@@ -1,0 +1,76 @@
+# =======================
+# FRONTEND (Angular)
+# =======================
+
+# compiled output
+frontend/dist/
+frontend/tmp/
+frontend/out-tsc/
+# Only exists if Bazel was run
+frontend/bazel-out/
+
+# dependencies
+frontend/node_modules/
+
+# profiling files
+frontend/chrome-profiler-events*.json
+
+# misc
+frontend/.sass-cache
+frontend/connect.lock
+frontend/coverage/
+frontend/libpeerconnection.log
+frontend/npm-debug.log
+frontend/yarn-error.log
+frontend/testem.log
+frontend/typings/
+
+# Angular project IDE configs
+frontend/.idea/
+frontend/.project
+frontend/.classpath
+frontend/.c9/
+frontend/*.launch
+frontend/.settings/
+frontend/*.sublime-workspace
+
+# VSCode
+frontend/.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+frontend/.history/
+
+# =======================
+# BACKEND (Python)
+# =======================
+
+# Byte-compiled / optimized / DLL files
+backend/__pycache__/
+backend/**/__pycache__/
+backend/*.py[cod]
+backend/*.so
+
+# Virtual environment
+backend/venv/
+
+# Logs and caches
+backend/*.log
+backend/.mypy_cache/
+backend/.pytest_cache/
+backend/.cache/
+
+# IDEs
+.idea/
+.vscode/
+
+# =======================
+# SYSTEM FILES
+# =======================
+
+.DS_Store
+Thumbs.db
+*.log
+*.swp
+*.tmp
