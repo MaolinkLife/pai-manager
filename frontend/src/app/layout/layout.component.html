@@ -1,0 +1,39 @@
+<!-- <app-header></app-header>
+<div class="layout">
+    <app-sidebar></app-sidebar>
+    <main class="content"></main>
+</div> -->
+
+<div class="layout">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+        <div class="top-buttons">
+            <button class="icon-button" [routerLink]="['chat']">C</button>
+            <button class="icon-button" [routerLink]="['settings']">S</button>
+            <button class="icon-button" [routerLink]="['tasks']">T</button>
+            <button class="icon-button" [routerLink]="['debug']">D</button>
+        </div>
+
+        <!-- <div class="nav-blocks">
+            <div class="nav-block"></div>
+            <div class="nav-block"></div>
+            <div class="nav-block"></div>
+            <div class="nav-block"></div>
+        </div> -->
+
+        <div class="bottom-button">
+            <button class="icon-button">P</button>
+        </div>
+    </aside>
+
+    <!-- Content -->
+    <div class="content">
+        <header class="header">
+            <div class="title"></div>
+            <div class="subtitle"></div>
+        </header>
+        <main class="main-area">
+            <router-outlet></router-outlet>
+        </main>
+    </div>
+</div>

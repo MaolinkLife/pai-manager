@@ -28,11 +28,19 @@
                         "inlineStyleLanguage": "less",
                         "assets": [
                             "src/favicon.ico",
-                            "src/assets"
+                            "src/assets",
+                            "src/assets/fonts/*"
                         ],
                         "styles": [
                             "src/styles.less"
                         ],
+                        "stylePreprocessorOptions": {
+                            "includePaths": [
+                                "src/assets/styles",
+                                "src/assets/styles/mui-flex-library",
+                                "src/assets/fonts"
+                            ]
+                        },
                         "scripts": []
                     },
                     "configurations": {
