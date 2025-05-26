@@ -92,3 +92,32 @@ def set_config_value(path: str, value: Any):
         ref = ref.setdefault(key, {})
     ref[keys[-1]] = value
     save_config(config)
+
+
+def _recursive_update(existing: dict, updates: dict, path: str = ""):
+    updated = []
+    failed = []
+
+    for key, value in updates.items():
+        current_path = f"{path}.{key}" if path else key
+
+        if key not in existing:
+            failed.append({"path": current_path, "error": "Ключ не найден."})
+            continue
+
+        if isinstance(value, dict) and isinstance(existing.get(key), dict):
+            u, f = _recursive_update(existing[key], value, current_path)
+            updated.extend(u)
+            failed.extend(f)
+        else:
+            existing[key] = value
+            updated.append(current_path)
+
+    return updated, failed
+
+
+def update_config_bulk(updates: dict):
+    config = get_config()
+    updated, failed = _recursive_update(config, updates)
+    save_config(config)
+    return updated, failed

@@ -1,5 +1,7 @@
 from fastapi import APIRouter, Request
+
 from config import config_loader
+from config.config_loader import update_config_bulk
 
 router = APIRouter(prefix="/api/config", tags=["Config"])
 
@@ -18,19 +20,14 @@ async def overwrite_config(request: Request):
     return {"status": "ok", "message": "Конфиг обновлён."}
 
 
-# Обновляет отдельный путь ("api.model", "voice.language", и т.п.)
+# Обновляет config 
 @router.patch("/")
-async def update_config_value(payload: dict):
-    """
-    {
-        "path": "api.model",
-        "value": "qwen3:14b"
-    }
-    """
-    path = payload.get("path")
-    value = payload.get("value")
-    if not path:
-        return {"status": "error", "message": "Отсутствует путь."}
+async def update_config_bulk_route(request: Request):
+    updates = await request.json()
+    updated, failed = config_loader.update_config_bulk(updates)
 
-    config_loader.set_config_value(path, value)
-    return {"status": "ok", "message": f"Значение '{path}' обновлено."}
+    return {
+        "status": "partial" if failed else "ok",
+        "updated": updated,
+        "failed": failed
+    }

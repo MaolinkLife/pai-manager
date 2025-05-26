@@ -18,4 +18,8 @@ export class ApiService {
             catchError((_err) => of([]))
         );
     }
+
+    sendMessage$(request: any): Observable<any> {
+        return this.http.post<{ response: string }>(`${this.apiUrl}/ollama/chat`, request)
+    }
 }

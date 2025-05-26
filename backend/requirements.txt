@@ -4,3 +4,4 @@ uvicorn[standard]>=0.20.0
 ollama
 python-dotenv
 requests
+pyyaml

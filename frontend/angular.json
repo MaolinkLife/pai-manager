@@ -38,7 +38,8 @@
                             "includePaths": [
                                 "src/assets/styles",
                                 "src/assets/styles/mui-flex-library",
-                                "src/assets/fonts"
+                                "src/assets/fonts",
+                                "src/assets/styles/lim-ui"
                             ]
                         },
                         "scripts": []

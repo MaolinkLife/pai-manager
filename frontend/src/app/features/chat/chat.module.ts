@@ -3,6 +3,10 @@ import { CommonModule } from '@angular/common';
 
 import { ChatRoutingModule } from './chat-routing.module';
 import { ChatComponent } from './chat.component';
+import { FormsModule, ReactiveFormsModule } from '@angular/forms';
+import { HttpClientModule } from '@angular/common/http';
+import { ApiService } from '../../core/services/api.service';
+import { ConfigService } from '../../core/services/config.service';
 
 
 @NgModule({
@@ -11,7 +15,14 @@ import { ChatComponent } from './chat.component';
     ],
     imports: [
         CommonModule,
-        ChatRoutingModule
+        ChatRoutingModule,
+        FormsModule,
+        ReactiveFormsModule,
+        HttpClientModule,
+    ],
+    providers: [
+        ApiService,
+        ConfigService,
     ]
 })
 export class ChatModule { }

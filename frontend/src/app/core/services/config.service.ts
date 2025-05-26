@@ -28,4 +28,8 @@ export class ConfigService {
             })
         )
     }
+
+    updateCongif$(body: any): Observable<any> {
+        return this.http.patch(`${this.apiUrl}/config`, body);
+    }
 }

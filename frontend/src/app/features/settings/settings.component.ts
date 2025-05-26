@@ -35,4 +35,20 @@ export class SettingsComponent implements OnInit {
         })
     }
 
+    clickUpdateConfig() {
+        this.configSerice.updateCongif$({
+            char_name: 'Lim',
+            user_name: 'Mao',
+            modules: {
+                rag: true,
+            },
+            custom_field: 'custom'
+        }).subscribe((result) => {
+            console.log({
+                result
+            });
+
+        })
+    }
+
 }

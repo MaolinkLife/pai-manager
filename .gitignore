@@ -74,3 +74,16 @@ Thumbs.db
 *.log
 *.swp
 *.tmp
+
+# =======================
+# CHARACTER CARDS (LIMVERSE)
+# =======================
+
+# Игнорируем все персональные карточки
+backend/config/characters/*
+
+# Но оставляем дефолт
+!backend/config/characters/default.yaml
+
+# Config.json — создаётся автоматически, не пушим
+backend/config/config.json
