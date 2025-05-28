@@ -9,12 +9,12 @@
 
 import yaml
 import os
-from config import config_loader
+from services import config_service
 
 
 def load_system_prompt() -> str:
     base_path = os.path.join(os.path.dirname(__file__), "..", "config", "characters")
-    char_name = config_loader.get_config_value("char_name", default="default")
+    char_name = config_service.get_config_value("char_name", default="default")
     filename = f"{char_name}.yaml"
     full_path = os.path.join(base_path, filename)
     fallback_path = os.path.join(base_path, "default.yaml")

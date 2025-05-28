@@ -3,7 +3,7 @@
 # Назначение: Точка входа в приложение LIM. Запускает FastAPI, подключает маршруты, активирует CORS
 # Используется: при старте всей системы
 # Особенности:
-# - Подключает конфигурацию (config_loader)
+# - Подключает конфигурацию (config_service)
 # - Включает CORS для связи с фронтом
 # - Интегрирует маршруты ollama и config
 # - Содержит эндпоинт /api/ping для проверки состояния
@@ -14,9 +14,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from routes.ollama_routes import router as ollama_router
 from routes.config_routes import router as config_router
 
-from config import config_loader
+from services import config_service
 
-config_loader.ensure_config_exists()
+config_service.ensure_config_exists()
 
 app = FastAPI()
 

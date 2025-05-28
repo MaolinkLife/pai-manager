@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse
 
 from services import api_service, ollama_service
 from services.history_service import get_history
-from config import config_loader
+from services import config_service
 
 router = APIRouter(prefix="/api/ollama", tags=["Ollama"])
 
@@ -40,7 +40,7 @@ async def get_available_models():
 @router.get("/history")
 async def fetch_history(limit: int = 32):
     try:
-        char_name = config_loader.get_config_value("char_name", "default_waifu")
+        char_name = config_service.get_config_value("char_name", "default_waifu")
         history = get_history(char_name, limit)
         return JSONResponse(content={"status": "ok", "history": history})
     except Exception as e:

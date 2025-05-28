@@ -1,5 +1,5 @@
 # =========================================================
-# Модуль: config_loader.py
+# Модуль: config_service.py
 # Назначение: Управление конфигурацией LIM. Загрузка, сохранение,
 #             обновление и кеширование значений из config.json.
 # Используется в: сервисах, утилитах, ядре — везде, где нужна настройка
@@ -13,7 +13,7 @@ import json
 import os
 from typing import Any
 
-CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config.json")
+CONFIG_PATH = os.path.join(os.path.dirname(__file__), "..", "config", "config.json")
 
 DEFAULT_CONFIG = {
     "char_name": "default_waifu",

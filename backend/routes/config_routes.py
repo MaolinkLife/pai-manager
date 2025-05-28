@@ -9,8 +9,8 @@
 
 from fastapi import APIRouter, Request
 
-from config import config_loader
-from config.config_loader import update_config_bulk
+from services import config_service
+from services.config_service import update_config_bulk
 
 router = APIRouter(prefix="/api/config", tags=["Config"])
 
@@ -18,14 +18,14 @@ router = APIRouter(prefix="/api/config", tags=["Config"])
 # Возвращает весь конфиг
 @router.get("/")
 def get_full_config():
-    return config_loader.get_config()
+    return config_service.get_config()
 
 
 # Перезаписывает конфиг целиком.
 @router.post("/")
 async def overwrite_config(request: Request):
     new_config = await request.json()
-    config_loader.save_config(new_config)
+    config_service.save_config(new_config)
     return {"status": "ok", "message": "Конфиг обновлён."}
 
 
@@ -33,7 +33,7 @@ async def overwrite_config(request: Request):
 @router.patch("/")
 async def update_config_bulk_route(request: Request):
     updates = await request.json()
-    updated, failed = config_loader.update_config_bulk(updates)
+    updated, failed = config_service.update_config_bulk(updates)
 
     return {
         "status": "partial" if failed else "ok",

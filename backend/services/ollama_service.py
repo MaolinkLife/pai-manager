@@ -12,10 +12,12 @@ from ollama import chat, ChatResponse
 from ollama._types import ResponseError
 from ollama import list as ollama_list
 
-from config.model_config import ollama_model, ollama_model_visual
 from requests.exceptions import ConnectionError as RequestsConnectionError
 
-from config import config_loader
+from services import config_service
+
+ollama_model = config_service.get_config_value("api.model")
+ollama_model_visual = config_service.get_config_value("api.visual_model")
 
 # Возвращает словарь параметров температуры по выбранному уровню (0-2).
 def get_temperature_options(
@@ -62,7 +64,7 @@ def get_temperature_options(
 def api_standard(history, temp_level, stop, max_tokens):
     try:
         response: ChatResponse = chat(
-            model=config_loader.get_config_value("api.model"),
+            model=config_service.get_config_value("api.model"),
             messages=history,
             keep_alive="25h",
             options=get_temperature_options(temp_level, stop, max_tokens),
@@ -98,7 +100,7 @@ def api_stream(history, temp_level, stop, max_tokens):
 def api_standard_image(history):
     try:
         response: ChatResponse = chat(
-            model=config_loader.get_config_value("api.visual_model"),
+            model=config_service.get_config_value("api.visual_model"),
             messages=history,
             keep_alive="25h",
         )
