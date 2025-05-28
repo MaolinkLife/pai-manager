@@ -1,33 +1,39 @@
-<div class="chat-container">
-    <div class="messages">
-        <div
-            class="message"
-            *ngFor="let msg of chatHistory"
-            [ngClass]="msg.role"
-        >
-            <div class="timestamp">
-                {{ formatTimestamp(msg.timestamp) }}
+<ng-container *ngIf="config$ | async as config">
+    <div class="chat-container">
+        <div class="messages">
+            <div
+                class="message"
+                *ngFor="let msg of chatHistory"
+                [ngClass]="msg.role"
+            >
+                <div class="timestamp">
+                    {{ formatTimestamp(msg.timestamp) }}
+                </div>
+
+                <div class="sender" *ngIf="msg.role === 'user'">
+                    {{ config.userName }}:
+                </div>
+                <div class="sender" *ngIf="msg.role === 'assistant'">
+                    {{ config.charName }}:
+                </div>
+
+                <markdown [data]="msg.content"></markdown>
             </div>
 
-            <div class="sender" *ngIf="msg.role === 'user'">Ты:</div>
-            <div class="sender" *ngIf="msg.role === 'assistant'">Лим:</div>
-
-            <markdown [data]="msg.content"></markdown>
+            <div *ngIf="loading" class="message assistant">
+                <div class="sender">{{ config.charName }}:</div>
+                Печатаю...
+            </div>
         </div>
 
-        <div *ngIf="loading" class="message assistant">
-            <div class="sender">Лим:</div>
-            Печатаю...
-        </div>
+        <form (submit)="sendMessage()" class="input-area">
+            <input
+                type="text"
+                [formControl]="chatInput"
+                class="chat-input"
+                placeholder="Скажи что-нибудь..."
+            />
+            <button type="submit">➤</button>
+        </form>
     </div>
-
-    <form (submit)="sendMessage()" class="input-area">
-        <input
-            type="text"
-            [formControl]="chatInput"
-            class="chat-input"
-            placeholder="Скажи что-нибудь..."
-        />
-        <button type="submit">➤</button>
-    </form>
-</div>
+</ng-container>

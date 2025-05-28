@@ -4,7 +4,7 @@ import { ProjectConfig } from '../models/project-config.model';
 import { HttpClient } from '@angular/common/http';
 import { ProjectConfigDto } from '../models/project-config.dto';
 import { catchError, map } from 'rxjs/operators'
-import { mapProjectConfigDtoToModel } from '../utils/project-config.mapper';
+import { mapProjectConfigDtoToModel, mapPartialModelToDto } from '../utils/project-config.mapper';
 import { environment } from '../../../environments/environment';
 
 
@@ -29,7 +29,7 @@ export class ConfigService {
         )
     }
 
-    updateCongif$(body: any): Observable<any> {
-        return this.http.patch(`${this.apiUrl}/config`, body);
+    updateCongif$(body: ProjectConfig): Observable<any> {
+        return this.http.patch(`${this.apiUrl}/config`, mapPartialModelToDto(body));
     }
 }

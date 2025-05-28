@@ -1,3 +1,157 @@
-<p>settings works!</p>
+<div class="settings-wrapper">
+    <form
+        [formGroup]="settingsForm"
+        (ngSubmit)="clickUpdateConfig()"
+        class="settings-form"
+    >
+        <h2>⚙️ Персонаж</h2>
+        <div class="form-group">
+            <label for="charName">Имя персонажа</label>
+            <input id="charName" type="text" formControlName="charName" />
+        </div>
 
-<button (click)="clickUpdateConfig()">Обновить конфиг</button>
+        <div class="form-group">
+            <label for="userName">Имя пользователя</label>
+            <input id="userName" type="text" formControlName="userName" />
+        </div>
+
+        <h2>🎤 Голос</h2>
+        <div formGroupName="voice">
+            <div class="form-group">
+                <label for="voiceLanguage">Голосовой язык</label>
+                <input
+                    id="voiceLanguage"
+                    type="text"
+                    formControlName="voiceLanguage"
+                />
+            </div>
+
+            <div class="form-group">
+                <label for="language">Язык</label>
+                <input id="language" type="text" formControlName="language" />
+            </div>
+
+            <div class="form-group">
+                <label for="outputId">Output ID</label>
+                <input id="outputId" type="number" formControlName="outputId" />
+            </div>
+
+            <div class="form-group">
+                <label for="windowsOutputId">Windows Output ID</label>
+                <input
+                    id="windowsOutputId"
+                    type="number"
+                    formControlName="windowsOutputId"
+                />
+            </div>
+
+            <div class="form-group">
+                <label class="checkbox">
+                    <input type="checkbox" formControlName="useRvc" />
+                    Использовать RVC
+                </label>
+            </div>
+        </div>
+
+        <h2>🧩 Модули</h2>
+        <div class="checkbox-grid" formGroupName="modules">
+            <label
+                ><input type="checkbox" formControlName="vtube_studio" /> VTube
+                Studio</label
+            >
+            <label
+                ><input type="checkbox" formControlName="whisper" />
+                Whisper</label
+            >
+            <label
+                ><input type="checkbox" formControlName="minecraft" />
+                Minecraft</label
+            >
+            <label
+                ><input type="checkbox" formControlName="gaming" />
+                Gaming</label
+            >
+            <label
+                ><input type="checkbox" formControlName="alarm" /> Alarm</label
+            >
+            <label
+                ><input type="checkbox" formControlName="discord" />
+                Discord</label
+            >
+            <label><input type="checkbox" formControlName="rag" /> RAG</label>
+            <label
+                ><input type="checkbox" formControlName="visual" />
+                Visual</label
+            >
+        </div>
+
+        <h2>🧠 API</h2>
+        <div formGroupName="api">
+            <div class="form-group">
+                <label for="type">Тип</label>
+                <input id="type" type="text" formControlName="type" />
+            </div>
+
+            <div class="form-group">
+                <label for="model">Модель</label>
+                <input id="model" type="text" formControlName="model" />
+            </div>
+
+            <div class="form-group">
+                <label for="visualModel">Visual Model</label>
+                <input
+                    id="visualModel"
+                    type="text"
+                    formControlName="visualModel"
+                />
+            </div>
+
+            <div class="form-group token-limit-block">
+                <label for="tokenLimit">Token Limit</label>
+                <input
+                    #tokenInput
+                    id="tokenLimit"
+                    type="number"
+                    min="512"
+                    max="131072"
+                    step="256"
+                    formControlName="tokenLimit"
+                />
+                <input
+                    #tokenSlider
+                    type="range"
+                    min="512"
+                    max="131072"
+                    step="256"
+                    formControlName="tokenLimit"
+                />
+
+                <div class="token-range-labels">
+                    <span>512</span>
+                    <span>128k</span>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="messagePairLimit">Message Pair Limit</label>
+                <input
+                    id="messagePairLimit"
+                    type="number"
+                    formControlName="messagePairLimit"
+                />
+            </div>
+
+            <label class="checkbox">
+                <input type="checkbox" formControlName="streaming" />
+                Streaming Mode
+            </label>
+        </div>
+
+        <div class="button-row">
+            <button type="submit" [disabled]="!hasChanges()">
+                💾 Сохранить
+            </button>
+            <!-- <button class="cancel" type="button">Отмена</button> -->
+        </div>
+    </form>
+</div>

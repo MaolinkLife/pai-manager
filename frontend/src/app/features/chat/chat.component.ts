@@ -2,6 +2,10 @@ import { Component, OnInit } from '@angular/core';
 import { ApiService } from '../../core/services/api.service';
 import { Message } from '../../core/models/message.model';
 import { FormControl } from '@angular/forms';
+import { ConfigService } from '../../core/services/config.service';
+import { ProjectConfig } from './../../core/models/project-config.model';
+import { Observable } from 'rxjs';
+import { map } from 'rxjs/operators';
 
 @Component({
     selector: 'app-chat',
@@ -13,9 +17,15 @@ export class ChatComponent implements OnInit {
     chatHistory: Message[] = [];
     loading = false;
 
-    constructor(private apiService: ApiService) { }
+    userName: string = '';
+    charName: string = '';
+
+    config$: Observable<{ userName: string; charName: string } | null> | null = null;
+
+    constructor(private apiService: ApiService, private configService: ConfigService) { }
 
     ngOnInit(): void {
+        this.getSettings();
         this.loadHistory();
     }
 
@@ -63,6 +73,25 @@ export class ChatComponent implements OnInit {
                 console.error('Ошибка загрузки истории:', err);
             },
         });
+    }
+
+    getSettings(): void {
+        this.config$ = this.configService.getConfig$().pipe(
+            map((config: ProjectConfig | null) => {
+                if (!config) {
+                    return null;
+                }
+
+                const { userName, charName } = config;
+                this.userName = userName;
+                this.charName = charName;
+
+                return {
+                    userName,
+                    charName
+                }
+            })
+        )
     }
 
     formatTimestamp(isoDate?: string): string {

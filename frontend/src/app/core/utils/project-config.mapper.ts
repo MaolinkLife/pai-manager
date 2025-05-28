@@ -51,3 +51,66 @@ export const mapProjectConfigModelToDto = (model: ProjectConfig): ProjectConfigD
         message_pair_limit: model.api.messagePairLimit,
     },
 });
+
+export const mapPartialModelToDto = (
+    model: Partial<ProjectConfig>
+): Partial<ProjectConfigDto> => {
+    const dto: Partial<ProjectConfigDto> = {};
+
+    const allowedKeys = ['charName', 'userName', 'voice', 'modules', 'api'];
+
+    Object.keys(model).forEach((key) => {
+        if (!allowedKeys.includes(key)) {
+            throw new Error(`Unexpected field "${key}" in ProjectConfig`);
+        }
+
+        switch (key) {
+            case 'charName':
+                dto.char_name = model.charName!;
+                break;
+            case 'userName':
+                dto.user_name = model.userName!;
+                break;
+            case 'voice':
+                dto.voice = mapVoiceModelToDto(model.voice!);
+                break;
+            case 'modules':
+                dto.modules = mapModulesModelToDto(model.modules!);
+                break;
+            case 'api':
+                dto.api = mapApiModelToDto(model.api!);
+                break;
+        }
+    });
+
+    return dto;
+};
+
+
+const mapVoiceModelToDto = (voice: ProjectConfig['voice']) => ({
+    output_id: voice.outputId,
+    windows_output_id: voice.windowsOutputId,
+    language: voice.language,
+    use_rvc: voice.useRvc,
+    voice_language: voice.voiceLanguage,
+});
+
+const mapModulesModelToDto = (modules: ProjectConfig['modules']) => ({
+    vtube_studio: modules.vtube_studio,
+    whisper: modules.whisper,
+    minecraft: modules.minecraft,
+    gaming: modules.gaming,
+    alarm: modules.alarm,
+    discord: modules.discord,
+    rag: modules.rag,
+    visual: modules.visual,
+});
+
+const mapApiModelToDto = (api: ProjectConfig['api']) => ({
+    type: api.type,
+    streaming: api.streaming,
+    model: api.model,
+    visual_model: api.visualModel,
+    token_limit: api.tokenLimit,
+    message_pair_limit: api.messagePairLimit,
+});

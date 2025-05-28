@@ -1,0 +1,190 @@
+@import "../../../assets/styles/lim-ui/colors.less";
+
+:host {
+    display: block;
+}
+
+.settings-wrapper {
+    background-color: @color-surface;
+    padding: 24px;
+    border-radius: @radius;
+    box-shadow: @shadow-soft;
+    font-family: @font-family;
+    color: @color-text;
+    max-width: 700px;
+    margin: 0 auto;
+
+    h2 {
+        color: @color-text-active;
+        margin-top: 0;
+        margin-bottom: 12px;
+        font-size: 20px;
+    }
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 20px;
+
+    label {
+        font-weight: 500;
+        margin-bottom: 6px;
+    }
+
+    input[type="text"],
+    input[type="number"] {
+        background-color: @color-bg;
+        color: @color-text-active;
+        border: 1px solid @color-border;
+        padding: 10px;
+        border-radius: @radius;
+        font-size: 14px;
+        transition: border-color 0.2s;
+
+        &:focus {
+            border-color: @color-accent;
+            box-shadow: 0 0 6px @color-focus;
+            outline: none;
+        }
+    }
+
+    label.checkbox {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        cursor: pointer;
+
+        input[type="checkbox"] {
+            accent-color: @color-accent;
+            width: 16px;
+            height: 16px;
+        }
+    }
+}
+
+.checkbox-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px 16px;
+    margin-bottom: 24px;
+
+    label {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        cursor: pointer;
+
+        input[type="checkbox"] {
+            accent-color: @color-accent;
+            width: 16px;
+            height: 16px;
+        }
+    }
+}
+
+.button-row {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+
+    button {
+        background: @color-accent;
+        color: @color-text-active;
+        border: none;
+        padding: 10px 16px;
+        border-radius: @radius;
+        font-family: @font-family;
+        transition: background 0.2s ease;
+        box-shadow: @shadow-soft;
+        cursor: pointer;
+
+        &:hover {
+            background: @color-accent-dark;
+        }
+
+        &:disabled {
+            background: @color-border;
+            color: #777;
+            cursor: not-allowed;
+            box-shadow: none;
+            opacity: 0.6;
+        }
+
+        &.cancel {
+            background: transparent;
+            color: @color-text;
+            border: 1px solid @color-border;
+
+            &:hover {
+                border-color: @color-accent;
+                color: @color-accent;
+            }
+        }
+    }
+}
+
+.token-limit-block {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 24px;
+
+    label {
+        font-weight: bold;
+        margin-bottom: 6px;
+        color: @color-text-active;
+    }
+
+    input[type="number"] {
+        width: 120px;
+        margin-bottom: 10px;
+        padding: 6px 10px;
+        background-color: @color-bg;
+        border: 1px solid @color-border;
+        color: @color-text-active;
+        border-radius: @radius;
+
+        &:focus {
+            border-color: @color-accent;
+            box-shadow: 0 0 6px @color-focus;
+            outline: none;
+        }
+    }
+
+    input[type="range"] {
+        width: 100%;
+        height: 6px;
+        background-color: @color-border;
+        border-radius: 4px;
+        -webkit-appearance: none;
+        -moz-appearance: none;
+        appearance: none;
+
+        &::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: @color-accent;
+            cursor: pointer;
+            border: 2px solid @color-surface;
+        }
+
+        &::-moz-range-thumb {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: @color-accent;
+            border: 2px solid @color-surface;
+            cursor: pointer;
+        }
+    }
+
+    .token-range-labels {
+        display: flex;
+        justify-content: space-between;
+        font-size: 12px;
+        color: @color-text;
+        margin-top: 4px;
+    }
+}
