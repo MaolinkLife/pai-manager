@@ -5,3 +5,4 @@ ollama
 python-dotenv
 requests
 pyyaml
+SQLAlchemy>=1.4

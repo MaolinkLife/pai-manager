@@ -89,3 +89,4 @@ backend/config/characters/*
 backend/config/config.json
 
 backend/storage/history/*
+backend/storage/database/core.db

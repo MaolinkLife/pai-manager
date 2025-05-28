@@ -16,6 +16,7 @@ from typing import Any
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "..", "config", "config.json")
 
 DEFAULT_CONFIG = {
+    "user_id": None,
     "char_name": "default_waifu",
     "user_name": "You",
     "voice": {
@@ -111,6 +112,15 @@ def _recursive_update(existing: dict, updates: dict, path: str = ""):
 
     for key, value in updates.items():
         current_path = f"{path}.{key}" if path else key
+
+        # 🔒 Спец-проверка для user_id
+        if current_path == "user_id":
+            if existing.get(key) not in [None, ""]:
+                failed.append({
+                    "path": current_path,
+                    "error": "user_id уже установлен и не может быть изменён."
+                })
+                continue
 
         if key not in existing:
             failed.append({"path": current_path, "error": "Ключ не найден."})

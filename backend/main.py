@@ -13,10 +13,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from routes.ollama_routes import router as ollama_router
 from routes.config_routes import router as config_router
+from core.initialize import run_startup_checks
 
-from services import config_service
-
-config_service.ensure_config_exists()
+run_startup_checks()
 
 app = FastAPI()
 
