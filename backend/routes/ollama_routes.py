@@ -30,7 +30,6 @@ def chat(payload: dict):
     }
 
 
-
 # Возвращает список доступных моделей Ollama.
 @router.get("/models")
 async def get_available_models():
@@ -43,5 +42,30 @@ async def fetch_history(limit: int = 32):
         char_name = config_service.get_config_value("char_name", "default_waifu")
         history = database_service.get_history(char_name, limit)
         return JSONResponse(content={"status": "ok", "history": history})
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
+    
+    
+@router.delete("/history/message")
+async def delete_message_api(message_id: str, chain: bool = False):
+    try:
+        if chain:
+            return database_service.delete_message_chain(message_id)
+        else:
+            return database_service.delete_message(message_id)
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
+    
+
+@router.post("/history/reroll")
+async def reroll_assistant_message(payload: dict):
+    try:
+        message_id = payload.get("message_id")
+        if not message_id:
+            return JSONResponse(status_code=400, content={"status": "error", "message": "message_id is required"})
+
+        new_reply = database_service.reroll_message(message_id)
+        return JSONResponse(content={"status": "ok", "new_message": new_reply})
+
     except Exception as e:
         return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})

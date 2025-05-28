@@ -33,7 +33,7 @@ export class ChatComponent implements OnInit {
         const trimmed = this.chatInput.value?.trim();
         if (!trimmed) return;
 
-        const userMessage: Message = { role: 'user', content: trimmed, timestamp: new Date().toISOString() };
+        const userMessage: Message = { id: '', role: 'user', content: trimmed, timestamp: new Date().toISOString() };
         this.chatHistory.push(userMessage);
         this.chatInput.setValue('');
         this.loading = true;
@@ -45,11 +45,12 @@ export class ChatComponent implements OnInit {
         }
         this.apiService.sendMessage$(message).subscribe({
             next: (res) => {
-                this.chatHistory.push({ role: 'assistant', content: res.response, timestamp: new Date().toISOString() });
+                this.chatHistory.push({ id: res.id, role: 'assistant', content: res.response, timestamp: new Date().toISOString() });
                 this.loading = false;
             },
             error: (err) => {
                 this.chatHistory.push({
+                    id: '',
                     role: 'assistant',
                     content: '[Ошибка получения ответа]',
                     timestamp: new Date().toISOString(),
@@ -92,6 +93,59 @@ export class ChatComponent implements OnInit {
                 }
             })
         )
+    }
+
+    deleteMessage(msg: Message, chain: boolean): void {
+        if (!msg || !msg.id) return; // На всякий случай
+
+        this.apiService.deleteMessage$(msg.id, chain).subscribe({
+            next: (res) => {
+                if (res.status === 'ok') {
+                    // Обновим локально
+                    this.chatHistory = this.chatHistory.filter(m => {
+                        if (!chain) return m.id !== msg.id;
+                        if (m.id === msg.id) return false;
+
+                        // Если цепочка: удалим следующее сообщение от ассистента по таймстампу
+                        return !(m.role === 'assistant' && m.timestamp === msg.timestamp);
+                    });
+                } else {
+                    console.warn('Не удалось удалить сообщение:', res);
+                }
+
+                this.loadHistory();
+            },
+            error: (err) => {
+                console.error('Ошибка при удалении:', err);
+            }
+        });
+    }
+
+    rerollMessage(messageId: string): void {
+        if (!messageId) return;
+
+        this.loading = true;
+
+        this.apiService.rerollMessage$(messageId).subscribe({
+            next: (res) => {
+                if (res.status === 'ok') {
+                    // Обновляем историю после реролла
+                    this.loadHistory();
+                } else {
+                    console.error('Ошибка реролла:', res.message || res);
+                }
+                this.loading = false;
+            },
+            error: (err) => {
+                console.error('Ошибка при реролле:', err);
+                this.loading = false;
+            },
+        });
+    }
+
+    shouldShowReroll(msg: Message, index: number): boolean {
+        // Только если это ассистент и это последнее сообщение в списке
+        return msg.role === 'assistant' && index === this.chatHistory.length - 1;
     }
 
     formatTimestamp(isoDate?: string): string {

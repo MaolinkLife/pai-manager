@@ -27,4 +27,12 @@ export class ApiService {
     getChatHistory$(limit: number = 32) {
         return this.http.get<{ status: string; history: Message[] }>(`${this.apiUrl}/history?limit=${limit}`)
     }
+
+    deleteMessage$(messageId: string, chain: boolean): Observable<any> {
+        return this.http.delete<{ status: string; deleted?: number }>(`${this.apiUrl}/history/message?message_id=${messageId}&chain=${chain}`)
+    }
+
+    rerollMessage$(messageId: string) {
+        return this.http.post<any>(`${this.apiUrl}/history/reroll`, { message_id: messageId });
+    }
 }

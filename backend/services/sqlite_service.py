@@ -119,11 +119,131 @@ def get_history_sqlite(character_name: str, limit: int = 20):
 
         return [
             {
+                "id": msg.id,
                 "role": msg.role,
                 "content": msg.content,
                 "timestamp": msg.timestamp.isoformat()
             }
             for msg in reversed(messages)
         ]
+    finally:
+        session.close()
+        
+        
+def delete_message_sqlite(message_id: str) -> bool:
+    session = SessionLocal()
+    try:
+        message = session.query(History).filter_by(id=message_id).first()
+        if not message:
+            return False
+
+        session.delete(message)
+        session.commit()
+        return True
+    finally:
+        session.close()
+        
+        
+def delete_message_chain_sqlite(user_message_id: str) -> int:
+    session = SessionLocal()
+    try:
+        user_msg = session.query(History).filter_by(id=user_message_id).first()
+        if not user_msg or user_msg.role != "user":
+            return 0
+
+        assistant_msg = (
+            session.query(History)
+            .filter(
+                History.character_id == user_msg.character_id,
+                History.timestamp > user_msg.timestamp,
+                History.role == "assistant"
+            )
+            .order_by(History.timestamp.asc())
+            .first()
+        )
+
+        count = 0
+        session.delete(user_msg)
+        count += 1
+
+        if assistant_msg:
+            session.delete(assistant_msg)
+            count += 1
+
+        session.commit()
+        return count
+    finally:
+        session.close()
+        
+        
+def reroll_assistant_message_sqlite(assistant_message_id: str) -> dict:
+    session = SessionLocal()
+    try:
+        # 1. Найти ассистентское сообщение
+        assistant_msg = session.query(History).filter_by(id=assistant_message_id).first()
+        if not assistant_msg or assistant_msg.role != "assistant":
+            raise ValueError("Сообщение не найдено или не является ответом ассистента.")
+
+        # 2. Найти соответствующее user-сообщение
+        user_msg = (
+            session.query(History)
+            .filter(
+                History.character_id == assistant_msg.character_id,
+                History.timestamp < assistant_msg.timestamp,
+                History.role == "user"
+            )
+            .order_by(History.timestamp.desc())
+            .first()
+        )
+        if not user_msg:
+            raise ValueError("Не найдено соответствующее user-сообщение.")
+
+        # 3. Сохраняем их timestamp'ы
+        user_timestamp = user_msg.timestamp
+        assistant_timestamp = assistant_msg.timestamp
+
+        # 4. Удаляем оба сообщения
+        session.delete(assistant_msg)
+        session.delete(user_msg)
+        session.commit()
+
+        # 5. Собираем историю до user_msg
+        history_before_user = (
+            session.query(History)
+            .filter(
+                History.character_id == user_msg.character_id,
+                History.timestamp < user_timestamp
+            )
+            .order_by(History.timestamp.asc())
+            .all()
+        )
+
+        # 6. Формируем историю для модели
+        history = [
+            {"role": msg.role, "content": msg.content, "timestamp": msg.timestamp.isoformat()}
+            for msg in history_before_user
+        ]
+        history.append({
+            "role": "user",
+            "content": user_msg.content,
+            "timestamp": user_timestamp.isoformat()
+        })
+
+        # 7. Импортируем API и вызываем модель
+        from services import api_service
+        new_response = api_service.run_standard(
+            history=history,
+            temp_level=1,
+            stop=None,
+            max_tokens=1024
+        )
+
+        # 8. Возвращаем результат
+        return {
+            "role": "assistant",
+            "content": new_response,
+            "timestamp": assistant_timestamp.isoformat()
+        }
+
     finally:
         session.close()
