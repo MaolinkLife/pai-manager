@@ -155,3 +155,137 @@
         </div>
     </form>
 </div>
+
+<div class="settings-wrapper">
+    <h2>🎨 Пресеты генерации</h2>
+    <div class="form-group">
+        <label for="presetSelect">Выбрать пресет</label>
+        <select
+            id="presetSelect"
+            [(ngModel)]="selectedPresetName"
+            (change)="applyPreset(selectedPresetName)"
+        >
+            <option *ngFor="let p of presets" [value]="p.name">
+                {{ p.name }}
+            </option>
+        </select>
+    </div>
+
+    <form [formGroup]="generationSettingsForm">
+        <div class="form-group">
+            <label>Имя пресета</label>
+            <input type="text" formControlName="name" />
+        </div>
+        <div class="form-group">
+            <label>Описание</label>
+            <input type="text" formControlName="description" />
+        </div>
+
+        <div class="form-group">
+            <label
+                >Temperature:
+                <span>{{
+                    generationSettingsForm.get("temperature")?.value
+                }}</span></label
+            >
+            <input
+                type="range"
+                min="0.1"
+                max="2.0"
+                step="0.01"
+                formControlName="temperature"
+            />
+        </div>
+
+        <div class="form-group">
+            <label
+                >Top P:
+                <span>{{
+                    generationSettingsForm.get("top_p")?.value
+                }}</span></label
+            >
+            <input
+                type="range"
+                min="0.1"
+                max="1.0"
+                step="0.01"
+                formControlName="top_p"
+            />
+        </div>
+
+        <div class="form-group">
+            <label
+                >Top K:
+                <span>{{
+                    generationSettingsForm.get("top_k")?.value
+                }}</span></label
+            >
+            <input
+                type="range"
+                min="1"
+                max="100"
+                step="1"
+                formControlName="top_k"
+            />
+        </div>
+
+        <div class="form-group">
+            <label
+                >Min P:
+                <span>{{
+                    generationSettingsForm.get("min_p")?.value
+                }}</span></label
+            >
+            <input
+                type="range"
+                min="0.0"
+                max="1.0"
+                step="0.01"
+                formControlName="min_p"
+            />
+        </div>
+
+        <div class="form-group">
+            <label
+                >Repeat Penalty:
+                <span>{{
+                    generationSettingsForm.get("repeat_penalty")?.value
+                }}</span></label
+            >
+            <input
+                type="range"
+                min="0.5"
+                max="2.0"
+                step="0.01"
+                formControlName="repeat_penalty"
+            />
+        </div>
+
+        <div class="form-group">
+            <label
+                >Max Tokens:
+                <span>{{
+                    generationSettingsForm.get("num_predict")?.value
+                }}</span></label
+            >
+            <input
+                type="range"
+                min="64"
+                max="4096"
+                step="64"
+                formControlName="num_predict"
+            />
+        </div>
+
+        <div class="form-group">
+            <label>Стоп-токены</label>
+            <textarea formControlName="stop"></textarea>
+        </div>
+
+        <div class="button-row">
+            <button type="button" (click)="saveOrUpdatePreset()">
+                💾 Сохранить пресет
+            </button>
+        </div>
+    </form>
+</div>

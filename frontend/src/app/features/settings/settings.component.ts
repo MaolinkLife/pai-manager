@@ -3,6 +3,7 @@ import { FormBuilder, FormGroup } from '@angular/forms';
 import { ConfigService } from '../../core/services/config.service';
 import { ProjectConfig } from '../../core/models/project-config.model';
 import { ApiService } from '../../core/services/api.service';
+import { GenerationPreset } from '../../core/models/generation-preset.model';
 
 @Component({
     selector: 'app-settings',
@@ -14,7 +15,10 @@ export class SettingsComponent implements OnInit {
     @ViewChild('tokenSlider') tokenSliderRef!: ElementRef<HTMLInputElement>;
     @ViewChild('tokenInput') tokenInputRef!: ElementRef<HTMLInputElement>;
 
-    settingsForm: FormGroup;
+    settingsForm: FormGroup = new FormGroup({});
+    generationSettingsForm: FormGroup = new FormGroup({});;
+    presets: GenerationPreset[] = [];
+    selectedPresetName: string = 'default';
 
     originalConfig!: ProjectConfig;
 
@@ -23,6 +27,10 @@ export class SettingsComponent implements OnInit {
         private configService: ConfigService,
         private apiService: ApiService,
     ) {
+        this.initializeFormGroups();
+    }
+
+    initializeFormGroups(): void {
         this.settingsForm = this.fb.group({
             charName: [''],
             userName: [''],
@@ -52,6 +60,18 @@ export class SettingsComponent implements OnInit {
                 messagePairLimit: [0]
             })
         });
+
+        this.generationSettingsForm = this.fb.group({
+            name: [''],
+            description: [''],
+            temperature: [1.0],
+            min_p: [0.05],
+            top_p: [0.9],
+            top_k: [40],
+            repeat_penalty: [1.1],
+            num_predict: [2048],
+            stop: [[]]
+        });
     }
 
     ngOnInit(): void {
@@ -61,6 +81,18 @@ export class SettingsComponent implements OnInit {
                 this.settingsForm.patchValue(data);
             }
         });
+
+        // Получение всех пресетов
+        this.configService.getGenerationPresets$().subscribe(presets => {
+            this.presets = presets;
+            const active = presets.find(p => p.name === this.selectedPresetName) || presets[0];
+            if (active) {
+                this.generationSettingsForm.patchValue(active);
+                this.selectedPresetName = active.name;
+            }
+        });
+
+
 
         const tokenLimitControl = this.settingsForm.get('api.tokenLimit');
 
@@ -122,6 +154,21 @@ export class SettingsComponent implements OnInit {
             console.log({ result });
             this.originalConfig = JSON.parse(JSON.stringify(this.settingsForm.value)); // обновляем базу
         });
+    }
+
+    applyPreset(presetName: string) {
+        const preset = this.presets.find(p => p.name === presetName);
+        if (preset) {
+            this.generationSettingsForm.patchValue(preset);
+            // this.apiService.applyPreset(presetName).subscribe(() => {
+            //     this.selectedPresetName = presetName;
+            // });
+        }
+    }
+
+    saveOrUpdatePreset() {
+        const current = this.generationSettingsForm.value;
+        this.configService.saveGenerationPreset$(current).subscribe()
     }
 
     hasChanges(): boolean {

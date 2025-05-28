@@ -23,9 +23,6 @@ def chat(payload: dict):
     return  {
          "response": api_service.run_standard(
             history=payload["history"],
-            temp_level=payload.get("temp_level", 1),
-            stop=payload.get("stop"),
-            max_tokens=payload.get("max_tokens", 2048),
         )
     }
 

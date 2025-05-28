@@ -15,6 +15,7 @@ import os
 
 from services import config_service
 from services import database_service
+from services import preset_service
 
 def run_startup_checks():
     """
@@ -27,6 +28,7 @@ def run_startup_checks():
 
     # Проверка наличия и создание конфига
     config_service.ensure_config_exists()
+    preset_service.ensure_presets_exist()
 
     # Генерация user_id, если он отсутствует
     if not config_service.get_config_value("user_id"):

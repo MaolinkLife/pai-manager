@@ -233,9 +233,6 @@ def reroll_assistant_message_sqlite(assistant_message_id: str) -> dict:
         from services import api_service
         new_response = api_service.run_standard(
             history=history,
-            temp_level=1,
-            stop=None,
-            max_tokens=1024
         )
 
         # 8. Возвращаем результат

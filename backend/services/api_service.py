@@ -50,11 +50,14 @@ def build_chat_request(history, include_system=True):
     return sanitized_history
 
 
-def run_standard(history: list, temp_level: int, stop: list, max_tokens: int) -> str:
+def run_standard(history: list) -> str:
     full_history = build_chat_request(history)
     
     # Получаем имя персонажа
     char_name = config_service.get_config_value("char_name", "default")
+    
+    generation_settings = config_service.get_config_value("generate_settings", {})
+    options = {k: v for k, v in generation_settings.items() if k not in ["name", "description"]}
 
     # Получаем последний message от user
     last_user_message = next(
@@ -64,9 +67,7 @@ def run_standard(history: list, temp_level: int, stop: list, max_tokens: int) ->
     # Вызов модели через ollama_service
     response = ollama_service.api_standard(
         history=full_history,
-        temp_level=temp_level,
-        stop=stop,
-        max_tokens=max_tokens,
+        options=options,
     )
 
     # Извлекаем результат

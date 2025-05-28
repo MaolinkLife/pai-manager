@@ -40,3 +40,18 @@ async def update_config_bulk_route(request: Request):
         "updated": updated,
         "failed": failed
     }
+    
+
+@router.post("/apply_preset")
+async def apply_preset(request: Request):
+    body = await request.json()
+    preset_name = body.get("name")
+
+    if not preset_name:
+        return {"status": "error", "message": "Название пресета не указано"}
+
+    success = config_service.apply_preset_by_name(preset_name)
+    if success:
+        return {"status": "ok", "message": f"Пресет '{preset_name}' применён."}
+    else:
+        return {"status": "error", "message": "Пресет не найден"}

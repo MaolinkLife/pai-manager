@@ -15,6 +15,7 @@ from typing import Any
 from services import database_service
 
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "..", "config", "config.json")
+PRESETS_PATH = os.path.join(os.path.dirname(__file__), "..", "config", "generation_presets.json")
 
 DEFAULT_CONFIG = {
     "user_id": None,
@@ -45,7 +46,19 @@ DEFAULT_CONFIG = {
         "token_limit": 4096,
         "message_pair_limit": 10,
     },
+    "generate_settings": {
+        "name": "Default",
+        "description": "Сбалансированный стиль генерации",
+        "temperature": 1.27,
+        "min_p": 0.0497,
+        "top_p": 0.87,
+        "top_k": 72,
+        "repeat_penalty": 1.12,
+        "stop": None,
+        "num_predict": 1024
+    }
 }
+
 
 _config_cache = None
 
@@ -149,3 +162,23 @@ def update_config_bulk(updates: dict):
         database_service.get_or_create_character(new_char_name)
         
     return updated, failed
+
+
+def load_generation_presets() -> list:
+    if not os.path.exists(PRESETS_PATH):
+        return []
+    with open(PRESETS_PATH, "r", encoding="utf-8") as f:
+        return json.load(f)
+    
+    
+def apply_preset_by_name(preset_name: str) -> bool:
+    presets = load_generation_presets()
+    matched = next((p for p in presets if p["name"] == preset_name), None)
+
+    if not matched:
+        return False
+
+    config = get_config()
+    config["generate_settings"] = matched
+    save_config(config)
+    return True

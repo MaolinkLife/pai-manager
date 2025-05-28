@@ -87,6 +87,7 @@ backend/config/characters/*
 
 # Config.json — создаётся автоматически, не пушим
 backend/config/config.json
+backend/config/generation_presets.json
 
 backend/storage/history/*
 backend/storage/database/core.db

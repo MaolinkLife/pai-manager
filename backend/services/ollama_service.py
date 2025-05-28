@@ -61,13 +61,13 @@ def get_temperature_options(
 
 
 # Отправляет обычный (непотоковый) чат-запрос в Ollama, возвращает ответ.
-def api_standard(history, temp_level, stop, max_tokens):
+def api_standard(history, options: dict):
     try:
         response: ChatResponse = chat(
             model=config_service.get_config_value("api.model"),
             messages=history,
             keep_alive="25h",
-            options=get_temperature_options(temp_level, stop, max_tokens),
+            options=options,
         )
         return response
 
