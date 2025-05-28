@@ -9,7 +9,7 @@
 
 import yaml
 import os
-from services import config_service
+from services import ollama_service, config_service, database_service
 
 
 def load_system_prompt() -> str:
@@ -49,3 +49,44 @@ def build_chat_request(history, include_system=True):
             })
     return sanitized_history
 
+
+def run_standard(history: list, temp_level: int, stop: list, max_tokens: int) -> str:
+    full_history = build_chat_request(history)
+    
+    # Получаем имя персонажа
+    char_name = config_service.get_config_value("char_name", "default")
+
+    # Получаем последний message от user
+    last_user_message = next(
+        (msg for msg in reversed(history) if msg.get("role") == "user"), None
+    )
+
+    # Вызов модели через ollama_service
+    response = ollama_service.api_standard(
+        history=full_history,
+        temp_level=temp_level,
+        stop=stop,
+        max_tokens=max_tokens,
+    )
+
+    # Извлекаем результат
+    assistant_content = response.message.content.strip()
+
+    # Сохраняем в историю (если последнее сообщение — от user)
+    if last_user_message:
+        database_service.add_message_to_history(
+            character_name=char_name,
+            role="user",
+            content=last_user_message["content"],
+            timestamp=last_user_message.get("timestamp"),
+        )
+
+    # Сохраняем ответ ассистента
+    database_service.add_message_to_history(
+        character_name=char_name,
+        role="assistant",
+        content=assistant_content,
+        timestamp=response.created_at 
+    )
+
+    return assistant_content

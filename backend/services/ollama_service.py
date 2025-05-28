@@ -69,7 +69,7 @@ def api_standard(history, temp_level, stop, max_tokens):
             keep_alive="25h",
             options=get_temperature_options(temp_level, stop, max_tokens),
         )
-        return response.message.content
+        return response
 
     except ResponseError as e:
         print(

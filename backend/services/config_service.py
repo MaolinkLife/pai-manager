@@ -12,6 +12,7 @@
 import json
 import os
 from typing import Any
+from services import database_service
 
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "..", "config", "config.json")
 
@@ -141,4 +142,10 @@ def update_config_bulk(updates: dict):
     config = get_config()
     updated, failed = _recursive_update(config, updates)
     save_config(config)
+    
+    # 🧠 Если обновлён char_name — создаём персонажа в БД
+    new_char_name = updates.get("char_name")
+    if new_char_name:
+        database_service.get_or_create_character(new_char_name)
+        
     return updated, failed
