@@ -1,14 +1,22 @@
+# =========================================================
+# Модуль: api_service.py
+# Назначение: Формирование запроса для модели, включая system prompt и очистку истории
+# Используется в: ollama_routes (для подготовки истории)
+# Особенности:
+# - Загружает YAML-профиль персонажа
+# - Удаляет из истории лишние поля (например, timestamp)
+# =========================================================
+
 import yaml
 import os
 from config import config_loader
 
+
 def load_system_prompt() -> str:
     base_path = os.path.join(os.path.dirname(__file__), "..", "config", "characters")
-    
     char_name = config_loader.get_config_value("char_name", default="default")
     filename = f"{char_name}.yaml"
     full_path = os.path.join(base_path, filename)
-    
     fallback_path = os.path.join(base_path, "default.yaml")
 
     try:
@@ -27,14 +35,17 @@ def load_system_prompt() -> str:
         print(f"[Ошибка чтения character-файла]: {e}")
         return "[System Error] Prompt loading failed."
 
+
 def build_chat_request(history, include_system=True):
-    full_history = history[:]
+    sanitized_history = [
+        {k: v for k, v in msg.items() if k != "timestamp"} for msg in history
+    ]
     if include_system:
         system_prompt = load_system_prompt()
         if system_prompt:
-            full_history.insert(0, {
+            sanitized_history.insert(0, {
                 "role": "system",
                 "content": system_prompt
             })
-    return full_history
+    return sanitized_history
 

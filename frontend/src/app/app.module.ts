@@ -9,8 +9,9 @@ import { LayoutComponent } from './layout/layout.component';
 import { ThemeService } from './core/services/theme.service';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { SharedModule } from './shared/shared.module';
-import { HttpClientModule } from '@angular/common/http';
+import { HttpClient, HttpClientModule } from '@angular/common/http';
 import { ConfigService } from './core/services/config.service';
+import { MarkdownModule } from 'ngx-markdown';
 
 @NgModule({
     declarations: [
@@ -26,6 +27,7 @@ import { ConfigService } from './core/services/config.service';
         ReactiveFormsModule,
         SharedModule,
         HttpClientModule,
+        MarkdownModule.forRoot({ loader: HttpClient }),
     ],
     providers: [ThemeService, ConfigService],
     bootstrap: [AppComponent]

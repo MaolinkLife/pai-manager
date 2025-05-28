@@ -7,6 +7,7 @@ import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { HttpClientModule } from '@angular/common/http';
 import { ApiService } from '../../core/services/api.service';
 import { ConfigService } from '../../core/services/config.service';
+import { MarkdownModule } from 'ngx-markdown';
 
 
 @NgModule({
@@ -19,6 +20,7 @@ import { ConfigService } from '../../core/services/config.service';
         FormsModule,
         ReactiveFormsModule,
         HttpClientModule,
+        MarkdownModule.forChild(),
     ],
     providers: [
         ApiService,

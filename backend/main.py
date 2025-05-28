@@ -1,3 +1,14 @@
+# =========================================================
+# Модуль: main.py
+# Назначение: Точка входа в приложение LIM. Запускает FastAPI, подключает маршруты, активирует CORS
+# Используется: при старте всей системы
+# Особенности:
+# - Подключает конфигурацию (config_loader)
+# - Включает CORS для связи с фронтом
+# - Интегрирует маршруты ollama и config
+# - Содержит эндпоинт /api/ping для проверки состояния
+# =========================================================
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from routes.ollama_routes import router as ollama_router

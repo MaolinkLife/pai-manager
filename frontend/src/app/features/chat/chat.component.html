@@ -5,11 +5,20 @@
             *ngFor="let msg of chatHistory"
             [ngClass]="msg.role"
         >
-            <strong *ngIf="msg.role === 'user'">Ты:</strong>
-            <strong *ngIf="msg.role === 'assistant'">Лим:</strong>
-            {{ msg.content }}
+            <div class="timestamp">
+                {{ formatTimestamp(msg.timestamp) }}
+            </div>
+
+            <div class="sender" *ngIf="msg.role === 'user'">Ты:</div>
+            <div class="sender" *ngIf="msg.role === 'assistant'">Лим:</div>
+
+            <markdown [data]="msg.content"></markdown>
         </div>
-        <div *ngIf="loading" class="message assistant">Печатаю...</div>
+
+        <div *ngIf="loading" class="message assistant">
+            <div class="sender">Лим:</div>
+            Печатаю...
+        </div>
     </div>
 
     <form (submit)="sendMessage()" class="input-area">

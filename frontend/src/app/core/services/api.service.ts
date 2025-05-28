@@ -3,23 +3,28 @@ import { Injectable } from '@angular/core';
 import { environment } from '../../../environments/environment';
 import { Observable, of } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
+import { Message } from '../models/message.model';
 
 @Injectable({
     providedIn: 'root'
 })
 export class ApiService {
-    private apiUrl = environment.apiBaseUrl;
+    private apiUrl = `${environment.apiBaseUrl}/ollama`;
 
     constructor(private http: HttpClient) { }
 
     getOllamaModels$(): Observable<string[]> {
-        return this.http.get<{ status: string; models: string[] }>(`${this.apiUrl}/ollama/models`).pipe(
+        return this.http.get<{ status: string; models: string[] }>(`${this.apiUrl}/models`).pipe(
             map(({ models }) => models),
             catchError((_err) => of([]))
         );
     }
 
     sendMessage$(request: any): Observable<any> {
-        return this.http.post<{ response: string }>(`${this.apiUrl}/ollama/chat`, request)
+        return this.http.post<{ response: string }>(`${this.apiUrl}/chat`, request)
+    }
+
+    getChatHistory$(limit: number = 32) {
+        return this.http.get<{ status: string; history: Message[] }>(`${this.apiUrl}/history?limit=${limit}`)
     }
 }

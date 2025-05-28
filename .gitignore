@@ -76,7 +76,7 @@ Thumbs.db
 *.tmp
 
 # =======================
-# CHARACTER CARDS (LIMVERSE)
+# CHARACTER CARDS
 # =======================
 
 # Игнорируем все персональные карточки
@@ -87,3 +87,5 @@ backend/config/characters/*
 
 # Config.json — создаётся автоматически, не пушим
 backend/config/config.json
+
+backend/storage/history/*
