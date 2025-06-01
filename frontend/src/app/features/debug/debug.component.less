@@ -1,0 +1,97 @@
+@import "../../../assets/styles/lim-ui/colors.less"; // если у тебя всё централизовано
+
+.debug-log {
+    padding: 24px;
+    background: @color-bg;
+    color: @color-text;
+    font-family: @font-family;
+
+    .log-entry {
+        background: @color-surface;
+        border-left: 4px solid @color-border;
+        border-radius: @radius;
+        padding: 16px;
+        margin-bottom: 12px;
+        box-shadow: @shadow-soft;
+        transition: border-color 0.3s;
+
+        &.error {
+            border-color: @color-danger;
+        }
+
+        &.audit {
+            border-color: @color-accent;
+        }
+
+        &.debug {
+            border-color: @color-emotion;
+        }
+
+        &.success {
+            border-color: @color-success;
+            color: @color-success;
+
+            .log-message {
+                color: @color-success;
+            }
+
+            .tag {
+                background: fade(@color-success, 20%);
+            }
+        }
+
+        .log-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 13px;
+            margin-bottom: 8px;
+
+            .tag {
+                background: @color-border;
+                color: @color-text-active;
+                padding: 2px 8px;
+                border-radius: @radius;
+                font-weight: bold;
+                text-transform: uppercase;
+            }
+
+            .timestamp {
+                font-style: italic;
+                color: @color-focus;
+            }
+        }
+
+        .log-body {
+            .log-message {
+                font-size: 14px;
+                color: @color-text-active;
+                font-weight: 500;
+            }
+
+            .log-context {
+                margin-top: 6px;
+                font-size: 13px;
+                color: lighten(@color-text, 15%);
+                white-space: pre-wrap;
+            }
+        }
+
+        .log-footer {
+            margin-top: 10px;
+            font-size: 12px;
+            color: @color-border;
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            font-style: italic;
+
+            .meta-source {
+                color: @color-text;
+            }
+            .meta-severity {
+                color: @color-text;
+            }
+        }
+    }
+}

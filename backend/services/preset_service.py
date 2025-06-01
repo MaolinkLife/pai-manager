@@ -2,6 +2,8 @@ import os
 import json
 from services import config_service  # Импортируем чтобы вносить изменения в конфиг
 
+from utils.open_file_w_utf8 import open_utf8
+
 PRESET_PATH = os.path.join(os.path.dirname(__file__), "..", "config", "generation_presets.json")
 
 # 🔐 Стандартный пресет, если файл отсутствует
@@ -25,12 +27,12 @@ def ensure_presets_exist():
 
 def get_all_presets() -> list:
     ensure_presets_exist()
-    with open(PRESET_PATH, "r", encoding="utf-8") as f:
+    with open_utf8(PRESET_PATH, "r") as f:
         return json.load(f)
 
 
 def save_presets(presets: list):
-    with open(PRESET_PATH, "w", encoding="utf-8") as f:
+    with open_utf8(PRESET_PATH, "w") as f:
         json.dump(presets, f, indent=4, ensure_ascii=False)
 
 

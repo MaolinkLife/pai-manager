@@ -1,1 +1,39 @@
-<p>debug works!</p>
+<div class="debug-log">
+    <div
+        *ngFor="let log of logs"
+        class="log-entry"
+        [ngClass]="getLogClass(log)"
+    >
+        <div class="log-header">
+            <span class="tag">{{ log.event_type }}</span>
+            <span class="timestamp">{{
+                log.timestamp | date : "dd.MM.yyyy HH:mm:ss"
+            }}</span>
+        </div>
+
+        <div class="log-body">
+            <div class="log-message">
+                {{
+                    log.msg ||
+                        log.details?.msg ||
+                        log.details?.error ||
+                        log.details?.status
+                }}
+            </div>
+
+            <!-- <div class="log-details">
+                <pre>
+                    {{ log.details | json }}
+                </pre>
+            </div> -->
+            <div class="log-context" *ngIf="log.details?.context">
+                {{ log.details.context }}
+            </div>
+        </div>
+
+        <div class="log-footer">
+            <span class="meta-source">{{ log.meta?.source }}</span>
+            <span class="meta-severity">{{ log.meta?.severity }}</span>
+        </div>
+    </div>
+</div>

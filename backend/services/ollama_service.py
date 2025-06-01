@@ -14,10 +14,10 @@ from ollama import list as ollama_list
 
 from requests.exceptions import ConnectionError as RequestsConnectionError
 
-from services import config_service
+from services.config_service import get_config_value
+from services.logger_service import log_audit_entry, log_error, AuditStatus
 
-ollama_model = config_service.get_config_value("api.model")
-ollama_model_visual = config_service.get_config_value("api.visual_model")
+ollama_model_visual = get_config_value("api.visual_model")
 
 # Возвращает словарь параметров температуры по выбранному уровню (0-2).
 def get_temperature_options(
@@ -62,9 +62,10 @@ def get_temperature_options(
 
 # Отправляет обычный (непотоковый) чат-запрос в Ollama, возвращает ответ.
 def api_standard(history, options: dict):
+    ollama_model=get_config_value("api.model")
     try:
         response: ChatResponse = chat(
-            model=config_service.get_config_value("api.model"),
+            model=ollama_model,
             messages=history,
             keep_alive="25h",
             options=options,
@@ -72,14 +73,26 @@ def api_standard(history, options: dict):
         return response
 
     except ResponseError as e:
-        print(
-            f"❌ Ollama ResponseError: {e}\nМодель '{ollama_model}' не найдена или не загружена."
+        log_audit_entry(
+            event_type="generate_message", 
+            msg=f"[Ollama] Модель '{ollama_model}' не найдена или не загружена",
+            status=AuditStatus.ERROR,
+            details={
+                "context": f"Ollama ResponseError: {e}",
+                "status": "error"
+            }
         )
+        
+        log_error(
+            f"Ollama ResponseError: {e}\nМодель '{ollama_model}' не найдена или не загружена."
+        )
+        
         return f"[Ошибка] Модель '{ollama_model}' не найдена. Проверь конфигурацию или загрузи модель вручную."
 
 
 # Отправляет запрос с stream=True — генерация потока текста.
 def api_stream(history, temp_level, stop, max_tokens):
+    ollama_model=get_config_value("api.model")
     try:
         return chat(
             model=ollama_model,
@@ -100,7 +113,7 @@ def api_stream(history, temp_level, stop, max_tokens):
 def api_standard_image(history):
     try:
         response: ChatResponse = chat(
-            model=config_service.get_config_value("api.visual_model"),
+            model=get_config_value("api.visual_model"),
             messages=history,
             keep_alive="25h",
         )

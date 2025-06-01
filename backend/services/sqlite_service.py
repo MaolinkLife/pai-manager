@@ -18,6 +18,8 @@ from sqlalchemy import (
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 
+from utils.time_utils import format_user_datetime
+
 # 📍 Путь к базе (создастся в storage/database/)
 DB_PATH = os.path.join("storage", "database", "core.db")
 DB_URL = f"sqlite:///{DB_PATH}"
@@ -116,13 +118,15 @@ def get_history_sqlite(character_name: str, limit: int = 20):
             .limit(limit)
             .all()
         )
+        
+        
 
         return [
             {
                 "id": msg.id,
                 "role": msg.role,
                 "content": msg.content,
-                "timestamp": msg.timestamp.isoformat()
+                "timestamp": format_user_datetime(msg.timestamp)
             }
             for msg in reversed(messages)
         ]
@@ -242,5 +246,68 @@ def reroll_assistant_message_sqlite(assistant_message_id: str) -> dict:
             "timestamp": assistant_timestamp.isoformat()
         }
 
+    finally:
+        session.close()
+
+
+def get_last_user_message_time_sqlite(character_name: str):
+    session = SessionLocal()
+    try:
+        character = session.query(Character).filter_by(name=character_name).first()
+        if not character:
+            return None
+
+        last_user_msg = (
+            session.query(History)
+            .filter_by(character_id=character.id, role="user")
+            .order_by(History.timestamp.desc())
+            .first()
+        )
+
+        return last_user_msg.timestamp if last_user_msg else None
+    finally:
+        session.close()
+        
+def get_message_pattern_sqlite(character_name: str, limit: int = 10):
+    session = SessionLocal()
+    try:
+        character = session.query(Character).filter_by(name=character_name).first()
+        if not character:
+            return []
+
+        messages = (
+            session.query(History)
+            .filter_by(character_id=character.id)
+            .order_by(History.timestamp.desc())
+            .limit(limit)
+            .all()
+        )
+
+        # Собираем сообщения в порядке их поступления
+        return [
+            {
+                "role": msg.role,
+                "content": msg.content,
+                "timestamp": msg.timestamp
+            } for msg in reversed(messages)
+        ]
+    finally:
+        session.close()
+        
+        
+def get_message_by_id_sqlite(message_id: str):
+    session = SessionLocal()
+    try:
+        message = session.query(History).filter_by(id=message_id).first()
+        if not message:
+            return None
+
+        return {
+            "id": message.id,
+            "role": message.role,
+            "content": message.content,
+            "timestamp": format_user_datetime(message.timestamp),
+            "character_id": message.character_id
+        }
     finally:
         session.close()

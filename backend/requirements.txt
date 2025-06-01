@@ -6,3 +6,10 @@ python-dotenv
 requests
 pyyaml
 SQLAlchemy>=1.4
+numpy
+sounddevice
+pydub
+edge-tts
+emoji>=2.0.0
+faster-whisper
+python-dateutil

@@ -11,10 +11,16 @@
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
 from routes.ollama_routes import router as ollama_router
 from routes.config_routes import router as config_router
 from routes.preset_routes import router as preset_router
+from routes.logger_routes import router as logger_router
+from routes.voice_routes import router as voice_router
+from routes.resources_routes import router as resources_router
+
 from core.initialize import run_startup_checks
+from loops.loop_core import run_loop
 
 run_startup_checks()
 
@@ -31,7 +37,12 @@ app.add_middleware(
 app.include_router(ollama_router)
 app.include_router(config_router)
 app.include_router(preset_router)
+app.include_router(logger_router)
+app.include_router(voice_router)
+app.include_router(resources_router)
 
+# Стартуем фоновые циклы
+run_loop()
 
 @app.get("/api/ping")
 def ping():

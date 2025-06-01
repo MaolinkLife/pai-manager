@@ -23,6 +23,83 @@
     }
 }
 
+.custom-select {
+    position: relative;
+    user-select: none;
+    cursor: pointer;
+
+    .selected {
+        background-color: @color-bg;
+        color: @color-text-active;
+        border: 1px solid @color-border;
+        padding: 10px;
+        border-radius: @radius;
+    }
+
+    .options {
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        z-index: 10;
+        background-color: @color-surface;
+        border: 1px solid @color-border;
+        border-top: none;
+        max-height: 200px;
+        overflow-y: auto;
+        border-radius: 0 0 @radius @radius;
+        box-shadow: @shadow-soft;
+
+        li {
+            padding: 10px;
+            color: @color-text;
+            transition: background 0.2s;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+
+            &:hover {
+                background-color: @color-accent-dark;
+                color: @color-text-active;
+            }
+
+            &.active {
+                background-color: @color-accent;
+                color: @color-text-active;
+            }
+        }
+    }
+}
+
+select {
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+
+    background-color: @color-bg;
+    color: @color-text-active;
+    border: 1px solid @color-border;
+    padding: 10px 40px 10px 12px; // вот здесь справа больше — для стрелочки
+    border-radius: @radius;
+    font-size: 14px;
+    font-family: @font-family;
+    background-image: url("data:image/svg+xml;utf8,<svg fill='%2300d8ff' height='20' viewBox='0 0 24 24' width='20' xmlns='http://www.w3.org/2000/svg'><path d='M7 10l5 5 5-5z'/></svg>");
+
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    background-size: 16px;
+
+    option {
+        background-color: @color-surface;
+        color: @color-text;
+    }
+
+    &:focus {
+        border-color: @color-accent;
+        box-shadow: 0 0 6px @color-focus;
+        outline: none;
+    }
+}
 .form-group {
     display: flex;
     flex-direction: column;

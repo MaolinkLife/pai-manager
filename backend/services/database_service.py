@@ -17,7 +17,11 @@ from services.sqlite_service import (
     delete_message_sqlite,
     delete_message_chain_sqlite,
 
-    reroll_assistant_message_sqlite
+    reroll_assistant_message_sqlite,
+    
+    get_last_user_message_time_sqlite,
+    get_message_pattern_sqlite,
+    get_message_by_id_sqlite,
 )
 from datetime import datetime, timezone
 
@@ -65,3 +69,18 @@ def delete_message(message_id: str):
 
 def reroll_message(message_id: str):
     return reroll_assistant_message_sqlite(message_id)
+
+
+def get_last_user_message_time(character_name: str):
+    if db_type == "sqlite":
+        return get_last_user_message_time_sqlite(character_name)
+    
+    
+def get_last_messages(char_name: str, limit=10):
+    if db_type == "sqlite":
+        return get_message_pattern_sqlite(char_name, limit)
+    
+    
+def get_message_by_id(message_id: str):
+    if db_type == "sqlite":
+        return get_message_by_id_sqlite(message_id)

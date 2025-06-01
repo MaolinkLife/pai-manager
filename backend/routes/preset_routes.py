@@ -1,6 +1,12 @@
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
-from services import preset_service
+
+from services.preset_service import (
+    get_all_presets, 
+    get_preset_by_name, 
+    update_or_add_preset, 
+    apply_preset_to_config
+)
 
 router = APIRouter(prefix="/api/presets", tags=["Presets"])
 
@@ -9,7 +15,7 @@ router = APIRouter(prefix="/api/presets", tags=["Presets"])
 @router.get("/")
 def get_presets():
     try:
-        presets = preset_service.get_all_presets()
+        presets = get_all_presets()
         return {"status": "ok", "presets": presets}
     except Exception as e:
         return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
@@ -18,7 +24,7 @@ def get_presets():
 # 🎯 Получить пресет по имени
 @router.get("/{name}")
 def get_preset(name: str):
-    preset = preset_service.get_preset_by_name(name)
+    preset = get_preset_by_name(name)
     if preset:
         return {"status": "ok", "preset": preset}
     return JSONResponse(status_code=404, content={"status": "error", "message": "Пресет не найден"})
@@ -32,7 +38,7 @@ async def save_preset(request: Request):
         if not preset.get("name"):
             return JSONResponse(status_code=400, content={"status": "error", "message": "Имя пресета обязательно"})
 
-        preset_service.update_or_add_preset(preset)
+        update_or_add_preset(preset)
         return {"status": "ok", "message": "Пресет сохранён"}
     except Exception as e:
         return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
@@ -47,11 +53,11 @@ async def apply_existing_preset(request: Request):
         if not preset_name:
             return JSONResponse(status_code=400, content={"status": "error", "message": "Preset name is required."})
 
-        preset = preset_service.get_preset_by_name(preset_name)
+        preset = get_preset_by_name(preset_name)
         if not preset:
             return JSONResponse(status_code=404, content={"status": "error", "message": "Preset not found."})
 
-        preset_service.apply_preset_to_config(preset)
+        apply_preset_to_config(preset)
 
         return JSONResponse(content={"status": "ok", "message": f"Preset '{preset_name}' applied to config."})
 

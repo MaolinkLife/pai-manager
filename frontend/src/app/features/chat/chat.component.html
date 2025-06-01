@@ -1,6 +1,6 @@
 <ng-container *ngIf="config$ | async as config">
     <div class="chat-container">
-        <div class="messages">
+        <div class="messages" #messagesContainer>
             <div
                 class="message"
                 *ngFor="let msg of chatHistory; let i = index"
@@ -17,39 +17,43 @@
                     {{ config.charName }}:
                 </div>
 
+                <button class="btn-icon btn-top">
+                    <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="20"
+                        height="20"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        class="lucide lucide-ellipsis-vertical inline-flex items-center justify-center w-4 h-4"
+                    >
+                        <circle cx="12" cy="12" r="1"></circle>
+                        <circle cx="12" cy="5" r="1"></circle>
+                        <circle cx="12" cy="19" r="1"></circle>
+                    </svg>
+                </button>
+
                 <markdown [data]="msg.content"></markdown>
 
-                <button
-                    *ngIf="msg.role === 'user'"
-                    class="delete-btn"
-                    (click)="deleteMessage(msg, false)"
-                    title="Удалить"
-                >
-                    ❌
-                </button>
-                <button
-                    *ngIf="msg.role === 'user'"
-                    class="delete-btn chain"
-                    (click)="deleteMessage(msg, true)"
-                    title="Удалить с ответом"
-                >
-                    🔥
-                </button>
-
-                <div *ngIf="shouldShowReroll(msg, i)">
-                    <button
-                        class="reroll-button"
-                        (click)="rerollMessage(msg.id)"
-                    >
-                        ♻️
-                    </button>
-                </div>
+                <app-icons-toolbar
+                    [msg]="msg"
+                    [index]="i"
+                    [lastIndex]="chatHistory.length - 1"
+                    (rerollChange)="rerollMessage($event.id)"
+                    (deleteChange)="deleteMessage($event.msg, $event.chain)"
+                    (playVoiceChange)="playMessage($event)"
+                ></app-icons-toolbar>
             </div>
 
             <div *ngIf="loading" class="message assistant">
                 <div class="sender">{{ config.charName }}:</div>
                 Печатаю...
             </div>
+
+            <div id="bottomAnchor"></div>
         </div>
 
         <form (submit)="sendMessage()" class="input-area">
@@ -60,6 +64,15 @@
                 placeholder="Скажи что-нибудь..."
             />
             <button type="submit">➤</button>
+
+            <button
+                type="button"
+                class="stop-btn"
+                (click)="stopVoice()"
+                title="Остановить озвучку"
+            >
+                🛑
+            </button>
         </form>
     </div>
 </ng-container>

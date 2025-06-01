@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { AfterViewChecked, AfterViewInit, Component, ElementRef, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { ApiService } from '../../core/services/api.service';
 import { Message } from '../../core/models/message.model';
 import { FormControl } from '@angular/forms';
@@ -6,13 +6,14 @@ import { ConfigService } from '../../core/services/config.service';
 import { ProjectConfig } from './../../core/models/project-config.model';
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
+import { VoiceService } from '../../core/services/voice.service';
 
 @Component({
     selector: 'app-chat',
     templateUrl: './chat.component.html',
     styleUrls: ['./chat.component.less']
 })
-export class ChatComponent implements OnInit {
+export class ChatComponent implements OnInit, OnDestroy {
     chatInput = new FormControl('');
     chatHistory: Message[] = [];
     loading = false;
@@ -22,11 +23,31 @@ export class ChatComponent implements OnInit {
 
     config$: Observable<{ userName: string; charName: string } | null> | null = null;
 
-    constructor(private apiService: ApiService, private configService: ConfigService) { }
+    constructor(
+        private apiService: ApiService,
+        private configService: ConfigService,
+        private voiceSerice: VoiceService,
+    ) { }
 
     ngOnInit(): void {
         this.getSettings();
         this.loadHistory();
+    }
+
+    ngOnDestroy() { }
+
+    scrollToBottom(): void {
+        const tryScroll = () => {
+            const anchor = document.getElementById('bottomAnchor');
+            if (anchor) {
+                anchor.scrollIntoView({ behavior: 'auto' });
+            } else {
+                // console.warn('⚠️ anchor не найден. Пробуем ещё раз...');
+                setTimeout(() => requestAnimationFrame(tryScroll), 50);
+            }
+        };
+
+        requestAnimationFrame(tryScroll);
     }
 
     sendMessage(): void {
@@ -47,6 +68,7 @@ export class ChatComponent implements OnInit {
             next: (res) => {
                 this.chatHistory.push({ id: res.id, role: 'assistant', content: res.response, timestamp: new Date().toISOString() });
                 this.loading = false;
+                setTimeout(() => this.scrollToBottom(), 0);
             },
             error: (err) => {
                 this.chatHistory.push({
@@ -68,6 +90,7 @@ export class ChatComponent implements OnInit {
                     this.chatHistory = res.history
                         .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
                         .map((msg) => ({ ...msg }));
+                    setTimeout(() => this.scrollToBottom(), 0);
                 }
             },
             error: (err) => {
@@ -93,6 +116,18 @@ export class ChatComponent implements OnInit {
                 }
             })
         )
+    }
+
+    playMessage(msg: Message) {
+        console.log({
+            msg
+        });
+
+
+        this.voiceSerice.playMessage(msg.id).subscribe((r) => {
+            console.log({ r });
+
+        })
     }
 
     deleteMessage(msg: Message, chain: boolean): void {
@@ -126,15 +161,26 @@ export class ChatComponent implements OnInit {
 
         this.loading = true;
 
+        // Удалим последнее сообщение ассистента
+        const lastIndex = this.chatHistory.findIndex(
+            (msg, i) => msg.role === 'assistant' && i === this.chatHistory.length - 1
+        );
+
+        if (lastIndex !== -1) {
+            this.chatHistory.splice(lastIndex, 1); // удалим сообщение из истории
+        }
+
+        setTimeout(() => this.scrollToBottom(), 0); // прокрутим вниз
+
         this.apiService.rerollMessage$(messageId).subscribe({
             next: (res) => {
                 if (res.status === 'ok') {
-                    // Обновляем историю после реролла
-                    this.loadHistory();
+                    this.loadHistory(); // получаем новую версию истории
+                    this.loading = false;
                 } else {
                     console.error('Ошибка реролла:', res.message || res);
+                    this.loading = false;
                 }
-                this.loading = false;
             },
             error: (err) => {
                 console.error('Ошибка при реролле:', err);
@@ -173,5 +219,9 @@ export class ChatComponent implements OnInit {
         });
 
         return `${dateStr} ${time}`;
+    }
+
+    stopVoice() {
+        this.voiceSerice.stopPlay$().subscribe();
     }
 }

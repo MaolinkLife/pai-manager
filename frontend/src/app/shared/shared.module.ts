@@ -1,14 +1,17 @@
 import { CommonModule } from '@angular/common';
 import { NgModule } from '@angular/core';
 import { ThemeModule } from './components/theme/theme.module';
+import { IconsToolbarModule } from './components/icons-toolbar/icons-toolbar.module';
 
 @NgModule({
     imports: [
         CommonModule,
-        ThemeModule
+        ThemeModule,
+        IconsToolbarModule
     ],
     exports: [
-        ThemeModule
+        ThemeModule,
+        IconsToolbarModule,
     ]
 })
 export class SharedModule { }

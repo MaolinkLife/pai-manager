@@ -91,3 +91,8 @@ backend/config/generation_presets.json
 
 backend/storage/history/*
 backend/storage/database/core.db
+
+backend/temp/audio/*
+backend/temp/logs/*
+backend/temp/vision/*
+backend/temp/voice/*

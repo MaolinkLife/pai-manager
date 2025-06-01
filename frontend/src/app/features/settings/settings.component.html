@@ -32,17 +32,32 @@
             </div>
 
             <div class="form-group">
-                <label for="outputId">Output ID</label>
-                <input id="outputId" type="number" formControlName="outputId" />
+                <label for="outputId">Устройство вывода</label>
+                <select id="outputId" (change)="onAudioOutputChange($event)">
+                    <option
+                        *ngFor="let device of audioOutputs"
+                        [value]="device.id"
+                        [selected]="device.id === selectedAudioOutput?.id"
+                    >
+                        [{{ device.id }}]: {{ device.name }}
+                    </option>
+                </select>
             </div>
 
             <div class="form-group">
-                <label for="windowsOutputId">Windows Output ID</label>
-                <input
+                <label for="windowsOutputId">Windows Output</label>
+                <select
                     id="windowsOutputId"
-                    type="number"
-                    formControlName="windowsOutputId"
-                />
+                    (change)="onWindowsOutputChange($event)"
+                >
+                    <option
+                        *ngFor="let device of windowsOutputs"
+                        [value]="device.id"
+                        [selected]="device.id === selectedWindowsOutput?.id"
+                    >
+                        [{{ device.id }}]: {{ device.name }}
+                    </option>
+                </select>
             </div>
 
             <div class="form-group">
@@ -93,8 +108,26 @@
             </div>
 
             <div class="form-group">
-                <label for="model">Модель</label>
-                <input id="model" type="text" formControlName="model" />
+                <div
+                    class="custom-select"
+                    (click)="toggleDropdown()"
+                    [ngClass]="{ open: dropdownOpen }"
+                >
+                    <div class="selected">
+                        {{ settingsForm.get("api")?.value.model || "" }}
+                    </div>
+                    <ul class="options" *ngIf="dropdownOpen">
+                        <li
+                            *ngFor="let model of availableModels"
+                            (click)="selectModel(model); $event.stopPropagation()"
+                            [class.active]="model === selectedModel"
+                        >
+                            {{ model.split(":")[0] }} ({{
+                                model.split(":")[1] || "latest"
+                            }})
+                        </li>
+                    </ul>
+                </div>
             </div>
 
             <div class="form-group">

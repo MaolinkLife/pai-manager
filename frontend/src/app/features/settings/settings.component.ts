@@ -1,14 +1,17 @@
-import { Component, ElementRef, OnInit, ViewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, NgZone, OnInit, ViewChild } from '@angular/core';
 import { FormBuilder, FormGroup } from '@angular/forms';
 import { ConfigService } from '../../core/services/config.service';
 import { ProjectConfig } from '../../core/models/project-config.model';
 import { ApiService } from '../../core/services/api.service';
 import { GenerationPreset } from '../../core/models/generation-preset.model';
+import { ResourcesService } from '../../core/services/resources.service';
+import { BehaviorSubject } from 'rxjs';
 
 @Component({
     selector: 'app-settings',
     templateUrl: './settings.component.html',
-    styleUrls: ['./settings.component.less']
+    styleUrls: ['./settings.component.less'],
+    // changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class SettingsComponent implements OnInit {
 
@@ -22,10 +25,24 @@ export class SettingsComponent implements OnInit {
 
     originalConfig!: ProjectConfig;
 
+    audioOutputs: { id: number; name: string }[] = [];
+    windowsOutputs: { id: number; name: string }[] = [];
+
+    selectedAudioOutput: { id: number; name: string } | null = null;
+    selectedWindowsOutput: { id: number; name: string } | null = null;
+
+    availableModels: string[] = [];
+
+    // dropdownOpen$: BehaviorSubject<boolean> = new BehaviorSubject<boolean>(false);
+    dropdownOpen: boolean = false;
+    selectedModel = '';
+
     constructor(
         private fb: FormBuilder,
         private configService: ConfigService,
         private apiService: ApiService,
+        private resourcesService: ResourcesService,
+        private zone: NgZone,
     ) {
         this.initializeFormGroups();
     }
@@ -74,6 +91,20 @@ export class SettingsComponent implements OnInit {
         });
     }
 
+    toggleDropdown() {
+        this.dropdownOpen = !this.dropdownOpen;
+    }
+
+    selectModel(model: string) {
+        this.selectedModel = model;
+        this.dropdownOpen = false;
+        this.settingsForm.get('api.model')?.setValue(model);
+
+        this.zone.run(() => {
+            this.dropdownOpen = false;
+        });
+    }
+
     ngOnInit(): void {
         this.configService.getConfig$().subscribe((data: ProjectConfig | null) => {
             if (data) {
@@ -93,6 +124,10 @@ export class SettingsComponent implements OnInit {
         });
 
 
+        this.apiService.getOllamaModels$().subscribe((models: string[]) => {
+            this.availableModels = models;
+        });
+
 
         const tokenLimitControl = this.settingsForm.get('api.tokenLimit');
 
@@ -101,7 +136,6 @@ export class SettingsComponent implements OnInit {
             if (!value) {
                 return;
             }
-
 
             if (
                 this.tokenSliderRef &&
@@ -118,6 +152,25 @@ export class SettingsComponent implements OnInit {
             ) {
                 this.tokenInputRef.nativeElement.value = value.toString();
             }
+        });
+
+
+        this.getAudioDevices();
+    }
+
+
+    getAudioDevices(): void {
+        this.resourcesService.getAudioDevices$().subscribe(r => {
+            this.audioOutputs = (r.all_devices || []).map(
+                ([id, name]: [number, string]) => ({ id, name })
+            );
+            this.windowsOutputs = (r.get_windows_output || []).map(
+                ([id, name]: [number, string]) => ({ id, name })
+            );
+
+            const voiceForm = this.settingsForm.get('voice')?.value;
+            this.selectedAudioOutput = this.audioOutputs.find(d => d.id === voiceForm?.outputId) || null;
+            this.selectedWindowsOutput = this.windowsOutputs.find(d => d.id === voiceForm?.windowsOutputId) || null;
         });
     }
 
@@ -140,6 +193,24 @@ export class SettingsComponent implements OnInit {
         };
 
         return getDiff(this.originalConfig, current);
+    }
+
+    onAudioOutputChange(event: Event) {
+        const target = event.target as HTMLSelectElement;
+        const id = parseInt(target.value, 10);
+        const selected = this.audioOutputs.find(d => d.id === id) || null;
+
+        this.selectedAudioOutput = selected;
+        this.settingsForm.get('voice.outputId')?.setValue(id);
+    }
+
+    onWindowsOutputChange(event: Event) {
+        const target = event.target as HTMLSelectElement;
+        const id = parseInt(target.value, 10);
+        const selected = this.windowsOutputs.find(d => d.id === id) || null;
+
+        this.selectedWindowsOutput = selected;
+        this.settingsForm.get('voice.windowsOutputId')?.setValue(id);
     }
 
     clickUpdateConfig() {
