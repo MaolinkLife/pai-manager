@@ -1,0 +1,33 @@
+{
+    "settings": {
+        "general": "General",
+        "charName": "Character Name",
+        "userName": "User Name",
+        "language": "Language",
+        "voice": "Voice Settings",
+        "voice_language": "Voice Language",
+        "output_device": "Virtual Output Device",
+        "windows_output": "Windows Output Device",
+        "use_rvc": "Use RVC (for virtual output)",
+        "speak_responses": "Speak Responses",
+        "modules": "Modules",
+        "vtube_studio": "VTubeStudio",
+        "minecraft": "Minecraft",
+        "alarm": "Alarm",
+        "rag": "RAG",
+        "whisper": "Whisper",
+        "gaming": "Gaming",
+        "discord": "Discord",
+        "visual": "Visual",
+        "api": "API",
+        "api_type": "API Type",
+        "text_model": "Text Model (General)",
+        "visual_model": "Visual Model",
+        "token_limit": "Token Limit",
+        "message_pair_limit": "Message Pair Limit",
+        "streaming": "Streaming Mode"
+    },
+    "general": {
+        "save": "Save"
+    }
+}

@@ -4,7 +4,7 @@ from dateutil.parser import isoparse
 from services.api_service import run_initiative
 from services.database_service import get_last_messages
 from services.config_service import get_config_value
-from services.logger_service import log_error, log_audit
+from services.logger_service import log_error, log_audit, log_audit_entry, AuditStatus
 
 CHECK_EVERY = 60  # Проверяем каждую минуту
 
@@ -90,5 +90,10 @@ def initiative_monitor():
 
         except Exception as e:
             log_error("[Initiative]⚠️ Ошибка инициативы:", str(e))
-            log_audit("initiative_crash", {"error": str(e)})
+            log_audit_entry(
+                event_type="initiative_crash",
+                msg="[Initiative]: Ошибка инициативы",
+                status=AuditStatus.ERROR , 
+                details={"error": str(e)}
+            )
             time.sleep(60)

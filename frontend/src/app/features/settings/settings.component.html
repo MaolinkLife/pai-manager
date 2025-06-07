@@ -4,21 +4,34 @@
         (ngSubmit)="clickUpdateConfig()"
         class="settings-form"
     >
-        <h2>⚙️ Персонаж</h2>
+        <h2>⚙️ {{ "settings.general" | translate }}</h2>
         <div class="form-group">
-            <label for="charName">Имя персонажа</label>
+            <label for="charName">{{ "settings.charName" | translate }}</label>
             <input id="charName" type="text" formControlName="charName" />
         </div>
 
         <div class="form-group">
-            <label for="userName">Имя пользователя</label>
+            <label for="userName">{{ "settings.userName" | translate }}</label>
             <input id="userName" type="text" formControlName="userName" />
         </div>
 
-        <h2>🎤 Голос</h2>
+        <div class="form-group">
+            <label for="globalLanguage">{{
+                "settings.language" | translate
+            }}</label>
+            <select id="globalLanguage" formControlName="language">
+                <option *ngFor="let lang of languages" [value]="lang.code">
+                    {{ lang.label }}
+                </option>
+            </select>
+        </div>
+
+        <h2>🎤 {{ "settings.voice_setting" | translate }}</h2>
         <div formGroupName="voice">
             <div class="form-group">
-                <label for="voiceLanguage">Голосовой язык</label>
+                <label for="voiceLanguage">{{
+                    "settings.voice" | translate
+                }}</label>
                 <input
                     id="voiceLanguage"
                     type="text"
@@ -27,12 +40,16 @@
             </div>
 
             <div class="form-group">
-                <label for="language">Язык</label>
+                <label for="language">{{
+                    "settings.voice_language" | translate
+                }}</label>
                 <input id="language" type="text" formControlName="language" />
             </div>
 
             <div class="form-group">
-                <label for="outputId">Устройство вывода</label>
+                <label for="outputId">{{
+                    "settings.output_device" | translate
+                }}</label>
                 <select id="outputId" (change)="onAudioOutputChange($event)">
                     <option
                         *ngFor="let device of audioOutputs"
@@ -45,7 +62,9 @@
             </div>
 
             <div class="form-group">
-                <label for="windowsOutputId">Windows Output</label>
+                <label for="windowsOutputId">{{
+                    "settings.windows_output" | translate
+                }}</label>
                 <select
                     id="windowsOutputId"
                     (change)="onWindowsOutputChange($event)"
@@ -63,47 +82,57 @@
             <div class="form-group">
                 <label class="checkbox">
                     <input type="checkbox" formControlName="useRvc" />
-                    Использовать RVC
+                    {{ "settings.use_rvc" | translate }}
+                </label>
+            </div>
+
+            <div class="form-group">
+                <label class="checkbox">
+                    <input type="checkbox" formControlName="enabled" />
+                    {{ "settings.speak_responses" | translate }}
                 </label>
             </div>
         </div>
 
-        <h2>🧩 Модули</h2>
+        <h2>🧩 {{ "settings.modules" | translate }}</h2>
         <div class="checkbox-grid" formGroupName="modules">
             <label
-                ><input type="checkbox" formControlName="vtube_studio" /> VTube
-                Studio</label
+                ><input type="checkbox" formControlName="vtube_studio" />
+                {{ "settings.vtube_studio" | translate }}</label
             >
             <label
                 ><input type="checkbox" formControlName="whisper" />
-                Whisper</label
+                {{ "settings.whisper" | translate }}</label
             >
             <label
                 ><input type="checkbox" formControlName="minecraft" />
-                Minecraft</label
+                {{ "settings.minecraft" | translate }}</label
             >
             <label
                 ><input type="checkbox" formControlName="gaming" />
-                Gaming</label
+                {{ "settings.gaming" | translate }}</label
             >
             <label
                 ><input type="checkbox" formControlName="alarm" /> Alarm</label
             >
             <label
                 ><input type="checkbox" formControlName="discord" />
-                Discord</label
+                {{ "settings.discord" | translate }}</label
             >
-            <label><input type="checkbox" formControlName="rag" /> RAG</label>
+            <label
+                ><input type="checkbox" formControlName="rag" />
+                {{ "settings.rag" | translate }}</label
+            >
             <label
                 ><input type="checkbox" formControlName="visual" />
-                Visual</label
+                {{ "settings.visual" | translate }}</label
             >
         </div>
 
-        <h2>🧠 API</h2>
+        <h2>🧠 {{ "settings.api" | translate }}</h2>
         <div formGroupName="api">
             <div class="form-group">
-                <label for="type">Тип</label>
+                <label for="type">{{ "settings.api_type" | translate }}</label>
                 <input id="type" type="text" formControlName="type" />
             </div>
 
@@ -119,7 +148,9 @@
                     <ul class="options" *ngIf="dropdownOpen">
                         <li
                             *ngFor="let model of availableModels"
-                            (click)="selectModel(model); $event.stopPropagation()"
+                            (click)="
+                                selectModel(model); $event.stopPropagation()
+                            "
                             [class.active]="model === selectedModel"
                         >
                             {{ model.split(":")[0] }} ({{
@@ -131,7 +162,9 @@
             </div>
 
             <div class="form-group">
-                <label for="visualModel">Visual Model</label>
+                <label for="visualModel">{{
+                    "settings.visual_model" | translate
+                }}</label>
                 <input
                     id="visualModel"
                     type="text"
@@ -140,7 +173,9 @@
             </div>
 
             <div class="form-group token-limit-block">
-                <label for="tokenLimit">Token Limit</label>
+                <label for="tokenLimit">{{
+                    "settings.token_limit" | translate
+                }}</label>
                 <input
                     #tokenInput
                     id="tokenLimit"
@@ -166,7 +201,9 @@
             </div>
 
             <div class="form-group">
-                <label for="messagePairLimit">Message Pair Limit</label>
+                <label for="messagePairLimit">{{
+                    "settings.message_pair_limit" | translate
+                }}</label>
                 <input
                     id="messagePairLimit"
                     type="number"
@@ -176,13 +213,13 @@
 
             <label class="checkbox">
                 <input type="checkbox" formControlName="streaming" />
-                Streaming Mode
+                {{ "settings.streaming" | translate }}
             </label>
         </div>
 
         <div class="button-row">
             <button type="submit" [disabled]="!hasChanges()">
-                💾 Сохранить
+                💾 {{ "general.save" | translate }}
             </button>
             <!-- <button class="cancel" type="button">Отмена</button> -->
         </div>
@@ -190,9 +227,9 @@
 </div>
 
 <div class="settings-wrapper">
-    <h2>🎨 Пресеты генерации</h2>
+    <h2>🎨{{ "settings.presets" | translate }}</h2>
     <div class="form-group">
-        <label for="presetSelect">Выбрать пресет</label>
+        <label for="presetSelect">{{ "settings.select_preset" | translate }}</label>
         <select
             id="presetSelect"
             [(ngModel)]="selectedPresetName"
@@ -206,11 +243,11 @@
 
     <form [formGroup]="generationSettingsForm">
         <div class="form-group">
-            <label>Имя пресета</label>
+            <label>{{ "settings.preset_name" | translate }}</label>
             <input type="text" formControlName="name" />
         </div>
         <div class="form-group">
-            <label>Описание</label>
+            <label>{{ "settings.description" | translate }}</label>
             <input type="text" formControlName="description" />
         </div>
 

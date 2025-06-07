@@ -1,7 +1,9 @@
 export interface ProjectConfigDto {
     char_name: string;
     user_name: string;
+    language: string;
     voice: {
+        enabled: boolean;
         output_id: number;
         windows_output_id: number;
         language: string;

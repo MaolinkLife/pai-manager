@@ -4,7 +4,9 @@ import { ProjectConfig } from '../models/project-config.model';
 export const mapProjectConfigDtoToModel = (dto: ProjectConfigDto): ProjectConfig => ({
     charName: dto.char_name,
     userName: dto.user_name,
+    language: dto.language,
     voice: {
+        enabled: dto.voice.enabled,
         outputId: dto.voice.output_id,
         windowsOutputId: dto.voice.windows_output_id,
         language: dto.voice.language,
@@ -25,7 +27,9 @@ export const mapProjectConfigDtoToModel = (dto: ProjectConfigDto): ProjectConfig
 export const mapProjectConfigModelToDto = (model: ProjectConfig): ProjectConfigDto => ({
     char_name: model.charName,
     user_name: model.userName,
+    language: model.language,
     voice: {
+        enabled: model.voice.enabled,
         output_id: model.voice.outputId,
         windows_output_id: model.voice.windowsOutputId,
         language: model.voice.language,
@@ -57,7 +61,7 @@ export const mapPartialModelToDto = (
 ): Partial<ProjectConfigDto> => {
     const dto: Partial<ProjectConfigDto> = {};
 
-    const allowedKeys = ['charName', 'userName', 'voice', 'modules', 'api'];
+    const allowedKeys = ['charName', 'userName', 'language', 'voice', 'modules', 'api'];
 
     Object.keys(model).forEach((key) => {
         if (!allowedKeys.includes(key)) {
@@ -70,6 +74,9 @@ export const mapPartialModelToDto = (
                 break;
             case 'userName':
                 dto.user_name = model.userName!;
+                break;
+            case 'language':
+                dto.language = model.language!;
                 break;
             case 'voice':
                 dto.voice = mapVoiceModelToDto(model.voice!);
@@ -93,6 +100,7 @@ const mapVoiceModelToDto = (voice: ProjectConfig['voice']) => ({
     language: voice.language,
     use_rvc: voice.useRvc,
     voice_language: voice.voiceLanguage,
+    enabled: voice.enabled,
 });
 
 const mapModulesModelToDto = (modules: ProjectConfig['modules']) => ({

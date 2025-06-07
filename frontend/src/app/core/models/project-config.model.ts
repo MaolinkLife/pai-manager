@@ -3,10 +3,12 @@ export interface ProjectConfig {
     userName: string;
     voice: VoiceConfig;
     modules: ModuleConfig;
+    language: string;
     api: ApiConfig;
 }
 
 export interface VoiceConfig {
+    enabled: boolean;
     outputId: number;
     windowsOutputId: number;
     language: string;

@@ -4,6 +4,7 @@ import { CommonModule } from '@angular/common';
 import { DebugRoutingModule } from './debug-routing.module';
 import { DebugComponent } from './debug.component';
 import { LoggerService } from '../../core/services/logger.service';
+import { SharedModule } from '../../shared/shared.module';
 
 
 @NgModule({
@@ -12,7 +13,8 @@ import { LoggerService } from '../../core/services/logger.service';
     ],
     imports: [
         CommonModule,
-        DebugRoutingModule
+        DebugRoutingModule,
+        SharedModule
     ],
     providers: [
         LoggerService,

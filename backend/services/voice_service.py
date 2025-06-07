@@ -5,6 +5,7 @@ import uuid
 import numpy as np
 import re
 import emoji
+import traceback
 
 import sounddevice as sd
 import edge_tts
@@ -93,7 +94,7 @@ def speak_line(s_message, refuse_pause):
             #     break
 
         except Exception as e:
-            log_error("[Voice Error]", exc_info=str(e))
+            log_error("[Voice Error]", context=traceback.format_exc())
 
     # utils.hotkeys.cooldown_listener_timer()
     set_speaking(False)

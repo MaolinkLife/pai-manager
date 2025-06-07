@@ -96,3 +96,5 @@ backend/temp/audio/*
 backend/temp/logs/*
 backend/temp/vision/*
 backend/temp/voice/*
+
+backend/logs/*

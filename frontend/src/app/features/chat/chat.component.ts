@@ -1,4 +1,4 @@
-import { AfterViewChecked, AfterViewInit, Component, ElementRef, OnDestroy, OnInit, ViewChild } from '@angular/core';
+import { AfterViewChecked, AfterViewInit, Component, ElementRef, HostListener, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { ApiService } from '../../core/services/api.service';
 import { Message } from '../../core/models/message.model';
 import { FormControl } from '@angular/forms';
@@ -14,6 +14,11 @@ import { VoiceService } from '../../core/services/voice.service';
     styleUrls: ['./chat.component.less']
 })
 export class ChatComponent implements OnInit, OnDestroy {
+    @HostListener('document:click', ['$event'])
+    onClickOutside(): void {
+        this.activeDropdown = null;
+    }
+
     chatInput = new FormControl('');
     chatHistory: Message[] = [];
     loading = false;
@@ -23,10 +28,14 @@ export class ChatComponent implements OnInit, OnDestroy {
 
     config$: Observable<{ userName: string; charName: string } | null> | null = null;
 
+    recording = false;
+
+    activeDropdown: string | null = null;
+
     constructor(
         private apiService: ApiService,
         private configService: ConfigService,
-        private voiceSerice: VoiceService,
+        private voiceService: VoiceService,
     ) { }
 
     ngOnInit(): void {
@@ -50,6 +59,39 @@ export class ChatComponent implements OnInit, OnDestroy {
         requestAnimationFrame(tryScroll);
     }
 
+    toggleMessageMenu(msgId: string, event: Event): void {
+        event.stopPropagation();
+        this.activeDropdown = this.activeDropdown === msgId ? null : msgId;
+    }
+
+    copyMessage(msg: Message): void {
+        navigator.clipboard.writeText(msg.content).then(() => {
+            console.log('Скопировано!');
+        });
+    }
+
+    toggleRecording() {
+        if (!this.recording) {
+            this.voiceService.startRecord$().subscribe(() => {
+                this.recording = true;
+                console.log({ start: 'recording' });
+            });
+        } else {
+            this.voiceService.stopRecord$().subscribe((res) => {
+                console.log({ stop_response: res });
+                this.recording = false;
+
+                const msg = res.data;
+
+                if (msg && msg.content.trim()) {
+                    // Добавляем как пользовательское сообщение
+                    this.chatHistory.push(msg);
+                    this.scrollToBottom();
+                }
+            });
+        }
+    }
+
     sendMessage(): void {
         const trimmed = this.chatInput.value?.trim();
         if (!trimmed) return;
@@ -58,6 +100,7 @@ export class ChatComponent implements OnInit, OnDestroy {
         this.chatHistory.push(userMessage);
         this.chatInput.setValue('');
         this.loading = true;
+        setTimeout(() => this.scrollToBottom(), 0);
 
         const message = {
             "history": [...this.chatHistory],
@@ -124,7 +167,7 @@ export class ChatComponent implements OnInit, OnDestroy {
         });
 
 
-        this.voiceSerice.playMessage(msg.id).subscribe((r) => {
+        this.voiceService.playMessage(msg.id).subscribe((r) => {
             console.log({ r });
 
         })
@@ -222,6 +265,6 @@ export class ChatComponent implements OnInit, OnDestroy {
     }
 
     stopVoice() {
-        this.voiceSerice.stopPlay$().subscribe();
+        this.voiceService.stopPlay$().subscribe();
     }
 }

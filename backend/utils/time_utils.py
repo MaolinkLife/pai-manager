@@ -30,3 +30,7 @@ def format_user_datetime(dt: datetime, fmt="%Y-%m-%d %H:%M:%S", tz_offset=USER_T
 #     print("UTC:", now_utc)
 #     print("User local:", utc_to_user(now_utc))
 #     print("User str:", format_user_datetime(now_utc))
+
+
+def get_utc_now():
+    return datetime.now(timezone.utc)

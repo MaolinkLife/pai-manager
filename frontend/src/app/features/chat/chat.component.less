@@ -17,6 +17,7 @@
     display: flex;
     flex-direction: column;
 
+
     .message {
         position: relative;
         margin-bottom: 20px;
@@ -24,6 +25,7 @@
         border-radius: @radius;
         box-shadow: @shadow-soft;
         max-width: 70%;
+        min-width: 180px;
 
         &.user {
             background: @color-surface;
@@ -36,6 +38,37 @@
             color: @color-text;
             align-self: flex-start;
             text-align: left;
+        }
+    }
+}
+
+.message-menu-wrapper {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+
+    .message-dropdown {
+        position: absolute;
+        top: 28px;
+        right: 0;
+        background: @color-surface;
+        border: 1px solid @color-border;
+        border-radius: @radius;
+        box-shadow: @shadow-soft;
+        z-index: 1000;
+        padding: 0.3rem 0;
+        list-style: none;
+        min-width: 160px;
+
+        li {
+            padding: 0.5rem 1rem;
+            cursor: pointer;
+            color: @color-text;
+
+            &:hover {
+                background: @color-accent-dark;
+                color: @color-text-active;
+            }
         }
     }
 }
@@ -120,6 +153,9 @@
 }
 
 .stop-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
     margin-left: 0.5rem;
     background: @color-danger;
     border: none;
@@ -132,5 +168,22 @@
 
     &:hover {
         background: darken(@color-danger, 10%);
+    }
+
+    &.recording {
+        background: lighten(@color-danger, 15%);
+        animation: pulse 1s infinite;
+    }
+
+    @keyframes pulse {
+        0% {
+            box-shadow: 0 0 0 0 fade(@color-danger, 30%);
+        }
+        70% {
+            box-shadow: 0 0 0 10px fade(@color-danger, 0%);
+        }
+        100% {
+            box-shadow: 0 0 0 0 fade(@color-danger, 0%);
+        }
     }
 }

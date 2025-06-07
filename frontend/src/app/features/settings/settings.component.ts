@@ -5,7 +5,9 @@ import { ProjectConfig } from '../../core/models/project-config.model';
 import { ApiService } from '../../core/services/api.service';
 import { GenerationPreset } from '../../core/models/generation-preset.model';
 import { ResourcesService } from '../../core/services/resources.service';
-import { BehaviorSubject } from 'rxjs';
+import { BehaviorSubject, combineLatest } from 'rxjs';
+import { map } from 'rxjs/operators';
+import { LocalizationService } from '../../shared/pipes/translation/localization.service';
 
 @Component({
     selector: 'app-settings',
@@ -28,6 +30,11 @@ export class SettingsComponent implements OnInit {
     audioOutputs: { id: number; name: string }[] = [];
     windowsOutputs: { id: number; name: string }[] = [];
 
+    languages: { code: string, label: string }[] = [
+        { code: 'ru-RU', label: 'Русский' },
+        { code: 'en-US', label: 'English' }
+    ];
+
     selectedAudioOutput: { id: number; name: string } | null = null;
     selectedWindowsOutput: { id: number; name: string } | null = null;
 
@@ -43,15 +50,19 @@ export class SettingsComponent implements OnInit {
         private apiService: ApiService,
         private resourcesService: ResourcesService,
         private zone: NgZone,
+        private localizationService: LocalizationService
     ) {
         this.initializeFormGroups();
+
     }
 
     initializeFormGroups(): void {
         this.settingsForm = this.fb.group({
             charName: [''],
             userName: [''],
+            language: [''],
             voice: this.fb.group({
+                enabled: [false],
                 outputId: [0],
                 windowsOutputId: [0],
                 language: [''],
@@ -106,27 +117,30 @@ export class SettingsComponent implements OnInit {
     }
 
     ngOnInit(): void {
-        this.configService.getConfig$().subscribe((data: ProjectConfig | null) => {
-            if (data) {
-                this.originalConfig = JSON.parse(JSON.stringify(data)); // глубокая копия
-                this.settingsForm.patchValue(data);
-            }
-        });
+        this.localizationService.init();
+        this.initLanguageChangeListener();
 
-        // Получение всех пресетов
-        this.configService.getGenerationPresets$().subscribe(presets => {
-            this.presets = presets;
-            const active = presets.find(p => p.name === this.selectedPresetName) || presets[0];
-            if (active) {
-                this.generationSettingsForm.patchValue(active);
-                this.selectedPresetName = active.name;
-            }
-        });
+        combineLatest([
+            this.configService.getConfig$(),
+            this.configService.getGenerationPresets$(),
+            this.apiService.getOllamaModels$(),
+        ]).pipe(
+            map(([config, presets, models]: [ProjectConfig | null, GenerationPreset[], string[]]) => {
+                if (config) {
+                    this.originalConfig = JSON.parse(JSON.stringify(config)); // глубокая копия
+                    this.settingsForm.patchValue(config);
+                }
 
+                // Получение всех пресетов
+                this.presets = presets;
+                const active = presets.find(p => p.name === this.selectedPresetName) || presets[0];
+                if (active) {
+                    this.generationSettingsForm.patchValue(active);
+                    this.selectedPresetName = active.name;
+                }
 
-        this.apiService.getOllamaModels$().subscribe((models: string[]) => {
-            this.availableModels = models;
-        });
+                this.availableModels = models;
+            })).subscribe();
 
 
         const tokenLimitControl = this.settingsForm.get('api.tokenLimit');
@@ -158,6 +172,19 @@ export class SettingsComponent implements OnInit {
         this.getAudioDevices();
     }
 
+
+
+    initLanguageChangeListener() {
+        const control = this.settingsForm.get('language');
+        if (control) {
+            control.valueChanges.subscribe(lang => {
+                if (lang) {
+                    localStorage.setItem('language', lang);
+                    this.localizationService.setLanguage(lang);
+                }
+            });
+        }
+    }
 
     getAudioDevices(): void {
         this.resourcesService.getAudioDevices$().subscribe(r => {
@@ -220,6 +247,11 @@ export class SettingsComponent implements OnInit {
             console.log("Нет изменений");
             return;
         }
+
+        console.log({
+            changes
+        });
+
 
         this.configService.updateCongif$(changes).subscribe(result => {
             console.log({ result });

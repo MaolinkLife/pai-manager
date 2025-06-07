@@ -18,7 +18,7 @@ def get_structure_label(name: str) -> str:
     try:
         return StructureEnum[camel_case].value
     except KeyError:
-        return StructureEnum.Core
+        return StructureEnum['Core'].value
 
 def get_label_from_file(file_path: str) -> str:
     base = os.path.splitext(os.path.basename(file_path))[0]

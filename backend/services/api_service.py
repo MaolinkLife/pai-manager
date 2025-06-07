@@ -12,7 +12,7 @@ import os
 import threading
 from services import ollama_service, database_service
 
-from services.logger_service import log_audit, log_audit_entry, AuditStatus
+from services.logger_service import log_audit_entry, AuditStatus
 from services.voice_service import speak_line, set_speaking
 from services.config_service import get_config_value
 from services.database_service import get_message_by_id
@@ -30,13 +30,21 @@ def load_system_prompt() -> str:
     full_path = os.path.join(base_path, filename)
     fallback_path = os.path.join(base_path, "default.yaml")
 
-    log_audit_entry(event_type="load_character_card", msg="[API] Загрузка Character Card в System Prompt", status=AuditStatus.INFO, meta={
-        "base_path": base_path,
-        "char_name": base_path,
-        "filename": filename,
-        "full_path":full_path,
-        "fallback_path":fallback_path
-    })
+    log_audit_entry(
+        event_type="load_character_card", 
+        msg="[Api Service]: Loading Character Card в System Prompt", 
+        status=AuditStatus.INFO, 
+        details={
+            "inputs": {
+                "base_path": base_path,
+                "char_name": base_path,
+                "filename": filename,
+                "full_path":full_path,
+                "fallback_path":fallback_path
+            }
+        },
+        meta={}
+    )
     try:
         if os.path.exists(full_path):
             with open_utf8(full_path, "r") as f:
@@ -49,25 +57,24 @@ def load_system_prompt() -> str:
         else:
             log_audit_entry(
                 event_type="character_prompt_not_found", 
-                msg=f"[API] Character prompt not found", 
+                msg=f"[Api Service]: Character prompt not found", 
                 status=AuditStatus.ERROR
             )
             return "[System Error] Character prompt not found."
     except Exception as e:
-        # print(f"[Ошибка чтения character-файла]: {e}")
         log_audit_entry(
             event_type="prompt_loading_failed", 
-            msg=f"[API] Ошибка чтения файла: {e}", 
+            msg=f"[Api Service]: Prompt loading failed", 
             status=AuditStatus.ERROR, 
             details={
+                "inputs": {},
+                "outputs": {
+                    "context": f"{e}",
+                    "status": "error"
+                }
+            }, meta={
                 "context": f"{e}",
                 "status": "error"
-            }, meta={
-                "base_path": base_path,
-                "char_name": base_path,
-                "filename": filename,
-                "full_path":full_path,
-                "fallback_path":fallback_path
             }
         )
         return "[System Error] Prompt loading failed."
@@ -88,28 +95,36 @@ def build_chat_request(history, include_system=True):
 
 
 def run_standard(history: list) -> str:
+    log_audit_entry(
+        event_type="ApiService.RunStandard",
+        msg="[Api Service]: Запущена функция генерации",
+        status=AuditStatus.INFO,
+        details={
+            "inputs": {
+                "history": history
+            },
+            "outputs": None
+        }
+    )
+
     full_history = build_chat_request(history)
-    
+
     # Получаем имя персонажа
     char_name = get_config_value("char_name", "default")
-    
-    generation_settings = get_config_value("generate_settings", {})
-    options = {k: v for k, v in generation_settings.items() if k not in ["name", "description"]}
 
-    # Получаем последний message от user
-    last_user_message = next(
-        (msg for msg in reversed(history) if msg.get("role") == "user"), None
-    )
+    # Настройки генерации
+    options = get_generation_options_from_config()
     
-    emotion_instruction = ""
+    # Последнее сообщение пользователя
+    last_user_message = extract_last_user_message(history)
+    
+    # Эмоциональная окраска
+    emotion_instruction = ''
     if last_user_message:
-        analysis = analyze_emotion(last_user_message["content"])
-        emotion_instruction = generate_instruction(analysis)
+        emotion_instruction = get_emotional_instruction(last_user_message["content"])
 
-    # Загружаем базовый system prompt
+    # System prompt
     system_prompt = load_system_prompt()
-
-    # Объединяем system prompt с эмоцией
     if emotion_instruction:
         system_prompt += "\n\n[Эмоциональная реакция на реплику пользователя]:\n" + emotion_instruction
 
@@ -117,17 +132,16 @@ def run_standard(history: list) -> str:
         "role": "system",
         "content": system_prompt
     })
-    
-    # Вызов модели через ollama_service
+
+    # Вызов модели
     response = ollama_service.api_standard(
         history=full_history,
         options=options,
     )
-    
-    # Извлекаем результат
+
     assistant_content = response.message.content.strip()
-    
-    # Сохраняем в историю (если последнее сообщение — от user)
+
+    # Сохраняем сообщения
     if last_user_message:
         database_service.add_message_to_history(
             character_name=char_name,
@@ -136,27 +150,70 @@ def run_standard(history: list) -> str:
             timestamp=last_user_message.get("timestamp"),
         )
 
-    # Сохраняем ответ ассистента
     database_service.add_message_to_history(
         character_name=char_name,
         role="assistant",
         content=assistant_content,
         timestamp=response.created_at 
     )
-    
+
     # Озвучка (если включена)
     if get_config_value("voice.enabled", False):
         set_speaking(True)
         threading.Thread(target=speak_line, args=(assistant_content, False)).start()
         
-    # Логируем событие
-    log_audit("generation_standard", {
-        "user_input": last_user_message["content"] if last_user_message else None,
-        "assistant_output": assistant_content,
-        "msg": "[API] Генерация ответа"
-    }, meta={"source": "model", "mode": "standard", "full_response": response.dict()})
+    # Финальное логирование
+    log_audit_entry(
+        event_type="generation_standard",
+        msg="[API] Генерация ответа завершена",
+        status=AuditStatus.SUCCESS,
+        details={
+            "user_input": last_user_message["content"] if last_user_message else None,
+            "assistant_output": assistant_content,
+            "msg": "[API] Генерация ответа"
+        },
+        meta={
+            "source": "model",
+            "mode": "standard",
+            "full_response": response.dict()
+        }
+    )
 
     return assistant_content
+
+
+def get_emotional_instruction(message: str):
+    analysis = analyze_emotion(message)
+    instruction = generate_instruction(analysis)
+    
+    return instruction
+
+
+def get_generation_options_from_config(exclude: list = None) -> dict:
+    exclude = exclude or ["name", "description"]
+    full_settings = get_config_value("generate_settings", {})
+    options = {k: v for k, v in full_settings.items() if k not in exclude}
+    
+    log_audit_entry(
+        event_type="config_generation_options",
+        msg="[Api Service]: Получены опции генерации из конфига",
+        status=AuditStatus.SUCCESS,
+        details={
+            "input": {"exclude": exclude},
+            "output": options
+        },
+        meta={
+            "source": "config",
+            "mode": "filtered",
+            "raw": full_settings
+        }
+    )
+    
+    return options
+
+
+def extract_last_user_message(history):
+    return next((msg for msg in reversed(history) if msg.get("role") == "user"), None)
 
 
 def run_initiative(emotion: str = "беспокойство"):
@@ -197,8 +254,8 @@ def run_initiative(emotion: str = "беспокойство"):
     }]
 
     char_name = get_config_value("char_name", "default")
-    generation_settings = get_config_value("generate_settings", {})
-    options = {k: v for k, v in generation_settings.items() if k not in ["name", "description"]}
+    
+    options = get_generation_options_from_config()
 
     # Генерация без контекста, только systemPrompt
     response = ollama_service.api_standard(
@@ -223,11 +280,6 @@ def run_initiative(emotion: str = "беспокойство"):
         threading.Thread(target=speak_line, args=(assistant_content, False)).start()
         
     # Логируем инициативу
-    # log_audit("generation_initiative", {
-    #     "emotion": emotion,
-    #     "assistant_output": assistant_content
-    # }, meta={"source": "model", "mode": "initiative"})
-    
     log_audit_entry(
         event_type="generation_initiative",
         msg="[API] Генерация инициативного ответа",
@@ -243,7 +295,7 @@ def run_initiative(emotion: str = "беспокойство"):
 
 
 def play_message(msg_id: str):
-    # get message from database from id
+    # get message from database by id
     # database_service.py → sqlite_service.py
     message = get_message_by_id(msg_id)
     

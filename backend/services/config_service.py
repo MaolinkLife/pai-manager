@@ -15,7 +15,7 @@ from typing import Any
 from services import database_service
 from utils.open_file_w_utf8 import open_utf8
 
-from services.logger_service import log_audit
+from services.logger_service import log_audit_entry, AuditStatus
 
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "..", "config", "config.json")
 PRESETS_PATH = os.path.join(os.path.dirname(__file__), "..", "config", "generation_presets.json")
@@ -24,6 +24,7 @@ DEFAULT_CONFIG = {
     "user_id": None,
     "char_name": "default_waifu",
     "user_name": "You",
+    "language": "ru-RU",
     "voice": {
         "enabled": False,
         "output_id": 0,
@@ -71,7 +72,16 @@ _config_cache = None
 def ensure_config_exists():
     if not os.path.exists(CONFIG_PATH):
         save_config(DEFAULT_CONFIG)
-        log_audit("config_created", {"status": "OK", "path": CONFIG_PATH})
+        log_audit_entry(
+            event_type="config_created", 
+            msg="[Config Service]: Create Default Config",
+            status=AuditStatus.SUCCESS,
+            details={"status": "OK", "path": CONFIG_PATH},
+            meta={
+                "config_path": CONFIG_PATH,
+                "defaultConfig": DEFAULT_CONFIG,
+            }
+        )
 
 
 def _load_config_from_file() -> dict:
@@ -100,7 +110,15 @@ def save_config(new_data: dict):
     global _config_cache
     _config_cache = new_data
     _save_config_to_file(_config_cache)
-    log_audit("config_saved", {"status": "OK", "keys": list(new_data.keys())})
+    log_audit_entry(
+        event_type="config_saved", 
+        msg="[Config Service]: Save config file",
+        status=AuditStatus.SUCCESS, 
+        details={"status": "OK", "keys": list(new_data.keys())},
+        meta={
+            "new_data": new_data
+        }
+    )
 
 
 # Устанавливает значение по вложенному пути и сохраняет конфиг
@@ -108,10 +126,47 @@ def get_config_value(path: str, default: Any = None):
     keys = path.split(".")
     config = get_config()
     ref = config
+    trace = []
+
     for key in keys:
-        ref = ref.get(key)
+        trace.append(key)
+        if isinstance(ref, dict):
+            ref = ref.get(key)
+        else:
+            ref = None
+
         if ref is None:
+            log_audit_entry(
+                event_type="config_get_missing",
+                msg=f"[Config Service]: Ключ не найден в конфиге: {'.'.join(trace)}",
+                status=AuditStatus.ERROR,
+                details={
+                    "path": path,
+                    "partial_path": ".".join(trace),
+                    "default_returned": default
+                },
+                meta={
+                    "type": "config",
+                    "mode": "read",
+                    "result": "default"
+                }
+            )
             return default
+
+    log_audit_entry(
+        event_type="config_get_success",
+        msg=f"[Config Service]: Получено значение конфига: {path}",
+        status=AuditStatus.SUCCESS,
+        details={
+            "path": path,
+            "value": ref
+        },
+        meta={
+            "type": "config",
+            "mode": "read"
+        }
+    )
+
     return ref
 
 
@@ -161,10 +216,23 @@ def update_config_bulk(updates: dict):
     config = get_config()
     updated, failed = _recursive_update(config, updates)
     save_config(config)
-    log_audit("config_updated_bulk", {
-        "updated": updated,
-        "failed": failed
-    }, meta={"source": "config", "mode": "bulk"})
+    
+    log_audit_entry(
+        event_type="config_updated_bulk",
+        msg="[Config Service]: Update config fields",
+        status=AuditStatus.SUCCESS,
+        details={
+            "updated": updated,
+            "failed": failed
+        }, 
+        meta={
+            "source": "config", 
+            "mode": "bulk",
+            "config": config,
+            "updated": updated,
+            "failed": failed
+        }
+    )
     
     # 🧠 Если обновлён char_name — создаём персонажа в БД
     new_char_name = updates.get("char_name")

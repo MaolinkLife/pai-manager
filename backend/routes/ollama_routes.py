@@ -13,6 +13,7 @@ from fastapi.responses import JSONResponse
 from services import api_service, ollama_service
 # from services.history_service import get_history
 from services import config_service, database_service
+from services.logger_service import log_audit_entry, AuditStatus
 
 router = APIRouter(prefix="/api/ollama", tags=["Ollama"])
 
@@ -65,4 +66,13 @@ async def reroll_assistant_message(payload: dict):
         return JSONResponse(content={"status": "ok", "new_message": new_reply})
 
     except Exception as e:
+        log_audit_entry(
+            event_type="reroll_request_error",
+            msg="[Ollama Router]: Ошибка во время выполнения reroll",
+            status=AuditStatus.ERROR,
+            details={
+                "input": payload,
+                "error": str(e)
+            }
+        )
         return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})

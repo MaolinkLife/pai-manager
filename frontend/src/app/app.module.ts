@@ -12,6 +12,7 @@ import { SharedModule } from './shared/shared.module';
 import { HttpClient, HttpClientModule } from '@angular/common/http';
 import { ConfigService } from './core/services/config.service';
 import { MarkdownModule } from 'ngx-markdown';
+import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 
 @NgModule({
     declarations: [
@@ -27,6 +28,7 @@ import { MarkdownModule } from 'ngx-markdown';
         ReactiveFormsModule,
         SharedModule,
         HttpClientModule,
+        BrowserAnimationsModule,
         MarkdownModule.forRoot({ loader: HttpClient }),
     ],
     providers: [ThemeService, ConfigService],

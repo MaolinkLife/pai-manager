@@ -9,8 +9,12 @@
 
 from fastapi import APIRouter, Request
 
-from services import config_service
-from services.config_service import update_config_bulk
+from services.config_service import (
+    update_config_bulk, 
+    save_config, 
+    apply_preset_by_name, 
+    get_config
+)
 
 router = APIRouter(prefix="/api/config", tags=["Config"])
 
@@ -18,14 +22,14 @@ router = APIRouter(prefix="/api/config", tags=["Config"])
 # Возвращает весь конфиг
 @router.get("/")
 def get_full_config():
-    return config_service.get_config()
+    return get_config()
 
 
 # Перезаписывает конфиг целиком.
 @router.post("/")
 async def overwrite_config(request: Request):
     new_config = await request.json()
-    config_service.save_config(new_config)
+    save_config(new_config)
     return {"status": "ok", "message": "Конфиг обновлён."}
 
 
@@ -33,7 +37,7 @@ async def overwrite_config(request: Request):
 @router.patch("/")
 async def update_config_bulk_route(request: Request):
     updates = await request.json()
-    updated, failed = config_service.update_config_bulk(updates)
+    updated, failed = update_config_bulk(updates)
 
     return {
         "status": "partial" if failed else "ok",
@@ -41,7 +45,7 @@ async def update_config_bulk_route(request: Request):
         "failed": failed
     }
     
-
+# Применяет выбранный пресет
 @router.post("/apply_preset")
 async def apply_preset(request: Request):
     body = await request.json()
@@ -50,7 +54,7 @@ async def apply_preset(request: Request):
     if not preset_name:
         return {"status": "error", "message": "Название пресета не указано"}
 
-    success = config_service.apply_preset_by_name(preset_name)
+    success = apply_preset_by_name(preset_name)
     if success:
         return {"status": "ok", "message": f"Пресет '{preset_name}' применён."}
     else:

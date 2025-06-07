@@ -1,0 +1,40 @@
+{
+    "settings": {
+        "general": "Основные",
+        "charName": "Имя персонажа",
+        "userName": "Имя пользователя",
+        "language": "Язык",
+        "voice": "Голос",
+        "voice_setting": "Настройка голоса",
+        "voice_language": "Язык озвучки",
+        "output_device": "Устройство виртуального вывода",
+        "windows_output": "Устройство вывода Windows",
+        "use_rvc": "Использовать RVC (для виртуального вывода)",
+        "speak_responses": "Озвучивать ответы",
+        "modules": "Модули",
+        "vtube_studio": "VTubeStudio",
+        "minecraft": "Minecraft",
+        "alarm": "Будильник",
+        "rag": "RAG",
+        "whisper": "Whisper",
+        "gaming": "Gaming",
+        "discord": "Discord",
+        "visual": "Visual",
+        "api": "API",
+        "api_type": "Тип API",
+        "text_model": "Текстовая модель (общая)",
+        "visual_model": "Визуальная модель",
+        "token_limit": "Лимит токенов",
+        "message_pair_limit": "Message Pair Limit",
+        "streaming": "Streaming Mode",
+        "preset_name": "Имя пресета",
+        "description": "Описание",
+        "presets": "Пресеты",
+        "select_preset": "Выбрать пресет"
+    },
+    "general": {
+        "save": "Сохранить",
+        "cancel": "Отменить",
+        "exit": "Выход"
+    }
+}

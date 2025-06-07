@@ -1,14 +1,14 @@
 <div class="debug-log">
     <div
-        *ngFor="let log of logs"
+        *ngFor="let log of logs; let i = index"
         class="log-entry"
         [ngClass]="getLogClass(log)"
     >
         <div class="log-header">
             <span class="tag">{{ log.event_type }}</span>
-            <span class="timestamp">{{
-                log.timestamp | date : "dd.MM.yyyy HH:mm:ss"
-            }}</span>
+            <span class="timestamp">
+                {{ log.timestamp | date : "dd.MM.yyyy HH:mm:ss" }}
+            </span>
         </div>
 
         <div class="log-body">
@@ -21,11 +21,26 @@
                 }}
             </div>
 
-            <!-- <div class="log-details">
-                <pre>
-                    {{ log.details | json }}
+            <div class="log-toggle" (click)="toggleDetails(i)">
+                <span>
+                    {{
+                        expandedLogs.has(i)
+                            ? "▼ Hide details"
+                            : "▶ Show details"
+                    }}
+                </span>
+            </div>
+
+            <div
+                class="log-details"
+                [class.open]="expandedLogs.has(i)"
+                [@expandCollapse]="expandedLogs.has(i) ? 'open' : 'closed'"
+            >
+                <pre *ngIf="expandedLogs.has(i)"
+                    >{{ log.details | json }}
                 </pre>
-            </div> -->
+            </div>
+
             <div class="log-context" *ngIf="log.details?.context">
                 {{ log.details.context }}
             </div>
