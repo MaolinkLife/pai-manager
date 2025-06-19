@@ -1,7 +1,7 @@
 import uuid
 import os
 from datetime import datetime, timezone
-from services import stt_service, api_service
+from services import stt_service
 
 TEMP_AUDIO_PATH = os.path.join("temp", "voice", "temp_recording.wav")
 
@@ -11,13 +11,12 @@ def start_recording():
 
 def stop_recording_and_process(character_name: str) -> dict:
     """
-    Останавливает запись, сохраняет WAV, расшифровывает,
-    генерирует UUID и возвращает фейковый message-объект.
+    Stops recording, saves WAV, decrypts, generates UUID and returns fake message object.
     """
-    # Сначала сохраняем аудио
+    # First, save the audio
     stt_service.stop_recording_and_save(TEMP_AUDIO_PATH)
 
-    # Теперь можно безопасно транскрибировать
+    # Now you can safely transcribe
     transcript = stt_service.transcribe_audio(TEMP_AUDIO_PATH)
 
     message_id = str(uuid.uuid4())

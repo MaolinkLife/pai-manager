@@ -1,11 +1,13 @@
-import uuid
+import json
 from fastapi import APIRouter, Body
+
 from services.voice_service import force_cut_voice
 from services.api_service import play_message, run_standard
-from services import stt_service, config_service, voice_controller
+from services import config_service, voice_controller
+
+from core.websocket_manager import manager
 
 router = APIRouter(prefix="/api/voice", tags=["Voice"])
-
 
 @router.post("/stop")
 async def stop_voice():
@@ -29,11 +31,14 @@ def start_record():
 
 
 @router.post("/record/stop")
-def stop_record():
+async def stop_record():
     char_name = config_service.get_config_value("char_name", "default_waifu")
     data = voice_controller.stop_recording_and_process(char_name)
     
-    run_standard([data])
+    async def push_ws(msg):
+        await manager.send_message(json.dumps(msg, ensure_ascii=False))
+    
+    await run_standard([data], emit_ws_fn=push_ws)
 
     return {
         "status": "ok",

@@ -32,10 +32,10 @@ os.makedirs(AUDIO_TEMP_DIR, exist_ok=True)
 
 # Removes all occurrences of the type *something*
 def remove_emotions_or_actions(text: str) -> str:
-    # Убираем *действия* в звёздочках
+    # Remove *actions* in asterisks
     text = re.sub(r"\*(.*?)\*", "", text).strip()
 
-    # Убираем эмодзи
+    # Remove emojis
     text = emoji.replace_emoji(text, replace='')
     
     return text
@@ -60,7 +60,6 @@ def play_voice_output(file_path):
     samples /= np.iinfo(sound.array_type).max
     
     device_id = virtual_output if get_config_value("voice.use_rvc") else windows_output
-    # utils.zw_logging.update_debug_log(f"🎧 Using device ID: {device_id}")
     
     sd.play(samples, samplerate=sound.frame_rate, device=device_id)
     while sd.get_stream().active:
@@ -77,7 +76,7 @@ def speak_line(s_message, refuse_pause):
 
     for chunk in chunky_message:
         if cut_voice:
-            break  # 💥 Вот тут мы реально прерываем
+            break
         
         try:
             clean_chunk = remove_emotions_or_actions(chunk)
@@ -87,7 +86,7 @@ def speak_line(s_message, refuse_pause):
             play_voice_output(filename)
             os.remove(filename) # Deletes the file after listening
 
-            time.sleep(0.05 if not refuse_pause else 0.001)
+            time.sleep(0.01 if not refuse_pause else 0.001)
 
             # if utils.hotkeys.NEXT_PRESSED or utils.hotkeys.REDO_PRESSED or cut_voice:
             #     cut_voice = False

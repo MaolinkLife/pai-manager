@@ -1,13 +1,13 @@
-# =========================================================
-# Модуль: config_service.py
-# Назначение: Управление конфигурацией LIM. Загрузка, сохранение,
-#             обновление и кеширование значений из config.json.
-# Используется в: сервисах, утилитах, ядре — везде, где нужна настройка
-# Особенности:
-# - Использует кеширование (_config_cache) для минимизации I/O
-# - Позволяет точечную модификацию значений через get/set
-# - Поддерживает массовое обновление с валидацией (_recursive_update)
-# =========================================================
+# ===========================================================
+# Module: config_service.py
+# Purpose: Managing LIM configuration. Loading, saving,
+# updating and caching values ​​from config.json.
+# Used in: services, utilities, core — anywhere configuration is needed
+# Features:
+# - Uses caching (_config_cache) to minimize I/O
+# - Allows fine-grained modification of values ​​via get/set
+# - Supports bulk update with validation (_recursive_update)
+# ==========================================================
 
 import json
 import os
@@ -20,6 +20,7 @@ from services.logger_service import log_audit_entry, AuditStatus
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "..", "config", "config.json")
 PRESETS_PATH = os.path.join(os.path.dirname(__file__), "..", "config", "generation_presets.json")
 
+# TODO: can be moved later to a file with constants
 DEFAULT_CONFIG = {
     "user_id": None,
     "char_name": "default_waifu",
@@ -64,11 +65,9 @@ DEFAULT_CONFIG = {
     }
 }
 
-
 _config_cache = None
 
-
-# Создаёт файл config.json с дефолтами, если его нет.
+# Creates a config.json file with defaults if it does not exist.
 def ensure_config_exists():
     if not os.path.exists(CONFIG_PATH):
         save_config(DEFAULT_CONFIG)
@@ -91,21 +90,18 @@ def _load_config_from_file() -> dict:
         _config_cache = json.load(f)
     return _config_cache
 
-
 def _save_config_to_file(data: dict):
     with open_utf8(CONFIG_PATH, "w") as f:
         json.dump(data, f, indent=4, ensure_ascii=False)
 
-
-# Возвращает текущий конфиг (с кешированием).
+# Returns the current config (with caching).
 def get_config() -> dict:
     global _config_cache
     if _config_cache is None:
         return _load_config_from_file()
     return _config_cache
 
-
-# Перезаписывает весь конфиг новым содержимым.
+# Overwrites the entire config with new contents.
 def save_config(new_data: dict):
     global _config_cache
     _config_cache = new_data
@@ -120,8 +116,7 @@ def save_config(new_data: dict):
         }
     )
 
-
-# Устанавливает значение по вложенному пути и сохраняет конфиг
+# Sets the value to the nested path and saves the config
 def get_config_value(path: str, default: Any = None):
     keys = path.split(".")
     config = get_config()
@@ -138,7 +133,7 @@ def get_config_value(path: str, default: Any = None):
         if ref is None:
             log_audit_entry(
                 event_type="config_get_missing",
-                msg=f"[Config Service]: Ключ не найден в конфиге: {'.'.join(trace)}",
+                msg=f"[Config Service]: Key not found in config: {'.'.join(trace)}",
                 status=AuditStatus.ERROR,
                 details={
                     "path": path,
@@ -155,7 +150,7 @@ def get_config_value(path: str, default: Any = None):
 
     log_audit_entry(
         event_type="config_get_success",
-        msg=f"[Config Service]: Получено значение конфига: {path}",
+        msg=f"[Config Service]: Received config value: {path}",
         status=AuditStatus.SUCCESS,
         details={
             "path": path,
@@ -170,7 +165,7 @@ def get_config_value(path: str, default: Any = None):
     return ref
 
 
-# Возвращает значение по пути "key1.key2". Если не найдено — возвращает default
+# Returns the value at the path "key1.key2". If not found, returns default
 def set_config_value(path: str, value: Any):
     keys = path.split(".")
     config = get_config()
@@ -188,17 +183,17 @@ def _recursive_update(existing: dict, updates: dict, path: str = ""):
     for key, value in updates.items():
         current_path = f"{path}.{key}" if path else key
 
-        # 🔒 Спец-проверка для user_id
+        # Special check for user_id
         if current_path == "user_id":
             if existing.get(key) not in [None, ""]:
                 failed.append({
                     "path": current_path,
-                    "error": "user_id уже установлен и не может быть изменён."
+                    "error": "user_id is already set and cannot be changed."
                 })
                 continue
 
         if key not in existing:
-            failed.append({"path": current_path, "error": "Ключ не найден."})
+            failed.append({"path": current_path, "error": "Key not found."})
             continue
 
         if isinstance(value, dict) and isinstance(existing.get(key), dict):
@@ -234,7 +229,7 @@ def update_config_bulk(updates: dict):
         }
     )
     
-    # 🧠 Если обновлён char_name — создаём персонажа в БД
+    # If char_name is updated, we create a character in the DB
     new_char_name = updates.get("char_name")
     if new_char_name:
         database_service.get_or_create_character(new_char_name)

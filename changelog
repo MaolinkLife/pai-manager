@@ -1,0 +1,16 @@
+version: 0.1
+- Migrated TTS module from z-waif
+- Reworked and styled chat interface (action icons, message input, send/reroll/stop buttons)
+- Added visual debug log with expandable details
+- Implemented basic UI settings with partial + global config sync
+- Connected audio module to backend
+- Created reusable low-level utilities
+- Added LLM initiative engine and preload script
+- Introduced preset editor for temperature settings (UI accessible)
+- Integrated API router logging & auditing
+- Added extensible SQLite database with message history support
+- Implemented system device info retrieval (microphone, speakers, etc.)
+- Introduced speech-to-text (STT) service
+- Migrated utility features from z-waif
+- Added memory search behavior
+- Improved interaction with voice input

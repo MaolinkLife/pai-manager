@@ -8,21 +8,18 @@ from typing import Literal, Optional
 
 from utils.open_file_w_utf8 import open_utf8
 
-# 📦 Пути к логам
-LOGS_DIR = os.path.join(os.path.dirname(__file__), "..", "logs")
-TEMP_LOGS_DIR = os.path.join(os.path.dirname(__file__), "..", "temp", "logs")
-
-# Создание директорий при необходимости
-os.makedirs(LOGS_DIR, exist_ok=True)
-os.makedirs(TEMP_LOGS_DIR, exist_ok=True)
-
-# 📦 Идентификатор текущей сессии
+# Current session ID
 SESSION_ID = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
 
-# 📄 Пути к логам
+# Paths to logs
+LOGS_DIR = os.path.join(os.path.dirname(__file__), "..", "logs")
+TEMP_LOGS_DIR = os.path.join(os.path.dirname(__file__), "..", "temp", "logs")
 DEBUG_FILE_PER_SESSION = os.path.join(LOGS_DIR, f"{SESSION_ID}_debug.jsonl")
-DEBUG_FILE_CURRENT = os.path.join(LOGS_DIR, "debug_log.jsonl")  # Последняя активная
+DEBUG_FILE_CURRENT = os.path.join(LOGS_DIR, "debug_log.jsonl")  # Last active
 
+# Create directories if necessary
+os.makedirs(LOGS_DIR, exist_ok=True)
+os.makedirs(TEMP_LOGS_DIR, exist_ok=True)
 
 class AuditStatus(str, Enum):
     SUCCESS = 'Success'
@@ -49,12 +46,12 @@ def get_session_id():
 
 def initialize_log_files():
     """
-    Инициализирует пустые лог-файлы, если они ещё не существуют.
+    Initializes empty log files if they do not already exist.
     """
     for path in [DEBUG_FILE_PER_SESSION, DEBUG_FILE_CURRENT]:
         if not os.path.exists(path):
             with open_utf8(path, "w") as f:
-                pass  # просто создаём пустой файл
+                pass  # just create an empty file
 
 def _write_jsonl(filepath, record):
     with open_utf8(filepath, "a") as f:
@@ -63,7 +60,7 @@ def _write_jsonl(filepath, record):
 
 def log_audit(event_type, details=None, meta=None):
     """
-    Запись ключевых событий в DEBUG_LOG
+    Logging key events to DEBUG_LOG
     """
     record = {
         "timestamp": datetime.now().isoformat(timespec="seconds"),
@@ -77,8 +74,8 @@ def log_audit(event_type, details=None, meta=None):
 
 
 def log_error(error_msg, context=None, severity="error"):
-    """
-    Ошибки в temp-log и debug
+    """ 
+    Errors on temp-log and debug
     """
     date_str = datetime.now().strftime("%Y-%m-%d")
     temp_path = os.path.join(TEMP_LOGS_DIR, f"{date_str}_log.txt")
@@ -97,7 +94,7 @@ def log_error(error_msg, context=None, severity="error"):
 
 def log_audit_entry(event_type: str, msg: str, status: AuditStatus = AuditStatus.INFO, details: dict = None, meta: dict = None):
     """
-    Запись ключевых событий в DEBUG_LOG
+    Logging key events to DEBUG_LOG using a strict format
     """
     
     log = AuditLog(
@@ -115,14 +112,14 @@ def log_audit_entry(event_type: str, msg: str, status: AuditStatus = AuditStatus
 
 def log_debug(message, tag="DEBUG"):
     """
-    Консольный лог
+    Console log
     """
     print(f"[{tag}][{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {message}")
 
 
 def get_debug_log():
     """
-    Возвращает текущий debug log как список записей
+    Returns the current debug log as a list of entries
     """
     session_id = get_session_id()
     log_file = os.path.join(LOGS_DIR, f"{session_id}_debug.jsonl")
@@ -136,4 +133,4 @@ def get_debug_log():
         return logs, session_id
 
     except Exception as e:
-        raise RuntimeError(f"Ошибка при чтении лога: {e}")
+        raise RuntimeError(f"Error reading log: {e}")

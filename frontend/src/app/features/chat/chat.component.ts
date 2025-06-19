@@ -7,6 +7,7 @@ import { ProjectConfig } from './../../core/models/project-config.model';
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { VoiceService } from '../../core/services/voice.service';
+import { WebsocketService } from '../../core/services/websocket.service';
 
 @Component({
     selector: 'app-chat',
@@ -32,18 +33,66 @@ export class ChatComponent implements OnInit, OnDestroy {
 
     activeDropdown: string | null = null;
 
+    private currentStreamingMessage: Message | null = null;
+
     constructor(
         private apiService: ApiService,
         private configService: ConfigService,
         private voiceService: VoiceService,
+        private websocketService: WebsocketService,
     ) { }
 
     ngOnInit(): void {
         this.getSettings();
         this.loadHistory();
+
+        this.websocketService.messages$.subscribe((rawMsg: string) => {
+            try {
+                const parsed = JSON.parse(rawMsg);
+
+                if (typeof parsed === 'object' && parsed.type === 'message') {
+                    // Это полноценное сообщение (от user или assistant)
+                    this.chatHistory.push({
+                        id: this.generateId(),
+                        role: parsed.role,
+                        content: parsed.content,
+                        timestamp: new Date().toISOString()
+                    });
+
+                    this.scrollToBottom();
+                    return;
+                }
+            } catch {
+                // Стриминг: это просто строка или часть
+            }
+
+            // === Стриминговое поведение ===
+            if (rawMsg === '[DONE]') {
+                this.loading = false;
+                this.currentStreamingMessage = null;
+                return;
+            }
+
+            if (!this.currentStreamingMessage) {
+                this.currentStreamingMessage = {
+                    id: null,
+                    role: 'assistant',
+                    content: rawMsg,
+                    timestamp: new Date().toISOString()
+                };
+                this.chatHistory.push(this.currentStreamingMessage);
+            } else {
+                this.currentStreamingMessage.content += rawMsg;
+            }
+
+            setTimeout(() => this.scrollToBottom(), 50);
+        });
+
     }
 
     ngOnDestroy() { }
+
+
 
     scrollToBottom(): void {
         const tryScroll = () => {
@@ -59,7 +108,7 @@ export class ChatComponent implements OnInit, OnDestroy {
         requestAnimationFrame(tryScroll);
     }
 
-    toggleMessageMenu(msgId: string, event: Event): void {
+    toggleMessageMenu(msgId: string | null, event: Event): void {
         event.stopPropagation();
         this.activeDropdown = this.activeDropdown === msgId ? null : msgId;
     }
@@ -85,7 +134,7 @@ export class ChatComponent implements OnInit, OnDestroy {
 
                 if (msg && msg.content.trim()) {
                     // Добавляем как пользовательское сообщение
-                    this.chatHistory.push(msg);
+                    // this.chatHistory.push(msg);
                     this.scrollToBottom();
                 }
             });
@@ -96,7 +145,7 @@ export class ChatComponent implements OnInit, OnDestroy {
         const trimmed = this.chatInput.value?.trim();
         if (!trimmed) return;
 
-        const userMessage: Message = { id: '', role: 'user', content: trimmed, timestamp: new Date().toISOString() };
+        const userMessage: Message = { id: null, role: 'user', content: trimmed, timestamp: new Date().toISOString() };
         this.chatHistory.push(userMessage);
         this.chatInput.setValue('');
         this.loading = true;
@@ -107,23 +156,9 @@ export class ChatComponent implements OnInit, OnDestroy {
             "temp_level": 1,
             "max_tokens": 512
         }
-        this.apiService.sendMessage$(message).subscribe({
-            next: (res) => {
-                this.chatHistory.push({ id: res.id, role: 'assistant', content: res.response, timestamp: new Date().toISOString() });
-                this.loading = false;
-                setTimeout(() => this.scrollToBottom(), 0);
-            },
-            error: (err) => {
-                this.chatHistory.push({
-                    id: '',
-                    role: 'assistant',
-                    content: '[Ошибка получения ответа]',
-                    timestamp: new Date().toISOString(),
-                });
-                this.loading = false;
-                console.error(err);
-            },
-        });
+
+        this.websocketService.send(JSON.stringify(message));
+        this.currentStreamingMessage = null;
     }
 
     loadHistory(): void {
@@ -167,9 +202,8 @@ export class ChatComponent implements OnInit, OnDestroy {
         });
 
 
-        this.voiceService.playMessage(msg.id).subscribe((r) => {
+        this.voiceService.playMessage(msg.id as string).subscribe((r) => {
             console.log({ r });
-
         })
     }
 
@@ -199,7 +233,7 @@ export class ChatComponent implements OnInit, OnDestroy {
         });
     }
 
-    rerollMessage(messageId: string): void {
+    rerollMessage(messageId: string | null): void {
         if (!messageId) return;
 
         this.loading = true;

@@ -4,8 +4,8 @@ from utils.audio_devices import (
     get_device_name_by_id
 )
 
-# Здесь можно будет централизованно объединять и другие ресурсы:
-# CPU, диск, монитор, микрофон, переменные среды и т.д.
+# Here you can centrally combine other resources:
+# CPU, disk, monitor, microphone, environment variables, etc.
 
 def get_audio_resources():
     return {

@@ -5,47 +5,47 @@ import os
 import wave
 from faster_whisper import WhisperModel
 
-# ===============================
-# СТАТУСНЫЕ ПЕРЕМЕННЫЕ
-# ===============================
+# =================================
+# STATUS VARIABLES
+# ================================
 _stream = None
 _buffer = []
 _is_recording = False
 
-# ===============================
-# КОНСТАНТЫ
-# ===============================
+# =================================
+# CONSTANTS
+# ================================
 SAMPLE_RATE = 16000
 CHANNELS = 1
 MODEL = WhisperModel("base", device="cpu", compute_type="int8")
 
 
-# ===============================
-# ЗАПИСЬ СИНХРОННАЯ
-# ===============================
+# =================================
+# SYNCHRONOUS RECORDING
+# ================================
 def record_audio(filename: str, duration: int = 5):
     print(f"[🎙] Recording for {duration} seconds...")
     audio = sd.rec(int(duration * SAMPLE_RATE), samplerate=SAMPLE_RATE, channels=CHANNELS, dtype='int16')
     sd.wait()
 
     _save_wave(filename, audio)
-    print(f"[💾] Saved audio to: {filename}")
+    print(f"[Record] Saved audio to: {filename}")
 
 
-# ===============================
-# ТРАНСКРИПЦИЯ
-# ===============================
+# ==============================================
+# TRANSCRIPTION
+# ==============================================
 def transcribe_audio(filename: str) -> str:
-    print(f"[🔍] Transcribing: {filename}")
+    print(f"[Record] Transcribing: {filename}")
     segments, _ = MODEL.transcribe(filename)
     result = " ".join(segment.text for segment in segments)
-    print(f"[📜] Transcribed text: {result}")
+    print(f"[Record] Transcribed text: {result}")
     return result
 
 
-# ===============================
-# ЗАПИСЬ + ТРАНСКРИПЦИЯ
-# ===============================
+# =================================
+# RECORDING + TRANSCRIPTION
+# =================================
 def record_and_transcribe() -> str:
     with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
         path = tmp.name
@@ -55,14 +55,14 @@ def record_and_transcribe() -> str:
     return result
 
 
-# ===============================
-# ЗАПИСЬ В ФОНЕ
-# ===============================
+# ================================
+# BACKGROUND RECORDING
+# ================================
 def start_recording_background(filename: str):
     global _stream, _buffer, _is_recording
 
     if _is_recording:
-        print("[⚠] Запись уже идёт.")
+        print("[Record] Recording is already in progress.")
         return
 
     os.makedirs(os.path.dirname(filename), exist_ok=True)
@@ -72,7 +72,7 @@ def start_recording_background(filename: str):
 
     def callback(indata, frames, time, status):
         if status:
-            print(f"[⚠] Статус записи: {status}")
+            print(f"[Record] Record status: {status}")
         if _is_recording:
             _buffer.append(indata.copy())
 
@@ -83,17 +83,17 @@ def start_recording_background(filename: str):
         callback=callback
     )
     _stream.start()
-    print("[🎙] Фоновая запись началась...")
+    print("[Record] Background recording has started...")
 
 
-# ===============================
-# СТОП + СОХРАНЕНИЕ WAV
-# ===============================
+# ================================
+# STOP + SAVE WAV
+# ================================
 def stop_recording_and_save(filename: str):
     global _stream, _is_recording, _buffer
 
     if not _is_recording:
-        raise RuntimeError("Запись не активна — остановка невозможна.")
+        raise RuntimeError("Recording is not active - stopping is not possible.")
 
     _is_recording = False
 
@@ -103,18 +103,18 @@ def stop_recording_and_save(filename: str):
         _stream = None
 
     if not _buffer:
-        raise RuntimeError("Буфер пуст. Ничего не записано.")
+        raise RuntimeError("The buffer is empty. Nothing written.")
 
     audio = np.concatenate(_buffer, axis=0)
     _save_wave(filename, audio)
     _buffer.clear()
 
-    print(f"[💾] Аудио сохранено: {filename}")
+    print(f"[Record] Audio saved: {filename}")
 
 
-# ===============================
-# УТИЛИТА СОХРАНЕНИЯ WAV
-# ===============================
+# =================================
+# WAV SAVE UTILITY
+# ================================
 def _save_wave(filename: str, audio: np.ndarray):
     with wave.open(filename, 'wb') as wf:
         wf.setnchannels(CHANNELS)
@@ -123,16 +123,16 @@ def _save_wave(filename: str, audio: np.ndarray):
         wf.writeframes(audio.tobytes())
 
 
-# ===============================
-# ФЛАГ: ИДЁТ ЛИ ЗАПИСЬ
-# ===============================
+# ================================
+# FLAG: IS RECORDING IN PROGRESS
+# =================================
 def is_recording() -> bool:
     return _is_recording
 
 
-# ===============================
-# ОТЛАДКА: СОСТОЯНИЕ
-# ===============================
+# ================================
+# DEBUG: STATUS
+# ================================
 def get_recording_state():
     return {
         "recording": _is_recording,

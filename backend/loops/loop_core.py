@@ -8,5 +8,4 @@ def run_loop():
     Thread(target=initiative_monitor, daemon=True).start()
     # Thread(target=emotion_drift_monitor, daemon=True).start()
     # Thread(target=anchor_check_monitor, daemon=True).start()
-    print("[LIM] ✅ Loop system запущен.")
     log_audit("loop_started", {"loop": "initiative_monitor", "msg": "[Initiative] Loop system запущен", "status": "OK"})

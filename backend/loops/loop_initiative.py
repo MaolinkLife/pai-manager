@@ -6,13 +6,12 @@ from services.database_service import get_last_messages
 from services.config_service import get_config_value
 from services.logger_service import log_error, log_audit, log_audit_entry, AuditStatus
 
-CHECK_EVERY = 60  # Проверяем каждую минуту
+CHECK_EVERY = 60  # We check every minute
 
-# Хранилище состояния между итерациями
+# Store state between iterations
 last_triggered_phase = None
 last_initiative_time = None
-MIN_INTERVAL = timedelta(minutes=10)  # минимальное время между инициативами
-
+MIN_INTERVAL = timedelta(minutes=10)  # minimum time between initiatives
 
 def ensure_datetime(value):
     if isinstance(value, str):
@@ -50,8 +49,6 @@ def analyze_pattern(messages):
 
 def initiative_monitor():
     global last_triggered_phase, last_initiative_time
-
-    print("[LIM] ▶ Инициатива запущена.")
     log_audit("loop_started", {"loop": "initiative_monitor"})
 
     while True:
@@ -60,7 +57,6 @@ def initiative_monitor():
             messages = get_last_messages(char_name, limit=10)
 
             if not messages:
-                print("[LIM] ❓ Нет сообщений. Пропуск итерации.")
                 log_audit("initiative_skip", {"reason": "no_messages"})
                 time.sleep(CHECK_EVERY)
                 continue
@@ -69,31 +65,23 @@ def initiative_monitor():
             now = datetime.now(timezone.utc)
 
             if emotion:
-                # Проверка на повтор и частоту
+                # Check for repetition and frequency
                 if emotion != last_triggered_phase or (last_initiative_time and now - last_initiative_time >= MIN_INTERVAL):
-                    print(f"[LIM] ⏰ Инициатива: {emotion}")
                     log_audit("initiative_triggered", {"emotion": emotion})
                     run_initiative(emotion=emotion)
                     last_triggered_phase = emotion
                     last_initiative_time = now
                 else:
-                    print(f"[LIM] 🔁 Фаза '{emotion}' уже была недавно. Пропуск.")
                     log_audit("initiative_repeat_skipped", {
                         "emotion": emotion,
                         "last_triggered": last_initiative_time.isoformat() if last_initiative_time else None
                     })
-            else:
-                print("[LIM] 💤 Пока нет условий для инициативы.")
+            # else:
+            #     print("[LIM] 💤 Пока нет условий для инициативы.")
                 # log_audit("initiative_conditions_not_met", {"pattern": [msg["role"] for msg in messages]})
 
             time.sleep(CHECK_EVERY)
 
         except Exception as e:
-            log_error("[Initiative]⚠️ Ошибка инициативы:", str(e))
-            log_audit_entry(
-                event_type="initiative_crash",
-                msg="[Initiative]: Ошибка инициативы",
-                status=AuditStatus.ERROR , 
-                details={"error": str(e)}
-            )
+            log_error("[Initiative] Initiative Error:", str(e))
             time.sleep(60)

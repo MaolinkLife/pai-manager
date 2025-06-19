@@ -1,10 +1,10 @@
-# =========================================================
-# Модуль: history_service.py
-# Назначение: Получение истории сообщений по персонажу
-# Используется в: ollama_routes для возврата истории
-# Особенности:
-# - Читает JSON-файлы из локального хранилища
-# - Создаёт файл, если он отсутствует
+# ============================================================
+# Module: history_service.py
+# Purpose: Getting message history by character
+# Used in: ollama_routes to return history
+# Features:
+# - Reads JSON files from local storage
+# - Creates file if it does not exist
 # =========================================================
 
 import os

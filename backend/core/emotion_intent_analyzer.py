@@ -18,11 +18,11 @@ INTENT_PATTERNS = {
 }
 
 POLARITY_MAP = {
-    "грусть": "негативная",
-    "радость": "положительная",
-    "злость": "негативная",
-    "любовь": "положительная",
-    "страх": "негативная"
+    "sadness": "negative",
+    "gladness": "positive",
+    "anger": "negative",
+    "love": "positive",
+    "fear": "negative"
 }
 
 def analyze_emotion(text: str) -> Dict:
@@ -33,35 +33,35 @@ def analyze_emotion(text: str) -> Dict:
         if any(kw in text_lower for kw in keywords):
             detected_emotions.append(emotion)
 
-    tone = "нейтральный"
-    if "любовь" in detected_emotions and "грусть" in detected_emotions:
-        tone = "грусть с тёплым подтекстом"
-    elif "грусть" in detected_emotions:
-        tone = "печальный"
-    elif "радость" in detected_emotions:
-        tone = "радостный"
-    elif "злость" in detected_emotions:
-        tone = "раздражённый"
-    elif "любовь" in detected_emotions:
-        tone = "тёплый"
-    elif "страх" in detected_emotions:
-        tone = "тревожный"
+    tone = "neutral"
+    if "love" in detected_emotions and "sadness" in detected_emotions:
+        tone = "sadness with a warm undertone"
+    elif "sadness" in detected_emotions:
+        tone = "sad"
+    elif "gladness" in detected_emotions:
+        tone = "glad"
+    elif "anger" in detected_emotions:
+        tone = "irritated"
+    elif "love" in detected_emotions:
+        tone = "warm"
+    elif "fear" in detected_emotions:
+        tone = "anxious"
 
-    intent = "неопределено"
+    intent = "undefined"
     for label, pattern in INTENT_PATTERNS.items():
         if re.search(pattern, text_lower):
             intent = label
             break
 
-    polarity_scores = [POLARITY_MAP.get(e, "нейтральная") for e in detected_emotions]
-    dominant_polarity = "нейтральная"
+    polarity_scores = [POLARITY_MAP.get(e, "neutral") for e in detected_emotions]
+    dominant_polarity = "neutral"
     if polarity_scores:
-        pos = polarity_scores.count("положительная")
-        neg = polarity_scores.count("негативная")
+        pos = polarity_scores.count("positive")
+        neg = polarity_scores.count("negative")
         if pos > neg:
-            dominant_polarity = "положительная"
+            dominant_polarity = "positive"
         elif neg > pos:
-            dominant_polarity = "негативная"
+            dominant_polarity = "negative"
 
     return {
         "tone": tone,
@@ -81,8 +81,8 @@ def generate_instruction(analysis: Dict) -> str:
     primary = ", ".join(analysis["meta"]["dominant_emotions"])
     secondary = ", ".join(analysis["meta"]["secondary_emotions"])
     
-    description = f"Ты ощущаешь {primary} ({polarity} эмоции)"
+    description = f"You feel {primary} ({polarity} emotions)"
     if secondary:
-        description += f", также присутствуют {secondary}."
-    description += f" Отвечай в тоне: {tone}."
+        description += f", also present {secondary}."
+    description += f" Answer in tone: {tone}."
     return description

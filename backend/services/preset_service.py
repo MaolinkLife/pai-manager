@@ -1,15 +1,15 @@
 import os
 import json
-from services import config_service  # Импортируем чтобы вносить изменения в конфиг
+from services import config_service  # Import to make changes to the config
 
 from utils.open_file_w_utf8 import open_utf8
 
 PRESET_PATH = os.path.join(os.path.dirname(__file__), "..", "config", "generation_presets.json")
 
-# 🔐 Стандартный пресет, если файл отсутствует
+# Standard preset if file is missing
 DEFAULT_PRESET = [{
     "name": "Default",
-    "description": "Базовые параметры генерации",
+    "description": "Base parameters for generation",
     "temperature": 1.0,
     "min_p": 0.05,
     "top_p": 0.9,
@@ -46,13 +46,13 @@ def update_or_add_preset(preset: dict):
     existing_index = next((i for i, p in enumerate(presets) if p["name"] == name), None)
 
     if existing_index is not None:
-        presets[existing_index] = preset  # обновляем существующий
+        presets[existing_index] = preset  # update existing
     else:
-        presets.append(preset)  # добавляем новый
+        presets.append(preset)  # add new
 
     save_presets(presets)
 
-    # 🎯 Обновляем config.json на основе нового/обновлённого пресета
+    # Update config.json based on new/updated preset
     apply_preset_to_config(preset)
 
 
