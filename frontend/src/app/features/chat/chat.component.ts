@@ -53,7 +53,7 @@ export class ChatComponent implements OnInit, OnDestroy {
                 if (typeof parsed === 'object' && parsed.type === 'message') {
                     // Это полноценное сообщение (от user или assistant)
                     this.chatHistory.push({
-                        id: this.generateId(),
+                        id: null, // временная заглушка, нужно получать ID от сервера
                         role: parsed.role,
                         content: parsed.content,
                         timestamp: new Date().toISOString()
