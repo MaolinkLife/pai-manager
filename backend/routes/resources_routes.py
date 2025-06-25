@@ -14,5 +14,5 @@ def get_audio_devices():
     except Exception as e:
         return {
             "status": "error",
-            "content": f"Ошибка при получении аудиоустройств: {str(e)}"
+            "content": f"Error while getting audio devices: {str(e)}"
         }

@@ -9,12 +9,12 @@ def get_current_session_log():
     try:
         logs, session_id = get_debug_log()
         if logs is None:
-            return JSONResponse(status_code=404, content={"error": "Лог-файл не найден."})
+            return JSONResponse(status_code=404, content={"error": "Log file not found"})
 
         return {"session_id": session_id, "logs": logs}
 
     except Exception as e:
         return JSONResponse(
             status_code=500,
-            content={"error": "Ошибка при обработке запроса", "details": str(e)}
+            content={"error": "Error processing request", "details": str(e)}
         )

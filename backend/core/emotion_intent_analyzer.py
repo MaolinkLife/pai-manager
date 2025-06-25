@@ -1,6 +1,16 @@
 import re
 from typing import Dict, List
 
+# TODO: Add to translate service and checking for selected language
+# RU Segment
+INTENT_PATTERNS = {
+    "признание": r"(люблю|нравишься|дорога|значишь|ценю)",
+    "угроза": r"(убью|разнесу|уничтожу|поквитаюсь)",
+    "вопрос": r"(ты\s+знаешь|можешь|почему|зачем|что если)",
+    "обида": r"(всегда так|опять|ты даже не|как всегда|обидно)",
+    "забота": r"(волнуешься|тебе важно|позаботиться|будь осторожна)"
+}
+
 EMOTION_KEYWORDS = {
     "грусть": ["печально", "жаль", "одиноко", "слёзы", "не хватает", "тоска"],
     "радость": ["счастлив", "рад", "ура", "восторг", "приятно", "улыбка"],
@@ -9,12 +19,21 @@ EMOTION_KEYWORDS = {
     "страх": ["боюсь", "страшно", "тревожно", "опасаюсь", "паника", "дрожь"]
 }
 
-INTENT_PATTERNS = {
-    "признание": r"(люблю|нравишься|дорога|значишь|ценю)",
-    "угроза": r"(убью|разнесу|уничтожу|поквитаюсь)",
-    "вопрос": r"(ты\s+знаешь|можешь|почему|зачем|что если)",
-    "обида": r"(всегда так|опять|ты даже не|как всегда|обидно)",
-    "забота": r"(волнуешься|тебе важно|позаботиться|будь осторожна)"
+# EN Segment
+INTENT_PATTERNS_EN = {
+    "confession": r"(I love you|like you|dear you|mean you|I appreciate you)",
+    "threat": r"(I'll kill you|I'll smash you|I'll destroy you|I'll get even)",
+    "question": r"(you\s+know|you can|why|what for|what if)",
+    "offense": r"(always like this|again|you don't even|like always|offensive)",
+    "care": r"(you're worried|it's important to you|to take care|be careful)"
+}
+
+EMOTION_KEYWORDS_EN = {
+    "sadness": ["sad", "pity", "lonely", "tears", "miss", "longing"],
+    "joy": ["happy", "glad", "hooray", "delight", "pleased", "smile"],
+    "anger": ["hate", "annoying", "infuriating", "angry", "would kill", "rage"],
+    "love": ["road", "love", "like you", "mean", "appreciate", "care about you"],
+    "fear": ["afraid", "scared", "anxious", "fearful", "panic", "trembling"]
 }
 
 POLARITY_MAP = {

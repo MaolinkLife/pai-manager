@@ -1,7 +1,7 @@
 import json
 import os
 
-# Корректный путь к config/port-config.json
+# Correct path to config/port-config.json
 config_path = os.path.join("config", "port-config.json")
 
 with open(config_path, encoding="utf-8") as f:

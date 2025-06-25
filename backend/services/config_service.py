@@ -54,7 +54,7 @@ DEFAULT_CONFIG = {
     },
     "generate_settings": {
         "name": "Default",
-        "description": "Сбалансированный стиль генерации",
+        "description": "Balanced generation style",
         "temperature": 1.27,
         "min_p": 0.0497,
         "top_p": 0.87,

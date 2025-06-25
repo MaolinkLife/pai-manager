@@ -79,13 +79,13 @@ Thumbs.db
 # CHARACTER CARDS
 # =======================
 
-# Игнорируем все персональные карточки
+# Ignore all personal cards
 backend/config/characters/*
 
-# Но оставляем дефолт
+# But we leave the default
 !backend/config/characters/default.yaml
 
-# Config.json — создаётся автоматически, не пушим
+# Config.json — created automatically, do not push
 backend/config/config.json
 backend/config/generation_presets.json
 

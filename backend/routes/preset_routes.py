@@ -11,7 +11,7 @@ from services.preset_service import (
 router = APIRouter(prefix="/api/presets", tags=["Presets"])
 
 
-# 📦 Получить список всех пресетов
+# Get a list of all presets
 @router.get("/")
 def get_presets():
     try:
@@ -21,25 +21,25 @@ def get_presets():
         return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
 
 
-# 🎯 Получить пресет по имени
+# Get preset by name
 @router.get("/{name}")
 def get_preset(name: str):
     preset = get_preset_by_name(name)
     if preset:
         return {"status": "ok", "preset": preset}
-    return JSONResponse(status_code=404, content={"status": "error", "message": "Пресет не найден"})
+    return JSONResponse(status_code=404, content={"status": "error", "message": "Preset not found"})
 
 
-# 💾 Добавить или обновить пресет
+# Add or update preset
 @router.post("/")
 async def save_preset(request: Request):
     try:
         preset = await request.json()
         if not preset.get("name"):
-            return JSONResponse(status_code=400, content={"status": "error", "message": "Имя пресета обязательно"})
+            return JSONResponse(status_code=400, content={"status": "error", "message": "Preset name is required"})
 
         update_or_add_preset(preset)
-        return {"status": "ok", "message": "Пресет сохранён"}
+        return {"status": "ok", "message": "Preset saved"}
     except Exception as e:
         return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
 

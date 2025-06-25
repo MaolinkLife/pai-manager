@@ -14,8 +14,8 @@ def load_ports():
 def main():
     frontend_port, backend_port = load_ports()
 
-    print(f"🚀 Запускаем Angular (порт {frontend_port})")
-    print(f"🧠 Запускаем Backend (порт {backend_port})")
+    print(f"Start Frontend (port {frontend_port})")
+    print(f"Start Backend (port {backend_port})")
     print("-" * 50)
 
     processes = []
@@ -49,16 +49,16 @@ def main():
         )
         processes.append(backend)
 
-        # Ждём завершения
+        # Waiting for completion
         for p in processes:
             p.wait()
 
     except KeyboardInterrupt:
-        print("\n🛑 Прерывание! Завершаем процессы...")
+        print("\nInterrupt! Terminating processes...")
         for p in processes:
             if p.poll() is None:
                 p.send_signal(signal.SIGINT)
-        print("✅ Все процессы завершены.")
+        print("All processes are completed.")
 
 
 if __name__ == "__main__":

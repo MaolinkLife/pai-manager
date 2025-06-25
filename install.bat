@@ -1,20 +1,20 @@
 @echo off
 echo ----------------------------------
-echo Установка зависимостей Z-Waif
+echo Installing Z-Waif dependencies
 echo ----------------------------------
 
 echo.
-echo Устанавливаем frontend...
+echo install frontend...
 cd frontend
 call npm install
 cd ..
 
 echo.
-echo Настраиваем backend...
+echo install backend...
 cd backend
 
 IF NOT EXIST venv (
-    echo Создаём виртуальное окружение...
+    echo Create a virtual environment...
     python -m venv venv
 )
 
@@ -23,5 +23,5 @@ pip install -r requirements.txt
 cd ..
 
 echo.
-echo Установка завершена. Готово к запуску!
+echo Installation is complete. Ready to run!
 pause

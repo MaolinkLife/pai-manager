@@ -1,13 +1,13 @@
 @echo off
 chcp 65001 >nul
-echo 🛠 Запуск проекта Z-Waif...
+echo Launch of the Z-Waif project...
 
-:: Активируем venv
+:: Activate venv
 cd backend
 call venv\Scripts\activate
 cd ..
 
-:: Запускаем Python-менеджер процессов
+:: Launching Python Process Manager
 python run.py
 
 pause

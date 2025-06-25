@@ -12,7 +12,7 @@ router = APIRouter(prefix="/api/voice", tags=["Voice"])
 @router.post("/stop")
 async def stop_voice():
     force_cut_voice()
-    return {"status": "ok", "message": "🔇 Воспроизведение остановлено."}
+    return {"status": "ok", "message": "Playback has stopped"}
 
 
 @router.post("/play")
@@ -22,7 +22,7 @@ def play_message_by_id(request: dict = Body(...)):
         return {"status": "error", "message": "message_id не указан"}
     
     play_message(message_id)
-    return {"status": "ok", "message": f"▶️ Проигрываю сообщение: {message_id}"}
+    return {"status": "ok", "message": f"Playing the message: {message_id}"}
 
 
 @router.post("/record/start")

@@ -1,11 +1,11 @@
-# =========================================================
-# Модуль: ollama_routes.py
-# Назначение: Эндпоинты для взаимодействия с моделью Ollama и получения истории
-# Используется в: WebUI или других клиентах, посылающих запросы к LLM
-# Особенности:
-# - Работает через api_service (сборка запроса) и ollama_service (отправка запроса)
-# - Имеет эндпоинты для получения списка моделей и истории
-# =========================================================
+# ===========================================================
+# Module: ollama_routes.py
+# Purpose: Endpoints for interacting with the Ollama model and getting history
+# Used in: WebUI or other clients sending requests to LLM
+# Features:
+# - Works via api_service (request assembly) and ollama_service (request sending)
+# - Has endpoints for getting the list of models and history
+# ========================================================
 
 from fastapi import APIRouter, Query
 from fastapi.responses import JSONResponse
@@ -18,7 +18,7 @@ from services.logger_service import log_audit_entry, AuditStatus
 router = APIRouter(prefix="/api/ollama", tags=["Ollama"])
 
 
-# Отправка сообщений в Ollama (chat-запрос)
+# Sending messages to Ollama (chat request)
 @router.post("/chat")
 def chat(payload: dict):
     return  {
@@ -28,7 +28,7 @@ def chat(payload: dict):
     }
 
 
-# Возвращает список доступных моделей Ollama.
+# Returns a list of available Ollama models.
 @router.get("/models")
 async def get_available_models():
     return ollama_service.get_models()
@@ -68,7 +68,7 @@ async def reroll_assistant_message(payload: dict):
     except Exception as e:
         log_audit_entry(
             event_type="reroll_request_error",
-            msg="[Ollama Router]: Ошибка во время выполнения reroll",
+            msg="[Ollama Router]: Error while executing rerolll",
             status=AuditStatus.ERROR,
             details={
                 "input": payload,
