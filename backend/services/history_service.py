@@ -6,15 +6,26 @@ from services.db_core import SessionLocal
 from services.logger_service import log_audit_entry, AuditStatus
 from utils.time_utils import format_user_datetime
 import asyncio
+from typing import Optional
 
 
-def add_history(character_id: str, role: str, content: str, timestamp: datetime = None):
+def add_history(
+    character_id: str,
+    role: str,
+    content: str,
+    timestamp: Optional[datetime] = None,
+    session: Optional[Session] = None,
+):
     """Добавление сообщения в историю"""
-    if timestamp is None:
-        timestamp = datetime.now(timezone.utc)
+    own_session = False
+    if session is None:
+        session = SessionLocal()
+        own_session = True
 
-    session: Session = SessionLocal()
     try:
+        if timestamp is None:
+            timestamp = datetime.now(timezone.utc)
+
         entry = History(
             id=str(uuid.uuid4()),
             character_id=character_id,
@@ -27,7 +38,8 @@ def add_history(character_id: str, role: str, content: str, timestamp: datetime 
         session.refresh(entry)
         return entry
     finally:
-        session.close()
+        if own_session:
+            session.close()
 
 
 def get_history(character_id: str, limit: int = 20):
@@ -305,8 +317,23 @@ async def reroll_assistant_message(message_id: str) -> dict:
         print(f"[DEBUG] Found user message: {user_msg.id}")
 
         # 3. Удаляем сообщения
+        print(
+            "[DEBUG] Deleting assistant:",
+            assistant_msg.id,
+            "=>",
+            assistant_msg.content[:30],
+        )
+        print("[DEBUG] Deleting user:", user_msg.id, "=>", user_msg.content[:30])
         delete_messages_from_database(session, [assistant_msg, user_msg])
         print(f"[DEBUG] Messages deleted")
+
+        # Проверка — жив ли ассистент
+        check = session.query(History).filter_by(id=assistant_msg.id).first()
+        print("[DEBUG] Assistant still in DB?", check is not None)
+
+        # Проверка — жив ли пользователь
+        check = session.query(History).filter_by(id=user_msg.id).first()
+        print("[DEBUG] User still in DB?", check is not None)
 
         # 4. Собираем историю до пользовательского сообщения
         history = build_history_up_to_user_message(
@@ -316,22 +343,18 @@ async def reroll_assistant_message(message_id: str) -> dict:
 
         from services import api_service
 
-        new_response = await api_service.run_standard(history=history)
+        new_response = await api_service.run_standard(history=history, return_full=True)
         print(f"[DEBUG] New response generated")
-
-        # СОЗДАЕМ НОВОЕ СООБЩЕНИЕ В БАЗЕ И ВОЗВРАЩАЕМ ЕГО ID
-        new_message_obj = add_history(
-            character_id=assistant_msg.character_id,
-            role="assistant",
-            content=new_response,
-            timestamp=assistant_timestamp,
-        )
 
         return {
             "role": "assistant",
-            "content": new_response,
-            "timestamp": assistant_timestamp.isoformat(),
-            "id": new_message_obj.id,  # <-- Добавлено: возвращаем ID
+            "content": new_response["content"],
+            "timestamp": (
+                new_response["timestamp"].isoformat()
+                if hasattr(new_response["timestamp"], "isoformat")
+                else str(new_response["timestamp"])
+            ),
+            "id": new_response["id"],
         }
 
     finally:

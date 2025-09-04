@@ -89,7 +89,9 @@ def build_chat_request(history, include_system=True):
 # ===========================================================
 # Standard (non-streaming) generation
 # ===========================================================
-async def run_standard(history: list, emit_ws_fn=None) -> str:
+async def run_standard(
+    history: list, emit_ws_fn=None, store: bool = True, return_full: bool = False
+):
     log_audit_entry(
         event_type="ApiService.RunStandard",
         msg="[Api Service]: Запущена функция генерации",
@@ -139,12 +141,14 @@ async def run_standard(history: list, emit_ws_fn=None) -> str:
             timestamp=last_user_message.get("timestamp"),
         )
 
-    database_service.add_message_to_history(
-        character_name=char_name,
-        role="assistant",
-        content=assistant_content,
-        timestamp=datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
-    )
+    new_message_obj = None
+    if store:
+        new_message_obj = database_service.add_message_to_history(
+            character_name=char_name,
+            role="assistant",
+            content=assistant_content,
+            timestamp=datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
+        )
 
     # Voice
     if get_config_value("voice.enabled", False):
@@ -172,6 +176,13 @@ async def run_standard(history: list, emit_ws_fn=None) -> str:
         await emit_ws_fn(
             {"type": "message", "role": "assistant", "content": assistant_content}
         )
+
+    if return_full:
+        return {
+            "id": new_message_obj.id if new_message_obj else None,
+            "content": assistant_content,
+            "timestamp": new_message_obj.timestamp if new_message_obj else None,
+        }
 
     return assistant_content
 
@@ -229,10 +240,10 @@ async def run_stream_message(websocket: WebSocket, history: list):
             )
 
     response_chunks = []
-    buffer = [] 
+    buffer = []
     voice_enabled = get_config_value("voice.enabled", False)
     streaming_tts = get_config_value("voice.streaming_tts", False)
-    
+
     if voice_enabled:
         set_speaking(True)
 
