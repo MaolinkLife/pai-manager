@@ -3,160 +3,163 @@
 # Purpose: Interaction with Ollama model (text and visual)
 # Used in: ollama_routes
 # Features:
-# - Supports both regular and streaming output
-# - Processes visual models separately
-# =========================================================
+# - Direct HTTP calls to Ollama API
+# - Full error transparency (native Ollama errors are returned)
+# ===========================================================
 
+import requests
+import aiohttp
 import asyncio
-from ollama import chat, ChatResponse
-from ollama._types import ResponseError
-from ollama import list as ollama_list
+import json
 
 from requests.exceptions import ConnectionError as RequestsConnectionError
 
 from services.config_service import get_config_value
 from services.logger_service import log_audit_entry, log_error, AuditStatus
 
-from functools import partial
 
+OLLAMA_API_URL = "http://localhost:11434/api"
 ollama_model_visual = get_config_value("api.visual_model")
 
-# Returns a dictionary of temperature parameters at the selected level (0-2).
-# TODO: Probably won't be needed anymore
-def get_temperature_options(
-    temp_level: int, stop: list | None, max_tokens: int
-) -> dict | None:
-    if temp_level == -1:
-        return None
 
-    if temp_level == 0:
-        return {
-            "temperature": 1.17,
-            "min_p": 0.0597,
-            "top_p": 0.87,
-            "top_k": 64,
-            "repeat_penalty": 1.09,
-            "stop": stop,
-            "num_predict": max_tokens,
-        }
-
-    if temp_level == 1:
-        return {
-            "temperature": 1.27,
-            "min_p": 0.0497,
-            "top_p": 0.87,
-            "top_k": 72,
-            "repeat_penalty": 1.12,
-            "stop": stop,
-            "num_predict": max_tokens,
-        }
-
-    if temp_level == 2:
-        return {
-            "temperature": 1.47,
-            "min_p": 0.0397,
-            "top_p": 0.97,
-            "top_k": 99,
-            "repeat_penalty": 1.19,
-            "stop": stop,
-            "num_predict": max_tokens,
-        }
-
-
-# Sends a regular (non-streaming) chat request to Ollama, returns a response.
+# ===========================================================
+# Regular chat (non-streaming)
+# ===========================================================
 def api_standard(history, options: dict):
-    ollama_model=get_config_value("api.model")
+    ollama_model = get_config_value("api.model")
     try:
-        response: ChatResponse = chat(
-            model=ollama_model,
-            messages=history,
-            keep_alive="25h",
-            options=options,
+        r = requests.post(
+            f"{OLLAMA_API_URL}/chat",
+            json={
+                "model": ollama_model,
+                "messages": history,
+                "options": options,
+                "stream": False,
+            },
+            timeout=300,
         )
-        return response
+        r.raise_for_status()
+        data = r.json()
 
-    except ResponseError as e:
-        log_audit_entry(
-            event_type="generate_message", 
-            msg=f"[Ollama] Model '{ollama_model}' not found or not loaded",
-            status=AuditStatus.ERROR,
-            details={
-                "context": f"Ollama ResponseError: {e}",
-                "status": "error"
-            }
-        )
-        
-        log_error(
-            f"Ollama ResponseError: {e}\nModel '{ollama_model}' not found or not loaded."
-        )
-        
-        return f"[ERROR] Model '{ollama_model}' not found. Check configuration or upload model manually."
+        if "error" in data:
+            log_audit_entry(
+                event_type="ollama_error",
+                msg=f"[Ollama] Error: {data['error']}",
+                status=AuditStatus.ERROR,
+                details={"model": ollama_model, "error": data["error"]},
+            )
+            raise RuntimeError(data["error"])
+
+        return data
+
+    except Exception as e:
+        log_error(f"[Ollama] HTTP error: {e}")
+        raise
 
 
-# Sends a request with stream=True - generates a text stream.
+# ===========================================================
+# Streaming chat
+# ===========================================================
 async def api_stream(history: list, options: dict):
     ollama_model = get_config_value("api.model")
+    url = f"{OLLAMA_API_URL}/chat"
 
-    try:
-        loop = asyncio.get_running_loop()
-        sync_generator = await loop.run_in_executor(
-            None,
-            partial(chat, model=ollama_model, messages=history, stream=True, keep_alive="25h", options=options)
-        )
+    async with aiohttp.ClientSession() as session:
+        async with session.post(
+            url,
+            json={
+                "model": ollama_model,
+                "messages": history,
+                "options": options,
+                "stream": True,
+            },
+        ) as resp:
+            async for line in resp.content:
+                if not line.strip():
+                    continue
+                try:
+                    data = line.decode("utf-8").strip()
+                    obj = json.loads(data)
+                    if "error" in obj:
+                        yield {"error": obj["error"]}
+                        return
+                    yield obj
+                except Exception as e:
+                    log_error(f"[Ollama stream parse error]: {e}")
 
-        for chunk in sync_generator:
-            yield chunk
 
-    except ResponseError as e:
-        log_error(f"Ollama ResponseError: {e}")
-    except Exception as e:
-        log_error(f"Unknown error in stream: {e}")
-
-
-# Query the visual model.
+# ===========================================================
+# Visual model: regular
+# ===========================================================
 def api_standard_image(history):
     try:
-        response: ChatResponse = chat(
-            model=get_config_value("api.visual_model"),
-            messages=history,
-            keep_alive="25h",
+        r = requests.post(
+            f"{OLLAMA_API_URL}/chat",
+            json={
+                "model": ollama_model_visual,
+                "messages": history,
+                "stream": False,
+            },
+            timeout=300,
         )
-        return response.message.content
+        r.raise_for_status()
+        data = r.json()
 
-    except ResponseError as e:
-        log_error(f"Vision-model '{ollama_model_visual}' not found: {e}")
-        return "[ERROR] The visual model is not loaded."
+        if "error" in data:
+            log_error(f"[Ollama visual error]: {data['error']}")
+            return f"[ERROR] {data['error']}"
 
+        return data.get("message", {}).get("content", "")
 
-# Stream generation with visual model.
-def api_stream_image(history):
-    try:
-        return chat(
-            model=ollama_model_visual,
-            messages=history,
-            stream=True,
-            keep_alive="25h",
-        )
-    except ResponseError as e:
-        log_error(f"Ollama ResponseError: {e}")
-        return None
     except Exception as e:
-        log_error(f"Unknown error in stream: {e}")
-        return None
+        log_error(f"[Ollama visual HTTP error]: {e}")
+        return "[ERROR] Visual model request failed."
 
 
+# ===========================================================
+# Visual model: streaming
+# ===========================================================
+async def api_stream_image(history):
+    url = f"{OLLAMA_API_URL}/chat"
+
+    async with aiohttp.ClientSession() as session:
+        async with session.post(
+            url,
+            json={
+                "model": ollama_model_visual,
+                "messages": history,
+                "stream": True,
+            },
+        ) as resp:
+            async for line in resp.content:
+                if not line.strip():
+                    continue
+                try:
+                    data = line.decode("utf-8").strip()
+                    obj = json.loads(data)
+                    if "error" in obj:
+                        yield {"error": obj["error"]}
+                        return
+                    yield obj
+                except Exception as e:
+                    log_error(f"[Ollama visual stream parse error]: {e}")
+                    return
+
+
+# ===========================================================
+# Check if Ollama is alive
+# ===========================================================
 def is_ollama_available() -> bool:
     try:
-        ollama_list()
-        return True
-    except (ResponseError, RequestsConnectionError, ConnectionError):
-        return False
-    except Exception as e:
-        print(f"[ERROR] Error while checking Ollama: {e}")
+        r = requests.get(f"{OLLAMA_API_URL}/tags", timeout=5)
+        return r.status_code == 200
+    except Exception:
         return False
 
 
-# Returns a list of available models if Ollama is running. Otherwise, an error message
+# ===========================================================
+# Get list of models
+# ===========================================================
 def get_models():
     if not is_ollama_available():
         return {
@@ -165,23 +168,10 @@ def get_models():
         }
 
     try:
-        models = ollama_list()
-        model_list = models.models  # this is not a dict, but an attribute
-
-        return {
-            "status": "ok",
-            "models": [m.model for m in model_list],  # access to an object field
-        }
-
-    except ResponseError as e:
-        return {"status": "error", "message": f"Ollama returned an error: {str(e)}"}
-
+        r = requests.get(f"{OLLAMA_API_URL}/tags", timeout=10)
+        r.raise_for_status()
+        data = r.json()
+        models = [m["name"] for m in data.get("models", [])]
+        return {"status": "ok", "models": models}
     except Exception as e:
-        import traceback
-
-        traceback.print_exc()
-
-        return {
-            "status": "error",
-            "message": f"Unknown error while getting models: {str(e)}",
-        }
+        return {"status": "error", "message": f"Ollama error: {str(e)}"}

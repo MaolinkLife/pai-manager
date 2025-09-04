@@ -1,0 +1,62 @@
+@import "../../../../../assets/styles/lim-ui/colors.less";
+
+.content {
+    display: flex;
+    width: 100%;
+    height: 100%;
+    background-color: @color-bg;
+    color: @color-text;
+    font-family: @font-family;
+}
+
+.sidebar {
+    display: flex;
+    flex-direction: column;
+    background-color: @color-surface;
+    border-right: 1px solid @color-border;
+    width: 200px;
+    padding: 16px;
+    box-shadow: inset -1px 0 0 @color-border;
+}
+
+.sidebar-title {
+    color: @color-text-active;
+    font-weight: bold;
+    margin-bottom: 12px;
+}
+
+.sidebar-content {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+
+    button {
+        background-color: transparent;
+        border: 1px solid @color-border;
+        border-radius: @radius;
+        color: @color-text;
+        padding: 8px 12px;
+        text-align: left;
+        transition: background 0.2s ease, color 0.2s ease;
+        cursor: pointer;
+        font-family: @font-family;
+
+        &:hover {
+            background-color: @color-accent-dark;
+            color: @color-text-active;
+        }
+
+        &.active {
+            background-color: @color-accent;
+            color: @color-text-active;
+            box-shadow: @shadow-soft;
+        }
+    }
+}
+
+.main-content {
+    flex-grow: 1;
+    padding: 24px;
+    background-color: @color-bg;
+    overflow-y: auto;
+}

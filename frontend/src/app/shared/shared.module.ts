@@ -4,6 +4,7 @@ import { ThemeModule } from './components/theme/theme.module';
 import { IconsToolbarModule } from './components/icons-toolbar/icons-toolbar.module';
 import { TranslationModule } from './pipes/translation/translation.module';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
+import { ModalModule } from './components/modal/modal.module';
 
 @NgModule({
     imports: [
@@ -13,6 +14,7 @@ import { FormsModule, ReactiveFormsModule } from '@angular/forms';
         TranslationModule.forRoot(),
         FormsModule,
         ReactiveFormsModule,
+        ModalModule,
     ],
     exports: [
         ThemeModule,
@@ -20,6 +22,7 @@ import { FormsModule, ReactiveFormsModule } from '@angular/forms';
         TranslationModule,
         FormsModule,
         ReactiveFormsModule,
+        ModalModule,
     ]
 })
 export class SharedModule { }

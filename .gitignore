@@ -91,6 +91,7 @@ backend/config/generation_presets.json
 
 backend/storage/history/*
 backend/storage/database/core.db
+backend/storage/vector_store
 
 backend/temp/audio/*
 backend/temp/logs/*

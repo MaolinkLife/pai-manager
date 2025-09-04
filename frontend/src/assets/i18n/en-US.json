@@ -25,7 +25,11 @@
         "visual_model": "Visual Model",
         "token_limit": "Token Limit",
         "message_pair_limit": "Message Pair Limit",
-        "streaming": "Streaming Mode"
+        "streaming": "Streaming Mode",
+        "select_preset": "Select Preset",
+        "presets": "Presets",
+        "voice_setting": "Voice Settings",
+        "stop_tokens": "Stop Tokens"
     },
     "general": {
         "save": "Save"

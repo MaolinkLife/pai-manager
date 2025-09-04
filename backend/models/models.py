@@ -1,0 +1,59 @@
+from sqlalchemy import Column, String, Text, DateTime, ForeignKey, Boolean, Integer
+from sqlalchemy.orm import relationship
+from datetime import datetime, timezone
+import uuid
+from sqlalchemy.orm import declarative_base
+from services.db_core import Base
+
+# Character Table
+class Character(Base):
+    __tablename__ = "characters"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    name = Column(String, unique=True, index=True, nullable=False)
+    configs = Column(Text, default="{}")  # JSON as a string
+    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+    history = relationship("History", back_populates="character")
+
+
+# History table
+class History(Base):
+    __tablename__ = "history"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    character_id = Column(String, ForeignKey("characters.id"), nullable=False)
+    role = Column(String, nullable=False)  # 'user' / 'assistant'
+    content = Column(Text, nullable=False)
+    timestamp = Column(DateTime, default=datetime.now(timezone.utc))
+
+    character = relationship("Character", back_populates="history")
+
+# =======================
+# Users
+# =======================
+class User(Base):
+    __tablename__ = "users"
+
+    uuid = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    name = Column(String, nullable=False)
+    trust_level = Column(Integer, default=0)  # 0=anon, 1=friend, 2=owner
+    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+
+
+# =======================
+# Messages
+# =======================
+class Message(Base):
+    __tablename__ = "messages"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String, ForeignKey("users.uuid"), nullable=False)
+    dialog_id = Column(String, nullable=True)  # группировка по диалогам
+    role = Column(String, nullable=False)      # 'user' / 'assistant'
+    content = Column(Text, nullable=False)     # пока plain, потом шифр
+    volatile = Column(Boolean, default=False)  # временное сообщение
+    timestamp = Column(DateTime, default=datetime.now(timezone.utc))
+
+    user = relationship("User")

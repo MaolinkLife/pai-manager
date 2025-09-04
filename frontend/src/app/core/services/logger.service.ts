@@ -11,9 +11,7 @@ import { DebugLogsDto, LogsDto } from '../models/logs.model';
 export class LoggerService {
     apiUrl: string = `${environment.apiBaseUrl}/log`;
 
-    constructor(private http: HttpClient) {
-
-    }
+    constructor(private http: HttpClient) { }
 
     getDebugLog$(): Observable<LogsDto[]> {
         return this.http.get<DebugLogsDto>(this.apiUrl).pipe(

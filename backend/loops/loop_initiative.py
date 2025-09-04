@@ -4,7 +4,7 @@ from dateutil.parser import isoparse
 from services.api_service import run_initiative
 from services.database_service import get_last_messages
 from services.config_service import get_config_value
-from services.logger_service import log_error, log_audit, log_audit_entry, AuditStatus
+from services.logger_service import log_error, log_audit_entry, AuditStatus
 
 CHECK_EVERY = 60  # We check every minute
 
@@ -49,7 +49,7 @@ def analyze_pattern(messages):
 
 def initiative_monitor():
     global last_triggered_phase, last_initiative_time
-    log_audit("loop_started", {"loop": "initiative_monitor"})
+    log_audit_entry(event_type="loop_started",msg="[Initiative] Loop started", status=AuditStatus.INFO, details={"loop": "initiative_monitor"})
 
     while True:
         try:
@@ -57,7 +57,7 @@ def initiative_monitor():
             messages = get_last_messages(char_name, limit=10)
 
             if not messages:
-                log_audit("initiative_skip", {"reason": "no_messages"})
+                log_audit_entry(event_type="initiative_skip",msg="[Initiative] Skip Initiative", status=AuditStatus.INFO, details={"reason": "no_messages"})
                 time.sleep(CHECK_EVERY)
                 continue
 
@@ -67,18 +67,18 @@ def initiative_monitor():
             if emotion:
                 # Check for repetition and frequency
                 if emotion != last_triggered_phase or (last_initiative_time and now - last_initiative_time >= MIN_INTERVAL):
-                    log_audit("initiative_triggered", {"emotion": emotion})
+                    log_audit_entry(event_type="initiative_triggered",msg="[Initiative] Emotion change", status=AuditStatus.INFO, details={"emotion": emotion})
                     run_initiative(emotion=emotion)
                     last_triggered_phase = emotion
                     last_initiative_time = now
                 else:
-                    log_audit("initiative_repeat_skipped", {
+                    log_audit_entry(event_type="initiative_repeat_skipped",msg="[Initiative] Triggered Emotions", status=AuditStatus.INFO, details={
                         "emotion": emotion,
                         "last_triggered": last_initiative_time.isoformat() if last_initiative_time else None
                     })
             # else:
             #     print("[LIM] 💤 Пока нет условий для инициативы.")
-                # log_audit("initiative_conditions_not_met", {"pattern": [msg["role"] for msg in messages]})
+                # log_audit_entry("initiative_conditions_not_met", {"pattern": [msg["role"] for msg in messages]})
 
             time.sleep(CHECK_EVERY)
 

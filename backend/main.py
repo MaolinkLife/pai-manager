@@ -20,6 +20,8 @@ from routes.voice_routes import router as voice_router
 from routes.lorebook_routes import router as lorebook_router
 from routes.resources_routes import router as resources_router
 from routes.ws_routes import ws_router
+from routes.embed_routes import router as embed_router
+from routes.vector_routes import router as vector_router
 
 from core.initialize import run_startup_checks
 from loops.loop_core import run_loop
@@ -44,6 +46,8 @@ app.include_router(voice_router)
 app.include_router(resources_router)
 app.include_router(ws_router)
 app.include_router(lorebook_router)
+app.include_router(embed_router)
+app.include_router(vector_router)
 
 # Start background loops
 run_loop()

@@ -1,0 +1,21 @@
+<div class="content">
+    <div class="sidebar">
+        <div class="sidebar-title">Settings</div>
+        <div class="sidebar-content">
+            <button
+                *ngFor="let tab of tabs"
+                [class.active]="activeView === tab.key"
+                (click)="selectView(tab.key)"
+            >
+                {{ tab.label }}
+            </button>
+        </div>
+    </div>
+
+    <div class="main-content">
+        <app-lorebook *ngIf="activeView === 'lorebook'"></app-lorebook>
+        <!-- <app-audio *ngIf="activeView === 'audio'"></app-audio>
+        <app-generate *ngIf="activeView === 'generate'"></app-generate>
+        <app-vision *ngIf="activeView === 'vision'"></app-vision> -->
+    </div>
+</div>

@@ -9,6 +9,14 @@ import { map } from 'rxjs/operators';
 import { VoiceService } from '../../core/services/voice.service';
 import { WebsocketService } from '../../core/services/websocket.service';
 
+function generateTempId(): string {
+    if ((crypto as any).randomUUID) {
+        return (crypto as any).randomUUID();
+    }
+    // fallback
+    return 'temp-' + Math.random().toString(36).substr(2, 9);
+}
+
 @Component({
     selector: 'app-chat',
     templateUrl: './chat.component.html',
@@ -44,50 +52,135 @@ export class ChatComponent implements OnInit, OnDestroy {
 
     ngOnInit(): void {
         this.getSettings();
-        this.loadHistory();
+        // this.loadHistory();
+
+        this.websocketService.send(JSON.stringify({
+            action: 'fetch_history',
+            payload: { limit: 32 }
+        }));
 
         this.websocketService.messages$.subscribe((rawMsg: string) => {
+            let event: any;
             try {
-                const parsed = JSON.parse(rawMsg);
-
-                if (typeof parsed === 'object' && parsed.type === 'message') {
-                    // Это полноценное сообщение (от user или assistant)
-                    this.chatHistory.push({
-                        id: null, // временная заглушка, нужно получать ID от сервера
-                        role: parsed.role,
-                        content: parsed.content,
-                        timestamp: new Date().toISOString()
-                    });
-
-                    this.scrollToBottom();
-                    return;
-                }
+                event = JSON.parse(rawMsg);
             } catch {
-                // Стриминг: это просто строка или часть
-            }
-
-            // === Стриминговое поведение ===
-            if (rawMsg === '[DONE]') {
-                this.loading = false;
-                this.currentStreamingMessage = null;
+                console.warn('[WS] ⚠️ Received non-JSON message:', rawMsg);
                 return;
             }
 
-            if (!this.currentStreamingMessage) {
-                this.currentStreamingMessage = {
-                    id: null,
-                    role: 'assistant',
-                    content: rawMsg,
-                    timestamp: new Date().toISOString()
-                };
-                this.chatHistory.push(this.currentStreamingMessage);
-            } else {
-                this.currentStreamingMessage.content += rawMsg;
+            switch (event.type) {
+                case 'message_chunk':
+                    // Убираем плашку "Печатает" при первом чанке
+                    if (!this.currentStreamingMessage) {
+                        this.loading = false;
+                        const tempId = generateTempId();
+                        this.currentStreamingMessage = {
+                            id: tempId,
+                            role: event.role,
+                            content: event.content,
+                            timestamp: new Date().toISOString(),
+                            isPending: true
+                        };
+                        this.chatHistory.push(this.currentStreamingMessage);
+                    } else {
+                        this.currentStreamingMessage.content += event.content;
+                    }
+                    break;
+
+                case 'message':
+                    if (this.currentStreamingMessage) {
+                        // обновляем последний pending сообщение
+                        this.currentStreamingMessage.id = event.id || this.currentStreamingMessage.id;
+                        this.currentStreamingMessage.isPending = false;
+                        this.currentStreamingMessage.content = event.content;
+                        this.currentStreamingMessage = null;
+                    } else {
+                        // если почему-то не было chunk'ов
+                        this.chatHistory.push({
+                            id: event.id,
+                            role: event.role,
+                            content: event.content,
+                            timestamp: new Date().toISOString(),
+                            isPending: false
+                        });
+                    }
+                    this.loading = false;
+                    break;
+
+                case 'history':
+                    this.chatHistory = event.items.map((m: any) => ({
+                        ...m,
+                        isPending: false
+                    })).sort(
+                        (a: any, b: any) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+                    );
+                    break;
+
+                case 'deleted':
+                    if (event.chain) {
+                        // Удаление цепочки
+                        const deletedMsgIndex = this.chatHistory.findIndex(m => m.id === event.message_id);
+                        if (deletedMsgIndex !== -1) {
+                            const deletedMsg = this.chatHistory[deletedMsgIndex];
+                            this.chatHistory.splice(deletedMsgIndex, 1);
+
+                            // Если это пользовательское сообщение, удаляем следующее сообщение ассистента
+                            if (deletedMsg.role === 'user') {
+                                for (let i = deletedMsgIndex; i < this.chatHistory.length; i++) {
+                                    if (this.chatHistory[i].role === 'assistant') {
+                                        this.chatHistory.splice(i, 1);
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        // Обычное удаление - удаляем только одно сообщение
+                        this.chatHistory = this.chatHistory.filter(m => m.id !== event.message_id);
+                    }
+                    break;
+
+                case 'reroll':
+                    console.log('Reroll response:', event)
+                    // Добавляем новое сообщение от reroll
+                    this.chatHistory.push({
+                        id: event.new_message.id,  // используем ID из ответа
+                        role: event.new_message.role,
+                        content: event.new_message.content,
+                        timestamp: event.new_message.timestamp,
+                        isPending: false
+                    });
+                    this.loading = false;
+                    setTimeout(() => this.scrollToBottom(), 0);
+                    break;
+
+                case 'system':
+                    if (event.event === 'stream_end') {
+                        this.loading = false;
+                        this.currentStreamingMessage = null;
+                    }
+                    break;
+
+                case 'error':
+                    console.error('[WS] ❌ Error from server:', event.message);
+                    this.loading = false;
+                    break;
+
+                case 'ack_message':
+                    // Найти сообщение с tempId и обновить его id
+                    const idx = this.chatHistory.findIndex(m => m.id === event.tempId);
+                    if (idx !== -1) {
+                        this.chatHistory[idx].id = event.realId;
+                        this.chatHistory[idx].isPending = false;
+                    }
+                    break;
+
+                default:
+                    console.warn('[WS] ⚠️ Unknown event:', event);
             }
 
             setTimeout(() => this.scrollToBottom(), 50);
         });
-
     }
 
     ngOnDestroy() { }
@@ -145,36 +238,35 @@ export class ChatComponent implements OnInit, OnDestroy {
         const trimmed = this.chatInput.value?.trim();
         if (!trimmed) return;
 
-        const userMessage: Message = { id: null, role: 'user', content: trimmed, timestamp: new Date().toISOString() };
+        const tempId = generateTempId();
+        const timestamp = new Date().toISOString();
+
+        const userMessage: Message = {
+            id: tempId,
+            role: 'user',
+            content: trimmed,
+            timestamp,
+            isPending: true
+        };
+
         this.chatHistory.push(userMessage);
+
         this.chatInput.setValue('');
         this.loading = true;
         setTimeout(() => this.scrollToBottom(), 0);
 
-        const message = {
-            "history": [...this.chatHistory],
-            "temp_level": 1,
-            "max_tokens": 512
-        }
 
-        this.websocketService.send(JSON.stringify(message));
-        this.currentStreamingMessage = null;
+        this.websocketService.send(JSON.stringify({
+            action: 'send_message',
+            payload: userMessage
+        }));
     }
 
     loadHistory(): void {
-        this.apiService.getChatHistory$().subscribe({
-            next: (res) => {
-                if (res.status === 'ok' && Array.isArray(res.history)) {
-                    this.chatHistory = res.history
-                        .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
-                        .map((msg) => ({ ...msg }));
-                    setTimeout(() => this.scrollToBottom(), 0);
-                }
-            },
-            error: (err) => {
-                console.error('Ошибка загрузки истории:', err);
-            },
-        });
+        this.websocketService.send(JSON.stringify({
+            action: 'fetch_history',
+            payload: { limit: 32 }
+        }));
     }
 
     getSettings(): void {
@@ -209,61 +301,50 @@ export class ChatComponent implements OnInit, OnDestroy {
 
     deleteMessage(msg: Message, chain: boolean): void {
         if (!msg || !msg.id) return; // На всякий случай
-
-        this.apiService.deleteMessage$(msg.id, chain).subscribe({
-            next: (res) => {
-                if (res.status === 'ok') {
-                    // Обновим локально
-                    this.chatHistory = this.chatHistory.filter(m => {
-                        if (!chain) return m.id !== msg.id;
-                        if (m.id === msg.id) return false;
-
-                        // Если цепочка: удалим следующее сообщение от ассистента по таймстампу
-                        return !(m.role === 'assistant' && m.timestamp === msg.timestamp);
-                    });
-                } else {
-                    console.warn('Не удалось удалить сообщение:', res);
-                }
-
-                this.loadHistory();
-            },
-            error: (err) => {
-                console.error('Ошибка при удалении:', err);
-            }
-        });
+        this.websocketService.send(JSON.stringify({
+            action: 'delete_message',
+            payload: { message_id: msg.id, chain }
+        }));
     }
 
     rerollMessage(messageId: string | null): void {
-        if (!messageId) return;
+        console.log('Reroll called with:', { messageId });
 
-        this.loading = true;
+        // Если messageId не передан, ищем последнее сообщение ассистента
+        if (!messageId) {
+            // Ищем последнее сообщение ассистента (НЕ удаляем его!)
+            for (let i = this.chatHistory.length - 1; i >= 0; i--) {
+                if (this.chatHistory[i].role === 'assistant') {
+                    messageId = this.chatHistory[i].id;
+                    break;
+                }
+            }
 
-        // Удалим последнее сообщение ассистента
-        const lastIndex = this.chatHistory.findIndex(
-            (msg, i) => msg.role === 'assistant' && i === this.chatHistory.length - 1
-        );
-
-        if (lastIndex !== -1) {
-            this.chatHistory.splice(lastIndex, 1); // удалим сообщение из истории
+            if (!messageId) {
+                console.warn('No assistant message found for reroll');
+                return;
+            }
         }
 
-        setTimeout(() => this.scrollToBottom(), 0); // прокрутим вниз
+        // Показываем "Печатает..." и убираем старое сообщение
+        this.loading = true;
 
-        this.apiService.rerollMessage$(messageId).subscribe({
-            next: (res) => {
-                if (res.status === 'ok') {
-                    this.loadHistory(); // получаем новую версию истории
-                    this.loading = false;
-                } else {
-                    console.error('Ошибка реролла:', res.message || res);
-                    this.loading = false;
-                }
-            },
-            error: (err) => {
-                console.error('Ошибка при реролле:', err);
-                this.loading = false;
-            },
-        });
+        // Удаляем последнее сообщение ассистента из фронтенда
+        const lastAssistantIndex = this.chatHistory.map((msg, i) => ({ msg, i }))
+            .reverse()
+            .find(item => item.msg.role === 'assistant')?.i;
+
+        if (lastAssistantIndex !== undefined) {
+            this.chatHistory.splice(lastAssistantIndex, 1);
+        }
+
+        setTimeout(() => this.scrollToBottom(), 0);
+        console.log('Sending reroll with ID:', messageId);
+        // Отправляем reroll с ID существующего сообщения
+        this.websocketService.send(JSON.stringify({
+            action: 'reroll_message',
+            payload: { message_id: messageId }
+        }));
     }
 
     shouldShowReroll(msg: Message, index: number): boolean {

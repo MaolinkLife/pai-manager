@@ -57,22 +57,6 @@ def _write_jsonl(filepath, record):
     with open_utf8(filepath, "a") as f:
         f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
-
-def log_audit(event_type, details=None, meta=None):
-    """
-    Logging key events to DEBUG_LOG
-    """
-    record = {
-        "timestamp": datetime.now().isoformat(timespec="seconds"),
-        "session_id": SESSION_ID,
-        "event_type": event_type,
-        "details": details or {},
-        "meta": meta or {}
-    }
-    _write_jsonl(DEBUG_FILE_PER_SESSION, record)
-    _write_jsonl(DEBUG_FILE_CURRENT, record)
-
-
 def log_error(error_msg, context=None, severity="error"):
     """ 
     Errors on temp-log and debug
@@ -85,10 +69,12 @@ def log_error(error_msg, context=None, severity="error"):
         if context:
             f.write(f"Context: {context}\n")
 
-    log_audit(
+    log_audit_entry(
         event_type="error",
+        msg=f"Error occurred: {error_msg}",
+        status=AuditStatus.ERROR,
         details={"error": error_msg, "context": context},
-        meta={"source": "system", "severity": severity}
+        meta={"source": "system", "severity": severity, "context": context or {}}
     )
 
 

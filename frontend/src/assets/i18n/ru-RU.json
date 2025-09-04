@@ -30,7 +30,8 @@
         "preset_name": "Имя пресета",
         "description": "Описание",
         "presets": "Пресеты",
-        "select_preset": "Выбрать пресет"
+        "select_preset": "Выбрать пресет",
+        "stop_tokens": "Стоп-токены"
     },
     "general": {
         "save": "Сохранить",
