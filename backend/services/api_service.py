@@ -13,10 +13,12 @@ import yaml
 import os
 import threading
 import json
-from datetime import datetime, timezone
-
+import gc
+import torch
+from datetime import datetime
+from services.config_service import get_config_value
 from fastapi import WebSocket
-
+from datetime import datetime, timezone
 from services import ollama_service, database_service
 from services.logger_service import log_audit_entry, AuditStatus
 from services.voice_service import (
@@ -32,7 +34,6 @@ from services.ollama_service import api_stream
 from utils.context_builder import build_memory_context
 from utils.structure_utils import get_label_from_file
 from utils.open_file_w_utf8 import open_utf8
-
 from core.emotion_intent_analyzer import analyze_emotion, generate_instruction
 
 
@@ -76,13 +77,13 @@ def load_system_prompt() -> str:
 # Build request
 # ===========================================================
 def build_chat_request(history, include_system=True):
+    """
+    Теперь system prompt уже встроен в историю, просто очищаем timestamp
+    """
     sanitized_history = [
         {k: v for k, v in msg.items() if k != "timestamp"} for msg in history
     ]
-    if include_system:
-        system_prompt = load_system_prompt()
-        if system_prompt:
-            sanitized_history.insert(0, {"role": "system", "content": system_prompt})
+    # Не добавляем system prompt, он уже есть в истории
     return sanitized_history
 
 
@@ -105,22 +106,41 @@ async def run_standard(
     last_user_message = extract_last_user_message(history)
 
     # Build system prompt with lore, memory, emotions
-    system_prompt = load_system_prompt()
-    rag_block, memory_block, emotion_instruction = "", "", ""
+    system_prompt = None
+    for msg in history:
+        if msg.get("role") == "system":
+            system_prompt = msg.get("content")
+            break
 
-    if last_user_message:
-        rag_block = format_lore_block(
-            retrieve_lore_fragments(last_user_message["content"])
+    # Если system prompt не найден, используем стандартный (fallback)
+    if not system_prompt:
+        base_system_prompt = load_system_prompt()
+        system_prompt = add_vision_context_to_system_prompt(
+            base_system_prompt,
+            last_user_message["content"] if last_user_message else "",
         )
-        memory_block = build_memory_context(last_user_message["content"], char_name)
-        emotion_instruction = get_emotional_instruction(last_user_message["content"])
+        # Добавляем RAG, память и эмоции только если это fallback
+        if last_user_message:
+            rag_block = format_lore_block(
+                retrieve_lore_fragments(last_user_message["content"])
+            )
+            # Используем MemoryLayer для получения контекста
+            from core.memory_layer import MemoryLayer
 
-    if rag_block:
-        system_prompt += f"\n\n{rag_block}"
-    if memory_block:
-        system_prompt += f"\n\n{memory_block}"
-    if emotion_instruction:
-        system_prompt += f"\n\n[Emotional reaction]:\n{emotion_instruction}"
+            memory_layer = MemoryLayer()
+            # Вместо asyncio.run используем await, так как мы уже в асинхронной функции
+            memory_context = await memory_layer.get_context(last_user_message)
+            memory_block = memory_context.get("recent_conversation", "")
+
+            emotion_instruction = get_emotional_instruction(
+                last_user_message["content"]
+            )
+            if rag_block:
+                system_prompt += f"\n\n{rag_block}"
+            if memory_block:
+                system_prompt += f"\n\n{memory_block}"
+            if emotion_instruction:
+                system_prompt += f"\n\n[Emotional reaction]:\n{emotion_instruction}"
 
     full_history.insert(0, {"role": "system", "content": system_prompt})
 
@@ -203,22 +223,38 @@ async def run_stream_message(websocket: WebSocket, history: list):
     options = get_generation_options_from_config()
     last_user_message = extract_last_user_message(history)
 
-    system_prompt = load_system_prompt()
-    rag_block, memory_block, emotion_instruction = "", "", ""
-    if last_user_message:
-        rag_block = format_lore_block(
-            retrieve_lore_fragments(last_user_message["content"])
+    # Получаем system prompt из истории или создаем стандартный
+    system_prompt = None
+    for msg in history:
+        if msg.get("role") == "system":
+            system_prompt = msg.get("content")
+            break
+
+    # Если system prompt не найден, используем стандартный (fallback)
+    if not system_prompt:
+        base_system_prompt = load_system_prompt()
+        system_prompt = add_vision_context_to_system_prompt(
+            base_system_prompt,
+            last_user_message["content"] if last_user_message else "",
         )
-        memory_block = build_memory_context(last_user_message["content"], char_name)
-        emotion_instruction = get_emotional_instruction(last_user_message["content"])
+        # Добавляем RAG, память и эмоции только если это fallback
+        if last_user_message:
+            rag_block = format_lore_block(
+                retrieve_lore_fragments(last_user_message["content"])
+            )
+            memory_block = build_memory_context(last_user_message["content"], char_name)
+            emotion_instruction = get_emotional_instruction(
+                last_user_message["content"]
+            )
 
-    if rag_block:
-        system_prompt += f"\n\n{rag_block}"
-    if memory_block:
-        system_prompt += f"\n\n{memory_block}"
-    if emotion_instruction:
-        system_prompt += f"\n\n[Emotional reaction]:\n{emotion_instruction}"
+            if rag_block:
+                system_prompt += f"\n\n{rag_block}"
+            if memory_block:
+                system_prompt += f"\n\n{memory_block}"
+            if emotion_instruction:
+                system_prompt += f"\n\n[Emotional reaction]:\n{emotion_instruction}"
 
+    # Добавляем system prompt в историю
     full_history.insert(0, {"role": "system", "content": system_prompt})
 
     # Save user msg и отправляем ack для пользователя
@@ -406,3 +442,273 @@ def play_message(msg_id: str):
         set_speaking(True)
         threading.Thread(target=speak_line, args=(message["content"], False)).start()
     return message
+
+
+# ===========================================================
+# Vision Context Integration (Добавить в конец файла)
+# ===========================================================
+def add_vision_context_to_system_prompt(
+    base_system_prompt: str, last_user_message_content: str = ""
+) -> str:
+    """
+    Добавляет визуальный контекст к системному промпту.
+    Использует FastVLM для детального описания экрана или OCR/YOLO как фолбэк.
+    """
+    session_id = "unknown_session"  # На случай, если get_session_id недоступна
+    try:
+        from services.logger_service import get_session_id  # Импорт, если доступен
+
+        session_id = get_session_id()
+    except ImportError:
+        pass
+
+    event_prefix = "vision_context"
+
+    if not get_config_value("vision.enabled", False):
+        # Логируем как INFO, так как это штатное поведение
+        log_audit_entry(
+            event_type=f"{event_prefix}_disabled",
+            msg="[Vision Context] Визуальный модуль отключен в конфигурации.",
+            status=AuditStatus.INFO,
+            meta={"session_id": session_id},
+        )
+        return base_system_prompt
+
+    visual_module_instance = None
+    try:
+        from services.vision_service import vision_service
+        from core.visual_module import VisualModule
+
+        log_audit_entry(
+            event_type=f"{event_prefix}_init",
+            msg="[Vision Context] Создаю экземпляр VisualModule...",
+            status=AuditStatus.INFO,
+            meta={"session_id": session_id},
+        )
+        visual_module_instance = VisualModule()
+
+        # --- Определение типа запроса ---
+        # Расширяем список ключевых слов
+        vision_keywords = [
+            "видела",
+            "заметила",
+            "на экране",
+            "ты видишь",
+            "ты это видела",
+            "что видишь",
+            "что на экране",
+            "опиши экран",
+            "расскажи, что на экране",
+        ]
+        is_vision_query = any(
+            kw in last_user_message_content.lower() for kw in vision_keywords
+        )
+        log_audit_entry(
+            event_type=f"{event_prefix}_query_check",
+            msg=f"[Vision Context] Сообщение пользователя: '{last_user_message_content}'",
+            status=AuditStatus.INFO,
+            details={
+                "is_vision_query": is_vision_query,
+                "keywords_matched": [
+                    kw
+                    for kw in vision_keywords
+                    if kw in last_user_message_content.lower()
+                ],
+            },
+            meta={"session_id": session_id},
+        )
+
+        # --- Получение базового анализа (OCR/YOLO) ---
+        log_audit_entry(
+            event_type=f"{event_prefix}_analyzing",
+            msg="[Vision Context] Запрашиваю анализ у VisionService...",
+            status=AuditStatus.INFO,
+            meta={"session_id": session_id},
+        )
+        visual_data = vision_service.analyze_recent_context(4.0)
+        confidence = visual_data.get("confidence", "N/A") if visual_data else "N/A"
+        log_audit_entry(
+            event_type=f"{event_prefix}_analyzed",
+            msg=f"[Vision Context] Получен анализ от VisionService.",
+            status=AuditStatus.INFO,
+            details={
+                "confidence": confidence,
+                "summary_preview": (
+                    visual_data.get("summary", "")[:100] if visual_data else None
+                ),
+            },
+            meta={"session_id": session_id},
+        )
+
+        # --- Попытка использовать FastVLM ---
+        if is_vision_query:
+            log_audit_entry(
+                event_type=f"{event_prefix}_vlm_check",
+                msg="[Vision Context] Это визуальный запрос. Проверяю готовность VisualModule...",
+                status=AuditStatus.INFO,
+                meta={"session_id": session_id},
+            )
+
+            is_vm_ready = (
+                visual_module_instance.is_ready() if visual_module_instance else False
+            )
+            log_audit_entry(
+                event_type=f"{event_prefix}_vlm_status",
+                msg=f"[Vision Context] Статус VisualModule: {'Готов' if is_vm_ready else 'Не готов'}.",
+                status=AuditStatus.INFO,
+                meta={"session_id": session_id},
+            )
+
+            if is_vm_ready:
+                log_audit_entry(
+                    event_type=f"{event_prefix}_vlm_fetching_frame",
+                    msg="[Vision Context] VisualModule готов. Получаю кадры...",
+                    status=AuditStatus.INFO,
+                    meta={"session_id": session_id},
+                )
+                frames = vision_service.buffer.get_latest_frames(1)
+                if frames:
+                    log_audit_entry(
+                        event_type=f"{event_prefix}_vlm_processing_image",
+                        msg="[Vision Context] Получен кадр. Преобразую в PIL Image и вызываю describe_image...",
+                        status=AuditStatus.INFO,
+                        meta={"session_id": session_id},
+                    )
+                    try:
+                        _, last_frame = frames[-1]
+                        from PIL import Image
+                        import cv2
+
+                        img_rgb = cv2.cvtColor(last_frame, cv2.COLOR_BGR2RGB)
+                        # Опционально: уменьшить размер для экономии памяти
+                        # pil_img = Image.fromarray(img_rgb)
+                        # if pil_img.width > 1024 or pil_img.height > 1024:
+                        #     pil_img.thumbnail((1024, 1024), Image.Resampling.LANCZOS)
+
+                        pil_img = Image.fromarray(img_rgb)
+
+                        # Вызов FastVLM
+                        vlm_result = visual_module_instance.describe_image(
+                            pil_img,
+                            "Describe the screen in detail in English.",
+                        )
+
+                        log_audit_entry(
+                            event_type=f"{event_prefix}_vlm_success",
+                            msg="[Vision Context] Получен результат от VisualModule.",
+                            status=AuditStatus.SUCCESS,
+                            details={
+                                "model": vlm_result.get("model"),
+                                "prompt": vlm_result.get("prompt"),
+                                "summary_preview": vlm_result.get("summary", "")[:150],
+                                "status": vlm_result.get("status"),
+                            },
+                            meta={"session_id": session_id},
+                        )
+
+                        visual_summary = vlm_result.get("summary", "")
+                        if visual_summary:
+                            final_prompt = f"{base_system_prompt}\n\n[Visual Context]: {visual_summary}"
+                            log_audit_entry(
+                                event_type=f"{event_prefix}_vlm_added",
+                                msg="[Vision Context] Добавлен контекст от VisualModule.",
+                                status=AuditStatus.SUCCESS,
+                                details={"summary_length": len(visual_summary)},
+                                meta={"session_id": session_id},
+                            )
+                            return final_prompt
+                        else:
+                            log_audit_entry(
+                                event_type=f"{event_prefix}_vlm_empty_summary",
+                                msg="[Vision Context] VisualModule вернул пустой summary.",
+                                status=AuditStatus.WARNING,
+                                meta={"session_id": session_id},
+                            )
+                    except Exception as img_proc_err:
+                        log_audit_entry(
+                            event_type=f"{event_prefix}_vlm_image_error",
+                            msg=f"[Vision Context] Ошибка при обработке изображения или вызове describe_image: {img_proc_err}",
+                            status=AuditStatus.ERROR,
+                            meta={"session_id": session_id},
+                        )
+                else:
+                    log_audit_entry(
+                        event_type=f"{event_prefix}_no_frames",
+                        msg="[Vision Context] Нет доступных кадров для анализа VisualModule.",
+                        status=AuditStatus.WARNING,
+                        meta={"session_id": session_id},
+                    )
+            else:
+                log_audit_entry(
+                    event_type=f"{event_prefix}_vlm_not_ready",
+                    msg="[Vision Context] VisualModule не готов для использования.",
+                    status=AuditStatus.WARNING,
+                    meta={"session_id": session_id},
+                )
+        else:
+            log_audit_entry(
+                event_type=f"{event_prefix}_not_vision_query",
+                msg="[Vision Context] Запрос не распознан как визуальный.",
+                status=AuditStatus.INFO,
+                meta={"session_id": session_id},
+            )
+
+        # --- Фолбэк на OCR/YOLO ---
+        if visual_data and visual_data.get("confidence", 0) > 0.5:
+            ocr_yolo_summary = visual_data.get("summary", "")
+            final_prompt = (
+                f"{base_system_prompt}\n\n[Visual Context]: {ocr_yolo_summary}"
+            )
+            log_audit_entry(
+                event_type=f"{event_prefix}_ocr_yolo_added",
+                msg="[Vision Context] Добавлен контекст от OCR/YOLO.",
+                status=AuditStatus.SUCCESS,
+                details={
+                    "summary_preview": ocr_yolo_summary[:100],
+                    "confidence": visual_data.get("confidence"),
+                },
+                meta={"session_id": session_id},
+            )
+            return final_prompt
+        else:
+            log_audit_entry(
+                event_type=f"{event_prefix}_low_confidence",
+                msg="[Vision Context] Уверенность OCR/YOLO низкая или данные отсутствуют.",
+                status=AuditStatus.INFO,
+                details={"confidence": confidence},
+                meta={"session_id": session_id},
+            )
+
+    except Exception as e:
+        log_audit_entry(
+            event_type=f"{event_prefix}_error",
+            msg=f"[Vision Context] Ошибка добавления контекста: {e}",
+            status=AuditStatus.ERROR,
+            details={"error": str(e)},
+            meta={"session_id": session_id},
+        )
+        # В случае ошибки всё равно возвращаем оригинальный промпт, чтобы не сломать основной поток
+    finally:
+        # --- Принудительная очистка ресурсов ---
+        if visual_module_instance is not None:
+            # Удаляем ссылку на экземпляр
+            del visual_module_instance
+            # Принудительно запускаем сборщик мусора
+            gc.collect()
+            # Если CUDA доступна, очищаем её кэш
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+            log_audit_entry(
+                event_type=f"{event_prefix}_cleanup",
+                msg="[Vision Context] Ресурсы VisualModule освобождены.",
+                status=AuditStatus.INFO,
+                meta={"session_id": session_id},
+            )
+
+    log_audit_entry(
+        event_type=f"{event_prefix}_fallback",
+        msg="[Vision Context] Возвращаю оригинальный промпт без визуального контекста.",
+        status=AuditStatus.INFO,
+        meta={"session_id": session_id},
+    )
+    return base_system_prompt

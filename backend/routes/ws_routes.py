@@ -1,7 +1,10 @@
 import json
+import asyncio
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from core.websocket_manager import manager
 from services import api_service, database_service, config_service
+from core.cognitive_analyzer import cognitive_analyzer
+from core.decision_layer import decision_layer
 
 ws_router = APIRouter(prefix="/api", tags=["WebSocket"])
 
@@ -32,8 +35,28 @@ async def websocket_endpoint(websocket: WebSocket):
             # === ROUTING ===
             if action == "send_message":
                 try:
-                    await api_service.run_stream_message(websocket, [data])
-                except ValueError as e:
+                    from core.instructor import Instructor
+
+                    # Получаем обработанный контекст от DecisionLayer
+                    processing_result = await decision_layer.process_message(
+                        data, websocket
+                    )
+
+                    # Форматируем для API Service
+                    instructor = Instructor()
+                    formatted_history = await instructor.format_for_api(
+                        processing_result["system_prompt"],
+                        processing_result["user_message"],
+                    )
+
+                    # Передаем в API Service (твой оригинальный метод)
+                    await api_service.run_stream_message(websocket, formatted_history)
+
+                except Exception as e:
+                    print(f"[WS] Ошибка обработки сообщения: {e}")
+                    import traceback
+
+                    traceback.print_exc()  # Для отладки
                     await websocket.send_json({"type": "error", "message": str(e)})
 
             elif action == "fetch_history":

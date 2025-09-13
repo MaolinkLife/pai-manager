@@ -1,3 +1,4 @@
+// main-modal.component.ts
 import { Component, Inject, OnInit } from '@angular/core';
 import { ModalRef } from '../../../../shared/components/modal/modal-ref';
 
@@ -11,9 +12,11 @@ export class MainModalComponent implements OnInit {
 
     tabs = [
         { key: 'lorebook', label: 'Lorebook' },
-        // { key: 'audio', label: 'Audio' },
-        // { key: 'generate', label: 'Generate' },
-        // { key: 'vision', label: 'Vision' }
+        { key: 'voice', label: 'Voice' },
+        { key: 'audio', label: 'Audio' },
+        { key: 'vision', label: 'Vision' },
+        { key: 'rag', label: 'RAG' },
+        { key: 'generate', label: 'Generation' }
     ];
 
     activeView = 'lorebook';

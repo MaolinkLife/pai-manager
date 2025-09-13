@@ -17,6 +17,8 @@ from services import database_service
 from services import preset_service
 from services import character_service, config_service
 from services.logger_service import initialize_log_files, log_audit_entry, AuditStatus
+from services.vision_service import vision_service
+from services.config_service import get_config_value
 from services.voice_service import tts_worker
 from utils.structure_utils import get_label_from_file
 
@@ -69,6 +71,14 @@ def run_startup_checks():
     # - presence of char_name
     # - config.json structure
 
+    # Инициализируем и запускаем визуальный сервис
+    if get_config_value("vision.enabled", False):
+        try:
+            vision_service.start()
+            print("[Main] Визуальный сервис запущен")
+        except Exception as e:
+            print(f"[Main] Ошибка запуска визуального сервиса: {e}")
+
     print("Initialization completed successfully.")
     log_audit_entry(
         event_type="startup_complete",
@@ -77,3 +87,15 @@ def run_startup_checks():
     )
 
     threading.Thread(target=tts_worker, daemon=True).start()
+
+
+def shutdown_services():
+    """Остановить все сервисы"""
+    # ... другие остановки ...
+
+    # Останавливаем визуальный сервис
+    try:
+        vision_service.stop()
+        print("[Main] Визуальный сервис остановлен")
+    except Exception as e:
+        print(f"[Main] Ошибка остановки визуального сервиса: {e}")

@@ -1,0 +1,117 @@
+<div class="settings-wrapper">
+    <form
+        [formGroup]="visionForm"
+        (ngSubmit)="saveChanges()"
+        class="settings-form"
+    >
+        <h2>👁️ Vision Settings</h2>
+
+        <div class="form-group">
+            <label class="checkbox">
+                <input type="checkbox" formControlName="enabled" />
+                Enable Vision Processing
+            </label>
+        </div>
+
+        <!-- НОВЫЙ БЛОК - Выбор монитора -->
+        <div class="form-group">
+            <label for="monitorIndex">Monitor Selection</label>
+            <div class="monitor-selection">
+                <input
+                    id="monitorIndex"
+                    type="number"
+                    formControlName="monitorIndex"
+                    min="0"
+                    readonly
+                    class="monitor-input"
+                />
+                <button
+                    type="button"
+                    class="select-monitor-btn"
+                    (click)="openMonitorSelection()"
+                >
+                    🖥️ Select Monitor
+                </button>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label for="fps">Capture FPS</label>
+            <input
+                id="fps"
+                type="number"
+                formControlName="fps"
+                min="1"
+                max="30"
+            />
+        </div>
+
+        <div class="form-group">
+            <label for="bufferSec">Buffer Seconds</label>
+            <input
+                id="bufferSec"
+                type="number"
+                formControlName="bufferSec"
+                min="1"
+                max="30"
+            />
+        </div>
+
+        <div class="form-group">
+            <label for="downscaleWidth">Downscale Width</label>
+            <input
+                id="downscaleWidth"
+                type="number"
+                formControlName="downscaleWidth"
+                min="640"
+                max="1920"
+                step="320"
+            />
+        </div>
+
+        <div class="form-group">
+            <label class="checkbox">
+                <input type="checkbox" formControlName="yoloEnabled" />
+                Enable YOLO Detection
+            </label>
+        </div>
+
+        <div class="form-group">
+            <label for="ocrLang">OCR Languages</label>
+            <input
+                id="ocrLang"
+                type="text"
+                formControlName="ocrLang"
+                placeholder="rus+eng"
+            />
+        </div>
+
+        <div class="form-group">
+            <label for="ocrMinConf">OCR Min Confidence (%)</label>
+            <input
+                id="ocrMinConf"
+                type="number"
+                formControlName="ocrMinConf"
+                min="0"
+                max="100"
+            />
+        </div>
+
+        <div class="form-group">
+            <label for="ocrMaxLines">OCR Max Lines</label>
+            <input
+                id="ocrMaxLines"
+                type="number"
+                formControlName="ocrMaxLines"
+                min="1"
+                max="20"
+            />
+        </div>
+
+        <div class="button-row">
+            <button type="submit" [disabled]="!hasChanges()">
+                💾 Save Vision Settings
+            </button>
+        </div>
+    </form>
+</div>

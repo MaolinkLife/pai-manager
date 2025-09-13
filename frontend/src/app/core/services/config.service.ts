@@ -24,8 +24,13 @@ export class ConfigService {
         )
     }
 
-    updateCongif$(body: ProjectConfig): Observable<any> {
-        return this.http.patch(`${this.apiUrl}/config`, mapPartialModelToDto(body));
+    updateCongif$(body: any): Observable<any> {
+        // Если передается полный конфиг - используем PATCH
+        if (body.voice || body.modules || body.api || body.vision) {
+            return this.http.patch(`${this.apiUrl}/config`, mapPartialModelToDto(body));
+        }
+        // Иначе - используем POST для полной замены
+        return this.http.post(`${this.apiUrl}/config`, mapPartialModelToDto(body));
     }
 
     getGenerationPresets$(): Observable<GenerationPreset[]> {

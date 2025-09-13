@@ -31,16 +31,16 @@ export class ChatComponent implements OnInit, OnDestroy {
     chatInput = new FormControl('');
     chatHistory: Message[] = [];
     loading = false;
-
+    chatInputValue: string = '';
     userName: string = '';
     charName: string = '';
 
     config$: Observable<{ userName: string; charName: string } | null> | null = null;
 
     recording = false;
-
+    uniqueDates: string[] = [];
     activeDropdown: string | null = null;
-
+    currentPlayingMessage: string | null = null;
     private currentStreamingMessage: Message | null = null;
 
     constructor(
@@ -186,6 +186,53 @@ export class ChatComponent implements OnInit, OnDestroy {
     ngOnDestroy() { }
 
 
+    // Метод для распознавания уникальных дат
+    updateUniqueDates(): void {
+        const dates = new Set<string>();
+        this.chatHistory.forEach(msg => {
+            const dateStr = new Date(msg.timestamp).toDateString();
+            dates.add(dateStr);
+        });
+
+        // Сортируем по времени
+        this.uniqueDates = Array.from(dates)
+            .sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
+    }
+
+    // Форматирование даты
+    formatDateLabel(dateStr: string): string {
+        const today = new Date().toDateString();
+        const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toDateString();
+
+        if (dateStr === today) return 'Сегодня';
+        if (dateStr === yesterday) return 'Вчера';
+
+        const daysAgo = Math.floor((Date.now() - new Date(dateStr).getTime()) / (24 * 60 * 60 * 1000));
+        if (daysAgo === 1) return 'Вчера';
+        if (daysAgo === 2) return '2 дня назад';
+        if (daysAgo <= 7) return `${daysAgo} дней назад`;
+        return new Date(dateStr).toLocaleDateString('ru');
+    }
+
+    // Обработка клавиш в textarea
+    onKeyDown(event: KeyboardEvent): void {
+        if (event.key === 'Enter' && event.shiftKey) {
+            // Не прерывайте ввод
+        } else if (event.key === 'Enter') {
+            event.preventDefault(); // Предотвратить перенос строки
+            this.sendMessage();
+        }
+    }
+
+    onKeyUp(): void {
+        // Автоматически растягиваем textarea
+        const textarea = document.querySelector('.chat-input') as HTMLTextAreaElement;
+        if (textarea) {
+            textarea.style.height = 'auto';
+            textarea.style.height = `${textarea.scrollHeight}px`;
+        }
+    }
+
 
     scrollToBottom(): void {
         const tryScroll = () => {
@@ -250,7 +297,8 @@ export class ChatComponent implements OnInit, OnDestroy {
         };
 
         this.chatHistory.push(userMessage);
-
+        this.updateUniqueDates();
+        this.chatInputValue = '';
         this.chatInput.setValue('');
         this.loading = true;
         setTimeout(() => this.scrollToBottom(), 0);
@@ -286,6 +334,28 @@ export class ChatComponent implements OnInit, OnDestroy {
                 }
             })
         )
+    }
+
+    toggleAttachDropdown(): void {
+        // Открыть дропдаун для вложений
+        console.log('Открываем дропдаун вложений...');
+    }
+
+    editMessage(msg: Message): void {
+        // Можно открыть модальное окно для редактирования
+        console.log('Редактирование:', msg);
+    }
+
+    toggleVoice(msgId: string | null | undefined): void {
+        if (!msgId) return;
+
+        if (this.currentPlayingMessage === msgId) {
+            this.voiceService.stopPlay$().subscribe();
+            this.currentPlayingMessage = null;
+        } else {
+            this.voiceService.playMessage(msgId).subscribe();
+            this.currentPlayingMessage = msgId;
+        }
     }
 
     playMessage(msg: Message) {

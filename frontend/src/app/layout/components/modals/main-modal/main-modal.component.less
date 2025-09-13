@@ -23,32 +23,36 @@
     color: @color-text-active;
     font-weight: bold;
     margin-bottom: 12px;
+    font-size: 18px;
 }
 
 .sidebar-content {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 8px;
 
     button {
         background-color: transparent;
         border: 1px solid @color-border;
         border-radius: @radius;
         color: @color-text;
-        padding: 8px 12px;
+        padding: 10px 12px;
         text-align: left;
-        transition: background 0.2s ease, color 0.2s ease;
+        transition: all 0.2s ease;
         cursor: pointer;
         font-family: @font-family;
+        font-size: 14px;
 
         &:hover {
             background-color: @color-accent-dark;
             color: @color-text-active;
+            border-color: @color-accent;
         }
 
         &.active {
             background-color: @color-accent;
-            color: @color-text-active;
+            color: @color-bg;
+            border-color: @color-accent;
             box-shadow: @shadow-soft;
         }
     }
@@ -59,4 +63,49 @@
     padding: 24px;
     background-color: @color-bg;
     overflow-y: auto;
+
+    // Стили скроллбара в стиле LIM-UI
+    &::-webkit-scrollbar {
+        width: 8px;
+    }
+
+    &::-webkit-scrollbar-track {
+        background: @color-bg;
+        border-radius: 4px;
+    }
+
+    &::-webkit-scrollbar-thumb {
+        background: @color-border;
+        border-radius: 4px;
+        transition: background 0.2s ease;
+
+        &:hover {
+            background: @color-accent-dark;
+        }
+    }
+
+    // Для Firefox
+    scrollbar-width: thin;
+    scrollbar-color: @color-border @color-bg;
+
+    // Добавим плавный скролл
+    scroll-behavior: smooth;
+
+    // Улучшим отступы для контента
+    > * {
+        max-width: 100%;
+    }
+}
+
+// Адаптивность для меньших экранов
+@media (max-width: 768px) {
+    .content {
+        flex-direction: column;
+    }
+
+    .sidebar {
+        width: 100%;
+        border-right: none;
+        border-bottom: 1px solid @color-border;
+    }
 }

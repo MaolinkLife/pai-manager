@@ -1,5 +1,56 @@
 @import "../../../assets/styles/lim-ui/colors.less"; // если у тебя всё централизовано
 
+.filters {
+    display: flex;
+    flex-direction: column;
+    gap: 8px; // расстояние между строками
+
+    .chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+
+        .chip {
+            padding: 2px 8px;
+            border-radius: 6px;
+            background: #222;
+            cursor: pointer;
+            font-size: 13px;
+
+            &.active {
+                background: #444;
+                color: #00d8ff;
+            }
+
+            &.error {
+                border: 1px solid @color-danger;
+                color: @color-danger;
+            }
+
+            &.success {
+                border: 1px solid @color-success;
+                color: @color-success;
+            }
+
+            &.info {
+                border: 1px solid @color-accent;
+                color: @color-accent;
+            }
+
+            &.active {
+                background: linear-gradient(90deg, #2196f3, #f44336);
+                color: #fff;
+            }
+
+            span {
+                margin-left: 6px;
+                font-weight: bold;
+                cursor: pointer;
+            }
+        }
+    }
+}
+
 .debug-log {
     padding: 24px;
     background: @color-bg;

@@ -21,6 +21,7 @@ db_type = "sqlite"  # later: postgres, etc.
 def create_database():
     if db_type == "sqlite":
         from services.db_core import create_database
+
         return create_database()
     raise ValueError(f"Unknown database type: {db_type}")
 
@@ -46,7 +47,9 @@ def get_or_create_character(name: str):
 # =========================
 # Messages
 # =========================
-def add_message(user_id: str, role: str, content: str, dialog_id: str = None, volatile: bool = False):
+def add_message(
+    user_id: str, role: str, content: str, dialog_id: str = None, volatile: bool = False
+):
     return message_service.add_message(user_id, role, content, dialog_id, volatile)
 
 
@@ -57,7 +60,9 @@ def get_messages(user_id: str, limit: int = 20):
 # =========================
 # History (legacy support)
 # =========================
-def add_message_to_history(character_name: str, role: str, content: str, timestamp: datetime = None):
+def add_message_to_history(
+    character_name: str, role: str, content: str, timestamp: datetime = None
+):
     if isinstance(timestamp, str):
         try:
             timestamp = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
@@ -67,8 +72,7 @@ def add_message_to_history(character_name: str, role: str, content: str, timesta
 
     char = character_service.get_character(character_name)
     if not char:
-       raise ValueError(f"Персонаж '{character_name}' не найден")
-
+        raise ValueError(f"Персонаж '{character_name}' не найден")
 
     return history_service.add_history(char.id, role, content, timestamp)
 
@@ -77,19 +81,22 @@ def get_history(character_name: str, limit: int = 20):
     char = character_service.get_character(character_name)
     if not char:
         return []
-    
+
     rows = history_service.get_history(char.id, limit)
-    
+
     return [
         {
             "id": r.id,
             "role": r.role,
             "content": r.content,
-            "timestamp": r.timestamp.isoformat() if hasattr(r.timestamp, "isoformat") else str(r.timestamp),
+            "timestamp": (
+                r.timestamp.isoformat()
+                if hasattr(r.timestamp, "isoformat")
+                else str(r.timestamp)
+            ),
         }
         for r in rows
     ]
-        
 
 
 def delete_message_chain(message_id: str):

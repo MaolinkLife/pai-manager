@@ -1,10 +1,16 @@
 export interface ProjectConfig {
+    userId?: string;
     charName: string;
     userName: string;
+    language: string;
     voice: VoiceConfig;
     modules: ModuleConfig;
-    language: string;
+    vision: VisionConfig;
+    audio: AudioConfig;
+    rag: RagConfig;
     api: ApiConfig;
+    openrouter: OpenRouterConfig;
+    generateSettings: GenerationConfig;
 }
 
 export interface VoiceConfig {
@@ -14,10 +20,12 @@ export interface VoiceConfig {
     language: string;
     useRvc: boolean;
     voiceLanguage: string;
+    useWindowsOutput: boolean;
+    streamingTts: boolean;
 }
 
 export interface ModuleConfig {
-    vtube_studio: boolean;
+    vtubeStudio: boolean;
     whisper: boolean;
     minecraft: boolean;
     gaming: boolean;
@@ -27,6 +35,42 @@ export interface ModuleConfig {
     visual: boolean;
 }
 
+export interface VisionConfig {
+    enabled: boolean;
+    monitorIndex: number;
+    fps: number;
+    bufferSec: number;
+    downscaleWidth: number;
+    yoloEnabled: boolean;
+    ocrLang: string;
+    ocrMinConf: number;
+    ocrMaxLines: number;
+    region: any;
+}
+
+export interface AudioConfig {
+    inputDevice?: string;
+    outputDevice?: string;
+    sampleRate?: number;
+    bufferSize?: number;
+    enableNoiseReduction?: boolean;
+    enableEchoCancellation?: boolean;
+    volumeThreshold?: number;
+    silenceDuration?: number;
+}
+
+export interface RagConfig {
+    enabled: boolean;
+    embeddingModel?: string;
+    vectorDbPath?: string;
+    chunkSize?: number;
+    chunkOverlap?: number;
+    topK?: number;
+    similarityThreshold?: number;
+    enableCaching?: boolean;
+    cacheTtl?: number;
+}
+
 export interface ApiConfig {
     type: string;
     streaming: boolean;
@@ -34,4 +78,21 @@ export interface ApiConfig {
     visualModel: string;
     tokenLimit: number;
     messagePairLimit: number;
+}
+
+export interface OpenRouterConfig {
+    apiKey?: string;
+    model?: string;
+}
+
+export interface GenerationConfig {
+    temperature: number;
+    minP: number;
+    topP: number;
+    topK: number;
+    repeatPenalty: number;
+    stop: string[] | null;
+    numPredict: number;
+    name?: string;
+    description?: string;
 }

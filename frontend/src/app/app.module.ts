@@ -15,6 +15,13 @@ import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { MemoryModalComponent } from './layout/components/modals/memory-modal/memory-modal.component';
 import { MainModalComponent } from './layout/components/modals/main-modal/main-modal.component';
 import { LorebookComponent } from './layout/components/modals/main-modal/lorebook/lorebook.component';
+import { VoiceSettingsComponent } from './layout/components/modals/main-modal/voice-settings/voice-settings.component';
+import { AudioSettingsComponent } from './layout/components/modals/main-modal/audio-settings/audio-settings.component';
+import { VisionSettingsComponent } from './layout/components/modals/main-modal/vision-settings/vision-settings.component';
+import { RagSettingsComponent } from './layout/components/modals/main-modal/rag-settings/rag-settings.component';
+import { GenerationSettingsComponent } from './layout/components/modals/main-modal/generation-settings/generation-settings.component';
+import { MonitorSelectionModalComponent } from './layout/components/modals/monitor-selection-modal/monitor-selection-modal.component';
+
 
 @NgModule({
     declarations: [
@@ -25,6 +32,12 @@ import { LorebookComponent } from './layout/components/modals/main-modal/loreboo
         MemoryModalComponent,
         MainModalComponent,
         LorebookComponent,
+        VoiceSettingsComponent,
+        VisionSettingsComponent,
+        AudioSettingsComponent,
+        RagSettingsComponent,
+        GenerationSettingsComponent,
+        MonitorSelectionModalComponent
     ],
     imports: [
         BrowserModule,

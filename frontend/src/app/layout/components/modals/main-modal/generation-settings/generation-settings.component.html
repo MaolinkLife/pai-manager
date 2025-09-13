@@ -1,0 +1,234 @@
+<div class="settings-wrapper">
+    <form
+        [formGroup]="generationForm"
+        (ngSubmit)="saveChanges()"
+        class="settings-form"
+    >
+        <h2>⚡ API Settings</h2>
+
+        <div class="form-group">
+            <label for="apiType">API Type</label>
+            <input id="apiType" type="text" formControlName="apiType" />
+        </div>
+
+        <div class="form-group">
+            <label for="modelName">Model Name</label>
+            <div
+                class="custom-select"
+                (click)="toggleDropdown()"
+                [ngClass]="{ open: dropdownOpen }"
+            >
+                <div class="selected">
+                    {{
+                        generationForm.get("modelName")?.value || "Select Model"
+                    }}
+                </div>
+                <ul class="options" *ngIf="dropdownOpen">
+                    <li
+                        *ngFor="let model of availableModels"
+                        (click)="selectModel(model); $event.stopPropagation()"
+                        [class.active]="model === selectedModel"
+                    >
+                        {{ model.split(":")[0] }} ({{
+                            model.split(":")[1] || "latest"
+                        }})
+                    </li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label for="visualModel">Visual Model</label>
+            <input id="visualModel" type="text" formControlName="visualModel" />
+        </div>
+
+        <div class="form-group token-limit-block">
+            <label for="tokenLimit">Token Limit</label>
+            <input
+                #tokenInput
+                id="tokenLimit"
+                type="number"
+                min="512"
+                max="131072"
+                step="256"
+                formControlName="tokenLimit"
+            />
+            <input
+                #tokenSlider
+                type="range"
+                min="512"
+                max="131072"
+                step="256"
+                formControlName="tokenLimit"
+            />
+            <div class="token-range-labels">
+                <span>512</span>
+                <span>128k</span>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label for="messagePairLimit">Message Pair Limit</label>
+            <input
+                id="messagePairLimit"
+                type="number"
+                formControlName="messagePairLimit"
+                min="1"
+                max="50"
+            />
+        </div>
+
+        <div class="form-group">
+            <label class="checkbox">
+                <input type="checkbox" formControlName="streaming" />
+                Enable Streaming
+            </label>
+        </div>
+
+        <div class="button-row">
+            <button type="submit" [disabled]="!hasChanges()">
+                💾 Save API Settings
+            </button>
+        </div>
+    </form>
+</div>
+
+<div class="settings-wrapper">
+    <h2>🎨 Generation Presets</h2>
+
+    <div class="form-group">
+        <label for="presetSelect">Select Preset</label>
+        <select
+            id="presetSelect"
+            [value]="selectedPresetName"
+            (change)="onPresetChange($event)"
+        >
+            <option *ngFor="let p of presets" [value]="p.name">
+                {{ p.name }}
+            </option>
+        </select>
+    </div>
+
+    <form
+        [formGroup]="generationSettingsForm"
+        (ngSubmit)="saveOrUpdatePreset()"
+    >
+        <div class="form-group">
+            <label>Preset Name</label>
+            <input type="text" formControlName="name" />
+        </div>
+
+        <div class="form-group">
+            <label>Description</label>
+            <input type="text" formControlName="description" />
+        </div>
+
+        <div class="form-group">
+            <label>
+                Temperature:
+                <span>{{
+                    generationSettingsForm.get("temperature")?.value
+                        | number : "1.2-2"
+                }}</span>
+            </label>
+            <input
+                type="range"
+                min="0.1"
+                max="2.0"
+                step="0.01"
+                formControlName="temperature"
+            />
+        </div>
+
+        <div class="form-group">
+            <label>
+                Top P:
+                <span>{{
+                    generationSettingsForm.get("topP")?.value | number : "1.2-2"
+                }}</span>
+            </label>
+            <input
+                type="range"
+                min="0.1"
+                max="1.0"
+                step="0.01"
+                formControlName="topP"
+            />
+        </div>
+
+        <div class="form-group">
+            <label>
+                Top K:
+                <span>{{ generationSettingsForm.get("topK")?.value }}</span>
+            </label>
+            <input
+                type="range"
+                min="1"
+                max="100"
+                step="1"
+                formControlName="topK"
+            />
+        </div>
+
+        <div class="form-group">
+            <label>
+                Min P:
+                <span>{{
+                    generationSettingsForm.get("minP")?.value | number : "1.2-2"
+                }}</span>
+            </label>
+            <input
+                type="range"
+                min="0.0"
+                max="1.0"
+                step="0.01"
+                formControlName="minP"
+            />
+        </div>
+
+        <div class="form-group">
+            <label>
+                Repeat Penalty:
+                <span>{{
+                    generationSettingsForm.get("repeatPenalty")?.value
+                        | number : "1.2-2"
+                }}</span>
+            </label>
+            <input
+                type="range"
+                min="0.5"
+                max="2.0"
+                step="0.01"
+                formControlName="repeatPenalty"
+            />
+        </div>
+
+        <div class="form-group">
+            <label>
+                Max Tokens:
+                <span>{{
+                    generationSettingsForm.get("numPredict")?.value
+                }}</span>
+            </label>
+            <input
+                type="range"
+                min="64"
+                max="4096"
+                step="64"
+                formControlName="numPredict"
+            />
+        </div>
+
+        <div class="form-group">
+            <label>Stop Tokens</label>
+            <textarea
+                formControlName="stop"
+                placeholder="User:,Assistant:,</s>"
+            ></textarea>
+        </div>
+
+        <div class="button-row">
+            <button type="submit">💾 Save Preset</button>
+        </div>
+    </form>
+</div>
