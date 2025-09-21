@@ -88,7 +88,7 @@ def get_history(character_name: str, limit: int = 20):
         {
             "id": r.id,
             "role": r.role,
-            "content": r.content,
+            "content": _merge_reasoning(r),
             "timestamp": (
                 r.timestamp.isoformat()
                 if hasattr(r.timestamp, "isoformat")
@@ -130,3 +130,23 @@ def get_full_history(character_name: str):
 def get_lorebook_entries():
     character_name = get_config_value("char_name")
     return history_service.get_lorebook_entries(character_name)
+
+
+def add_reasoning_entry(message_id: str, content: str):
+    return history_service.add_reasoning_entry(message_id, content)
+
+
+def get_reasoning_by_message_id(message_id: str):
+    return history_service.get_reasoning_by_message_id(message_id)
+
+
+def _merge_reasoning(history_row) -> str:
+    content = history_row.content or ""
+    reasoning_entity = getattr(history_row, "reasoning", None)
+
+    if reasoning_entity:
+        reasoning_text = (reasoning_entity.content or "").strip()
+        if reasoning_text:
+            return f"<think>\n{reasoning_text}\n</think>\n\n{content}"
+
+    return content

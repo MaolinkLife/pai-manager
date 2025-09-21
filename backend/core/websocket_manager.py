@@ -1,6 +1,7 @@
 from typing import List
 from fastapi import WebSocket
 
+
 class ConnectionManager:
     def __init__(self):
         self.active_connections: List[WebSocket] = []
@@ -20,6 +21,7 @@ class ConnectionManager:
             except Exception:
                 # We don't throw the error so as not to break other clients
                 self.disconnect(connection)
+
 
 # Global instance of the connection manager
 manager = ConnectionManager()

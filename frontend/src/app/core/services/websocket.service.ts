@@ -25,7 +25,7 @@ export class WebsocketService {
         };
 
         this.socket.onmessage = (event) => {
-            console.log('[WS] Message:', event.data);
+            // console.log('[WS] Message:', event.data);
             this.messages$.next(event.data);
         };
 

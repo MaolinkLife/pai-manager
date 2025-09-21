@@ -1,9 +1,9 @@
 <ng-container *ngIf="entries$ | async as entries">
     <div *ngFor="let entry of entries" class="entry-block">
         <h3>
-            {{ entry.title }}
+            {{ entry.content }}
         </h3>
-        <textarea [(ngModel)]="entry.memory" class="entry-text"></textarea>
+        <textarea [(ngModel)]="entry.content" class="entry-text"></textarea>
     </div>
     <div class="modal-footer">
         <div>

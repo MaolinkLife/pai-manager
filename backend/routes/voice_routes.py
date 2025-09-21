@@ -1,9 +1,15 @@
 import json
+import asyncio
 from fastapi import APIRouter, Body
 
 from services.voice_service import force_cut_voice
 from services.api_service import play_message, run_standard
 from services import config_service, voice_controller
+from modules.voice.vad_listener import (
+    start_vad_background,
+    stop_vad,
+    is_vad_running,
+)
 
 from core.websocket_manager import manager
 
@@ -44,3 +50,25 @@ async def stop_record():
         "status": "ok",
         "data": data
     }
+
+
+# --- VoiceMode (VAD) controls ---
+@router.post("/mode/start")
+async def start_voice_mode():
+    """Запустить VoiceMode (постоянное прослушивание)"""
+    started, message = await start_vad_background()
+    status = "ok" if started else "error"
+    return {"status": status, "message": message, "running": is_vad_running()}
+
+
+@router.post("/mode/stop")
+async def stop_voice_mode():
+    """Остановить VoiceMode (без принудительного завершения записи)"""
+    stopped, message = await stop_vad(wait=True)
+    status = "ok" if stopped else "error"
+    return {"status": status, "message": message, "running": is_vad_running()}
+
+
+@router.get("/mode/status")
+async def voice_mode_status():
+    return {"status": "ok", "running": is_vad_running()}

@@ -276,3 +276,14 @@ def force_cut_voice():
             active_streams.clear()
 
     print("[Voice] All streams stopped")
+
+
+# --- Stubs for VAD integration (to be implemented) ---
+def log_last_output(text: str) -> None:
+    """Placeholder: record last spoken/transcribed text (to implement)."""
+    return None
+
+
+def is_self_trigger(_: str) -> bool:
+    """Placeholder: detect if transcript was produced by self TTS (to implement)."""
+    return False

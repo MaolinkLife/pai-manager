@@ -1,11 +1,11 @@
-import { AfterViewChecked, AfterViewInit, Component, ElementRef, HostListener, OnDestroy, OnInit, ViewChild } from '@angular/core';
-import { ApiService } from '../../core/services/api.service';
-import { Message } from '../../core/models/message.model';
+import { Component, HostListener, OnDestroy, OnInit } from '@angular/core';
 import { FormControl } from '@angular/forms';
-import { ConfigService } from '../../core/services/config.service';
-import { ProjectConfig } from './../../core/models/project-config.model';
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
+import { Message } from '../../core/models/message.model';
+import { ProjectConfig } from './../../core/models/project-config.model';
+import { ApiService } from '../../core/services/api.service';
+import { ConfigService } from '../../core/services/config.service';
 import { VoiceService } from '../../core/services/voice.service';
 import { WebsocketService } from '../../core/services/websocket.service';
 
@@ -13,7 +13,6 @@ function generateTempId(): string {
     if ((crypto as any).randomUUID) {
         return (crypto as any).randomUUID();
     }
-    // fallback
     return 'temp-' + Math.random().toString(36).substr(2, 9);
 }
 
@@ -26,8 +25,155 @@ export class ChatComponent implements OnInit, OnDestroy {
     @HostListener('document:click', ['$event'])
     onClickOutside(): void {
         this.activeDropdown = null;
+        this.showEmojiPicker = false;
     }
 
+    showEmojiPicker = false;
+    allEmojis = [
+        // Smileys
+        { symbol: '😀', name: 'grinning face', category: 'smileys' },
+        { symbol: '😃', name: 'grinning face with big eyes', category: 'smileys' },
+        { symbol: '😄', name: 'grinning face with smiling eyes', category: 'smileys' },
+        { symbol: '😁', name: 'beaming face with smiling eyes', category: 'smileys' },
+        { symbol: '😆', name: 'grinning squinting face', category: 'smileys' },
+        { symbol: '😅', name: 'grinning face with sweat', category: 'smileys' },
+        { symbol: '🤣', name: 'rolling on the floor laughing', category: 'smileys' },
+        { symbol: '😂', name: 'face with tears of joy', category: 'smileys' },
+        { symbol: '🙂', name: 'slightly smiling face', category: 'smileys' },
+        { symbol: '🙃', name: 'upside-down face', category: 'smileys' },
+        { symbol: '😉', name: 'winking face', category: 'smileys' },
+        { symbol: '😊', name: 'smiling face with smiling eyes', category: 'smileys' },
+        { symbol: '😇', name: 'smiling face with halo', category: 'smileys' },
+
+        // People
+        { symbol: '👋', name: 'waving hand', category: 'people' },
+        { symbol: '🤚', name: 'raised back of hand', category: 'people' },
+        { symbol: '🖐️', name: 'hand with fingers splayed', category: 'people' },
+        { symbol: '✋', name: 'raised hand', category: 'people' },
+        { symbol: '🖖', name: 'vulcan salute', category: 'people' },
+        { symbol: '👌', name: 'OK hand', category: 'people' },
+        { symbol: '🤌', name: 'pinched fingers', category: 'people' },
+        { symbol: '🤏', name: 'pinching hand', category: 'people' },
+        { symbol: '✌️', name: 'victory hand', category: 'people' },
+        { symbol: '🤞', name: 'crossed fingers', category: 'people' },
+        { symbol: '🤟', name: 'love-you gesture', category: 'people' },
+        { symbol: '🤘', name: 'sign of the horns', category: 'people' },
+        { symbol: '🤙', name: 'call me hand', category: 'people' },
+
+        // Nature
+        { symbol: '🐶', name: 'dog face', category: 'nature' },
+        { symbol: '🐱', name: 'cat face', category: 'nature' },
+        { symbol: '🐭', name: 'mouse face', category: 'nature' },
+        { symbol: '🐹', name: 'hamster', category: 'nature' },
+        { symbol: '🐰', name: 'rabbit face', category: 'nature' },
+        { symbol: '🦊', name: 'fox', category: 'nature' },
+        { symbol: '🐻', name: 'bear', category: 'nature' },
+        { symbol: '🐼', name: 'panda', category: 'nature' },
+        { symbol: '🐨', name: 'koala', category: 'nature' },
+        { symbol: '🐯', name: 'tiger face', category: 'nature' },
+        { symbol: '🦁', name: 'lion', category: 'nature' },
+        { symbol: '🐮', name: 'cow face', category: 'nature' },
+        { symbol: '🐷', name: 'pig face', category: 'nature' },
+
+        // Food
+        { symbol: '🍇', name: 'grapes', category: 'food' },
+        { symbol: '🍈', name: 'melon', category: 'food' },
+        { symbol: '🍉', name: 'watermelon', category: 'food' },
+        { symbol: '🍊', name: 'tangerine', category: 'food' },
+        { symbol: '🍋', name: 'lemon', category: 'food' },
+        { symbol: '🍌', name: 'banana', category: 'food' },
+        { symbol: '🍍', name: 'pineapple', category: 'food' },
+        { symbol: '🥭', name: 'mango', category: 'food' },
+        { symbol: '🍎', name: 'red apple', category: 'food' },
+        { symbol: '🍏', name: 'green apple', category: 'food' },
+        { symbol: '🍐', name: 'pear', category: 'food' },
+        { symbol: '🍑', name: 'peach', category: 'food' },
+        { symbol: '🍒', name: 'cherries', category: 'food' },
+
+        // Activity
+        { symbol: '⚽', name: 'soccer ball', category: 'activity' },
+        { symbol: '🏀', name: 'basketball', category: 'activity' },
+        { symbol: '🏈', name: 'american football', category: 'activity' },
+        { symbol: '⚾', name: 'baseball', category: 'activity' },
+        { symbol: '🎾', name: 'tennis', category: 'activity' },
+        { symbol: '🏐', name: 'volleyball', category: 'activity' },
+        { symbol: '🏉', name: 'rugby football', category: 'activity' },
+        { symbol: '🎱', name: 'pool 8 ball', category: 'activity' },
+        { symbol: '🏓', name: 'ping pong', category: 'activity' },
+        { symbol: '🏸', name: 'badminton', category: 'activity' },
+        { symbol: '🥅', name: 'goal net', category: 'activity' },
+        { symbol: '🏒', name: 'ice hockey', category: 'activity' },
+        { symbol: '🥍', name: 'lacrosse', category: 'activity' },
+
+        // Travel
+        { symbol: '🚗', name: 'automobile', category: 'travel' },
+        { symbol: '🚕', name: 'taxi', category: 'travel' },
+        { symbol: '🚙', name: 'sport utility vehicle', category: 'travel' },
+        { symbol: '🚌', name: 'bus', category: 'travel' },
+        { symbol: '🚎', name: 'trolleybus', category: 'travel' },
+        { symbol: '🏎️', name: 'racing car', category: 'travel' },
+        { symbol: '🚓', name: 'police car', category: 'travel' },
+        { symbol: '🚑', name: 'ambulance', category: 'travel' },
+        { symbol: '🚒', name: 'fire engine', category: 'travel' },
+        { symbol: '🚐', name: 'minibus', category: 'travel' },
+        { symbol: '🚚', name: 'delivery truck', category: 'travel' },
+        { symbol: '🚛', name: 'articulated lorry', category: 'travel' },
+        { symbol: '🚜', name: 'tractor', category: 'travel' },
+
+        // Objects
+        { symbol: '⌚', name: 'watch', category: 'objects' },
+        { symbol: '📱', name: 'mobile phone', category: 'objects' },
+        { symbol: '💻', name: 'laptop', category: 'objects' },
+        { symbol: '⌨️', name: 'keyboard', category: 'objects' },
+        { symbol: '🖥️', name: 'desktop computer', category: 'objects' },
+        { symbol: '🖨️', name: 'printer', category: 'objects' },
+        { symbol: '🖱️', name: 'computer mouse', category: 'objects' },
+        { symbol: '🖲️', name: 'trackball', category: 'objects' },
+        { symbol: '🕹️', name: 'joystick', category: 'objects' },
+        { symbol: '🗜️', name: 'clamp', category: 'objects' },
+        { symbol: '💽', name: 'computer disk', category: 'objects' },
+        { symbol: '💾', name: 'floppy disk', category: 'objects' },
+        { symbol: '💿', name: 'optical disk', category: 'objects' },
+
+        // Symbols
+        { symbol: '❤️', name: 'red heart', category: 'symbols' },
+        { symbol: '🧡', name: 'orange heart', category: 'symbols' },
+        { symbol: '💛', name: 'yellow heart', category: 'symbols' },
+        { symbol: '💚', name: 'green heart', category: 'symbols' },
+        { symbol: '💙', name: 'blue heart', category: 'symbols' },
+        { symbol: '💜', name: 'purple heart', category: 'symbols' },
+        { symbol: '🖤', name: 'black heart', category: 'symbols' },
+        { symbol: '🤍', name: 'white heart', category: 'symbols' },
+        { symbol: '🤎', name: 'brown heart', category: 'symbols' },
+        { symbol: '💔', name: 'broken heart', category: 'symbols' },
+        { symbol: '❣️', name: 'heart exclamation', category: 'symbols' },
+        { symbol: '💕', name: 'two hearts', category: 'symbols' },
+        { symbol: '💞', name: 'revolving hearts', category: 'symbols' }
+    ];
+
+
+    emojiSearchTerm = '';
+    selectedEmojiCategory = 'smileys';
+    filteredEmojis: any[] = [];
+
+    emojiCategories = [
+        { name: 'smileys', icon: '😀', label: 'Смайлики' },
+        { name: 'people', icon: '👋', label: 'Люди' },
+        { name: 'nature', icon: '🐶', label: 'Природа' },
+        { name: 'food', icon: '🍎', label: 'Еда' },
+        { name: 'activity', icon: '⚽', label: 'Активность' },
+        { name: 'travel', icon: '🚗', label: 'Путешествия' },
+        { name: 'objects', icon: '⌚', label: 'Объекты' },
+        { name: 'symbols', icon: '❤️', label: 'Символы' }
+    ];
+
+
+    // Pagination properties
+    hasMoreMessages = true;
+    isLoadingHistory = false;
+    currentOffset = 0;
+    readonly MESSAGES_PER_PAGE = 32;
+    emojiDropdownPosition = { x: 0, y: 0 };
     chatInput = new FormControl('');
     chatHistory: Message[] = [];
     loading = false;
@@ -38,7 +184,6 @@ export class ChatComponent implements OnInit, OnDestroy {
     config$: Observable<{ userName: string; charName: string } | null> | null = null;
 
     recording = false;
-    uniqueDates: string[] = [];
     activeDropdown: string | null = null;
     currentPlayingMessage: string | null = null;
     private currentStreamingMessage: Message | null = null;
@@ -52,12 +197,7 @@ export class ChatComponent implements OnInit, OnDestroy {
 
     ngOnInit(): void {
         this.getSettings();
-        // this.loadHistory();
-
-        this.websocketService.send(JSON.stringify({
-            action: 'fetch_history',
-            payload: { limit: 32 }
-        }));
+        this.loadHistory();
 
         this.websocketService.messages$.subscribe((rawMsg: string) => {
             let event: any;
@@ -65,12 +205,12 @@ export class ChatComponent implements OnInit, OnDestroy {
                 event = JSON.parse(rawMsg);
             } catch {
                 console.warn('[WS] ⚠️ Received non-JSON message:', rawMsg);
+                this.isLoadingHistory = false;
                 return;
             }
 
             switch (event.type) {
                 case 'message_chunk':
-                    // Убираем плашку "Печатает" при первом чанке
                     if (!this.currentStreamingMessage) {
                         this.loading = false;
                         const tempId = generateTempId();
@@ -89,13 +229,11 @@ export class ChatComponent implements OnInit, OnDestroy {
 
                 case 'message':
                     if (this.currentStreamingMessage) {
-                        // обновляем последний pending сообщение
                         this.currentStreamingMessage.id = event.id || this.currentStreamingMessage.id;
                         this.currentStreamingMessage.isPending = false;
                         this.currentStreamingMessage.content = event.content;
                         this.currentStreamingMessage = null;
                     } else {
-                        // если почему-то не было chunk'ов
                         this.chatHistory.push({
                             id: event.id,
                             role: event.role,
@@ -108,23 +246,34 @@ export class ChatComponent implements OnInit, OnDestroy {
                     break;
 
                 case 'history':
-                    this.chatHistory = event.items.map((m: any) => ({
+                    const newMessages = event.items.map((m: any) => ({
                         ...m,
                         isPending: false
                     })).sort(
                         (a: any, b: any) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
                     );
+
+                    if (this.isLoadingHistory) {
+                        // Append older messages to the beginning
+                        this.chatHistory = [...newMessages, ...this.chatHistory];
+                        this.currentOffset += newMessages.length;
+                        this.hasMoreMessages = newMessages.length === this.MESSAGES_PER_PAGE;
+                        this.isLoadingHistory = false;
+                    } else {
+                        // Initial load
+                        this.chatHistory = newMessages;
+                        this.currentOffset = newMessages.length;
+                        this.hasMoreMessages = newMessages.length === this.MESSAGES_PER_PAGE;
+                    }
                     break;
 
                 case 'deleted':
                     if (event.chain) {
-                        // Удаление цепочки
                         const deletedMsgIndex = this.chatHistory.findIndex(m => m.id === event.message_id);
                         if (deletedMsgIndex !== -1) {
                             const deletedMsg = this.chatHistory[deletedMsgIndex];
                             this.chatHistory.splice(deletedMsgIndex, 1);
 
-                            // Если это пользовательское сообщение, удаляем следующее сообщение ассистента
                             if (deletedMsg.role === 'user') {
                                 for (let i = deletedMsgIndex; i < this.chatHistory.length; i++) {
                                     if (this.chatHistory[i].role === 'assistant') {
@@ -135,16 +284,13 @@ export class ChatComponent implements OnInit, OnDestroy {
                             }
                         }
                     } else {
-                        // Обычное удаление - удаляем только одно сообщение
                         this.chatHistory = this.chatHistory.filter(m => m.id !== event.message_id);
                     }
                     break;
 
                 case 'reroll':
-                    console.log('Reroll response:', event)
-                    // Добавляем новое сообщение от reroll
                     this.chatHistory.push({
-                        id: event.new_message.id,  // используем ID из ответа
+                        id: event.new_message.id,
                         role: event.new_message.role,
                         content: event.new_message.content,
                         timestamp: event.new_message.timestamp,
@@ -167,7 +313,6 @@ export class ChatComponent implements OnInit, OnDestroy {
                     break;
 
                 case 'ack_message':
-                    // Найти сообщение с tempId и обновить его id
                     const idx = this.chatHistory.findIndex(m => m.id === event.tempId);
                     if (idx !== -1) {
                         this.chatHistory[idx].id = event.realId;
@@ -185,135 +330,118 @@ export class ChatComponent implements OnInit, OnDestroy {
 
     ngOnDestroy() { }
 
-
-    // Метод для распознавания уникальных дат
-    updateUniqueDates(): void {
-        const dates = new Set<string>();
-        this.chatHistory.forEach(msg => {
-            const dateStr = new Date(msg.timestamp).toDateString();
-            dates.add(dateStr);
-        });
-
-        // Сортируем по времени
-        this.uniqueDates = Array.from(dates)
-            .sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
+    isMessageStreaming(msg: Message): boolean {
+        return msg.isPending === true && msg.role === 'assistant';
     }
 
-    // Форматирование даты
-    formatDateLabel(dateStr: string): string {
-        const today = new Date().toDateString();
-        const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toDateString();
-
-        if (dateStr === today) return 'Сегодня';
-        if (dateStr === yesterday) return 'Вчера';
-
-        const daysAgo = Math.floor((Date.now() - new Date(dateStr).getTime()) / (24 * 60 * 60 * 1000));
-        if (daysAgo === 1) return 'Вчера';
-        if (daysAgo === 2) return '2 дня назад';
-        if (daysAgo <= 7) return `${daysAgo} дней назад`;
-        return new Date(dateStr).toLocaleDateString('ru');
-    }
-
-    // Обработка клавиш в textarea
-    onKeyDown(event: KeyboardEvent): void {
-        if (event.key === 'Enter' && event.shiftKey) {
-            // Не прерывайте ввод
-        } else if (event.key === 'Enter') {
-            event.preventDefault(); // Предотвратить перенос строки
-            this.sendMessage();
-        }
-    }
-
-    onKeyUp(): void {
-        // Автоматически растягиваем textarea
-        const textarea = document.querySelector('.chat-input') as HTMLTextAreaElement;
-        if (textarea) {
-            textarea.style.height = 'auto';
-            textarea.style.height = `${textarea.scrollHeight}px`;
-        }
-    }
-
-
-    scrollToBottom(): void {
-        const tryScroll = () => {
-            const anchor = document.getElementById('bottomAnchor');
-            if (anchor) {
-                anchor.scrollIntoView({ behavior: 'auto' });
-            } else {
-                // console.warn('⚠️ anchor не найден. Пробуем ещё раз...');
-                setTimeout(() => requestAnimationFrame(tryScroll), 50);
-            }
-        };
-
-        requestAnimationFrame(tryScroll);
-    }
-
-    toggleMessageMenu(msgId: string | null, event: Event): void {
+    toggleEmojiDropdown(event: Event): void {
         event.stopPropagation();
-        this.activeDropdown = this.activeDropdown === msgId ? null : msgId;
-    }
 
-    copyMessage(msg: Message): void {
-        navigator.clipboard.writeText(msg.content).then(() => {
-            console.log('Скопировано!');
-        });
-    }
+        if (!this.showEmojiPicker) {
+            // Получаем кнопку и ее позицию
+            const button = event.target as HTMLElement;
+            const rect = button.getBoundingClientRect();
 
-    toggleRecording() {
-        if (!this.recording) {
-            this.voiceService.startRecord$().subscribe(() => {
-                this.recording = true;
-                console.log({ start: 'recording' });
-            });
-        } else {
-            this.voiceService.stopRecord$().subscribe((res) => {
-                console.log({ stop_response: res });
-                this.recording = false;
+            // Вычисляем позицию дропдауна
+            const dropdownWidth = 320;
+            const dropdownHeight = 300;
 
-                const msg = res.data;
+            // Позиция по X - выравниваем по левому краю кнопки
+            let x = rect.left;
 
-                if (msg && msg.content.trim()) {
-                    // Добавляем как пользовательское сообщение
-                    // this.chatHistory.push(msg);
-                    this.scrollToBottom();
-                }
-            });
+            // Проверяем, не выходит ли дропдаун за правую границу экрана
+            if (x + dropdownWidth > window.innerWidth) {
+                x = window.innerWidth - dropdownWidth;
+            }
+
+            // Проверяем, не выходит ли дропдаун за левую границу экрана
+            if (x < 0) {
+                x = 0;
+            }
+
+            // Позиция по Y - показываем над кнопкой
+            let y = rect.top - dropdownHeight - 10;
+
+            // Если нет места сверху, показываем под кнопкой
+            if (y < 0) {
+                y = rect.bottom + 10;
+            }
+
+            this.emojiDropdownPosition = { x, y };
+        }
+
+        this.showEmojiPicker = !this.showEmojiPicker;
+        this.activeDropdown = this.showEmojiPicker ? 'emoji' : null;
+
+        if (this.showEmojiPicker) {
+            this.emojiSearchTerm = '';
+            this.filteredEmojis = this.allEmojis.filter(e => e.category === 'smileys');
         }
     }
 
-    sendMessage(): void {
-        const trimmed = this.chatInput.value?.trim();
-        if (!trimmed) return;
+    // Load more messages with cumulative offset
+    loadMoreHistory(): void {
+        if (!this.hasMoreMessages || this.isLoadingHistory) return;
 
-        const tempId = generateTempId();
-        const timestamp = new Date().toISOString();
-
-        const userMessage: Message = {
-            id: tempId,
-            role: 'user',
-            content: trimmed,
-            timestamp,
-            isPending: true
-        };
-
-        this.chatHistory.push(userMessage);
-        this.updateUniqueDates();
-        this.chatInputValue = '';
-        this.chatInput.setValue('');
-        this.loading = true;
-        setTimeout(() => this.scrollToBottom(), 0);
-
+        this.isLoadingHistory = true;
 
         this.websocketService.send(JSON.stringify({
-            action: 'send_message',
-            payload: userMessage
+            action: 'fetch_history',
+            payload: {
+                limit: this.MESSAGES_PER_PAGE,
+                offset: this.currentOffset // Правильный offset - не увеличиваем лимит, а сдвигаем позицию
+            }
         }));
     }
 
+    addEmoji(emoji: string): void {
+        const currentValue = this.chatInput.value || '';
+        const newValue = currentValue + emoji;
+        this.chatInput.setValue(newValue);
+        this.showEmojiPicker = false;
+
+        setTimeout(() => {
+            const textarea = document.querySelector('.chat-input') as HTMLTextAreaElement;
+            if (textarea) {
+                textarea.focus();
+                this.onKeyUp();
+            }
+        });
+    }
+
+    onEmojiSearchInput(event: any): void {
+        this.emojiSearchTerm = event.target.value;
+        this.filterEmojis();
+    }
+
+    filterEmojis(): void {
+        if (!this.emojiSearchTerm) {
+            this.filteredEmojis = this.allEmojis.filter(e => e.category === this.selectedEmojiCategory);
+            return;
+        }
+
+        const term = this.emojiSearchTerm.toLowerCase();
+        this.filteredEmojis = this.allEmojis.filter(emoji =>
+            emoji.name.toLowerCase().includes(term) ||
+            emoji.symbol.includes(this.emojiSearchTerm)
+        );
+    }
+
+
+    selectEmojiCategory(category: string): void {
+        this.selectedEmojiCategory = category;
+        this.emojiSearchTerm = '';
+        this.filteredEmojis = this.allEmojis.filter(e => e.category === category);
+    }
+
     loadHistory(): void {
+        this.currentOffset = 0;
+        this.hasMoreMessages = true;
+        this.isLoadingHistory = false;
+
         this.websocketService.send(JSON.stringify({
             action: 'fetch_history',
-            payload: { limit: 32 }
+            payload: { limit: this.MESSAGES_PER_PAGE }
         }));
     }
 
@@ -336,14 +464,96 @@ export class ChatComponent implements OnInit, OnDestroy {
         )
     }
 
-    toggleAttachDropdown(): void {
-        // Открыть дропдаун для вложений
-        console.log('Открываем дропдаун вложений...');
+    // Message handling methods
+    sendMessage(): void {
+        const trimmed = this.chatInput.value?.trim();
+        if (!trimmed) return;
+
+        const tempId = generateTempId();
+        const timestamp = new Date().toISOString();
+
+        const userMessage: Message = {
+            id: tempId,
+            role: 'user',
+            content: trimmed,
+            timestamp,
+            isPending: true
+        };
+
+        this.chatHistory.push(userMessage);
+        this.chatInputValue = '';
+        this.chatInput.setValue('');
+        this.loading = true;
+        setTimeout(() => this.scrollToBottom(), 0);
+
+        this.websocketService.send(JSON.stringify({
+            action: 'send_message',
+            payload: userMessage
+        }));
     }
 
-    editMessage(msg: Message): void {
-        // Можно открыть модальное окно для редактирования
-        console.log('Редактирование:', msg);
+    copyMessage(msg: Message): void {
+        navigator.clipboard.writeText(msg.content).then(() => {
+            console.log('Copied!');
+        });
+    }
+
+    deleteMessage(msg: Message, chain: boolean): void {
+        if (!msg || !msg.id) return;
+        this.websocketService.send(JSON.stringify({
+            action: 'delete_message',
+            payload: { message_id: msg.id, chain }
+        }));
+    }
+
+    rerollMessage(messageId: string | null): void {
+        if (!messageId) {
+            for (let i = this.chatHistory.length - 1; i >= 0; i--) {
+                if (this.chatHistory[i].role === 'assistant') {
+                    messageId = this.chatHistory[i].id;
+                    break;
+                }
+            }
+
+            if (!messageId) {
+                console.warn('No assistant message found for reroll');
+                return;
+            }
+        }
+
+        this.loading = true;
+
+        const lastAssistantIndex = this.chatHistory.map((msg, i) => ({ msg, i }))
+            .reverse()
+            .find(item => item.msg.role === 'assistant')?.i;
+
+        if (lastAssistantIndex !== undefined) {
+            this.chatHistory.splice(lastAssistantIndex, 1);
+        }
+
+        setTimeout(() => this.scrollToBottom(), 0);
+
+        this.websocketService.send(JSON.stringify({
+            action: 'reroll_message',
+            payload: { message_id: messageId }
+        }));
+    }
+
+    // Voice methods
+    toggleRecording() {
+        if (!this.recording) {
+            this.voiceService.startRecord$().subscribe(() => {
+                this.recording = true;
+            });
+        } else {
+            this.voiceService.stopRecord$().subscribe((res) => {
+                this.recording = false;
+                const msg = res.data;
+                if (msg && msg.content.trim()) {
+                    this.scrollToBottom();
+                }
+            });
+        }
     }
 
     toggleVoice(msgId: string | null | undefined): void {
@@ -358,68 +568,42 @@ export class ChatComponent implements OnInit, OnDestroy {
         }
     }
 
+    stopVoice() {
+        this.voiceService.stopPlay$().subscribe();
+    }
+
     playMessage(msg: Message) {
-        console.log({
-            msg
-        });
-
-
-        this.voiceService.playMessage(msg.id as string).subscribe((r) => {
-            console.log({ r });
-        })
+        this.voiceService.playMessage(msg.id as string).subscribe();
     }
 
-    deleteMessage(msg: Message, chain: boolean): void {
-        if (!msg || !msg.id) return; // На всякий случай
-        this.websocketService.send(JSON.stringify({
-            action: 'delete_message',
-            payload: { message_id: msg.id, chain }
-        }));
-    }
-
-    rerollMessage(messageId: string | null): void {
-        console.log('Reroll called with:', { messageId });
-
-        // Если messageId не передан, ищем последнее сообщение ассистента
-        if (!messageId) {
-            // Ищем последнее сообщение ассистента (НЕ удаляем его!)
-            for (let i = this.chatHistory.length - 1; i >= 0; i--) {
-                if (this.chatHistory[i].role === 'assistant') {
-                    messageId = this.chatHistory[i].id;
-                    break;
-                }
-            }
-
-            if (!messageId) {
-                console.warn('No assistant message found for reroll');
-                return;
-            }
+    // UI methods
+    onKeyDown(event: KeyboardEvent): void {
+        if (event.key === 'Enter' && event.shiftKey) {
+            // Allow line break
+        } else if (event.key === 'Enter') {
+            event.preventDefault();
+            this.sendMessage();
         }
-
-        // Показываем "Печатает..." и убираем старое сообщение
-        this.loading = true;
-
-        // Удаляем последнее сообщение ассистента из фронтенда
-        const lastAssistantIndex = this.chatHistory.map((msg, i) => ({ msg, i }))
-            .reverse()
-            .find(item => item.msg.role === 'assistant')?.i;
-
-        if (lastAssistantIndex !== undefined) {
-            this.chatHistory.splice(lastAssistantIndex, 1);
-        }
-
-        setTimeout(() => this.scrollToBottom(), 0);
-        console.log('Sending reroll with ID:', messageId);
-        // Отправляем reroll с ID существующего сообщения
-        this.websocketService.send(JSON.stringify({
-            action: 'reroll_message',
-            payload: { message_id: messageId }
-        }));
     }
 
-    shouldShowReroll(msg: Message, index: number): boolean {
-        // Только если это ассистент и это последнее сообщение в списке
-        return msg.role === 'assistant' && index === this.chatHistory.length - 1;
+    onKeyUp(): void {
+        const textarea = document.querySelector('.chat-input') as HTMLTextAreaElement;
+        if (textarea) {
+            textarea.style.height = 'auto';
+            textarea.style.height = `${textarea.scrollHeight}px`;
+        }
+    }
+
+    scrollToBottom(): void {
+        const tryScroll = () => {
+            const anchor = document.getElementById('bottomAnchor');
+            if (anchor) {
+                anchor.scrollIntoView({ behavior: 'auto' });
+            } else {
+                setTimeout(() => requestAnimationFrame(tryScroll), 50);
+            }
+        };
+        requestAnimationFrame(tryScroll);
     }
 
     formatTimestamp(isoDate?: string): string {
@@ -449,7 +633,21 @@ export class ChatComponent implements OnInit, OnDestroy {
         return `${dateStr} ${time}`;
     }
 
-    stopVoice() {
-        this.voiceService.stopPlay$().subscribe();
+    // Unused methods - can be removed if not needed
+    toggleMessageMenu(msgId: string | null, event: Event): void {
+        event.stopPropagation();
+        this.activeDropdown = this.activeDropdown === msgId ? null : msgId;
+    }
+
+    editMessage(msg: Message): void {
+        console.log('Editing:', msg);
+    }
+
+    toggleAttachDropdown(): void {
+        console.log('Opening attachments dropdown...');
+    }
+
+    shouldShowReroll(msg: Message, index: number): boolean {
+        return msg.role === 'assistant' && index === this.chatHistory.length - 1;
     }
 }

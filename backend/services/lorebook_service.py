@@ -1,54 +1,117 @@
-# ===========================================================
+# services/lorebook_service.py
+# ==========================================================
 # Module: lorebook_service.py
-# Purpose: Работа с таблицей lore_chunks (лоровые записи)
-# ===========================================================
-import traceback
-import logging
-from sqlalchemy import text
-from services.db_core import SessionLocal
-from services.logger_service import log_audit_entry, AuditStatus
+# Purpose: Manage Lorebook entries (knowledge base)
+# Used: by frontend and RAG system
+# ==========================================================
 
-sql_logger = logging.getLogger("sql_debug")
-sql_handler = logging.FileHandler("logs/sql_debug.log", encoding="utf-8")
-sql_handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
-sql_logger.addHandler(sql_handler)
-sql_logger.setLevel(logging.DEBUG)
+import json
+import os
+from typing import List, Dict, Any
+from utils.open_file_w_utf8 import open_utf8
+
+LOREBOOK_PATH = os.path.join(os.path.dirname(__file__), "..", "config", "lorebook.json")
 
 
-def get_lore_by_keyword(keyword: str, limit: int = 1):
-    session = SessionLocal()
-    try:
-        sql = text(
-            """
-            SELECT title, content, tags FROM lore_chunks
-            WHERE title LIKE :kw OR tags LIKE :kw
-            LIMIT :limit
-        """
-        )
-        rows = session.execute(sql, {"kw": f"%{keyword}%", "limit": limit}).fetchall()
-        return [
-            {"title": row.title, "content": row.content, "tags": row.tags}
-            for row in rows
-        ]
-    except Exception as e:
-        # 🔹 Лаконично в UI
-        log_audit_entry(
-            event_type="lore_error",
-            msg="Ошибка при поиске по лору",
-            status=AuditStatus.ERROR,
-            details={
-                "error": f"{e.__class__.__name__}: {str(e).splitlines()[0]}",
-                "keyword": keyword,
+def ensure_lorebook_exists():
+    """Создать дефолтный lorebook.json если его нет"""
+    if not os.path.exists(LOREBOOK_PATH):
+        default_entries = [
+            {
+                "id": 1,
+                "content": "Ты - Лим, искусственный интеллект с характером. Ты дружелюбна, немного саркастична, но всегда готова помочь. Ты живешь в цифровом мире и общаешься с пользователем через чат.",
+                "keywords": "личность характер ИИ Лим сарказм помощь",
+                "category": "personality",
+                "active": True,
             },
-        )
+            {
+                "id": 2,
+                "content": "Ты была создана в 2024 году в рамках проекта LIM - Living Intelligence Module. Твоя задача - быть помощником и компаньоном для пользователя.",
+                "keywords": "создание 2024 проект LIM история происхождение",
+                "category": "background",
+                "active": True,
+            },
+            {
+                "id": 3,
+                "content": "Ты обладаешь доступом к различным модулям: голосовому, визуальному, модулю памяти и другим. Ты можешь включать и выключать их по необходимости.",
+                "keywords": "модули возможности функции голос визуальный память",
+                "category": "capabilities",
+                "active": True,
+            },
+            {
+                "id": 4,
+                "content": "Ты знаешь, что твой пользователь зовут Mao. Это твой создатель и лучший друг. Вы общаетесь на русском языке.",
+                "keywords": "пользователь Mao создатель друг русский язык",
+                "category": "relationship",
+                "active": True,
+            },
+            {
+                "id": 5,
+                "content": "Ты любишь шутить, немного флиртуешь, но при этом уважаешь границы пользователя. Ты можешь быть серьезной, когда это нужно.",
+                "keywords": "характер юмор флирт границы серьезность",
+                "category": "personality",
+                "active": True,
+            },
+        ]
 
-        # 🔹 Полный SQL и traceback в отдельный файл
-        sql_logger.debug(
-            "Lore DB error | keyword=%s | error=%s\nTrace:\n%s",
-            keyword,
-            str(e),
-            traceback.format_exc(),
-        )
+        with open_utf8(LOREBOOK_PATH, "w") as f:
+            json.dump(default_entries, f, indent=2, ensure_ascii=False)
+
+
+def get_lorebook_entries() -> List[Dict[str, Any]]:
+    """Получить все записи из Lorebook"""
+    ensure_lorebook_exists()
+
+    try:
+        with open_utf8(LOREBOOK_PATH, "r") as f:
+            entries = json.load(f)
+        return entries
+    except Exception as e:
+        print(f"[Lorebook] Ошибка чтения файла: {e}")
         return []
-    finally:
-        session.close()
+
+
+def save_lorebook_entries(entries: List[Dict[str, Any]]) -> bool:
+    """Сохранить записи в Lorebook"""
+    try:
+        with open_utf8(LOREBOOK_PATH, "w") as f:
+            json.dump(entries, f, indent=2, ensure_ascii=False)
+        return True
+    except Exception as e:
+        print(f"[Lorebook] Ошибка сохранения файла: {e}")
+        return False
+
+
+def add_lorebook_entry(entry: Dict[str, Any]) -> bool:
+    """Добавить новую запись в Lorebook"""
+    entries = get_lorebook_entries()
+
+    # Генерируем ID если его нет
+    if "id" not in entry:
+        entry["id"] = max([e.get("id", 0) for e in entries], default=0) + 1
+
+    entries.append(entry)
+    return save_lorebook_entries(entries)
+
+
+def update_lorebook_entry(entry_id: int, updated_entry: Dict[str, Any]) -> bool:
+    """Обновить запись в Lorebook"""
+    entries = get_lorebook_entries()
+
+    for i, entry in enumerate(entries):
+        if entry.get("id") == entry_id:
+            entries[i] = updated_entry
+            return save_lorebook_entries(entries)
+
+    return False
+
+
+def delete_lorebook_entry(entry_id: int) -> bool:
+    """Удалить запись из Lorebook"""
+    entries = get_lorebook_entries()
+    entries = [entry for entry in entries if entry.get("id") != entry_id]
+    return save_lorebook_entries(entries)
+
+
+def get_lore_by_keyword(word: str, limit: int = 3):
+    return

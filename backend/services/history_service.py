@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy.orm import Session
-from models.models import History, Character
+from sqlalchemy.orm import Session, joinedload
+from models.models import History, Reasoning
 from services.db_core import SessionLocal
 from services.logger_service import log_audit_entry, AuditStatus
 from utils.time_utils import format_user_datetime
@@ -42,12 +42,53 @@ def add_history(
             session.close()
 
 
+def add_reasoning_entry(
+    message_id: str,
+    content: str,
+    session: Optional[Session] = None,
+):
+    if not content:
+        return None
+
+    own_session = False
+    if session is None:
+        session = SessionLocal()
+        own_session = True
+
+    try:
+        existing = session.query(Reasoning).filter_by(message_id=message_id).first()
+        if existing:
+            existing.content = content
+            session.commit()
+            session.refresh(existing)
+            return existing
+
+        entry = Reasoning(message_id=message_id, content=content)
+        session.add(entry)
+        session.commit()
+        session.refresh(entry)
+        return entry
+    finally:
+        if own_session:
+            session.close()
+
+
+def get_reasoning_by_message_id(message_id: str) -> Optional[str]:
+    session: Session = SessionLocal()
+    try:
+        entry = session.query(Reasoning).filter_by(message_id=message_id).first()
+        return entry.content if entry else None
+    finally:
+        session.close()
+
+
 def get_history(character_id: str, limit: int = 20):
     """Получение истории сообщений"""
     session: Session = SessionLocal()
     try:
         return (
             session.query(History)
+            .options(joinedload(History.reasoning))
             .filter_by(character_id=character_id)
             .order_by(History.timestamp.desc())
             .limit(limit)
@@ -61,7 +102,12 @@ def delete_message(message_id: str) -> bool:
     """Удаление одного сообщения по ID"""
     session: Session = SessionLocal()
     try:
-        message = session.query(History).filter_by(id=message_id).first()
+        message = (
+            session.query(History)
+            .options(joinedload(History.reasoning))
+            .filter_by(id=message_id)
+            .first()
+        )
         if not message:
             return False
 
@@ -81,13 +127,19 @@ def delete_message_chain(user_message_id: str) -> int:
     session: Session = SessionLocal()
     try:
         # Находим пользовательское сообщение
-        user_msg = session.query(History).filter_by(id=user_message_id).first()
+        user_msg = (
+            session.query(History)
+            .options(joinedload(History.reasoning))
+            .filter_by(id=user_message_id)
+            .first()
+        )
         if not user_msg or user_msg.role != "user":
             return 0
 
         # Находим следующее сообщение ассистента
         assistant_msg = (
             session.query(History)
+            .options(joinedload(History.reasoning))
             .filter(
                 History.character_id == user_msg.character_id,
                 History.timestamp > user_msg.timestamp,

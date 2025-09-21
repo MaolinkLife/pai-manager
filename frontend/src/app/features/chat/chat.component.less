@@ -17,60 +17,42 @@
     display: flex;
     flex-direction: column;
 
-    .date-separator {
-        text-align: center;
-        color: #888888; // Серый для дат
-        font-size: 0.85rem;
-        margin: 1rem 0;
-        padding: 0.5rem 0;
-        border-top: 1px solid @color-border;
-        border-bottom: 1px solid @color-border;
-        font-weight: 500;
-    }
-
     .message {
         position: relative;
         margin-bottom: 1.5rem;
-        max-width: 80%;
-        min-width: 180px;
-        padding: 0.75rem;
-        border-radius: @radius;
-        background: @color-surface;
-        box-shadow: @shadow-soft;
         transition: all 0.2s ease;
 
         &.user {
             align-self: flex-end;
-            background: #2a2a2a; // Темно-серый для пользователя
-            color: @color-text; // Обычный текст
-            border: 1px solid @color-border; // Легкая граница
-            border-radius: @radius 0 0 @radius;
+            max-width: 70%;
+            padding: 0.75rem;
+            border-radius: @radius;
+            background: #2a2a2a;
+            color: @color-text;
+            border: 1px solid @color-border;
         }
 
         &.assistant {
-            align-self: flex-start;
-            background: @color-surface;
-            color: @color-text;
-            border-radius: 0 @radius @radius 0;
-        }
-
-        .timestamp {
-            font-size: 0.75rem;
-            color: #888888; // Серый для времени
-            margin-bottom: 0.3rem;
+            align-self: center;
+            max-width: 90%;
+            padding: 0; // убираем лишний padding
+            background: none; // без фона
+            border: none; // без границы
+            box-shadow: none; // без тени
             text-align: left;
-        }
 
-        .sender {
-            font-weight: 500;
-            margin-bottom: 0.3rem;
-            color: @color-text-active;
-        }
+            .sender,
+            .timestamp {
+                display: none; // убираем подписи и время
+            }
 
-        .content {
-            white-space: pre-wrap;
-            line-height: 1.5;
-            word-break: break-word;
+            .content {
+                font-size: 1rem;
+                line-height: 1.6;
+                color: @color-text;
+                white-space: pre-wrap;
+                word-break: break-word;
+            }
         }
 
         .actions {
@@ -93,6 +75,160 @@
                     transform: scale(1.1);
                 }
             }
+        }
+    }
+}
+
+.load-more-container {
+    display: flex;
+    justify-content: center;
+    padding: 16px;
+
+    .load-more-btn {
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        color: #e1e1e1;
+        padding: 8px 16px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 14px;
+        transition: all 0.2s ease;
+
+        &:hover:not(:disabled) {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        &:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+    }
+}
+
+.emoji-btn {
+    background: transparent;
+    border: none;
+    color: #888;
+    cursor: pointer;
+    font-size: 1.2rem;
+    padding: 0.5rem;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 40px;
+    min-height: 40px;
+
+    &:hover {
+        color: @color-text-active;
+        background: rgba(255, 255, 255, 0.1);
+    }
+}
+
+.emoji-dropdown {
+    position: fixed; // Используем fixed для корректного позиционирования
+    background: @color-surface;
+    border: 1px solid @color-border;
+    border-radius: @radius;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    z-index: 1000;
+    width: 320px;
+    display: flex;
+    flex-direction: column;
+    max-height: 300px;
+
+    .emoji-search {
+        padding: 0.5rem;
+        border-bottom: 1px solid @color-border;
+
+        .emoji-search-input {
+            width: 100%;
+            padding: 0.5rem;
+            border-radius: @radius;
+            border: 1px solid @color-border;
+            background: @color-bg;
+            color: @color-text;
+            font-family: @font-family;
+
+            &:focus {
+                outline: none;
+                border-color: @color-focus;
+            }
+        }
+    }
+
+    .emoji-categories {
+        display: flex;
+        padding: 0.25rem;
+        border-bottom: 1px solid @color-border;
+        gap: 0.1rem;
+        overflow-x: auto;
+
+        .category-btn {
+            background: transparent;
+            border: none;
+            padding: 0.25rem 0.5rem;
+            border-radius: @radius;
+            cursor: pointer;
+            font-size: 1.1rem;
+            flex-shrink: 0;
+
+            &.active {
+                background: @color-accent;
+                color: @color-bg;
+            }
+
+            &:hover:not(.active) {
+                background: rgba(255, 255, 255, 0.1);
+            }
+        }
+    }
+
+    .emoji-picker {
+        max-height: 200px;
+        overflow-y: auto;
+        padding: 0.5rem;
+
+        .emoji-grid {
+            display: grid;
+            grid-template-columns: repeat(8, 1fr); // 8 колонок для плитки
+            gap: 0.25rem;
+
+            .emoji-item {
+                font-size: 1.3rem;
+                padding: 0.3rem;
+                text-align: center;
+                cursor: pointer;
+                border-radius: 6px;
+                transition: all 0.2s ease;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+
+                &:hover {
+                    background: rgba(255, 255, 255, 0.1);
+                    transform: scale(1.2);
+                }
+            }
+        }
+    }
+
+    // Стили скроллбара
+    .emoji-picker::-webkit-scrollbar {
+        width: 6px;
+    }
+
+    .emoji-picker::-webkit-scrollbar-track {
+        background: @color-bg;
+        border-radius: 3px;
+    }
+
+    .emoji-picker::-webkit-scrollbar-thumb {
+        background: @color-border;
+        border-radius: 3px;
+
+        &:hover {
+            background: #888;
         }
     }
 }
@@ -179,12 +315,10 @@
     }
 
     .stop-btn {
-        background: @color-danger;
-        color: @color-bg;
+        color: #888;
 
         &:hover {
-            background: darken(@color-danger, 10%);
-            color: @color-bg;
+            color: @color-text-active;
         }
     }
 

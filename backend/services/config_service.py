@@ -11,61 +11,12 @@
 from typing import Dict, Any, Optional
 import json
 import os
-from typing import Any
 from utils.open_file_w_utf8 import open_utf8
 from services.logger_service import log_audit_entry, AuditStatus
+from models.config_model import DEFAULT_CONFIG, CONFIG_PATHS
 
-CONFIG_PATH = os.path.join(os.path.dirname(__file__), "..", "config", "config.json")
-PRESETS_PATH = os.path.join(
-    os.path.dirname(__file__), "..", "config", "generation_presets.json"
-)
-
-# TODO: can be moved later to a file with constants
-DEFAULT_CONFIG = {
-    "user_id": None,
-    "char_name": "default_waifu",
-    "user_name": "You",
-    "language": "ru-RU",
-    "voice": {
-        "enabled": False,
-        "output_id": 0,
-        "windows_output_id": 13,
-        "language": "ru-RU",
-        "use_rvc": False,
-        "voice_language": "ru-RU-SvetlanaNeural",
-        "use_windows_output": True,
-        "streaming_tts": False,
-    },
-    "modules": {
-        "vtube_studio": False,
-        "whisper": False,
-        "minecraft": False,
-        "gaming": False,
-        "alarm": False,
-        "discord": False,
-        "rag": False,
-        "visual": False,
-    },
-    "api": {
-        "type": "Ollama",
-        "streaming": False,
-        "model": "command-r:latest",
-        "visual_model": "nsheth/llama-3-lumimaid-8b-v0.1-iq-imatrix",
-        "token_limit": 4096,
-        "message_pair_limit": 10,
-    },
-    "generate_settings": {
-        "name": "Default",
-        "description": "Balanced generation style",
-        "temperature": 1.27,
-        "min_p": 0.0497,
-        "top_p": 0.87,
-        "top_k": 72,
-        "repeat_penalty": 1.12,
-        "stop": None,
-        "num_predict": 1024,
-    },
-}
+CONFIG_PATH = os.path.join(os.path.dirname(__file__), "..", CONFIG_PATHS["config"])
+PRESETS_PATH = os.path.join(os.path.dirname(__file__), "..", CONFIG_PATHS["presets"])
 
 _config_cache = None
 
@@ -254,6 +205,20 @@ def validate_config(config: dict) -> tuple[bool, list]:
         elif not api.get("model"):
             errors.append("api.model is required")
 
+    # Проверим новые поля
+    if "audio" in config and not isinstance(config["audio"], dict):
+        errors.append("audio must be an object")
+
+    if "vision" in config and not isinstance(config["vision"], dict):
+        errors.append("vision must be an object")
+
+    if "rag" in config:
+        rag = config["rag"]
+        if not isinstance(rag, dict):
+            errors.append("rag must be an object")
+        elif rag.get("enabled") and not rag.get("embeddingModel"):
+            errors.append("rag.embeddingModel is required when rag is enabled")
+
     return len(errors) == 0, errors
 
 
@@ -302,9 +267,6 @@ def apply_preset_by_name(preset_name: str) -> bool:
     config["generate_settings"] = matched
     save_config(config)
     return True
-
-
-# Добавим в config_service.py:
 
 
 def get_user_config(user_id: str) -> dict:

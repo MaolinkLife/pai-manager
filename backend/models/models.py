@@ -2,7 +2,6 @@ from sqlalchemy import Column, String, Text, DateTime, ForeignKey, Boolean, Inte
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
 import uuid
-from sqlalchemy.orm import declarative_base
 from services.db_core import Base
 
 # Character Table
@@ -29,6 +28,12 @@ class History(Base):
     timestamp = Column(DateTime, default=datetime.now(timezone.utc))
 
     character = relationship("Character", back_populates="history")
+    reasoning = relationship(
+        "Reasoning",
+        back_populates="message",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
 
 # =======================
 # Users
@@ -57,3 +62,24 @@ class Message(Base):
     timestamp = Column(DateTime, default=datetime.now(timezone.utc))
 
     user = relationship("User")
+
+
+class Reasoning(Base):
+    __tablename__ = "reasoning"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    message_id = Column(
+        String,
+        ForeignKey("history.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+    )
+    content = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+    updated_at = Column(
+        DateTime,
+        default=datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    message = relationship("History", back_populates="reasoning")

@@ -2,6 +2,19 @@
     <div class="chat-container">
         <div class="messages" #messagesContainer>
             <!-- Messages will be here -->
+            <div class="load-more-container" *ngIf="hasMoreMessages">
+                <button
+                    class="load-more-btn"
+                    (click)="loadMoreHistory()"
+                    [disabled]="isLoadingHistory"
+                >
+                    <span *ngIf="!isLoadingHistory"
+                        >Загрузить еще сообщения</span
+                    >
+                    <span *ngIf="isLoadingHistory">Загрузка...</span>
+                </button>
+            </div>
+
             <div
                 class="message"
                 *ngFor="let msg of chatHistory; let i = index"
@@ -19,7 +32,11 @@
                 </div>
 
                 <div class="content">
-                    <markdown [data]="msg.content"></markdown>
+                    <app-message-renderer
+                        [content]="msg.content"
+                        [isStreaming]="isMessageStreaming(msg)"
+                    >
+                    </app-message-renderer>
                 </div>
 
                 <!-- Message actions -->
@@ -226,6 +243,68 @@
                     <path d="M12 19V5"></path>
                 </svg>
             </button>
+
+            <!-- <button
+                type="button"
+                class="emoji-btn"
+                (click)="toggleEmojiDropdown($event)"
+                title="Смайлики"
+            >
+                <svg
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                >
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <path d="M8 14s1.5 2 4 2 4-2 4-2"></path>
+                    <line x1="9" y1="9" x2="9.01" y2="9"></line>
+                    <line x1="15" y1="9" x2="15.01" y2="9"></line>
+                </svg>
+            </button>
+
+            <div
+                class="emoji-dropdown"
+                *ngIf="showEmojiPicker"
+                (click)="$event.stopPropagation()"
+                [style.left.px]="emojiDropdownPosition.x"
+                [style.bottom.px]="emojiDropdownPosition.y"
+            >
+                <div class="emoji-search">
+                    <input
+                        type="text"
+                        class="emoji-search-input"
+                        placeholder="Поиск эмодзи..."
+                        [value]="emojiSearchTerm"
+                        (input)="onEmojiSearchInput($event)"
+                    />
+                </div>
+                <div class="emoji-categories">
+                    <button
+                        *ngFor="let category of emojiCategories"
+                        class="category-btn"
+                        [class.active]="selectedEmojiCategory === category.name"
+                        (click)="selectEmojiCategory(category.name)"
+                        title="{{ category.label }}"
+                    >
+                        {{ category.icon }}
+                    </button>
+                </div>
+                <div class="emoji-picker">
+                    <div class="emoji-grid">
+                        <div
+                            class="emoji-item"
+                            *ngFor="let emoji of filteredEmojis"
+                            (click)="addEmoji(emoji.symbol)"
+                            [title]="emoji.name"
+                        >
+                            {{ emoji.symbol }}
+                        </div>
+                    </div>
+                </div>
+            </div> -->
         </form>
     </div>
 </ng-container>

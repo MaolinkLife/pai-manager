@@ -87,6 +87,7 @@ backend/config/characters/*
 
 # Config.json — created automatically, do not push
 backend/config/config.json
+backend/config/lorebook.json
 backend/config/generation_presets.json
 
 backend/storage/history/*

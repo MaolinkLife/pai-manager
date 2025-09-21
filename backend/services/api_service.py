@@ -15,6 +15,7 @@ import threading
 import json
 import gc
 import torch
+import re
 from datetime import datetime
 from services.config_service import get_config_value
 from fastapi import WebSocket
@@ -35,6 +36,51 @@ from utils.context_builder import build_memory_context
 from utils.structure_utils import get_label_from_file
 from utils.open_file_w_utf8 import open_utf8
 from core.emotion_intent_analyzer import analyze_emotion, generate_instruction
+
+
+THINK_PATTERN = re.compile(r"<think>(.*?)</think>", re.IGNORECASE | re.DOTALL)
+
+
+def split_reasoning(raw: str) -> tuple[str, str]:
+    if not raw:
+        return "", ""
+
+    match = THINK_PATTERN.search(raw)
+    if not match:
+        return raw.strip(), ""
+
+    reasoning = match.group(1).strip()
+    cleaned = THINK_PATTERN.sub("", raw).strip()
+    return cleaned, reasoning
+
+
+def strip_reasoning_from_chunk(chunk: str, in_reasoning: bool) -> tuple[str, str, bool]:
+    if not chunk:
+        return "", "", in_reasoning
+
+    speech_parts: list[str] = []
+    reasoning_parts: list[str] = []
+    lower_chunk = chunk.lower()
+    idx = 0
+    while idx < len(chunk):
+        if in_reasoning:
+            end_idx = lower_chunk.find("</think>", idx)
+            if end_idx == -1:
+                reasoning_parts.append(chunk[idx:])
+                return "".join(speech_parts), "".join(reasoning_parts), True
+            reasoning_parts.append(chunk[idx:end_idx])
+            idx = end_idx + len("</think>")
+            in_reasoning = False
+        else:
+            start_idx = lower_chunk.find("<think>", idx)
+            if start_idx == -1:
+                speech_parts.append(chunk[idx:])
+                break
+            speech_parts.append(chunk[idx:start_idx])
+            idx = start_idx + len("<think>")
+            in_reasoning = True
+
+    return "".join(speech_parts), "".join(reasoning_parts), in_reasoning
 
 
 # ===========================================================
@@ -150,7 +196,8 @@ async def run_standard(
     if "error" in response:
         raise RuntimeError(response["error"])
 
-    assistant_content = response.get("message", {}).get("content", "").strip()
+    assistant_raw = response.get("message", {}).get("content", "").strip()
+    assistant_content, assistant_reasoning = split_reasoning(assistant_raw)
 
     # === Save messages ===
     if last_user_message:
@@ -162,16 +209,21 @@ async def run_standard(
         )
 
     new_message_obj = None
-    if store:
+    if store and assistant_content:
         new_message_obj = database_service.add_message_to_history(
             character_name=char_name,
             role="assistant",
             content=assistant_content,
             timestamp=datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
         )
+        if assistant_reasoning:
+            database_service.add_reasoning_entry(
+                new_message_obj.id,
+                assistant_reasoning,
+            )
 
     # Voice
-    if get_config_value("voice.enabled", False):
+    if get_config_value("voice.enabled", False) and assistant_content:
         set_speaking(True)
         threading.Thread(target=speak_line, args=(assistant_content, False)).start()
 
@@ -183,8 +235,14 @@ async def run_standard(
         details={
             "user_input": last_user_message["content"] if last_user_message else None,
             "assistant_output": assistant_content,
+            "assistant_reasoning": assistant_reasoning,
         },
-        meta={"source": "model", "mode": "standard", "full_response": response},
+        meta={
+            "source": "model",
+            "mode": "standard",
+            "full_response": response,
+            "assistant_raw": assistant_raw,
+        },
     )
 
     # WS emit
@@ -193,9 +251,10 @@ async def run_standard(
             {"type": "message", "role": "user", "content": last_user_message["content"]}
         )
         await asyncio.sleep(0.005)
-        await emit_ws_fn(
-            {"type": "message", "role": "assistant", "content": assistant_content}
-        )
+        if assistant_content:
+            await emit_ws_fn(
+                {"type": "message", "role": "assistant", "content": assistant_content}
+            )
 
     if return_full:
         return {
@@ -275,8 +334,9 @@ async def run_stream_message(websocket: WebSocket, history: list):
                 }
             )
 
-    response_chunks = []
-    buffer = []
+    raw_chunks: list[str] = []
+    buffer: list[str] = []
+    streaming_in_reasoning = False
     voice_enabled = get_config_value("voice.enabled", False)
     streaming_tts = get_config_value("voice.streaming_tts", False)
 
@@ -295,13 +355,16 @@ async def run_stream_message(websocket: WebSocket, history: list):
             await websocket.send_json(
                 {"type": "message_chunk", "role": "assistant", "content": content}
             )
-            response_chunks.append(content)
+            raw_chunks.append(content)
 
-            if voice_enabled and streaming_tts:
-                buffer.append(content)
+            speech_chunk, _, streaming_in_reasoning = strip_reasoning_from_chunk(
+                content, streaming_in_reasoning
+            )
+
+            if voice_enabled and streaming_tts and speech_chunk:
+                buffer.append(speech_chunk)
                 buf_text = "".join(buffer)
 
-                # Условие отправки на озвучку
                 if len(buf_text) > 50 or buf_text.endswith((".", "!", "?")):
                     devices = []
                     if get_config_value("voice.use_windows_output", True):
@@ -312,27 +375,46 @@ async def run_stream_message(websocket: WebSocket, history: list):
                     tts_queue.put((buf_text, devices))
                     buffer = []
 
-    assistant_content = "".join(response_chunks).strip()
+    if voice_enabled and streaming_tts and buffer:
+        buf_text = "".join(buffer)
+        if buf_text:
+            devices = []
+            if get_config_value("voice.use_windows_output", True):
+                devices.append(get_config_value("voice.windows_output_id", 0))
+            if get_config_value("voice.use_rvc", False):
+                devices.append(get_config_value("voice.output_id", 0))
+            tts_queue.put((buf_text, devices))
+        buffer = []
+
+    assistant_raw = "".join(raw_chunks).strip()
+    assistant_content, assistant_reasoning = split_reasoning(assistant_raw)
 
     # сохраняем ассистентский ответ
-    assistant_message_obj = add_message_to_history(
-        character_name=char_name,
-        role="assistant",
-        content=assistant_content,
-        timestamp=datetime.now(timezone.utc),
-    )
+    assistant_message_obj = None
+    if assistant_content:
+        assistant_message_obj = add_message_to_history(
+            character_name=char_name,
+            role="assistant",
+            content=assistant_content,
+            timestamp=datetime.now(timezone.utc),
+        )
+        if assistant_reasoning:
+            database_service.add_reasoning_entry(
+                assistant_message_obj.id,
+                assistant_reasoning,
+            )
 
     # финальное сообщение клиенту
     await websocket.send_json(
         {
             "type": "message",
-            "id": assistant_message_obj.id,
+            "id": assistant_message_obj.id if assistant_message_obj else None,
             "role": "assistant",
-            "content": assistant_content,
+            "content": assistant_raw,
         }
     )
 
-    if voice_enabled and not streaming_tts:
+    if voice_enabled and not streaming_tts and assistant_content:
         set_speaking(True)
         threading.Thread(target=speak_line, args=(assistant_content, False)).start()
 
@@ -343,8 +425,13 @@ async def run_stream_message(websocket: WebSocket, history: list):
         details={
             "user_input": last_user_message["content"] if last_user_message else None,
             "assistant_output": assistant_content,
+            "assistant_reasoning": assistant_reasoning,
         },
-        meta={"source": "model", "mode": "stream", "full_response": assistant_content},
+        meta={
+            "source": "model",
+            "mode": "stream",
+            "full_response": assistant_raw,
+        },
     )
 
     await websocket.send_json({"type": "system", "event": "stream_end"})
@@ -476,7 +563,7 @@ def add_vision_context_to_system_prompt(
 
     visual_module_instance = None
     try:
-        from services.vision_service import vision_service
+        from modules.vision.service import VisionService
         from core.visual_module import VisualModule
 
         log_audit_entry(
@@ -525,6 +612,7 @@ def add_vision_context_to_system_prompt(
             status=AuditStatus.INFO,
             meta={"session_id": session_id},
         )
+        vision_service = VisionService()
         visual_data = vision_service.analyze_recent_context(4.0)
         confidence = visual_data.get("confidence", "N/A") if visual_data else "N/A"
         log_audit_entry(
@@ -608,7 +696,13 @@ def add_vision_context_to_system_prompt(
 
                         visual_summary = vlm_result.get("summary", "")
                         if visual_summary:
-                            final_prompt = f"{base_system_prompt}\n\n[Visual Context]: {visual_summary}"
+                            final_prompt = (
+                                f"{base_system_prompt}\n\n[CONTEXT:VISUAL]: {visual_summary}"
+                                "\n\n[INSTRUCTION]\n"
+                                "You currently see on the user's screen: "
+                                f"{visual_summary}. Reference relevant visual details "
+                                "in your reply when helpful."
+                            )
                             log_audit_entry(
                                 event_type=f"{event_prefix}_vlm_added",
                                 msg="[Vision Context] Добавлен контекст от VisualModule.",
@@ -657,7 +751,11 @@ def add_vision_context_to_system_prompt(
         if visual_data and visual_data.get("confidence", 0) > 0.5:
             ocr_yolo_summary = visual_data.get("summary", "")
             final_prompt = (
-                f"{base_system_prompt}\n\n[Visual Context]: {ocr_yolo_summary}"
+                f"{base_system_prompt}\n\n[CONTEXT:VISUAL]: {ocr_yolo_summary}"
+                "\n\n[INSTRUCTION]\n"
+                "You currently see on the user's screen: "
+                f"{ocr_yolo_summary}. Reference relevant visual details in "
+                "your reply when helpful."
             )
             log_audit_entry(
                 event_type=f"{event_prefix}_ocr_yolo_added",

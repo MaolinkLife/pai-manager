@@ -5,6 +5,9 @@ import signal
 import sys
 
 
+sys.dont_write_bytecode = True
+
+
 def load_ports():
     with open(os.path.join("config", "port-config.json"), encoding="utf-8") as f:
         data = json.load(f)

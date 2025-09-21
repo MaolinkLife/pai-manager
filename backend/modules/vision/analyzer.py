@@ -1,27 +1,26 @@
-# services/vision_analyzer.py
+"""
+Vision Analyzer: Analyzes visual signals from captured frames.
+Includes YOLO object detection, OCR text extraction, SSIM comparison, and optical flow.
+"""
 
 import cv2
 import numpy as np
 from typing import List, Tuple, Dict, Any, Optional
-from services.yolo_detector import YOLODetector
 
-# Для OCR можно использовать pytesseract или easyocr
+# Optional OCR
 try:
     import pytesseract
 
     OCR_AVAILABLE = True
 except ImportError:
     OCR_AVAILABLE = False
-    print(
-        "[Vision] OCR не доступен. Установите pytesseract для оптического распознавания"
-    )
+    print("[Vision] OCR not available. Install pytesseract for OCR support.")
 
 
 class VisionAnalyzer:
-    """Анализатор визуальных сигналов (инструменты)"""
+    """Analyzes visual signals (tools)."""
 
     def __init__(self):
-        # Ключевые слова для экранов смерти
         self.keywords = {
             "en": [
                 "you died",
@@ -46,7 +45,9 @@ class VisionAnalyzer:
             ],
         }
 
-        # YOLO
+        # YOLO detector
+        from services.yolo_detector import YOLODetector
+
         self.yolo_detector = YOLODetector(
             model_path="storage/models/yolov8n.pt",
             conf_threshold=0.5,
@@ -54,13 +55,13 @@ class VisionAnalyzer:
 
     # === YOLO ===
     def detect_objects_yolo(self, frame: np.ndarray) -> List[Dict]:
-        """Обнаруживает объекты на кадре с помощью YOLO"""
+        """Detect objects in a frame using YOLO."""
         return self.yolo_detector.detect(frame)
 
     def summarize_yolo_detections(self, detections: List[Dict]) -> str:
-        """Создаёт краткое текстовое описание детекций"""
+        """Generate a text summary of YOLO detections."""
         if not detections:
-            return "Ничего не обнаружено."
+            return "Nothing detected."
 
         object_counts = {}
         for det in detections:
@@ -69,16 +70,13 @@ class VisionAnalyzer:
 
         summary_parts = []
         for obj, count in object_counts.items():
-            if count == 1:
-                summary_parts.append(f"один {obj}")
-            else:
-                summary_parts.append(f"{count} {obj}")
+            summary_parts.append(f"{count} {obj}" if count > 1 else f"one {obj}")
 
-        return f"Вижу: {', '.join(summary_parts)}."
+        return f"I see: {', '.join(summary_parts)}."
 
     # === OCR ===
     def extract_text_with_ocr(self, frame: np.ndarray) -> Tuple[str, float]:
-        """Извлекает текст из изображения (OCR)"""
+        """Extract text from image using OCR."""
         if not OCR_AVAILABLE:
             return "", 0.0
 
@@ -98,12 +96,12 @@ class VisionAnalyzer:
             text = pytesseract.image_to_string(thresh, lang="eng+rus")
             return text.strip(), 0.8
         except Exception as e:
-            print(f"[Vision] OCR ошибка: {e}")
+            print(f"[Vision] OCR error: {e}")
             return "", 0.0
 
     # === SSIM ===
     def calculate_ssim(self, img1: np.ndarray, img2: np.ndarray) -> float:
-        """Рассчитать SSIM между двумя изображениями"""
+        """Calculate SSIM between two images."""
         try:
             gray1 = (
                 cv2.cvtColor(img1, cv2.COLOR_BGR2GRAY) if len(img1.shape) == 3 else img1
@@ -116,7 +114,7 @@ class VisionAnalyzer:
             return 1.0
 
     def _simple_ssim(self, img1: np.ndarray, img2: np.ndarray) -> float:
-        """Упрощённый расчёт SSIM"""
+        """Simplified SSIM calculation."""
         img1 = img1.astype(np.float64)
         img2 = img2.astype(np.float64)
 
@@ -134,7 +132,7 @@ class VisionAnalyzer:
     def calculate_optical_flow(
         self, prev_frame: np.ndarray, curr_frame: np.ndarray
     ) -> Dict[str, Any]:
-        """Рассчитать оптический поток между кадрами"""
+        """Calculate optical flow between two frames."""
         try:
             prev_gray = cv2.cvtColor(prev_frame, cv2.COLOR_BGR2GRAY)
             curr_gray = cv2.cvtColor(curr_frame, cv2.COLOR_BGR2GRAY)
@@ -147,10 +145,15 @@ class VisionAnalyzer:
             dx, dy = mean_flow[0], mean_flow[1]
             magnitude = np.sqrt(dx**2 + dy**2)
 
-            if abs(dy) > abs(dx):
-                direction = "down" if dy > 0 else "up"
-            else:
-                direction = "right" if dx > 0 else "left"
+            direction = (
+                "down"
+                if abs(dy) > abs(dx) and dy > 0
+                else (
+                    "up"
+                    if abs(dy) > abs(dx) and dy < 0
+                    else "right" if dx > 0 else "left"
+                )
+            )
 
             return {
                 "direction": direction,
@@ -159,12 +162,12 @@ class VisionAnalyzer:
                 "flow_y": float(dy),
             }
         except Exception as e:
-            print(f"[Vision] Ошибка оптического потока: {e}")
+            print(f"[Vision] Optical flow error: {e}")
             return {"direction": "unknown", "magnitude": 0.0}
 
     # === Death screen ===
     def detect_death_screen(self, text: str, language: str = "ru-RU") -> Optional[str]:
-        """Обнаружить экран смерти по ключевым словам"""
+        """Detect death screen by keywords."""
         text_lower = text.lower()
         keywords = (
             self.keywords["ru"] if language.startswith("ru") else self.keywords["en"]

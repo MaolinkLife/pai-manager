@@ -15,35 +15,14 @@ def extract_keywords(text: str) -> list:
 
 
 # Поиск фрагментов по ключевым словам
-def retrieve_lore_fragments(user_input: str, max_results=3) -> list:
-    keywords = extract_keywords(user_input)
-    if not keywords:
-        log_audit_entry(
-            event_type="rag_keywords",
-            msg="Ключевые слова не найдены",
-            status=AuditStatus.ERROR,
-            details={"input": user_input}
-        )
-        return []
-
-    results = []
-    for word in keywords:
-        found = lorebook_service.get_lore_by_keyword(word, limit=1)
-        if found:
-            results.extend(found)
-        if len(results) >= max_results:
-            break
-
-    log_audit_entry(
-        event_type="rag_lookup",
-        msg=f"Найдено {len(results)} фрагментов",
-        status=AuditStatus.INFO,
-        details={
-            "keywords": keywords,
-            "results": [r["title"] for r in results]
-        }
-    )
-    return results
+def retrieve_lore_fragments(text):
+    try:
+        for word in text.split():
+            found = lorebook_service.get_lore_by_keyword(word, limit=1)
+            # process `found`
+    except Exception as e:
+        print(f"Error retrieving lore for word '{word}': {e}")
+        raise  # re-raise if you want it to propagate
 
 
 # Форматирование для промпта
@@ -52,13 +31,15 @@ def format_lore_block(lore_entries: list) -> str:
         return ""
 
     header = "[LOREBOOK CONTEXT]\n"
-    block = "\n".join([f"• {entry['title']}: {entry['content']}" for entry in lore_entries])
+    block = "\n".join(
+        [f"• {entry['title']}: {entry['content']}" for entry in lore_entries]
+    )
 
     log_audit_entry(
         event_type="rag_format",
         msg="Сформирован блок лора",
         status=AuditStatus.INFO,
-        details={"entries_count": len(lore_entries)}
+        details={"entries_count": len(lore_entries)},
     )
 
     return f"{header}{block}\n"
