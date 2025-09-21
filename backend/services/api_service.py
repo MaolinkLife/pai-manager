@@ -19,6 +19,7 @@ import re
 from datetime import datetime
 from services.config_service import get_config_value
 from fastapi import WebSocket
+from starlette.websockets import WebSocketDisconnect
 from datetime import datetime, timezone
 from services import ollama_service, database_service
 from services.logger_service import log_audit_entry, AuditStatus
@@ -270,6 +271,13 @@ async def run_standard(
 # Streaming generation
 # ===========================================================
 async def run_stream_message(websocket: WebSocket, history: list):
+    async def safe_send(payload: dict) -> bool:
+        try:
+            await websocket.send_json(payload)
+            return True
+        except (WebSocketDisconnect, RuntimeError):
+            return False
+
     log_audit_entry(
         event_type="ApiService.RunStream",
         msg="[Api Service]: Start streaming generation",
@@ -326,13 +334,14 @@ async def run_stream_message(websocket: WebSocket, history: list):
             timestamp=normalize_timestamp(last_user_message.get("timestamp")),
         )
         if last_user_message.get("id"):
-            await websocket.send_json(
+            if not await safe_send(
                 {
                     "type": "ack_message",
                     "tempId": last_user_message.get("id"),
                     "realId": user_message_obj.id,
                 }
-            )
+            ):
+                return
 
     raw_chunks: list[str] = []
     buffer: list[str] = []
@@ -347,14 +356,15 @@ async def run_stream_message(websocket: WebSocket, history: list):
         if not chunk:
             continue
         if "error" in chunk:
-            await websocket.send_json({"type": "error", "message": chunk["error"]})
+            await safe_send({"type": "error", "message": chunk["error"]})
             return
 
         content = chunk.get("message", {}).get("content", "")
         if isinstance(content, str) and content:
-            await websocket.send_json(
+            if not await safe_send(
                 {"type": "message_chunk", "role": "assistant", "content": content}
-            )
+            ):
+                return
             raw_chunks.append(content)
 
             speech_chunk, _, streaming_in_reasoning = strip_reasoning_from_chunk(
@@ -405,7 +415,7 @@ async def run_stream_message(websocket: WebSocket, history: list):
             )
 
     # Final message pushed to the client
-    await websocket.send_json(
+    await safe_send(
         {
             "type": "message",
             "id": assistant_message_obj.id if assistant_message_obj else None,

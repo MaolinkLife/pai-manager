@@ -14,6 +14,8 @@ from constants.settings import (
     DEFAULT_HOST,
     PROJECT_NAME,
 )
+from services import ollama_service
+
 
 
 class CognitiveAnalyzer:
@@ -93,6 +95,34 @@ class CognitiveAnalyzer:
             return result
 
         except Exception as e:
+            if self._is_rate_limited(e):
+                log_audit_entry(
+                    "cognitive_analyzer_rate_limit",
+                    "[Cognitive Analyzer] Rate limit hit; attempting local fallback.",
+                    AuditStatus.WARNING,
+                    details={"error": str(e)},
+                )
+                try:
+                    result = self._call_local_fallback(user_message, context)
+                    log_audit_entry(
+                        "cognitive_analyzer_fallback_success",
+                        "[Cognitive Analyzer] Local fallback completed successfully.",
+                        AuditStatus.SUCCESS,
+                        details={"result_preview": str(result)},
+                    )
+                    return result
+                except Exception as fallback_error:
+                    log_audit_entry(
+                        "cognitive_analyzer_fallback_error",
+                        f"[Cognitive Analyzer] Local fallback failed: {fallback_error}",
+                        AuditStatus.ERROR,
+                        details={
+                            "error": str(fallback_error),
+                            "error_type": type(fallback_error).__name__,
+                        },
+                    )
+                    return None
+
             log_audit_entry(
                 "cognitive_analyzer_error",
                 f"[Cognitive Analyzer] Error during analysis: {e}",
@@ -156,6 +186,52 @@ class CognitiveAnalyzer:
         )
 
         return result
+
+    def _is_rate_limited(self, error: Exception) -> bool:
+        message = str(error).lower()
+        return "rate limit" in message or "429" in message
+
+    def _call_local_fallback(
+        self, user_message: str, context: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        user_prompt_content = f'User message: "{user_message}"'
+        if context:
+            user_prompt_content += (
+                f"\n\nContext:\n{json.dumps(context, ensure_ascii=False, indent=2)}"
+            )
+
+        history = [
+            {"role": "system", "content": COGNITIVE_ANALYSIS_PROMPT},
+            {"role": "user", "content": user_prompt_content},
+        ]
+
+        options = {
+            "temperature": DEFAULT_TEMPERATURE,
+            "max_tokens": DEFAULT_MAX_TOKENS,
+        }
+
+        log_audit_entry(
+            "cognitive_analyzer_fallback_request",
+            "[Cognitive Analyzer] Sending request to local model.",
+            AuditStatus.INFO,
+        )
+
+        response = ollama_service.api_standard(history, options)
+        assistant_content = (
+            response.get("message", {}).get("content", "")
+            if isinstance(response, dict)
+            else ""
+        )
+
+        if not assistant_content.strip():
+            raise ValueError("Local fallback returned empty response.")
+
+        try:
+            return json.loads(assistant_content)
+        except json.JSONDecodeError as decode_error:
+            raise ValueError(
+                f"Local fallback produced non-JSON response: {assistant_content}"
+            ) from decode_error
 
 
 # Global singleton instance

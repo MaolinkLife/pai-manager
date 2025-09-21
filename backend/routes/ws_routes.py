@@ -9,27 +9,46 @@ from core.decision_layer import decision_layer
 ws_router = APIRouter(prefix="/api", tags=["WebSocket"])
 
 
+async def _safe_send_json(websocket: WebSocket, payload: dict) -> bool:
+    try:
+        await websocket.send_json(payload)
+        return True
+    except (WebSocketDisconnect, RuntimeError):
+        return False
+
+
 @ws_router.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await manager.connect(websocket)
     try:
         while True:
-            raw_data = await websocket.receive_text()
+            try:
+                raw_data = await websocket.receive_text()
+            except WebSocketDisconnect:
+                break
+            except RuntimeError:
+                # WebSocket may not be connected or already closed
+                break
+
             print(f"[WS] ⬅️ From client: {raw_data}")
 
             try:
                 payload = json.loads(raw_data)
             except json.JSONDecodeError:
-                await websocket.send_json({"type": "error", "message": "Invalid JSON"})
+                if not await _safe_send_json(
+                    websocket, {"type": "error", "message": "Invalid JSON"}
+                ):
+                    break
                 continue
 
             action = payload.get("action")
             data = payload.get("payload", {})
 
             if not action:
-                await websocket.send_json(
-                    {"type": "error", "message": "Missing 'action'"}
-                )
+                if not await _safe_send_json(
+                    websocket, {"type": "error", "message": "Missing 'action'"}
+                ):
+                    break
                 continue
 
             # === ROUTING ===
@@ -57,7 +76,10 @@ async def websocket_endpoint(websocket: WebSocket):
                     import traceback
 
                     traceback.print_exc()  # For debugging
-                    await websocket.send_json({"type": "error", "message": str(e)})
+                    if not await _safe_send_json(
+                        websocket, {"type": "error", "message": str(e)}
+                    ):
+                        break
 
             elif action == "fetch_history":
                 limit = data.get("limit", 32)
@@ -65,54 +87,73 @@ async def websocket_endpoint(websocket: WebSocket):
                     "char_name", "default_waifu"
                 )
                 history = database_service.get_history(char_name, limit)
-                await websocket.send_json({"type": "history", "items": history})
+                if not await _safe_send_json(
+                    websocket, {"type": "history", "items": history}
+                ):
+                    break
 
             elif action == "delete_message":
                 message_id = data.get("message_id")
                 chain = data.get("chain", False)
                 if not message_id:
-                    await websocket.send_json(
-                        {"type": "error", "message": "message_id required"}
-                    )
+                    if not await _safe_send_json(
+                        websocket, {"type": "error", "message": "message_id required"}
+                    ):
+                        break
                 else:
                     if chain:
                         database_service.delete_message_chain(message_id)
-                        await websocket.send_json(
+                        if not await _safe_send_json(
+                            websocket,
                             {
                                 "type": "deleted",
                                 "message_id": message_id,
                                 "chain": True,
-                            }
-                        )
+                            },
+                        ):
+                            break
                     else:
                         database_service.delete_message(message_id)
-                        await websocket.send_json(
+                        if not await _safe_send_json(
+                            websocket,
                             {
                                 "type": "deleted",
                                 "message_id": message_id,
                                 "chain": False,
-                            }
-                        )
+                            },
+                        ):
+                            break
 
             elif action == "reroll_message":
                 message_id = data.get("message_id")
                 if not message_id:
-                    await websocket.send_json(
-                        {"type": "error", "message": "message_id required"}
-                    )
+                    if not await _safe_send_json(
+                        websocket, {"type": "error", "message": "message_id required"}
+                    ):
+                        break
                 else:
                     new_msg = await database_service.reroll_message(
                         message_id
                     )  # Added await
-                    await websocket.send_json(
-                        {"type": "reroll", "old_id": message_id, "new_message": new_msg}
-                    )
+                    if not await _safe_send_json(
+                        websocket,
+                        {
+                            "type": "reroll",
+                            "old_id": message_id,
+                            "new_message": new_msg,
+                        },
+                    ):
+                        break
 
             else:
-                await websocket.send_json(
-                    {"type": "error", "message": f"Unknown action '{action}'"}
-                )
+                if not await _safe_send_json(
+                    websocket,
+                    {"type": "error", "message": f"Unknown action '{action}'"},
+                ):
+                    break
 
     except WebSocketDisconnect:
         manager.disconnect(websocket)
         print("[WS] ⚠️ Client disconnected")
+    finally:
+        manager.disconnect(websocket)
