@@ -83,10 +83,10 @@ def save_lorebook_entries(entries: List[Dict[str, Any]]) -> bool:
 
 
 def add_lorebook_entry(entry: Dict[str, Any]) -> bool:
-    """Добавить новую запись в Lorebook"""
+    """Add a new entry to the lorebook."""
     entries = get_lorebook_entries()
 
-    # Генерируем ID если его нет
+    # Generate an ID if the entry does not have one
     if "id" not in entry:
         entry["id"] = max([e.get("id", 0) for e in entries], default=0) + 1
 
@@ -95,7 +95,7 @@ def add_lorebook_entry(entry: Dict[str, Any]) -> bool:
 
 
 def update_lorebook_entry(entry_id: int, updated_entry: Dict[str, Any]) -> bool:
-    """Обновить запись в Lorebook"""
+    """Update a lorebook entry."""
     entries = get_lorebook_entries()
 
     for i, entry in enumerate(entries):
@@ -107,7 +107,7 @@ def update_lorebook_entry(entry_id: int, updated_entry: Dict[str, Any]) -> bool:
 
 
 def delete_lorebook_entry(entry_id: int) -> bool:
-    """Удалить запись из Lorebook"""
+    """Delete a lorebook entry."""
     entries = get_lorebook_entries()
     entries = [entry for entry in entries if entry.get("id") != entry_id]
     return save_lorebook_entries(entries)

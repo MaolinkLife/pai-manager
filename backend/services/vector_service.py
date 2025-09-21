@@ -14,7 +14,7 @@ _collection = _client.get_or_create_collection(
     metadata={"hnsw:space": "cosine"}
 )
 
-# Используем cosine similarity вместо L2
+# Use cosine similarity instead of L2 distance
 _collection = _client.get_or_create_collection(
     name="pai_memory",
     metadata={"hnsw:space": "cosine"}
@@ -33,9 +33,7 @@ def add_texts(texts, embeddings, metadatas=None):
     )
 
 def search(query_embedding, top_k=3):
-    """
-    Найти ближайшие документы по эмбеддингу
-    """
+    """Find the nearest documents by embedding."""
     results = _collection.query(
         query_embeddings=[query_embedding],
         n_results=top_k,

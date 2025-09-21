@@ -16,7 +16,7 @@ from sqlalchemy.orm import sessionmaker, declarative_base
 DB_PATH = os.path.join("storage", "database", "core.db")
 DB_URL = f"sqlite:///{DB_PATH}"
 
-# In the future можно переключить на Postgres через ENV:
+# In the future you can switch to Postgres via ENV:
 # DB_URL = os.getenv("DB_URL", f"sqlite:///{DB_PATH}")
 
 # =======================

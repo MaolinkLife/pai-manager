@@ -159,7 +159,7 @@ class AppConfig(BaseModel):
     generate_settings: GenerateSettingsConfig = GenerateSettingsConfig()
 
     class Config:
-        # Позволяет использовать произвольные типы
+        # Allow arbitrary non-primitive field types
         arbitrary_types_allowed = True
 
 

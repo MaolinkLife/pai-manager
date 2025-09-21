@@ -8,27 +8,25 @@ from io import BytesIO
 
 
 def get_monitor_screens() -> List[Dict[str, Any]]:
-    """
-    Получить список доступных мониторов с превьюшками
-    """
+    """Return available monitors along with preview thumbnails."""
     try:
         monitors_info = []
 
         with mss.mss() as sct:
-            # Первый элемент - объединённый экран, остальные - отдельные мониторы
-            monitors = sct.monitors[1:]  # Пропускаем объединённый экран
+            # Skip the first entry (combined display); the rest are individual monitors
+            monitors = sct.monitors[1:]
 
             for i, monitor in enumerate(monitors):
                 try:
-                    # Захватываем скриншот монитора
+                    # Capture a screenshot of the monitor
                     screenshot = sct.grab(monitor)
                     frame = np.array(screenshot)
 
-                    # Конвертируем BGRA в BGR
+                    # Convert BGRA to BGR
                     if frame.shape[2] == 4:
                         frame = cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR)
 
-                    # Даунскейлим для превью (максимум 300px по ширине)
+                    # Downscale for preview (max width 300px)
                     max_preview_width = 300
                     if frame.shape[1] > max_preview_width:
                         h, w = frame.shape[:2]
@@ -41,7 +39,7 @@ def get_monitor_screens() -> List[Dict[str, Any]]:
                     else:
                         preview_frame = frame
 
-                    # Конвертируем в JPEG и кодируем в base64
+                    # Convert to JPEG and encode as base64
                     _, buffer = cv2.imencode(
                         ".jpg", preview_frame, [cv2.IMWRITE_JPEG_QUALITY, 80]
                     )
@@ -59,7 +57,7 @@ def get_monitor_screens() -> List[Dict[str, Any]]:
                     )
 
                 except Exception as e:
-                    # Если не удалось получить превью, добавляем без него
+                    # If preview generation fails, add the monitor without it
                     monitors_info.append(
                         {
                             "index": i,
@@ -79,15 +77,13 @@ def get_monitor_screens() -> List[Dict[str, Any]]:
 
 
 def get_monitor_info() -> Dict[str, Any]:
-    """
-    Получить информацию о мониторах
-    """
+    """Return basic information about the monitors."""
     try:
         with mss.mss() as sct:
             monitors = sct.monitors
             return {
                 "total_monitors": len(monitors)
-                - 1,  # -1 потому что первый элемент - объединённый экран
+                - 1,  # subtract 1 because the first element is the combined screen
                 "monitors": [
                     {
                         "index": i,

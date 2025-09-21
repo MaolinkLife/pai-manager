@@ -62,7 +62,7 @@ def get_config() -> dict:
 def save_config(new_data: dict):
     global _config_cache
 
-    # Валидация
+    # Validation
     is_valid, errors = validate_config(new_data)
     if not is_valid:
         log_audit_entry(
@@ -107,13 +107,13 @@ def set_config_value(path: str, value: Any) -> bool:
         config = get_config()
         ref = config
 
-        # Дойдём до нужного уровня, создавая промежуточные словари если нужно
+        # Reach the required level, creating intermediate dicts when necessary
         for key in keys[:-1]:
             if key not in ref or not isinstance(ref[key], dict):
                 ref[key] = {}
             ref = ref[key]
 
-        # Установим значение
+        # Assign the value
         ref[keys[-1]] = value
         save_config(config)
         return True
@@ -131,7 +131,7 @@ def _recursive_update(
     existing: dict, updates: dict, path: str = ""
 ) -> tuple[list, list]:
     """
-    Рекурсивно обновляет конфиг, возвращает список успешно обновлённых и неудачных путей
+    Recursively update the config, returning lists of success and failure paths.
     """
     updated = []
     failed = []
@@ -139,7 +139,7 @@ def _recursive_update(
     for key, value in updates.items():
         current_path = f"{path}.{key}" if path else key
 
-        # Защита от изменения user_id если он уже установлен
+        # Protect existing user_id from being overwritten
         if current_path == "user_id":
             if existing.get(key) not in [None, ""]:
                 failed.append(
@@ -151,17 +151,17 @@ def _recursive_update(
                 continue
 
         if isinstance(value, dict) and isinstance(existing.get(key), dict):
-            # Рекурсивно обновляем вложенные объекты
+            # Recursively update nested dictionaries
             u, f = _recursive_update(existing[key], value, current_path)
             updated.extend(u)
             failed.extend(f)
         else:
-            # Обновляем простое значение
+            # Update a simple value
             old_value = existing.get(key)
             existing[key] = value
             updated.append(current_path)
 
-            # Логируем изменение
+            # Log the change
             log_audit_entry(
                 event_type="config_key_updated",
                 msg=f"[Config Service]: Config key updated: {current_path}",
@@ -178,18 +178,18 @@ def _recursive_update(
 
 def validate_config(config: dict) -> tuple[bool, list]:
     """
-    Базовая валидация конфига
-    Возвращает (валиден, список ошибок)
+    Basic validation of the config.
+    Returns (is_valid, list_of_errors).
     """
     errors = []
 
-    # Проверим обязательные поля
+    # Check required fields
     required_fields = ["user_id", "char_name", "user_name", "language"]
     for field in required_fields:
         if field not in config or config[field] is None:
             errors.append(f"Missing required field: {field}")
 
-    # Проверим структуру voice
+    # Validate voice section
     if "voice" in config:
         voice = config["voice"]
         if not isinstance(voice, dict):
@@ -197,7 +197,7 @@ def validate_config(config: dict) -> tuple[bool, list]:
         elif voice.get("enabled") and not voice.get("voice_language"):
             errors.append("voice_language is required when voice is enabled")
 
-    # Проверим API настройки
+    # Validate API settings
     if "api" in config:
         api = config["api"]
         if not isinstance(api, dict):
@@ -205,7 +205,7 @@ def validate_config(config: dict) -> tuple[bool, list]:
         elif not api.get("model"):
             errors.append("api.model is required")
 
-    # Проверим новые поля
+    # Validate newly added sections
     if "audio" in config and not isinstance(config["audio"], dict):
         errors.append("audio must be an object")
 
@@ -271,23 +271,23 @@ def apply_preset_by_name(preset_name: str) -> bool:
 
 def get_user_config(user_id: str) -> dict:
     """
-    Получает конфиг для конкретного пользователя
-    Пока возвращает общий конфиг, но готовимся к БД
+    Retrieve config for a specific user.
+    Currently returns the global config but prepares for DB support.
     """
     config = get_config()
     if config.get("user_id") == user_id:
         return config
-    # TODO: В будущем будет загрузка из БД
+    # TODO: Load per-user config from the DB in the future
     return config
 
 
 def save_user_config(user_id: str, config: dict) -> bool:
     """
-    Сохраняет конфиг пользователя
-    Пока сохраняет общий конфиг, но готовимся к БД
+    Save a user's config.
+    Currently saves the global config but prepares for DB support.
     """
     if get_config().get("user_id") == user_id:
         save_config(config)
         return True
-    # TODO: В будущем будет сохранение в БД
+    # TODO: Persist per-user config to the DB in the future
     return False

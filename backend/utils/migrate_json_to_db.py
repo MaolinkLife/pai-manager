@@ -3,10 +3,10 @@ import json
 from datetime import datetime, timezone
 from services import database_service
 
-# 📁 Директория с файлами истории
+# 📁 Directory with exported history files
 HISTORY_DIR = os.path.join("storage", "history")
 
-# 🔍 Ключи, которые обязательны в каждом сообщении
+# 🔍 Keys that must be present in every message
 REQUIRED_KEYS = {"role", "content", "timestamp"}
 
 

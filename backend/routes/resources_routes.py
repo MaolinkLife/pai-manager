@@ -1,4 +1,4 @@
-# routes/resources_routes.py (обновлённый)
+# routes/resources_routes.py (updated)
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from services.logger_service import get_debug_log
@@ -6,7 +6,7 @@ from services.resource_service import get_audio_resources
 from services.monitor_service import (
     get_monitor_screens,
     get_monitor_info,
-)  # Добавляем импорт
+)  # Add import
 
 router = APIRouter(prefix="/api/resources", tags=["Resources"])
 
@@ -23,12 +23,10 @@ def get_audio_devices():
         }
 
 
-# НОВЫЙ ENDPOINT - Получение скриншотов мониторов
+# NEW ENDPOINT - Fetch monitor screenshots
 @router.get("/monitors/screens")
 def get_monitor_screens_endpoint():
-    """
-    Получить список мониторов с превьюшками для выбора в UI
-    """
+    """Return monitors with thumbnails for UI selection."""
     try:
         monitors = get_monitor_screens()
         return {"status": "success", "monitors": monitors}
@@ -40,12 +38,10 @@ def get_monitor_screens_endpoint():
         }
 
 
-# Дополнительный endpoint для получения информации о мониторах
+# Additional endpoint for retrieving monitor information
 @router.get("/monitors/info")
 def get_monitor_info_endpoint():
-    """
-    Получить информацию о мониторах без превьюшек
-    """
+    """Return monitor information without thumbnails."""
     try:
         info = get_monitor_info()
         return {"status": "success", "data": info}

@@ -123,10 +123,10 @@ def delete_message(message_id: str) -> bool:
 
 
 def delete_message_chain(user_message_id: str) -> int:
-    """Удаление цепочки сообщений (пользователь + ассистент)"""
+    """Delete a message pair (user + assistant)."""
     session: Session = SessionLocal()
     try:
-        # Находим пользовательское сообщение
+        # Locate the user message
         user_msg = (
             session.query(History)
             .options(joinedload(History.reasoning))
@@ -136,7 +136,7 @@ def delete_message_chain(user_message_id: str) -> int:
         if not user_msg or user_msg.role != "user":
             return 0
 
-        # Находим следующее сообщение ассистента
+        # Locate the following assistant reply
         assistant_msg = (
             session.query(History)
             .options(joinedload(History.reasoning))
@@ -168,7 +168,7 @@ def delete_message_chain(user_message_id: str) -> int:
 
 
 def get_message_by_id(message_id: str):
-    """Получение сообщения по ID"""
+    """Fetch a message by its ID."""
     session: Session = SessionLocal()
     try:
         message = session.query(History).filter_by(id=message_id).first()
@@ -187,7 +187,7 @@ def get_message_by_id(message_id: str):
 
 
 def get_full_history(character_id: str):
-    """Получение полной истории"""
+    """Fetch the entire conversation history."""
     session: Session = SessionLocal()
     try:
         messages = (
@@ -252,10 +252,10 @@ def get_last_messages(character_id: str, limit: int = 10):
 
 
 # =========================
-# REROLL функционал
+# REROLL functionality
 # =========================
 def get_message_from_database(session, filters: dict, expected_role: str = None):
-    """Получение сообщения по фильтрам"""
+    """Fetch a message by filters."""
     query = session.query(History).filter_by(**filters)
     result = query.first()
 
@@ -271,7 +271,7 @@ def get_message_from_database(session, filters: dict, expected_role: str = None)
 
 
 def get_last_user_message_before(session, character_id, before_timestamp):
-    """Получение последнего пользовательского сообщения до определенного времени"""
+    """Get the last user message before a specific timestamp."""
     result = (
         session.query(History)
         .filter(
@@ -290,7 +290,7 @@ def get_last_user_message_before(session, character_id, before_timestamp):
 
 
 def delete_messages_from_database(session, messages: list):
-    """Удаление списка сообщений"""
+    """Delete a list of messages within an existing session."""
     try:
         for msg in messages:
             session.delete(msg)
@@ -301,11 +301,11 @@ def delete_messages_from_database(session, messages: list):
 
 
 def build_history_up_to_user_message(session, character_id, user_msg, limit=32):
-    """Сбор истории до пользовательского сообщения"""
+    """Build history up to a given user message."""
     try:
         user_timestamp = user_msg.timestamp
 
-        # Берем последние N сообщений ДО пользовательского сообщения
+        # Collect the last N messages before the user message
         history_before_user = (
             session.query(History)
             .filter(
@@ -316,7 +316,7 @@ def build_history_up_to_user_message(session, character_id, user_msg, limit=32):
             .all()
         )
 
-        # Переворачиваем, чтобы время шло вперед
+        # Reverse so that timestamps go forward
         history = [
             {
                 "role": msg.role,
@@ -326,7 +326,7 @@ def build_history_up_to_user_message(session, character_id, user_msg, limit=32):
             for msg in reversed(history_before_user)
         ]
 
-        # Вставляем само пользовательское сообщение в конец
+        # Append the user message at the end
         history.append(
             {
                 "role": "user",
@@ -342,12 +342,12 @@ def build_history_up_to_user_message(session, character_id, user_msg, limit=32):
 
 
 async def reroll_assistant_message(message_id: str) -> dict:
-    """Перегенерация сообщения ассистента"""
+    """Regenerate an assistant message."""
     session: Session = SessionLocal()
     try:
         print(f"[DEBUG] Reroll called with message_id: {message_id}")
 
-        # 1. Ищем сообщение ассистента
+        # 1. Locate the assistant message
         try:
             assistant_msg = get_message_from_database(
                 session, filters={"id": message_id}, expected_role="assistant"
@@ -360,7 +360,7 @@ async def reroll_assistant_message(message_id: str) -> dict:
         assistant_timestamp = assistant_msg.timestamp
         print(f"[DEBUG] Assistant timestamp: {assistant_timestamp}")
 
-        # 2. Ищем соответствующее пользовательское сообщение
+        # 2. Locate the paired user message
         user_msg = get_last_user_message_before(
             session,
             character_id=assistant_msg.character_id,
@@ -368,7 +368,7 @@ async def reroll_assistant_message(message_id: str) -> dict:
         )
         print(f"[DEBUG] Found user message: {user_msg.id}")
 
-        # 3. Удаляем сообщения
+        # 3. Delete the existing messages
         print(
             "[DEBUG] Deleting assistant:",
             assistant_msg.id,
@@ -379,15 +379,15 @@ async def reroll_assistant_message(message_id: str) -> dict:
         delete_messages_from_database(session, [assistant_msg, user_msg])
         print(f"[DEBUG] Messages deleted")
 
-        # Проверка — жив ли ассистент
+        # Verify that the assistant message was removed
         check = session.query(History).filter_by(id=assistant_msg.id).first()
         print("[DEBUG] Assistant still in DB?", check is not None)
 
-        # Проверка — жив ли пользователь
+        # Verify that the user message was removed
         check = session.query(History).filter_by(id=user_msg.id).first()
         print("[DEBUG] User still in DB?", check is not None)
 
-        # 4. Собираем историю до пользовательского сообщения
+        # 4. Build history up to the user message
         history = build_history_up_to_user_message(
             session, character_id=user_msg.character_id, user_msg=user_msg, limit=32
         )
@@ -414,6 +414,6 @@ async def reroll_assistant_message(message_id: str) -> dict:
 
 
 def get_lorebook_entries(character_name: str):
-    """Получение записей из лорбука (заглушка)"""
-    # TODO: реализовать работу с лорбуком
+    """Placeholder: fetch lorebook entries (not implemented)."""
+    # TODO: implement lorebook lookup
     return []

@@ -39,7 +39,7 @@ os.makedirs(AUDIO_TEMP_DIR, exist_ok=True)
 
 
 def tts_worker():
-    """Фоновый воркер: берёт (text, devices) и озвучивает"""
+    """Background worker: takes (text, devices) and plays audio."""
     while True:
         item = tts_queue.get()
         if item is None:
@@ -88,12 +88,12 @@ def play_voice_output(file_path):
 
         streams_to_play = []
 
-        # Проверяем, нужно ли воспроизводить на Windows
+        # Check whether playback should happen on the Windows output
         if get_config_value("voice.use_windows_output", True):
             windows_output = get_config_value("voice.windows_output_id", 0)
             streams_to_play.append(windows_output)
 
-        # Проверяем, нужно ли воспроизводить на VBCable
+        # Check whether playback should happen on the virtual cable output
         if get_config_value("voice.use_rvc", False):
             virtual_output = get_config_value("voice.output_id", 0)
             streams_to_play.append(virtual_output)
@@ -132,14 +132,14 @@ def play_voice_output(file_path):
             finally:
                 finished.set()
 
-        # Запускаем воспроизведение на всех устройствах
+        # Start playback on all devices
         for device_id in streams_to_play:
             t = threading.Thread(target=play_on_device, args=(device_id,))
             t.daemon = True
             t.start()
             threads.append(t)
 
-        # Ждём окончания всех устройств (чтобы чанк играл синхронно на обоих)
+        # Wait for every device to finish (keeps chunks in sync)
         for t in threads:
             t.join()
 
@@ -158,7 +158,7 @@ def speak_line(s_message, refuse_pause):
     for i, chunk in enumerate(chunky_message):
         print(f"[Voice] Processing chunk {i+1}/{len(chunky_message)}: {chunk[:30]}...")
 
-        # Убираем проверку в начале - пусть хотя бы этот чанк озвучит
+        # Skip the early check—let it voice at least this chunk
         # if cut_voice:
         #     break
 
@@ -172,12 +172,12 @@ def speak_line(s_message, refuse_pause):
             asyncio.run(generate_tts(clean_chunk, filename))
 
             print(f"[Voice] Playing chunk {i+1}")
-            play_voice_output(filename)  # ← Вот тут может быть прервано
+            play_voice_output(filename)  # ← Playback may be interrupted here
 
             if os.path.exists(filename):
                 os.remove(filename)
 
-            # Проверяем после воспроизведения
+            # Re-check state after playback completes
             if cut_voice:
                 print(f"[Voice] Interrupted after chunk {i+1}")
                 break
@@ -194,7 +194,7 @@ def speak_line(s_message, refuse_pause):
 
 
 # ===========================================================
-# Streaming TTS (новый метод, без файлов и чанков)
+# Streaming TTS (new method without intermediate files or chunks)
 # ===========================================================
 async def stream_speak_line(text: str, devices: list[int]):
     global cut_voice, active_streams
@@ -208,7 +208,7 @@ async def stream_speak_line(text: str, devices: list[int]):
         stream = sd.OutputStream(
             samplerate=24000,
             channels=1,
-            dtype="float32",  # будем конвертировать в float32
+            dtype="float32",  # convert to float32 beforehand
             device=device_id,
         )
         stream.start()
@@ -227,8 +227,8 @@ async def stream_speak_line(text: str, devices: list[int]):
             if chunk["type"] == "audio":
                 buffer.write(chunk["data"])
 
-                # Пробуем декодировать, если накопилось достаточно
-                if buffer.tell() > 8192:  # 8 KB ~ маленький кусок mp3
+                # Try to decode once enough data is accumulated
+                if buffer.tell() > 8192:  # 8 KB ~ small MP3 chunk
                     buffer.seek(0)
                     try:
                         segment = AudioSegment.from_file(buffer, format="mp3")
@@ -240,7 +240,7 @@ async def stream_speak_line(text: str, devices: list[int]):
                             stream.write(samples)
                     except Exception:
                         pass
-                    buffer = io.BytesIO()  # очищаем и начинаем копить заново
+                    buffer = io.BytesIO()  # reset buffer and start accumulating again
     finally:
         for s in streams:
             try:
@@ -269,10 +269,10 @@ def force_cut_voice():
 
     cut_voice = True
 
-    # Останавливаем все активные потоки
+    # Stop all active streams
     with stream_lock:
         if active_streams:
-            sd.stop()  # Останавливаем все потоки sounddevice
+            sd.stop()  # Stop every sounddevice stream
             active_streams.clear()
 
     print("[Voice] All streams stopped")

@@ -20,7 +20,7 @@ def build_memory_context(user_input: str, character: str, max_hits: int = 3) -> 
     if not keywords:
         log_audit_entry(
             event_type="memory_keywords",
-            msg="❌ Нет ключевых слов для памяти",
+            msg="❌ No keywords extracted for memory",
             status=AuditStatus.WARNING,
             details={"input": user_input}
         )
@@ -55,7 +55,7 @@ def build_memory_context(user_input: str, character: str, max_hits: int = 3) -> 
 
     memory_block = "[MEMORY CONTEXT]\n"
     for r in relevant:
-        timestamp = r.get("timestamp", "неизв.")
+        timestamp = r.get("timestamp", "unknown")
         role = r.get("role", "unknown").capitalize()
         content = r.get("content", "")
         memory_block += f"{timestamp} — {role}: {content}\n"

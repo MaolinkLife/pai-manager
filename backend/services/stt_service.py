@@ -118,7 +118,7 @@ def stop_recording_and_save(filename: str):
 def _save_wave(filename: str, audio: np.ndarray):
     with wave.open(filename, 'wb') as wf:
         wf.setnchannels(CHANNELS)
-        wf.setsampwidth(2)  # int16 → 2 байта
+        wf.setsampwidth(2)  # int16 → 2 bytes
         wf.setframerate(SAMPLE_RATE)
         wf.writeframes(audio.tobytes())
 

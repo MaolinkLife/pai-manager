@@ -1,9 +1,9 @@
-# utils/audio_utils.py (обновленный)
+# utils/audio_utils.py (updated)
 import sounddevice as sd
 
 
 def get_input_devices():
-    """Получить список устройств для записи (входных устройств)"""
+    """Return a list of recording (input) devices."""
     devices = sd.query_devices()
     seen_names = set()
     input_devices = []
@@ -18,7 +18,7 @@ def get_input_devices():
 
 
 def get_output_devices():
-    """Получить список устройств для воспроизведения (выходных устройств)"""
+    """Return a list of playback (output) devices."""
     devices = sd.query_devices()
     seen_names = set()
     output_devices = []
@@ -33,7 +33,7 @@ def get_output_devices():
 
 
 def get_device_name_by_id(device_id, device_type="input"):
-    """Получить имя устройства по ID"""
+    """Return a device name by its ID."""
     if device_type == "input":
         devices = get_input_devices()
     else:
@@ -46,7 +46,7 @@ def get_device_name_by_id(device_id, device_type="input"):
 
 
 def get_windows_output_candidates():
-    """Получить список реальных (не виртуальных) выходных устройств"""
+    """Return a list of non-virtual output devices."""
     virtual_keywords = ["VB", "Cable", "VoiceMeeter", "Virtual", "Voicemod"]
     real_devices = []
 
@@ -58,7 +58,7 @@ def get_windows_output_candidates():
 
 
 def get_all_audio_devices():
-    """Получить все аудиоустройства"""
+    """Return aggregated info for all available audio devices."""
     try:
         input_devices = get_input_devices()
         output_devices = get_output_devices()

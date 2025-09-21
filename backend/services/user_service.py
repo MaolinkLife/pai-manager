@@ -5,7 +5,7 @@ from services.db_core import SessionLocal
 
 
 def get_or_create_user(name: str, trust_level: int = 0):
-    """Получение или создание пользователя"""
+    """Fetch an existing user or create a new one."""
     session: Session = SessionLocal()
     try:
         user = session.query(User).filter_by(name=name).first()
@@ -22,7 +22,7 @@ def get_or_create_user(name: str, trust_level: int = 0):
 
 
 def get_owner():
-    """Получение владельца (пользователя с trust_level=2)"""
+    """Return the owner (user with trust_level = 2)."""
     session: Session = SessionLocal()
     try:
         return session.query(User).filter_by(trust_level=2).first()

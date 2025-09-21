@@ -21,7 +21,7 @@ def ensure_datetime(value):
         return dt
     elif isinstance(value, datetime):
         return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
-    return datetime.now(timezone.utc)  # fallback, на всякий случай
+    return datetime.now(timezone.utc)  # fallback, just in case
 
 def analyze_pattern(messages):
     pattern = [msg["role"] for msg in messages]
@@ -77,7 +77,7 @@ def initiative_monitor():
                         "last_triggered": last_initiative_time.isoformat() if last_initiative_time else None
                     })
             # else:
-            #     print("[LIM] 💤 Пока нет условий для инициативы.")
+            #     print("[LIM] 💤 No conditions for initiative yet.")
                 # log_audit_entry("initiative_conditions_not_met", {"pattern": [msg["role"] for msg in messages]})
 
             time.sleep(CHECK_EVERY)

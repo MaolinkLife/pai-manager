@@ -6,12 +6,12 @@ class StructureEnum(str, Enum):
     ConfigService = '[CONFIG SERVICE]'
     Logger = '[LOGGER]'
     VoiceService = '[VOICE SERVICE]'
-    # Дополняй по вкусу
+    # Extend as needed
 
 def get_structure_label(name: str) -> str:
     """
-    Преобразует имя (например, 'voice_service') в строковый тег из StructureEnum.
-    Возвращает '[CORE]' по умолчанию, если не найдено.
+    Convert a name (e.g., 'voice_service') into a StructureEnum tag.
+    Returns '[CORE]' by default when no match is found.
     """
     camel_case = ''.join(part.capitalize() for part in name.split('_'))
 

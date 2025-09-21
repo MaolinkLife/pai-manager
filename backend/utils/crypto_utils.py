@@ -6,7 +6,7 @@
 # ==========================================================
 
 def encrypt(text: str) -> str:
-    # TODO: заменить на AES/Fernet
+    # TODO: replace with AES/Fernet
     return text
 
 

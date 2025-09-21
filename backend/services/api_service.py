@@ -124,12 +124,12 @@ def load_system_prompt() -> str:
 # ===========================================================
 def build_chat_request(history, include_system=True):
     """
-    Теперь system prompt уже встроен в историю, просто очищаем timestamp
+    System prompt is already embedded in history; we only strip timestamps.
     """
     sanitized_history = [
         {k: v for k, v in msg.items() if k != "timestamp"} for msg in history
     ]
-    # Не добавляем system prompt, он уже есть в истории
+    # Do not append system prompt here; it already exists in history
     return sanitized_history
 
 
@@ -141,7 +141,7 @@ async def run_standard(
 ):
     log_audit_entry(
         event_type="ApiService.RunStandard",
-        msg="[Api Service]: Запущена функция генерации",
+        msg="[Api Service]: Generation function started",
         status=AuditStatus.INFO,
         details={"inputs": {"history": history}},
     )
@@ -158,23 +158,23 @@ async def run_standard(
             system_prompt = msg.get("content")
             break
 
-    # Если system prompt не найден, используем стандартный (fallback)
+    # Fallback to the default system prompt if none was supplied
     if not system_prompt:
         base_system_prompt = load_system_prompt()
         system_prompt = add_vision_context_to_system_prompt(
             base_system_prompt,
             last_user_message["content"] if last_user_message else "",
         )
-        # Добавляем RAG, память и эмоции только если это fallback
+        # Only append RAG, memory, and emotion blocks when using the fallback
         if last_user_message:
             rag_block = format_lore_block(
                 retrieve_lore_fragments(last_user_message["content"])
             )
-            # Используем MemoryLayer для получения контекста
+            # Use MemoryLayer to obtain context
             from core.memory_layer import MemoryLayer
 
             memory_layer = MemoryLayer()
-            # Вместо asyncio.run используем await, так как мы уже в асинхронной функции
+            # Use await instead of asyncio.run because we are already inside an async function
             memory_context = await memory_layer.get_context(last_user_message)
             memory_block = memory_context.get("recent_conversation", "")
 
@@ -282,21 +282,21 @@ async def run_stream_message(websocket: WebSocket, history: list):
     options = get_generation_options_from_config()
     last_user_message = extract_last_user_message(history)
 
-    # Получаем system prompt из истории или создаем стандартный
+    # Extract system prompt from history or build a fallback
     system_prompt = None
     for msg in history:
         if msg.get("role") == "system":
             system_prompt = msg.get("content")
             break
 
-    # Если system prompt не найден, используем стандартный (fallback)
+    # Fallback to the default system prompt if none was supplied
     if not system_prompt:
         base_system_prompt = load_system_prompt()
         system_prompt = add_vision_context_to_system_prompt(
             base_system_prompt,
             last_user_message["content"] if last_user_message else "",
         )
-        # Добавляем RAG, память и эмоции только если это fallback
+        # Only append RAG, memory, and emotion blocks when using the fallback
         if last_user_message:
             rag_block = format_lore_block(
                 retrieve_lore_fragments(last_user_message["content"])
@@ -313,10 +313,10 @@ async def run_stream_message(websocket: WebSocket, history: list):
             if emotion_instruction:
                 system_prompt += f"\n\n[Emotional reaction]:\n{emotion_instruction}"
 
-    # Добавляем system prompt в историю
+    # Insert system prompt at the beginning of the history
     full_history.insert(0, {"role": "system", "content": system_prompt})
 
-    # Save user msg и отправляем ack для пользователя
+    # Save the user message and send ack back to the client
     user_message_obj = None
     if last_user_message:
         user_message_obj = add_message_to_history(
@@ -389,7 +389,7 @@ async def run_stream_message(websocket: WebSocket, history: list):
     assistant_raw = "".join(raw_chunks).strip()
     assistant_content, assistant_reasoning = split_reasoning(assistant_raw)
 
-    # сохраняем ассистентский ответ
+    # Persist the assistant response
     assistant_message_obj = None
     if assistant_content:
         assistant_message_obj = add_message_to_history(
@@ -404,7 +404,7 @@ async def run_stream_message(websocket: WebSocket, history: list):
                 assistant_reasoning,
             )
 
-    # финальное сообщение клиенту
+    # Final message pushed to the client
     await websocket.send_json(
         {
             "type": "message",
@@ -532,7 +532,7 @@ def play_message(msg_id: str):
 
 
 # ===========================================================
-# Vision Context Integration (Добавить в конец файла)
+# Vision Context Integration (Appended at the end of the file)
 # ===========================================================
 def add_vision_context_to_system_prompt(
     base_system_prompt: str, last_user_message_content: str = ""
@@ -541,9 +541,9 @@ def add_vision_context_to_system_prompt(
     Добавляет визуальный контекст к системному промпту.
     Использует FastVLM для детального описания экрана или OCR/YOLO как фолбэк.
     """
-    session_id = "unknown_session"  # На случай, если get_session_id недоступна
+    session_id = "unknown_session"  # In case get_session_id is unavailable
     try:
-        from services.logger_service import get_session_id  # Импорт, если доступен
+        from services.logger_service import get_session_id  # Import if available
 
         session_id = get_session_id()
     except ImportError:
@@ -552,7 +552,7 @@ def add_vision_context_to_system_prompt(
     event_prefix = "vision_context"
 
     if not get_config_value("vision.enabled", False):
-        # Логируем как INFO, так как это штатное поведение
+        # Log as INFO, as this is expected behavior
         log_audit_entry(
             event_type=f"{event_prefix}_disabled",
             msg="[Vision Context] Визуальный модуль отключен в конфигурации.",
@@ -574,8 +574,8 @@ def add_vision_context_to_system_prompt(
         )
         visual_module_instance = VisualModule()
 
-        # --- Определение типа запроса ---
-        # Расширяем список ключевых слов
+        # --- Determine whether this is a vision query ---
+        # Extend the keyword list
         vision_keywords = [
             "видела",
             "заметила",
@@ -605,7 +605,7 @@ def add_vision_context_to_system_prompt(
             meta={"session_id": session_id},
         )
 
-        # --- Получение базового анализа (OCR/YOLO) ---
+        # --- Gather baseline analysis (OCR/YOLO) ---
         log_audit_entry(
             event_type=f"{event_prefix}_analyzing",
             msg="[Vision Context] Запрашиваю анализ у VisionService...",
@@ -628,7 +628,7 @@ def add_vision_context_to_system_prompt(
             meta={"session_id": session_id},
         )
 
-        # --- Попытка использовать FastVLM ---
+        # --- Try using FastVLM ---
         if is_vision_query:
             log_audit_entry(
                 event_type=f"{event_prefix}_vlm_check",
@@ -668,14 +668,14 @@ def add_vision_context_to_system_prompt(
                         import cv2
 
                         img_rgb = cv2.cvtColor(last_frame, cv2.COLOR_BGR2RGB)
-                        # Опционально: уменьшить размер для экономии памяти
+                        # Optionally shrink the image to save memory
                         # pil_img = Image.fromarray(img_rgb)
                         # if pil_img.width > 1024 or pil_img.height > 1024:
                         #     pil_img.thumbnail((1024, 1024), Image.Resampling.LANCZOS)
 
                         pil_img = Image.fromarray(img_rgb)
 
-                        # Вызов FastVLM
+                        # Invoke FastVLM
                         vlm_result = visual_module_instance.describe_image(
                             pil_img,
                             "Describe the screen in detail in English.",
@@ -747,7 +747,7 @@ def add_vision_context_to_system_prompt(
                 meta={"session_id": session_id},
             )
 
-        # --- Фолбэк на OCR/YOLO ---
+        # --- Fallback to OCR/YOLO ---
         if visual_data and visual_data.get("confidence", 0) > 0.5:
             ocr_yolo_summary = visual_data.get("summary", "")
             final_prompt = (
@@ -785,15 +785,15 @@ def add_vision_context_to_system_prompt(
             details={"error": str(e)},
             meta={"session_id": session_id},
         )
-        # В случае ошибки всё равно возвращаем оригинальный промпт, чтобы не сломать основной поток
+        # On error, return the original prompt to avoid breaking the main flow
     finally:
-        # --- Принудительная очистка ресурсов ---
+        # --- Force resource cleanup ---
         if visual_module_instance is not None:
-            # Удаляем ссылку на экземпляр
+            # Remove the cached instance reference
             del visual_module_instance
-            # Принудительно запускаем сборщик мусора
+            # Force garbage collection
             gc.collect()
-            # Если CUDA доступна, очищаем её кэш
+            # Clear CUDA cache when available
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
             log_audit_entry(

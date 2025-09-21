@@ -8,9 +8,9 @@ import torch
 class YOLODetector:
     def __init__(self, model_path: str = "yolov8m.pt", conf_threshold: float = 0.5):
         """
-        Инициализация YOLO-детектора.
-        :param model_path: Путь к весам модели (например, yolov8n.pt)
-        :param conf_threshold: Порог уверенности для детекции
+        Initialize the YOLO detector.
+        :param model_path: Path to model weights (e.g., yolov8n.pt)
+        :param conf_threshold: Confidence threshold for detections
         """
         self.model_path = model_path
         self.conf_threshold = conf_threshold
@@ -19,49 +19,41 @@ class YOLODetector:
         self._load_model()
 
     def _load_model(self):
-        """Загрузка модели YOLO."""
+        """Load the YOLO model."""
         try:
             self.model = YOLO(self.model_path)
-            # Определяем устройство
+            # Select device
             self.device = "cuda" if torch.cuda.is_available() else "cpu"
             self.model.to(self.device)
-            # Получаем имена классов
+            # Read class names
             self.class_names = self.model.names
-            print(f"[YOLO] Модель загружена. Устройство: {self.device}")
+            print(f"[YOLO] Model loaded. Device: {self.device}")
         except Exception as e:
-            print(f"[YOLO] Ошибка загрузки модели: {e}")
+            print(f"[YOLO] Failed to load model: {e}")
             raise
 
     def detect(self, frame: np.ndarray) -> List[Dict]:
         """
-        Обнаружение объектов на одном кадре.
-        :param frame: Изображение в формате numpy.ndarray (BGR)
-        :return: Список обнаруженных объектов:
-                 [
-                     {
-                         "class": "person",
-                         "confidence": 0.92,
-                         "bbox": [x1, y1, x2, y2]
-                     },
-                     ...
-                 ]
+        Detect objects on a single frame.
+        :param frame: Image in numpy ndarray (BGR) format
+        :return: List of detections with class, confidence, and bounding box
         """
         try:
-            # Выполняем предикт
+            # Run inference
             results = self.model(frame, verbose=False, conf=self.conf_threshold)
             detections = []
 
-            # Обрабатываем результаты
+            # Process results
             for result in results:
                 boxes = result.boxes
                 if boxes is not None:
                     for i in range(len(boxes)):
-                        # Извлекаем данные
+                        # Extract data
                         cls_id = int(boxes.cls[i].item())
                         conf = float(boxes.conf[i].item())
                         xyxy = boxes.xyxy[i].cpu().numpy().tolist()
 
-                        # Получаем имя класса
+                        # Map to class name
                         class_name = self.class_names.get(cls_id, f"unknown_{cls_id}")
 
                         detections.append(
@@ -73,5 +65,5 @@ class YOLODetector:
                         )
             return detections
         except Exception as e:
-            print(f"[YOLO] Ошибка при детекции: {e}")
+            print(f"[YOLO] Detection error: {e}")
             return []

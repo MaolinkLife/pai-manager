@@ -11,14 +11,14 @@
 import requests
 from sentence_transformers import SentenceTransformer
 
-# URL Ollama API
+# Ollama API endpoint
 OLLAMA_URL = "http://localhost:11434/api/embeddings"
 
-# Загружаем локальную модель для fallback
+# Load local model for fallback
 _st_model = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
 
 def get_embedding_ollama(text: str, model: str = "nomic-embed-text"):
-    """ Получить эмбеддинг через Ollama """
+    """Retrieve an embedding via Ollama."""
     try:
         payload = {
             "model": model,
@@ -33,7 +33,7 @@ def get_embedding_ollama(text: str, model: str = "nomic-embed-text"):
         return None
 
 def get_embedding_st(text: str):
-    """ Получить эмбеддинг через SentenceTransformers (локально) """
+    """Retrieve an embedding locally via SentenceTransformers."""
     try:
         vec = _st_model.encode([text])
         return vec[0].tolist()
@@ -43,10 +43,10 @@ def get_embedding_st(text: str):
 
 def get_embedding(text: str, provider: str = "auto", model: str = "nomic-embed-text"):
     """
-    Унифицированный метод:
-    - provider="ollama" → только Ollama
-    - provider="st" → только SentenceTransformers
-    - provider="auto" → сначала Ollama, если пусто → ST
+    Unified helper:
+    - provider="ollama" → use Ollama only
+    - provider="st" → use SentenceTransformers only
+    - provider="auto" → try Ollama first, then fall back to ST
     """
     if provider == "ollama":
         return get_embedding_ollama(text, model)

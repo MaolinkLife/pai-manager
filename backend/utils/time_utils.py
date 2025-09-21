@@ -1,11 +1,11 @@
 from datetime import datetime, timezone, timedelta
 
-# Основной часовой пояс пользователя (можно вынести в конфиг)
-USER_TZ_OFFSET = 3  # Москва, Кипр, Стамбул и т.д.
+# Default user time-zone offset (can be moved to config)
+USER_TZ_OFFSET = 3  # Moscow, Cyprus, Istanbul, etc.
 
 def utc_to_user(dt_utc: datetime, tz_offset=USER_TZ_OFFSET):
     """
-    Переводит datetime в локальное время пользователя (напр. +3 часа).
+    Convert UTC datetime to the user's local time (e.g., +3 hours).
     """
     if dt_utc.tzinfo is None:
         dt_utc = dt_utc.replace(tzinfo=timezone.utc)
@@ -13,18 +13,18 @@ def utc_to_user(dt_utc: datetime, tz_offset=USER_TZ_OFFSET):
 
 def now_user(tz_offset=USER_TZ_OFFSET):
     """
-    Получить текущее локальное время пользователя (напр. +3 часа)
+    Get the current user-local datetime (e.g., +3 hours).
     """
     return datetime.utcnow().replace(tzinfo=timezone.utc) + timedelta(hours=tz_offset)
 
 def format_user_datetime(dt: datetime, fmt="%Y-%m-%d %H:%M:%S", tz_offset=USER_TZ_OFFSET):
     """
-    Форматировать дату в строку с учётом сдвига пояса
+    Format datetime as a string using the timezone offset.
     """
     dt_user = utc_to_user(dt, tz_offset)
     return dt_user.strftime(fmt)
 
-# Пример использования
+# Example usage
 # if __name__ == "__main__":
 #     now_utc = datetime.utcnow().replace(tzinfo=timezone.utc)
 #     print("UTC:", now_utc)

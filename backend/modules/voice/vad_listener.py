@@ -26,16 +26,16 @@ class VADListener:
     def __init__(self):
         self.is_listening = False
         self.audio_buffer = deque()
-        self.vad = webrtcvad.Vad(2)  # агрессивность 2
+        self.vad = webrtcvad.Vad(2)  # aggressiveness level 2
         self.speech_detected = False
         self.silence_counter = 0
         self.silence_threshold = 10
         self.vad_threshold = 0.5
         self.sample_rate = 16000
-        self.loop = None  # основной asyncio-цикл для планирования задач из аудио-потока
+        self.loop = None  # main asyncio loop used to schedule tasks from the audio callback
 
     async def start_voice_vad_loop(self):
-        """Точка входа - основной цикл прослушивания"""
+        """Entry point for the main listening loop."""
         if not get_config_value("voice.enabled", False):
             log_audit_entry(
                 event_type="vad_info",
@@ -67,7 +67,7 @@ class VADListener:
                 self.silence_threshold = 10
 
             self.is_listening = True
-            # сохраним текущий asyncio-цикл, чтобы планировать задачи из callback'а
+            # Remember the current event loop so we can schedule tasks from the callback
             self.loop = asyncio.get_running_loop()
 
             def audio_callback(indata, frames, time, status):
@@ -130,14 +130,13 @@ class VADListener:
             self.audio_buffer.append(audio_data.copy())
 
             if self.silence_counter > self.silence_threshold:
-                # планируем обработку сегмента в основном asyncio-цикле
+                # Schedule segment processing on the main asyncio loop
                 if self.loop is not None:
                     asyncio.run_coroutine_threadsafe(
                         self.process_speech_segment(), self.loop
                     )
                 else:
-                    # на всякий случай: если loop не инициализирован, просто сбросим обнаружение
-                    # (такого быть не должно в нормальном пути)
+                    # If the loop is not initialized (should not happen), simply reset detection
                     pass
 
     def is_speech_detected(self, audio_data):
@@ -195,7 +194,7 @@ class VADListener:
 
             audio_segment = np.concatenate(list(self.audio_buffer))
 
-            # Создаем временный WAV файл
+            # Create a temporary WAV file
             with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_file:
                 temp_filename = tmp_file.name
 

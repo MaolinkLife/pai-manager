@@ -1,52 +1,52 @@
-# LIM – Архитектура проекта
+# LIM – Project Architecture
 
-## 📁 Структура проекта
+## 📁 Directory Structure
 
-| Папка / Файл        | Назначение |
-|---------------------|------------|
-| `main.py`           | Точка входа, запускает FastAPI, подключает маршруты, включает CORS |
-| `config/`           | Конфигурационные данные и загрузка параметров |
-| `routes/`           | Эндпоинты API для общения с ИИ и конфигом |
-| `services/`         | Бизнес-логика, промежуточная обработка перед моделью или БД |
-| `core/`             | Основные механизмы Лим: память, эмоции, маршрутизация, поведение |
-| `utils/`            | Утилитарные функции, которые не имеют состояния |
-| `storage_history/`  | Хранение истории общения (если файловая реализация) |
-| `temp/`             | Временные файлы, кэш, логика на стадии разработки |
+| Folder / File        | Purpose |
+|---------------------|---------|
+| `main.py`           | Entry point: starts FastAPI, registers routes, enables CORS |
+| `config/`           | Configuration data and parameter loaders |
+| `routes/`           | API endpoints for interacting with the AI and configuration |
+| `services/`         | Business logic layer between models/DB and the API |
+| `core/`             | Core LIM mechanics: memory, emotions, routing, behaviour |
+| `utils/`            | Stateless helper utilities |
+| `storage_history/`  | Conversation history (when using the file-based implementation) |
+| `temp/`             | Temporary files, caches, work-in-progress logic |
 
 ---
 
-## 🧠 Ключевые файлы и их ответственность
+## 🧠 Key Modules and Responsibilities
 
 ### 📂 `core/`
-- `memory_engine.py` – доступ к БД памяти, CRUD, фильтрации, поиск
-- `router.py` – маршрутизация решений: поведение, выбор реакции
-- `logger.py` – логирование всего происходящего
-- `emotion_engine.py` – определение текущего эмоционального состояния
-- `decision_router.py` – слой принятия решений (реагировать, молчать, уточнить и т.д.)
+- `memory_engine.py` – memory database access (CRUD, filtering, search)
+- `router.py` – decision routing: behaviors and reaction selection
+- `logger.py` – central logging facility
+- `emotion_engine.py` – determine current emotional state
+- `decision_router.py` – decision layer (respond, stay silent, clarify, etc.)
 
 ### 📂 `services/`
-- `memory_service.py` – координация между логикой и `memory_engine`
-- `ollama_service.py` – взаимодействие с локальной моделью
-- `voice_service.py` – TTS и STT
-- `history_service.py` – управление историей общения
-- `api_service.py` – модификация промпта, сборка данных
+- `memory_service.py` – coordination layer over `memory_engine`
+- `ollama_service.py` – interaction with the local model
+- `voice_service.py` – TTS and STT handling
+- `history_service.py` – conversation history management
+- `api_service.py` – prompt shaping and data aggregation
 
 ### 📂 `utils/`
-- `prompt_builder.py` – формирование структуры запросов к LLM
-- `character_loader.py` – загрузка YAML-профиля персонажа
+- `prompt_builder.py` – assemble structured LLM prompts
+- `character_loader.py` – load YAML persona profiles
 
 ---
 
-## 📜 Правила архитектуры
+## 📜 Architecture Rules
 
-- Все файлы должны начинаться с описания их ответственности.
-- Каждый новый модуль должен быть добавлен сюда с коротким описанием.
-- Комментарии в коде обязаны отвечать на вопрос: **“зачем это нужно?”**, а не просто “что делает”.
+- Every file should begin with a short description of its responsibility.
+- Each new module must be listed here with a concise summary.
+- Comments should answer **“why is this needed?”** rather than just “what does it do?”.
 
 ---
 
-## 🚧 В разработке / MVP
+## 🚧 Roadmap / MVP
 
-- Подключение PostgreSQL
-- Разделение видимой и скрытой памяти
-- Внешние API-потоки (Discord, Twitch и пр.) — **будут отдельно**
+- Add PostgreSQL support
+- Split visible vs. hidden memory
+- External API pipelines (Discord, Twitch, etc.) — **planned separately**

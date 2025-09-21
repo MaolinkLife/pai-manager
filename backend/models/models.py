@@ -55,10 +55,10 @@ class Message(Base):
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id = Column(String, ForeignKey("users.uuid"), nullable=False)
-    dialog_id = Column(String, nullable=True)  # группировка по диалогам
+    dialog_id = Column(String, nullable=True)  # group messages by dialog
     role = Column(String, nullable=False)      # 'user' / 'assistant'
-    content = Column(Text, nullable=False)     # пока plain, потом шифр
-    volatile = Column(Boolean, default=False)  # временное сообщение
+    content = Column(Text, nullable=False)     # plain text for now; encryption later
+    volatile = Column(Boolean, default=False)  # temporary message
     timestamp = Column(DateTime, default=datetime.now(timezone.utc))
 
     user = relationship("User")

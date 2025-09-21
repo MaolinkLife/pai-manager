@@ -71,7 +71,7 @@ def run_startup_checks():
     # - presence of char_name
     # - config.json structure
 
-    # Инициализируем и запускаем визуальный сервис
+    # Initialize and launch the vision service
     if get_config_value("vision.enabled", False):
         try:
             vision_service = VisionService()
@@ -91,10 +91,10 @@ def run_startup_checks():
 
 
 def shutdown_services():
-    """Остановить все сервисы"""
-    # ... другие остановки ...
+    """Shut down all services."""
+    # ... other shutdown routines ...
 
-    # Останавливаем визуальный сервис
+    # Stop the vision service
     try:
         vision_service = VisionService()
         vision_service.stop()

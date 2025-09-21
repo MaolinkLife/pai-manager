@@ -109,7 +109,7 @@ class Instructor:
                 .get("generation_parameters", {})
                 .get("persona_constraints", [])
             )
-            # TODO: Временно убрал, чтобы не перезаписывать характер PAI
+            # TODO: Temporarily disabled to avoid overwriting the PAI persona
             # if persona_constraints:
             #     sections.append(
             #         f"[INSTRUCTION]\nPersona style: {', '.join(persona_constraints)}"
@@ -158,7 +158,7 @@ class Instructor:
                 AuditStatus.ERROR,
                 details={"error": str(e), "error_type": type(e).__name__},
             )
-            # fallback — минимальный промпт
+            # fallback — minimal prompt
             return "[CORE]\nSystem prompt unavailable due to error."
 
     async def format_for_api(

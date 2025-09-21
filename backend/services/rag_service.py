@@ -1,6 +1,6 @@
 # ===========================================================
 # Module: rag_service.py
-# Purpose: Извлечение подходящего лора из БД для генерации ответа
+# Purpose: Retrieve relevant lore from the DB for response generation
 # ===========================================================
 
 import re
@@ -8,13 +8,13 @@ from services.logger_service import log_audit_entry, AuditStatus
 from services import lorebook_service
 
 
-# Простая вычленялка ключевых слов
+# Simple keyword extractor
 def extract_keywords(text: str) -> list:
     words = re.findall(r"\b\w{4,}\b", text.lower())
     return list(set(words))
 
 
-# Поиск фрагментов по ключевым словам
+# Retrieve lore fragments by keywords
 def retrieve_lore_fragments(text):
     try:
         for word in text.split():
@@ -25,7 +25,7 @@ def retrieve_lore_fragments(text):
         raise  # re-raise if you want it to propagate
 
 
-# Форматирование для промпта
+# Format lore entries for the prompt
 def format_lore_block(lore_entries: list) -> str:
     if not lore_entries:
         return ""
@@ -37,7 +37,7 @@ def format_lore_block(lore_entries: list) -> str:
 
     log_audit_entry(
         event_type="rag_format",
-        msg="Сформирован блок лора",
+        msg="Lore block prepared",
         status=AuditStatus.INFO,
         details={"entries_count": len(lore_entries)},
     )
