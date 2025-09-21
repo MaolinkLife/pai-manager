@@ -9,9 +9,12 @@ from datetime import datetime
 import tempfile
 import os
 import wave
+import json
 
 from services.config_service import get_config_value
 from core.decision_layer import decision_layer
+from core.instructor import Instructor
+from core.websocket_manager import manager
 from services.voice_service import (
     log_last_output,
     is_self_trigger,
@@ -19,6 +22,7 @@ from services.voice_service import (
     check_if_speaking,
 )
 from services import stt_service
+from services.api_service import run_stream_message
 from services.logger_service import log_audit_entry, AuditStatus
 
 
@@ -278,7 +282,27 @@ class VADListener:
             "timestamp": datetime.utcnow().isoformat(),
         }
 
-        await decision_layer.process_message(user_message, None)
+        message_payload = {
+            "type": "message",
+            "id": user_message["id"],
+            "role": "user",
+            "content": transcript,
+            "timestamp": user_message["timestamp"],
+        }
+        await manager.send_message(json.dumps(message_payload, ensure_ascii=False))
+
+        instructor = Instructor()
+        processing_result = await decision_layer.process_message(user_message, None)
+        formatted_history = await instructor.format_for_api(
+            processing_result["system_prompt"],
+            processing_result["user_message"],
+        )
+
+        async def broadcast_send(payload: dict) -> bool:
+            await manager.send_message(json.dumps(payload, ensure_ascii=False))
+            return True
+
+        await run_stream_message(None, formatted_history, send_fn=broadcast_send)
         log_last_output(transcript)
 
     def contains_trigger_word(self, text):

@@ -20,6 +20,7 @@ from datetime import datetime
 from services.config_service import get_config_value
 from fastapi import WebSocket
 from starlette.websockets import WebSocketDisconnect
+from typing import Callable, Awaitable
 from datetime import datetime, timezone
 from services import ollama_service, database_service
 from services.logger_service import log_audit_entry, AuditStatus
@@ -270,13 +271,25 @@ async def run_standard(
 # ===========================================================
 # Streaming generation
 # ===========================================================
-async def run_stream_message(websocket: WebSocket, history: list):
+async def run_stream_message(
+    websocket: WebSocket | None,
+    history: list,
+    send_fn: Callable[[dict], Awaitable[bool]] | None = None,
+):
     async def safe_send(payload: dict) -> bool:
-        try:
-            await websocket.send_json(payload)
-            return True
-        except (WebSocketDisconnect, RuntimeError):
-            return False
+        if send_fn is not None:
+            try:
+                await send_fn(payload)
+                return True
+            except Exception:
+                return False
+        if websocket is not None:
+            try:
+                await websocket.send_json(payload)
+                return True
+            except (WebSocketDisconnect, RuntimeError):
+                return False
+        return False
 
     log_audit_entry(
         event_type="ApiService.RunStream",
@@ -444,7 +457,7 @@ async def run_stream_message(websocket: WebSocket, history: list):
         },
     )
 
-    await websocket.send_json({"type": "system", "event": "stream_end"})
+    await safe_send({"type": "system", "event": "stream_end"})
 
 
 # ===========================================================
