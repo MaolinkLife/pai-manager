@@ -37,3 +37,23 @@ version: 0.2
 - UX polish
   - Redesigned the thinking block with LIM palette, accordion-style expand/collapse, and auto-collapse after streaming.
   - Ensured reasoning removal on history deletion and tightened audit logs around VAD, visual context, and API generation flows.
+version: 0.3
+- Config & Backend
+  - Moved the default config into constants/default_config.py, expanded it with system/core sections, voice module settings, STT defaults, and snake_case audio/vision keys.
+  - Config service now logs recursive updates, exposes set_config_value, validates user_id, and config routes can read/write system prompts while history fetch supports offsets.
+- Voice & Conversation
+  - Introduced a shared voice_state controller and wired it through VAD, streaming, and TTS so listening/waiting/speaking stages stay in sync.
+  - Added ElevenLabs TTS integration with per-module settings, sanitized streamed speech (# removal, emoji stripping), and skipped synthesis when voice is disabled.
+  - VAD listener now deduplicates transcripts, honours the new trigger bypass flag, normalizes config keys, and guards processing with async locks to block self-trigger loops.
+- Vision
+  - Added an Apple FastVLM provider and structured provider configs, including capture metadata in summaries and optional frame dumps controlled via config.
+  - Capture worker now supports monitor/window modes, clamps invalid monitor indices, and reports when the active window falls outside the capture region.
+- Frontend & Settings
+  - Refactored config mappers into domain utilities aligned with the backend schema and renamed the API client method to updateConfig$.
+  - Added Core/System settings views (system prompt editor, theme/language switches, cognitive analyzer controls) and new ConfigService helpers for system endpoints.
+  - Theme service now persists the selected theme and initializes stored preferences.
+- UI & Components
+  - Introduced notification and skeleton shared components plus an emoji picker with a data generation script and bundled emoji dataset.
+  - Refreshed chat/settings/layout styles and tabs to surface the new settings groups and debug affordances.
+
+
