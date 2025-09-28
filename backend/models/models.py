@@ -83,3 +83,20 @@ class Reasoning(Base):
     )
 
     message = relationship("History", back_populates="reasoning")
+
+
+class LorebookEntry(Base):
+    __tablename__ = "lorebook_entries"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    title = Column(String, nullable=False, default="Untitled")
+    content = Column(Text, nullable=False)
+    keywords = Column(Text, default="")
+    category = Column(String, default="general")
+    active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+    updated_at = Column(
+        DateTime,
+        default=datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )

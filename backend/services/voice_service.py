@@ -16,7 +16,8 @@ from pydub import AudioSegment
 from services.config_service import get_config_value
 from utils.sentence_splitter import split_into_sentences
 from services.logger_service import log_error
-
+from services.voice_state import voice_state
+from services.elevenlabs_tts import generate_elevenlabs_tts
 
 # import utils.hotkeys
 # import utils.zw_logging
@@ -62,16 +63,26 @@ def remove_emotions_or_actions(text: str) -> str:
     # Remove emojis
     text = emoji.replace_emoji(text, replace="")
 
+    # Remove all occurrences of #
+    text = text.replace("#", "")
+
     return text
 
 
 # ——— Main Functions ——— #
 async def generate_tts(text, filename):
-    voice = get_config_value(
-        "voice.voice_language", "ru-RU-SvetlanaNeural"
-    )  # Voice to play
-    communicate = edge_tts.Communicate(text, voice=voice)
-    await communicate.save(filename)
+    if get_config_value("voice.enabled", False) is False:
+        return
+
+    engine = get_config_value("voice.active_module", "edge")
+    engine_config = get_config_value(f"voice.voice_modules.{engine}", {})
+
+    if engine == "elevenlabs":
+        await generate_elevenlabs_tts(text, filename, engine_config)
+    else:
+        voice = engine_config.get("voice_language", "ru-RU-SvetlanaNeural")
+        communicate = edge_tts.Communicate(text, voice=voice)
+        await communicate.save(filename)
 
 
 def play_voice_output(file_path):
@@ -199,16 +210,26 @@ def speak_line(s_message, refuse_pause):
 async def stream_speak_line(text: str, devices: list[int]):
     global cut_voice, active_streams
     cut_voice = False
+    set_speaking(True)
 
-    voice = get_config_value("voice.voice_language", "ru-RU-SvetlanaNeural")
-    communicate = edge_tts.Communicate(text, voice=voice)
+    # Получаем активный модуль
+    engine = get_config_value("voice.active_module", "edge")
+    engine_config = get_config_value(f"voice.voice_modules.{engine}", {})
+
+    # Берём voice_language из нужного модуля
+    voice = engine_config.get("voice_language", "ru-RU-SvetlanaNeural")
+
+    # Удаляем # из текста перед озвучкой
+    clean_text = remove_emotions_or_actions(text)
+
+    communicate = edge_tts.Communicate(clean_text, voice=voice)
 
     streams = []
     for device_id in devices:
         stream = sd.OutputStream(
             samplerate=24000,
             channels=1,
-            dtype="float32",  # convert to float32 beforehand
+            dtype="float32",
             device=device_id,
         )
         stream.start()
@@ -227,8 +248,7 @@ async def stream_speak_line(text: str, devices: list[int]):
             if chunk["type"] == "audio":
                 buffer.write(chunk["data"])
 
-                # Try to decode once enough data is accumulated
-                if buffer.tell() > 8192:  # 8 KB ~ small MP3 chunk
+                if buffer.tell() > 8192:
                     buffer.seek(0)
                     try:
                         segment = AudioSegment.from_file(buffer, format="mp3")
@@ -240,7 +260,7 @@ async def stream_speak_line(text: str, devices: list[int]):
                             stream.write(samples)
                     except Exception:
                         pass
-                    buffer = io.BytesIO()  # reset buffer and start accumulating again
+                    buffer = io.BytesIO()
     finally:
         for s in streams:
             try:
@@ -262,6 +282,11 @@ def check_if_speaking() -> bool:
 def set_speaking(set: bool):
     global is_speaking
     is_speaking = set
+
+    if set:
+        voice_state.enter_speaking("tts_active")
+    else:
+        voice_state.enter_listening("tts_idle")
 
 
 def force_cut_voice():

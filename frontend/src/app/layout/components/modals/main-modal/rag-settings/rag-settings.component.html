@@ -4,41 +4,51 @@
         (ngSubmit)="saveChanges()"
         class="settings-form"
     >
-        <h2>🧠 RAG Settings</h2>
+        <h2>🧠 {{ "settings.ragSettings" | translate }}</h2>
 
         <!-- Basic Settings -->
         <div class="section">
-            <h3>Basic Configuration</h3>
+            <h3>{{ "settings.basicConfiguration" | translate }}</h3>
 
             <div class="form-group">
                 <label class="checkbox">
                     <input type="checkbox" formControlName="enabled" />
-                    Enable RAG Processing
+                    {{ "settings.enableRAGProcessing" | translate }}
                 </label>
             </div>
 
             <div class="form-group">
-                <label for="embeddingModel">Embedding Model</label>
+                <label for="embeddingModel">{{
+                    "settings.embeddingModel" | translate
+                }}</label>
                 <input
                     id="embeddingModel"
                     type="text"
                     formControlName="embeddingModel"
-                    placeholder="all-MiniLM-L6-v2"
+                    [placeholder]="
+                        'settings.embeddingModelPlaceholder' | translate
+                    "
                 />
             </div>
 
             <div class="form-group">
-                <label for="vectorDbPath">Vector Database Path</label>
+                <label for="vectorDbPath">{{
+                    "settings.vectorDbPath" | translate
+                }}</label>
                 <input
                     id="vectorDbPath"
                     type="text"
                     formControlName="vectorDbPath"
-                    placeholder="./data/vector_db"
+                    [placeholder]="
+                        'settings.vectorDbPathPlaceholder' | translate
+                    "
                 />
             </div>
 
             <div class="form-group">
-                <label for="chunkSize">Chunk Size</label>
+                <label for="chunkSize">{{
+                    "settings.chunkSize" | translate
+                }}</label>
                 <input
                     id="chunkSize"
                     type="number"
@@ -50,7 +60,9 @@
             </div>
 
             <div class="form-group">
-                <label for="chunkOverlap">Chunk Overlap</label>
+                <label for="chunkOverlap">{{
+                    "settings.chunkOverlap" | translate
+                }}</label>
                 <input
                     id="chunkOverlap"
                     type="number"
@@ -62,7 +74,9 @@
             </div>
 
             <div class="form-group">
-                <label for="topK">Top K Results</label>
+                <label for="topK">{{
+                    "settings.topKResults" | translate
+                }}</label>
                 <input
                     id="topK"
                     type="number"
@@ -73,7 +87,9 @@
             </div>
 
             <div class="form-group">
-                <label for="similarityThreshold">Similarity Threshold</label>
+                <label for="similarityThreshold">{{
+                    "settings.similarityThreshold" | translate
+                }}</label>
                 <input
                     id="similarityThreshold"
                     type="range"
@@ -90,17 +106,19 @@
 
         <!-- Caching Settings -->
         <div class="section">
-            <h3>Caching</h3>
+            <h3>{{ "settings.caching" | translate }}</h3>
 
             <div class="form-group">
                 <label class="checkbox">
                     <input type="checkbox" formControlName="enableCaching" />
-                    Enable Result Caching
+                    {{ "settings.enableResultCaching" | translate }}
                 </label>
             </div>
 
             <div class="form-group">
-                <label for="cacheTtl">Cache TTL (minutes)</label>
+                <label for="cacheTtl">{{
+                    "settings.cacheTtl" | translate
+                }}</label>
                 <input
                     id="cacheTtl"
                     type="number"
@@ -113,21 +131,23 @@
 
         <!-- Search Strategy -->
         <div class="section">
-            <h3>Search Strategy</h3>
+            <h3>{{ "settings.searchStrategy" | translate }}</h3>
 
             <div class="subsection">
-                <h4>Session Context</h4>
+                <h4>{{ "settings.sessionContext" | translate }}</h4>
                 <div class="form-group">
                     <label class="checkbox">
                         <input
                             type="checkbox"
                             formControlName="sessionContextEnabled"
                         />
-                        Enable Session Context Search
+                        {{ "settings.enableSessionContextSearch" | translate }}
                     </label>
                 </div>
                 <div class="form-group">
-                    <label for="sessionContextMaxMessages">Max Messages</label>
+                    <label for="sessionContextMaxMessages">{{
+                        "settings.maxMessages" | translate
+                    }}</label>
                     <input
                         id="sessionContextMaxMessages"
                         type="number"
@@ -142,24 +162,26 @@
                             type="checkbox"
                             formControlName="sessionContextLookBackToToday"
                         />
-                        Look Back to Today
+                        {{ "settings.lookBackToToday" | translate }}
                     </label>
                 </div>
             </div>
 
             <div class="subsection">
-                <h4>Daily Summary</h4>
+                <h4>{{ "settings.dailySummary" | translate }}</h4>
                 <div class="form-group">
                     <label class="checkbox">
                         <input
                             type="checkbox"
                             formControlName="dailySummaryEnabled"
                         />
-                        Enable Daily Summary Search
+                        {{ "settings.enableDailySummarySearch" | translate }}
                     </label>
                 </div>
                 <div class="form-group">
-                    <label for="dailySummaryLookBackDays">Look Back Days</label>
+                    <label for="dailySummaryLookBackDays">{{
+                        "settings.lookBackDays" | translate
+                    }}</label>
                     <input
                         id="dailySummaryLookBackDays"
                         type="number"
@@ -174,20 +196,20 @@
                             type="checkbox"
                             formControlName="dailySummaryUseTags"
                         />
-                        Use Tags for Search
+                        {{ "settings.useTagsForSearch" | translate }}
                     </label>
                 </div>
             </div>
 
             <div class="subsection">
-                <h4>Long Term Memory</h4>
+                <h4>{{ "settings.longTermMemory" | translate }}</h4>
                 <div class="form-group">
                     <label class="checkbox">
                         <input
                             type="checkbox"
                             formControlName="longTermMemoryEnabled"
                         />
-                        Enable Long Term Memory
+                        {{ "settings.enableLongTermMemory" | translate }}
                     </label>
                 </div>
                 <div class="form-group">
@@ -196,7 +218,7 @@
                             type="checkbox"
                             formControlName="longTermMemoryVectorSearch"
                         />
-                        Vector Search
+                        {{ "settings.vectorSearch" | translate }}
                     </label>
                 </div>
                 <div class="form-group">
@@ -205,7 +227,7 @@
                             type="checkbox"
                             formControlName="longTermMemoryGraphSearch"
                         />
-                        Graph Search
+                        {{ "settings.graphSearch" | translate }}
                     </label>
                 </div>
                 <div class="form-group">
@@ -214,20 +236,20 @@
                             type="checkbox"
                             formControlName="longTermMemoryPriorityRules"
                         />
-                        Priority Rules
+                        {{ "settings.priorityRules" | translate }}
                     </label>
                 </div>
             </div>
 
             <div class="subsection">
-                <h4>Fallback</h4>
+                <h4>{{ "settings.fallback" | translate }}</h4>
                 <div class="form-group">
                     <label class="checkbox">
                         <input
                             type="checkbox"
                             formControlName="fallbackAskUser"
                         />
-                        Ask User for Clarification
+                        {{ "settings.askUserForClarification" | translate }}
                     </label>
                 </div>
                 <div class="form-group">
@@ -236,7 +258,7 @@
                             type="checkbox"
                             formControlName="fallbackAutoLearn"
                         />
-                        Auto Learn from User Responses
+                        {{ "settings.autoLearnFromUserResponses" | translate }}
                     </label>
                 </div>
             </div>
@@ -244,14 +266,14 @@
 
         <!-- Memory Settings -->
         <div class="section">
-            <h3>Memory Configuration</h3>
+            <h3>{{ "settings.memoryConfiguration" | translate }}</h3>
 
             <div class="subsection">
-                <h4>Facts Memory</h4>
+                <h4>{{ "settings.factsMemory" | translate }}</h4>
                 <div class="form-group">
                     <label class="checkbox">
                         <input type="checkbox" formControlName="factsEnabled" />
-                        Enable Facts Memory
+                        {{ "settings.enableFactsMemory" | translate }}
                     </label>
                 </div>
                 <div class="form-group">
@@ -260,17 +282,17 @@
                             type="checkbox"
                             formControlName="factsAutoUpdate"
                         />
-                        Auto Update Facts
+                        {{ "settings.autoUpdateFacts" | translate }}
                     </label>
                 </div>
             </div>
 
             <div class="subsection">
-                <h4>Graph Memory</h4>
+                <h4>{{ "settings.graphMemory" | translate }}</h4>
                 <div class="form-group">
                     <label class="checkbox">
                         <input type="checkbox" formControlName="graphEnabled" />
-                        Enable Graph Memory
+                        {{ "settings.enableGraphMemory" | translate }}
                     </label>
                 </div>
                 <div class="form-group">
@@ -279,7 +301,7 @@
                             type="checkbox"
                             formControlName="graphRelationships"
                         />
-                        Track Relationships
+                        {{ "settings.trackRelationships" | translate }}
                     </label>
                 </div>
                 <div class="form-group">
@@ -288,7 +310,7 @@
                             type="checkbox"
                             formControlName="graphInference"
                         />
-                        Enable Inference
+                        {{ "settings.enableInference" | translate }}
                     </label>
                 </div>
             </div>
@@ -296,7 +318,7 @@
 
         <div class="button-row">
             <button type="submit" [disabled]="!hasChanges()">
-                💾 Save RAG Settings
+                💾 {{ "general.saveRAGSettings" | translate }}
             </button>
         </div>
     </form>

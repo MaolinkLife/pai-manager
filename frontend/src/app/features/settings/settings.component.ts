@@ -131,6 +131,11 @@ export class SettingsComponent implements OnInit {
                     this.settingsForm.patchValue(config);
                 }
 
+                console.log({
+                    config
+                });
+
+
                 // Получение всех пресетов
                 this.presets = presets;
                 const active = presets.find(p => p.name === this.selectedPresetName) || presets[0];
@@ -253,7 +258,7 @@ export class SettingsComponent implements OnInit {
         });
 
 
-        this.configService.updateCongif$(changes).subscribe(result => {
+        this.configService.updateConfig$(changes).subscribe(result => {
             console.log({ result });
             this.originalConfig = JSON.parse(JSON.stringify(this.settingsForm.value)); // обновляем базу
         });

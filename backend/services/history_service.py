@@ -82,8 +82,8 @@ def get_reasoning_by_message_id(message_id: str) -> Optional[str]:
         session.close()
 
 
-def get_history(character_id: str, limit: int = 20):
-    """Получение истории сообщений"""
+def get_history(character_id: str, limit: int = 20, offset: int = 0):
+    """Получение истории сообщений с возможностью смещения (offset)"""
     session: Session = SessionLocal()
     try:
         return (
@@ -91,6 +91,7 @@ def get_history(character_id: str, limit: int = 20):
             .options(joinedload(History.reasoning))
             .filter_by(character_id=character_id)
             .order_by(History.timestamp.desc())
+            .offset(offset)
             .limit(limit)
             .all()
         )

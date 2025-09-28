@@ -87,7 +87,6 @@ export class DebugComponent implements OnInit {
             }
         }
 
-
         // Фолбэк: если квадратных тегов нет — можно подхватить префикс до двоеточия вида "[Vision] ...".
         // (Если логи иногда идут как "[Vision] xxx", но вдруг regex не сработал)
         // Если вообще пусто — добавим event_type как последний фолбэк, чтобы лог не терялся при фильтрации.
@@ -121,6 +120,23 @@ export class DebugComponent implements OnInit {
         if (s.includes('debug')) return 'Debug';
         if (s.includes('info')) return 'Info';
         return raw || 'Info';
+    }
+
+    // Проверяем, есть ли у лога значимые детали
+    hasDetails(log: any): boolean {
+        if (!log.details) return false;
+
+        // Проверяем, не пустой ли объект
+        if (typeof log.details === 'object' && Object.keys(log.details).length === 0) {
+            return false;
+        }
+
+        // Проверяем, не равен ли details пустому объекту
+        if (JSON.stringify(log.details) === '{}') {
+            return false;
+        }
+
+        return true;
     }
 
     toggleDetails(index: number): void {

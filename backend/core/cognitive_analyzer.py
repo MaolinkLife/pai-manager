@@ -17,7 +17,6 @@ from constants.settings import (
 from services import ollama_service
 
 
-
 class CognitiveAnalyzer:
     """
     Cognitive analyzer for detecting emotions, intents,

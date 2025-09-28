@@ -24,5 +24,9 @@
         <app-generation-settings
             *ngIf="activeView === 'generate'"
         ></app-generation-settings>
+        <app-core-settings *ngIf="activeView === 'core'"></app-core-settings>
+        <app-system-settings
+            *ngIf="activeView === 'system'"
+        ></app-system-settings>
     </div>
 </div>

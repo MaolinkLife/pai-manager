@@ -3,7 +3,10 @@ import { FormBuilder, FormGroup } from '@angular/forms';
 import { ConfigService } from '../../../../../core/services/config.service';
 import { ApiService } from '../../../../../core/services/api.service';
 import { GenerationPreset } from '../../../../../core/models/generation-preset.model';
-import { combineLatest } from 'rxjs';
+import { combineLatest, BehaviorSubject } from 'rxjs';
+import { LocalizationService } from '../../../../../shared/pipes/translation/localization.service';
+import { tap, finalize } from 'rxjs/operators';
+import { NotificationService } from '../../../../../shared/components/notification/notification.service';
 
 @Component({
     selector: 'app-generation-settings',
@@ -22,11 +25,14 @@ export class GenerationSettingsComponent implements OnInit {
     availableModels: string[] = [];
     dropdownOpen: boolean = false;
     selectedModel = '';
+    isLoading$ = new BehaviorSubject<boolean>(true);
 
     constructor(
         private fb: FormBuilder,
         private configService: ConfigService,
-        private apiService: ApiService
+        private apiService: ApiService,
+        private localizationService: LocalizationService,
+        private notificationService: NotificationService,
     ) {
         this.generationForm = this.createMainForm();
         this.generationSettingsForm = this.createGenerationSettingsForm();
@@ -35,6 +41,7 @@ export class GenerationSettingsComponent implements OnInit {
     ngOnInit(): void {
         this.loadConfigAndPresets();
         this.setupTokenLimitSync();
+        this.localizationService.init();
     }
 
     private createMainForm(): FormGroup {
@@ -67,7 +74,10 @@ export class GenerationSettingsComponent implements OnInit {
             this.configService.getConfig$(),
             this.configService.getGenerationPresets$(),
             this.apiService.getOllamaModels$()
-        ]).subscribe(([config, presets, models]) => {
+        ]).pipe(
+            tap(() => this.isLoading$.next(true)),
+            finalize(() => this.isLoading$.next(false))
+        ).subscribe(([config, presets, models]) => {
             // Load config
             if (config) {
                 this.originalConfig = {
@@ -162,8 +172,13 @@ export class GenerationSettingsComponent implements OnInit {
         }
 
         if (Object.keys(updateData).length > 0) {
-            this.configService.updateCongif$(updateData).subscribe({
+            this.configService.updateConfig$(updateData).subscribe({
                 next: (response) => {
+                    this.notificationService.open({
+                        title: 'Generation settings updated',
+                        type: 'success',
+                        autoClose: false
+                    });
                     console.log('Generation settings updated:', response);
                     this.originalConfig = {
                         api: { ...this.generationForm.value },
@@ -171,6 +186,12 @@ export class GenerationSettingsComponent implements OnInit {
                     };
                 },
                 error: (error) => {
+                    this.notificationService.open({
+                        title: 'Error updating generation settings',
+                        type: 'error',
+                        autoClose: false,
+                        
+                    });
                     console.error('Error updating generation settings:', error);
                 }
             });

@@ -1,8 +1,10 @@
-// lorebook.component.ts
 import { Component, OnInit } from '@angular/core';
 import { BehaviorSubject } from 'rxjs';
+import { finalize, take } from 'rxjs/operators';
 import { LorebookEntry } from '../../../../../core/models/lorebook-entry.model';
 import { LorebookService } from '../../../../../core/services/lorebook.service';
+import { NotificationService } from '../../../../../shared/components/notification/notification.service';
+import { LocalizationService } from '../../../../../shared/pipes/translation/localization.service';
 
 @Component({
     selector: 'app-lorebook',
@@ -12,22 +14,34 @@ import { LorebookService } from '../../../../../core/services/lorebook.service';
 export class LorebookComponent implements OnInit {
 
     entries$: BehaviorSubject<LorebookEntry[]> = new BehaviorSubject<LorebookEntry[]>([]);
+    isLoading$ = new BehaviorSubject<boolean>(true);
 
-    constructor(private lorebookService: LorebookService) { }
+    constructor(
+        private lorebookService: LorebookService,
+        private notificationService: NotificationService,
+        private localizationService: LocalizationService
+    ) { }
 
     ngOnInit(): void {
         this.loadEntries();
+        this.localizationService.init();
     }
 
     loadEntries(): void {
-        this.lorebookService.getLorebook$().subscribe(
-            entries => {
+        this.lorebookService.getLorebook$().pipe(
+            take(1),
+            finalize(() => {
+                this.isLoading$.next(false);
+            })
+        ).subscribe({
+            next: (entries) => {
                 this.entries$.next(entries);
             },
-            error => {
+            error: (error) => {
                 console.error('Ошибка загрузки записей:', error);
+                this.isLoading$.next(false);
             }
-        );
+        });
     }
 
     clickDelete(entry: LorebookEntry): void {
@@ -43,20 +57,9 @@ export class LorebookComponent implements OnInit {
         }
     }
 
-    save(): void {
-        // Сохраняем все изменения
-        const entries = this.entries$.getValue();
-
-        // Здесь можно добавить логику сохранения
-        // Пока просто показываем в консоли
-        console.log('Сохраняем записи:', entries);
-
-        // Для примера - добавим новую запись
-        this.addNewEntry();
-    }
-
     addNewEntry(): void {
         const newEntry: LorebookEntry = {
+            title: '',
             content: '',
             keywords: '',
             category: 'general',
@@ -65,6 +68,11 @@ export class LorebookComponent implements OnInit {
 
         this.lorebookService.createEntry$(newEntry).subscribe(
             response => {
+                this.notificationService.open({
+                    title: 'New Entry Created',
+                    type: 'success',
+                    autoClose: true
+                });
                 this.loadEntries(); // Перезагружаем список
             },
             error => {
@@ -77,7 +85,13 @@ export class LorebookComponent implements OnInit {
         if (entry.id) {
             this.lorebookService.updateEntry$(entry.id, entry).subscribe(
                 response => {
-                    console.log('Запись обновлена:', response);
+                    this.notificationService.open({
+                        message: JSON.stringify(response),
+                        title: 'Lorebook Updated',
+                        type: 'success',
+                        autoClose: true
+                    });
+                    console.log('Lorebook Updated', response);
                 },
                 error => {
                     console.error('Ошибка обновления записи:', error);

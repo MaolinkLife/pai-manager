@@ -4,6 +4,7 @@ import tempfile
 import os
 import wave
 from faster_whisper import WhisperModel
+from services.config_service import get_config_value
 
 # =================================
 # STATUS VARIABLES
@@ -25,7 +26,12 @@ MODEL = WhisperModel("base", device="cpu", compute_type="int8")
 # ================================
 def record_audio(filename: str, duration: int = 5):
     print(f"[🎙] Recording for {duration} seconds...")
-    audio = sd.rec(int(duration * SAMPLE_RATE), samplerate=SAMPLE_RATE, channels=CHANNELS, dtype='int16')
+    audio = sd.rec(
+        int(duration * SAMPLE_RATE),
+        samplerate=SAMPLE_RATE,
+        channels=CHANNELS,
+        dtype="int16",
+    )
     sd.wait()
 
     _save_wave(filename, audio)
@@ -36,10 +42,16 @@ def record_audio(filename: str, duration: int = 5):
 # TRANSCRIPTION
 # ==============================================
 def transcribe_audio(filename: str) -> str:
-    print(f"[Record] Transcribing: {filename}")
-    segments, _ = MODEL.transcribe(filename)
+    stt_lang = get_config_value("stt.language", None)
+    auto_detect = get_config_value("stt.auto_detect", True)
+
+    if auto_detect or not stt_lang:
+        segments, _ = MODEL.transcribe(filename)
+    else:
+        lang_code = stt_lang.split("-")[0]  # "ru-RU" → "ru"
+        segments, _ = MODEL.transcribe(filename, language=lang_code)
+
     result = " ".join(segment.text for segment in segments)
-    print(f"[Record] Transcribed text: {result}")
     return result
 
 
@@ -77,10 +89,7 @@ def start_recording_background(filename: str):
             _buffer.append(indata.copy())
 
     _stream = sd.InputStream(
-        samplerate=SAMPLE_RATE,
-        channels=CHANNELS,
-        dtype='int16',
-        callback=callback
+        samplerate=SAMPLE_RATE, channels=CHANNELS, dtype="int16", callback=callback
     )
     _stream.start()
     print("[Record] Background recording has started...")
@@ -116,7 +125,7 @@ def stop_recording_and_save(filename: str):
 # WAV SAVE UTILITY
 # ================================
 def _save_wave(filename: str, audio: np.ndarray):
-    with wave.open(filename, 'wb') as wf:
+    with wave.open(filename, "wb") as wf:
         wf.setnchannels(CHANNELS)
         wf.setsampwidth(2)  # int16 → 2 bytes
         wf.setframerate(SAMPLE_RATE)
@@ -137,5 +146,5 @@ def get_recording_state():
     return {
         "recording": _is_recording,
         "stream": _stream is not None,
-        "buffer_size": len(_buffer)
+        "buffer_size": len(_buffer),
     }

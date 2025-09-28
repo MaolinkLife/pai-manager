@@ -1,18 +1,15 @@
 import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM
 from PIL import Image
-import traceback
+import gc
 from typing import Dict, Any
 
 from datetime import datetime
 
 from services.logger_service import log_audit_entry, AuditStatus
 from services.config_service import get_config_value
-from constants.visual import (
-    DEFAULT_VISUAL_MODEL,
-    IMAGE_TOKEN_INDEX,
-    DEFAULT_IMAGE_PROMPT,
-)
+from constants.visual import DEFAULT_VISUAL_MODEL
+
+from modules.vision.providers.apple_vision import AppleVisionProvider
 
 
 class VisualModule:
@@ -21,170 +18,300 @@ class VisualModule:
     Supports FastVLM, LLaVA, BLIP and similar architectures.
     """
 
-    def __init__(self):
-        """
-        Initialize visual module:
-        - Load model/tokenizer
-        - Detect device (CUDA/CPU)
-        """
-        self.model_id = get_config_value("api.visual_model", DEFAULT_VISUAL_MODEL)
+    def __init__(self, provider_name: str = None):
+        self.provider_name = provider_name or get_config_value(
+            "vision.active_provider", "apple_vision"
+        )
+        self.provider = self._load_provider()
 
-        if torch.cuda.is_available():
-            self.device = "cuda"
-            torch_dtype = torch.float16
+    def _load_provider(self):
+        if self.provider_name == "apple_vision":
+            return AppleVisionProvider()
         else:
-            self.device = "cpu"
-            torch_dtype = torch.float32
-
-        try:
-            log_audit_entry(
-                "visual_init",
-                f"[VisualModule] Loading model {self.model_id} on device {self.device}",
-                AuditStatus.INFO,
-            )
-
-            # Load tokenizer
-            self.tokenizer = AutoTokenizer.from_pretrained(
-                self.model_id, trust_remote_code=True
-            )
-
-            # Load model
-            self.model = AutoModelForCausalLM.from_pretrained(
-                self.model_id,
-                torch_dtype=torch_dtype,
-                device_map=None,
-                trust_remote_code=True,
-                low_cpu_mem_usage=True,
-            ).to(self.device)
-
-            log_audit_entry(
-                "visual_loaded",
-                f"[VisualModule] Model {self.model_id} ready on {self.device}",
-                AuditStatus.SUCCESS,
-            )
-
-        except Exception as e:
-            error_msg = f"[VisualModule] Failed to load model: {e}"
-            log_audit_entry("visual_error", error_msg, AuditStatus.ERROR)
-            print(
-                f"[ERROR] [{datetime.utcnow().isoformat()}Z] {error_msg}\n{traceback.format_exc()}"
-            )
-            self.model = None
-            self.tokenizer = None
+            # Можно добавить другие провайдеры: openai_vision, llava_vision и т.п.
+            raise ValueError(f"Unknown vision provider: {self.provider_name}")
 
     def is_ready(self) -> bool:
-        """
-        Check if module is initialized correctly.
-        """
-        ready = self.model is not None and self.tokenizer is not None
-        log_audit_entry(
-            "visual_ready_check",
-            f"[VisualModule] Ready: {ready}",
-            AuditStatus.INFO,
-        )
-        return ready
+        return self.provider.is_ready()
 
     def describe_image(
-        self, image: Image.Image, prompt: str = DEFAULT_IMAGE_PROMPT
+        self,
+        image: Image.Image,
+        prompt: str = "Describe the image in detail in English.",
     ) -> Dict[str, Any]:
-        """
-        Run visual inference on input image with optional prompt.
+        return self.provider.describe_image(image, prompt)
 
-        Args:
-            image: PIL image object
-            prompt: User-defined or default prompt
-
-        Returns:
-            Dict with summary, model info and status
-        """
-        log_audit_entry(
-            "visual_inference_start",
-            "[VisualModule] Starting image description.",
-            AuditStatus.INFO,
-            details={"prompt": prompt},
-        )
-
-        if not self.is_ready():
-            result = {
-                "summary": "Visual module not available",
-                "model": self.model_id,
-                "status": "not_ready",
-            }
-            log_audit_entry(
-                "visual_inference_skipped",
-                "[VisualModule] Module not ready.",
-                AuditStatus.WARNING,
-                details=result,
-            )
-            return result
-
+    # ===========================================================
+    # Vision Context Integration (Moved from api_service.py)
+    # ===========================================================
+    def add_vision_context_to_system_prompt(
+        self,
+        base_system_prompt: str,
+        last_user_message_content: str = "",
+        decisions: Dict[str, bool] = None,
+    ) -> str:
+        decisions = decisions or {}
+        session_id = "unknown_session"
         try:
-            # 1. Construct input message
-            messages = [{"role": "user", "content": f"<image>\n{prompt}"}]
-            rendered = self.tokenizer.apply_chat_template(
-                messages, add_generation_prompt=True, tokenize=False
+            from services.logger_service import get_session_id
+
+            session_id = get_session_id()
+        except ImportError:
+            pass
+
+        event_prefix = "vision_context"
+
+        if not get_config_value("vision.enabled", False):
+            log_audit_entry(
+                event_type=f"{event_prefix}_disabled",
+                msg="[Vision Context] Визуальный модуль отключен в конфигурации.",
+                status=AuditStatus.INFO,
+                meta={"session_id": session_id},
             )
-            pre, post = rendered.split("<image>", 1)
+            return base_system_prompt
 
-            # 2. Tokenize pre/post text
-            pre_ids = self.tokenizer(
-                pre, return_tensors="pt", add_special_tokens=False
-            ).input_ids
-            post_ids = self.tokenizer(
-                post, return_tensors="pt", add_special_tokens=False
-            ).input_ids
+        visual_module_instance = None
+        try:
+            from modules.vision.service import VisionService
 
-            # 3. Insert special token for image
-            img_tok = torch.tensor([[IMAGE_TOKEN_INDEX]], dtype=pre_ids.dtype)
-            input_ids = torch.cat([pre_ids, img_tok, post_ids], dim=1).to(self.device)
-            attention_mask = torch.ones_like(input_ids, device=self.device)
+            log_audit_entry(
+                event_type=f"{event_prefix}_init",
+                msg="[Vision Context] Создаю экземпляр VisualModule...",
+                status=AuditStatus.INFO,
+                meta={"session_id": session_id},
+            )
+            visual_module_instance = self
 
-            # 4. Process image via vision tower
-            px = (
-                self.model.get_vision_tower()
-                .image_processor(images=image, return_tensors="pt")["pixel_values"]
-                .to(self.device, dtype=self.model.dtype)
+            # --- Determine whether this is a vision query ---
+            vision_keywords = [
+                "видела",
+                "заметила",
+                "на экране",
+                "ты видишь",
+                "ты это видела",
+                "что видишь",
+                "что на экране",
+                "опиши экран",
+                "расскажи, что на экране",
+                "что ты видишь",
+                "скажи, что видишь",
+                "видишь ли ты",
+            ]
+
+            needs_vision_from_layer = decisions.get("needs_vision", False)
+            is_vision_query = needs_vision_from_layer or any(
+                kw in last_user_message_content.lower() for kw in vision_keywords
             )
 
-            # 5. Generate description
-            with torch.no_grad():
-                out = self.model.generate(
-                    inputs=input_ids,
-                    attention_mask=attention_mask,
-                    images=px,
-                    max_new_tokens=128,
+            log_audit_entry(
+                event_type=f"{event_prefix}_query_check",
+                msg=f"[Vision Context] Сообщение пользователя: '{last_user_message_content}'",
+                status=AuditStatus.INFO,
+                details={
+                    "is_vision_query": is_vision_query,
+                    "keywords_matched": [
+                        kw
+                        for kw in vision_keywords
+                        if kw in last_user_message_content.lower()
+                    ],
+                },
+                meta={"session_id": session_id},
+            )
+
+            # --- Gather baseline analysis (OCR/YOLO) ---
+            log_audit_entry(
+                event_type=f"{event_prefix}_analyzing",
+                msg="[Vision Context] Запрашиваю анализ у VisionService...",
+                status=AuditStatus.INFO,
+                meta={"session_id": session_id},
+            )
+            vision_service = VisionService()
+            visual_data = vision_service.analyze_recent_context(4.0)
+            confidence = visual_data.get("confidence", "N/A") if visual_data else "N/A"
+            log_audit_entry(
+                event_type=f"{event_prefix}_analyzed",
+                msg=f"[Vision Context] Получен анализ от VisionService.",
+                status=AuditStatus.INFO,
+                details={
+                    "confidence": confidence,
+                    "summary_preview": (
+                        visual_data.get("summary", "")[:100] if visual_data else None
+                    ),
+                },
+                meta={"session_id": session_id},
+            )
+
+            # --- Try using FastVLM ---
+            vlm_used = False
+            if is_vision_query:
+                log_audit_entry(
+                    event_type=f"{event_prefix}_vlm_check",
+                    msg="[Vision Context] Это визуальный запрос. Проверяю готовность VisualModule...",
+                    status=AuditStatus.INFO,
+                    meta={"session_id": session_id},
                 )
 
-            text = self.tokenizer.decode(out[0], skip_special_tokens=True).strip()
-            result = {
-                "summary": text,
-                "model": self.model_id,
-                "prompt": prompt,
-                "status": "success",
-            }
+                is_vm_ready = (
+                    visual_module_instance.is_ready()
+                    if visual_module_instance
+                    else False
+                )
+                log_audit_entry(
+                    event_type=f"{event_prefix}_vlm_status",
+                    msg=f"[Vision Context] Статус VisualModule: {'Готов' if is_vm_ready else 'Не готов'}.",
+                    status=AuditStatus.INFO,
+                    meta={"session_id": session_id},
+                )
 
-            log_audit_entry(
-                "visual_inference_success",
-                "[VisualModule] Image description generated successfully.",
-                AuditStatus.SUCCESS,
-                details={"summary_preview": text[:100]},
-            )
+                if is_vm_ready:
+                    log_audit_entry(
+                        event_type=f"{event_prefix}_vlm_fetching_frame",
+                        msg="[Vision Context] VisualModule готов. Получаю кадры...",
+                        status=AuditStatus.INFO,
+                        meta={"session_id": session_id},
+                    )
+                    frames = vision_service.buffer.get_latest_frames(1)
+                    if frames:
+                        log_audit_entry(
+                            event_type=f"{event_prefix}_vlm_processing_image",
+                            msg="[Vision Context] Получен кадр. Преобразую в PIL Image и вызываю describe_image...",
+                            status=AuditStatus.INFO,
+                            meta={"session_id": session_id},
+                        )
+                        try:
+                            _, last_frame = frames[-1]
 
-            return result
+                            import cv2
+
+                            img_rgb = cv2.cvtColor(last_frame, cv2.COLOR_BGR2RGB)
+                            pil_img = Image.fromarray(img_rgb)
+
+                            # Invoke FastVLM
+                            vlm_result = visual_module_instance.describe_image(
+                                pil_img,
+                                "Describe the screen in detail in English.",
+                            )
+
+                            log_audit_entry(
+                                event_type=f"{event_prefix}_vlm_success",
+                                msg="[Vision Context] Получен результат от VisualModule.",
+                                status=AuditStatus.SUCCESS,
+                                details={
+                                    "model": vlm_result.get("model"),
+                                    "prompt": vlm_result.get("prompt"),
+                                    "summary_preview": vlm_result.get("summary", "")[
+                                        :150
+                                    ],
+                                    "status": vlm_result.get("status"),
+                                },
+                                meta={"session_id": session_id},
+                            )
+
+                            visual_summary = vlm_result.get("summary", "")
+                            if visual_summary:
+                                final_prompt = (
+                                    f"{base_system_prompt}\n\n[CONTEXT:VISUAL]: {visual_summary}"
+                                    "\n\n[INSTRUCTION]\n"
+                                    "You currently see on the user's screen: "
+                                    f"{visual_summary}. Reference relevant visual details "
+                                    "in your reply when helpful."
+                                )
+                                log_audit_entry(
+                                    event_type=f"{event_prefix}_vlm_added",
+                                    msg="[Vision Context] Добавлен контекст от VisualModule.",
+                                    status=AuditStatus.SUCCESS,
+                                    details={"summary_length": len(visual_summary)},
+                                    meta={"session_id": session_id},
+                                )
+                                vlm_used = True
+                                return final_prompt
+                            else:
+                                log_audit_entry(
+                                    event_type=f"{event_prefix}_vlm_empty_summary",
+                                    msg="[Vision Context] VisualModule вернул пустой summary.",
+                                    status=AuditStatus.WARNING,
+                                    meta={"session_id": session_id},
+                                )
+                        except Exception as img_proc_err:
+                            log_audit_entry(
+                                event_type=f"{event_prefix}_vlm_image_error",
+                                msg=f"[Vision Context] Ошибка при обработке изображения или вызове describe_image: {img_proc_err}",
+                                status=AuditStatus.ERROR,
+                                meta={"session_id": session_id},
+                            )
+                    else:
+                        log_audit_entry(
+                            event_type=f"{event_prefix}_no_frames",
+                            msg="[Vision Context] Нет доступных кадров для анализа VisualModule.",
+                            status=AuditStatus.WARNING,
+                            meta={"session_id": session_id},
+                        )
+                else:
+                    log_audit_entry(
+                        event_type=f"{event_prefix}_vlm_not_ready",
+                        msg="[Vision Context] VisualModule не готов для использования.",
+                        status=AuditStatus.WARNING,
+                        meta={"session_id": session_id},
+                    )
+
+            # --- Fallback to OCR/YOLO ---
+            if not vlm_used and visual_data and visual_data.get("confidence", 0) > 0.5:
+                ocr_yolo_summary = visual_data.get("summary", "")
+                final_prompt = (
+                    f"{base_system_prompt}\n\n[CONTEXT:VISUAL]: {ocr_yolo_summary}"
+                    "\n\n[INSTRUCTION]\n"
+                    "You currently see on the user's screen: "
+                    f"{ocr_yolo_summary}. Reference relevant visual details in "
+                    "your reply when helpful."
+                )
+                log_audit_entry(
+                    event_type=f"{event_prefix}_ocr_yolo_added",
+                    msg="[Vision Context] Добавлен контекст от OCR/YOLO.",
+                    status=AuditStatus.SUCCESS,
+                    details={
+                        "summary_preview": ocr_yolo_summary[:100],
+                        "confidence": visual_data.get("confidence"),
+                    },
+                    meta={"session_id": session_id},
+                )
+                return final_prompt
+            else:
+                log_audit_entry(
+                    event_type=f"{event_prefix}_low_confidence",
+                    msg="[Vision Context] Уверенность OCR/YOLO низкая или данные отсутствуют.",
+                    status=AuditStatus.INFO,
+                    details={"confidence": confidence},
+                    meta={"session_id": session_id},
+                )
 
         except Exception as e:
-            error_msg = f"[VisualModule] Inference error: {e}"
             log_audit_entry(
-                "visual_inference_error",
-                error_msg,
-                AuditStatus.ERROR,
-                details={"error": str(e), "traceback": traceback.format_exc()[:500]},
+                event_type=f"{event_prefix}_error",
+                msg=f"[Vision Context] Ошибка добавления контекста: {e}",
+                status=AuditStatus.ERROR,
+                details={"error": str(e)},
+                meta={"session_id": session_id},
             )
-            print(
-                f"[ERROR] [{datetime.utcnow().isoformat()}Z] {error_msg}\n{traceback.format_exc()}"
-            )
-            return {
-                "summary": f"Inference error: {e}",
-                "model": self.model_id,
-                "status": "error",
-            }
+        finally:
+            # --- Force resource cleanup ---
+            if visual_module_instance is not None and visual_module_instance != self:
+                del visual_module_instance
+                import gc
+
+                gc.collect()
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                log_audit_entry(
+                    event_type=f"{event_prefix}_cleanup",
+                    msg="[Vision Context] Ресурсы VisualModule освобождены.",
+                    status=AuditStatus.INFO,
+                    meta={"session_id": session_id},
+                )
+
+        log_audit_entry(
+            event_type=f"{event_prefix}_fallback",
+            msg="[Vision Context] Возвращаю оригинальный промпт без визуального контекста.",
+            status=AuditStatus.INFO,
+            meta={"session_id": session_id},
+        )
+        return base_system_prompt

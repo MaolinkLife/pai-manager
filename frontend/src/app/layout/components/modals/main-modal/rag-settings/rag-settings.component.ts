@@ -1,6 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { FormBuilder, FormGroup } from '@angular/forms';
 import { ConfigService } from '../../../../../core/services/config.service';
+import { LocalizationService } from '../../../../../shared/pipes/translation/localization.service';
 
 interface RagSearchStrategy {
     sessionContext: {
@@ -63,13 +64,15 @@ export class RagSettingsComponent implements OnInit {
 
     constructor(
         private fb: FormBuilder,
-        private configService: ConfigService
+        private configService: ConfigService,
+        private localizationService: LocalizationService
     ) {
         this.ragForm = this.createForm();
     }
 
     ngOnInit(): void {
         this.loadConfig();
+        this.localizationService.init();
     }
 
     private createForm(): FormGroup {
@@ -235,7 +238,7 @@ export class RagSettingsComponent implements OnInit {
         const changes = this.getChanges();
         if (Object.keys(changes).length > 0) {
             const updateData = { rag: changes };
-            this.configService.updateCongif$(updateData).subscribe({
+            this.configService.updateConfig$(updateData).subscribe({
                 next: (response) => {
                     console.log('RAG settings updated:', response);
                     this.originalConfig = this.buildRagConfigFromForm();

@@ -2,7 +2,9 @@
 Vision Service: Main service for vision analysis.
 """
 
+import os
 import threading
+import time
 from typing import Optional, Dict, Any
 from datetime import datetime
 
@@ -67,7 +69,30 @@ class VisionService:
         _, last_frame = frames[-1]
         prev_frame = frames[-2][1] if len(frames) >= 2 else None
 
+        _maybe_save_debug_frame(last_frame)
+
+        capture_bounds = _get_capture_bounds()
         win = _get_active_window_info_safe()
+        window_on_capture = True
+        if win:
+            win = dict(win)
+            window_rect = win.get("rect")
+            if capture_bounds and window_rect:
+                overlap_ratio = _rect_overlap_ratio(window_rect, capture_bounds)
+                window_on_capture = overlap_ratio >= 0.1
+                win["overlap_ratio"] = round(overlap_ratio, 3)
+            elif capture_bounds and not window_rect:
+                window_on_capture = False
+            else:
+                window_on_capture = True
+            win["matches_capture"] = window_on_capture
+            if not window_on_capture:
+                log_audit_entry(
+                    "vision_window_outside_capture",
+                    "[Vision] Active window outside captured region",
+                    AuditStatus.INFO,
+                    details={"window": win, "capture": capture_bounds},
+                )
 
         ocr_lang = get_config_value("vision.ocr_lang", "rus+eng")
         min_conf = int(get_config_value("vision.ocr_min_conf", 70))
@@ -126,8 +151,10 @@ class VisionService:
         readable = " | ".join(top_lines) if top_lines else "No text recognized"
 
         parts = []
-        if win:
-            parts.append(f"Active window: \"{win['title']}\" (proc: {win['process']})")
+        if win and win.get("matches_capture", True):
+            title = win.get("title", "")
+            process_name = win.get("process", "")
+            parts.append(f"Active window: \"{title}\" (proc: {process_name})")
         parts.append(f"Screen text: {readable}")
         if yolo_summary and yolo_summary != "Nothing detected.":
             parts.append(f"Detected: {yolo_summary}")
@@ -157,6 +184,7 @@ class VisionService:
             "summary": summary,
             "evidence": {
                 "window": win or {},
+                "capture": capture_bounds or {},
                 "ocr": {
                     "lines": text_blocks,
                     "lang": ocr_lang,
@@ -199,6 +227,54 @@ class VisionService:
         return None
 
 
+_debug_save_lock = threading.Lock()
+_debug_last_saved = 0.0
+
+
+def _maybe_save_debug_frame(frame):
+    if not get_config_value("vision.debug_save", False):
+        return
+
+    path_cfg = get_config_value("vision.debug_path", None)
+    base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "temp", "vision"))
+    save_dir = os.path.abspath(path_cfg) if path_cfg else base_dir
+
+    try:
+        os.makedirs(save_dir, exist_ok=True)
+        timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S_%f")
+        filename = os.path.join(save_dir, f"vision_{timestamp}.png")
+        import cv2
+        if not cv2.imwrite(filename, frame):
+            raise RuntimeError("cv2.imwrite returned False")
+
+        latest_path = os.path.join(save_dir, "last_frame.png")
+        if latest_path != filename:
+            try:
+                cv2.imwrite(latest_path, frame)
+            except Exception:
+                pass
+
+        now = time.time()
+        global _debug_last_saved
+        with _debug_save_lock:
+            if now - _debug_last_saved > 5:
+                log_audit_entry(
+                    "vision_debug_frame_saved",
+                    "[Vision] Debug frame saved",
+                    AuditStatus.INFO,
+                    details={"path": filename},
+                )
+                _debug_last_saved = now
+
+    except Exception as e:
+        log_audit_entry(
+            "vision_debug_save_error",
+            f"[Vision] Failed to save debug frame: {e}",
+            AuditStatus.ERROR,
+        )
+
+
+
 # --- Helpers ---
 def _get_active_window_info_safe():
     try:
@@ -207,16 +283,176 @@ def _get_active_window_info_safe():
         import win32process
 
         hwnd = win32gui.GetForegroundWindow()
+        if not hwnd:
+            return None
         title = win32gui.GetWindowText(hwnd) or ""
         _, pid = win32process.GetWindowThreadProcessId(hwnd)
         proc = psutil.Process(pid).name() if pid else ""
+        rect = None
+        try:
+            raw_rect = win32gui.GetWindowRect(hwnd)
+        except Exception:
+            raw_rect = None
+        if raw_rect and len(raw_rect) == 4:
+            left, top, right, bottom = raw_rect
+            width = max(0, int(right) - int(left))
+            height = max(0, int(bottom) - int(top))
+            if width > 0 and height > 0:
+                rect = {
+                    "left": int(left),
+                    "top": int(top),
+                    "width": width,
+                    "height": height,
+                }
         title = title.strip()
         proc = (proc or "").strip()
         if not title and not proc:
             return None
-        return {"title": title[:128], "process": proc[:64]}
+        info = {"title": title[:128], "process": proc[:64]}
+        if rect:
+            info["rect"] = rect
+        return info
     except Exception:
         return None
+
+
+
+
+def _get_capture_bounds():
+    region_cfg = get_config_value("vision.region", None)
+    rect = _normalize_rect_dict(region_cfg) if region_cfg else None
+    if rect:
+        return rect
+
+    capture_mode = str(get_config_value("vision.capture_mode", "monitor") or "monitor").lower()
+    if capture_mode != "monitor":
+        return None
+
+    try:
+        monitor_idx_cfg = int(get_config_value("vision.monitor_index", 0) or 0)
+    except Exception:
+        monitor_idx_cfg = 0
+
+    try:
+        import mss
+
+        with mss.mss() as sct:
+            monitors = sct.monitors
+            if not monitors:
+                return None
+
+            if monitor_idx_cfg == -1 or len(monitors) == 1:
+                return _normalize_rect_dict(monitors[0])
+
+            physical_monitors = monitors[1:] if len(monitors) > 1 else []
+            if not physical_monitors:
+                return _normalize_rect_dict(monitors[0])
+
+            max_idx = len(physical_monitors) - 1
+            if monitor_idx_cfg < 0 or monitor_idx_cfg > max_idx:
+                monitor_idx_cfg = min(max(monitor_idx_cfg, 0), max_idx)
+
+            return _normalize_rect_dict(physical_monitors[monitor_idx_cfg])
+    except Exception:
+        return None
+
+
+def _normalize_rect_dict(data):
+    if not isinstance(data, dict):
+        return None
+
+    def _to_int(value):
+        try:
+            return int(value)
+        except Exception:
+            return None
+
+    left = _to_int(data.get("left", data.get("x")))
+    top = _to_int(data.get("top", data.get("y")))
+    if left is None or top is None:
+        return None
+
+    width_value = data.get("width")
+    if width_value is None and data.get("right") is not None:
+        right = _to_int(data.get("right"))
+        if right is None:
+            return None
+        width = right - left
+    else:
+        width = _to_int(width_value) if width_value is not None else None
+
+    height_value = data.get("height")
+    if height_value is None and data.get("bottom") is not None:
+        bottom = _to_int(data.get("bottom"))
+        if bottom is None:
+            return None
+        height = bottom - top
+    else:
+        height = _to_int(height_value) if height_value is not None else None
+
+    if width is None or height is None:
+        return None
+
+    if width <= 0 or height <= 0:
+        return None
+
+    return {"left": left, "top": top, "width": width, "height": height}
+
+
+def _rects_intersect(rect_a, rect_b):
+    try:
+        ax1 = int(rect_a.get("left"))
+        ay1 = int(rect_a.get("top"))
+        ax2 = ax1 + int(rect_a.get("width"))
+        ay2 = ay1 + int(rect_a.get("height"))
+        bx1 = int(rect_b.get("left"))
+        by1 = int(rect_b.get("top"))
+        bx2 = bx1 + int(rect_b.get("width"))
+        by2 = by1 + int(rect_b.get("height"))
+    except Exception:
+        return False
+
+    if ax1 >= ax2 or ay1 >= ay2 or bx1 >= bx2 or by1 >= by2:
+        return False
+
+    return ax1 < bx2 and ax2 > bx1 and ay1 < by2 and ay2 > by1
+
+
+def _rect_overlap_ratio(rect_a, rect_b):
+    try:
+        ax1 = int(rect_a.get("left"))
+        ay1 = int(rect_a.get("top"))
+        aw = int(rect_a.get("width"))
+        ah = int(rect_a.get("height"))
+        bx1 = int(rect_b.get("left"))
+        by1 = int(rect_b.get("top"))
+        bw = int(rect_b.get("width"))
+        bh = int(rect_b.get("height"))
+    except Exception:
+        return 0.0
+
+    if aw <= 0 or ah <= 0 or bw <= 0 or bh <= 0:
+        return 0.0
+
+    ax2 = ax1 + aw
+    ay2 = ay1 + ah
+    bx2 = bx1 + bw
+    by2 = by1 + bh
+
+    inter_left = max(ax1, bx1)
+    inter_top = max(ay1, by1)
+    inter_right = min(ax2, bx2)
+    inter_bottom = min(ay2, by2)
+
+    if inter_left >= inter_right or inter_top >= inter_bottom:
+        return 0.0
+
+    intersection_area = (inter_right - inter_left) * (inter_bottom - inter_top)
+    window_area = aw * ah
+    if window_area <= 0:
+        return 0.0
+
+    return intersection_area / float(window_area)
 
 
 def _extract_top_text_blocks(frame, lang="rus+eng", min_conf=70, max_lines=5):

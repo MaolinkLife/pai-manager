@@ -12,6 +12,12 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from core.initialize import run_startup_checks
+
+# Запускаем инициализацию ДО импортов маршрутов
+run_startup_checks()
+
+# Теперь можно импортировать маршруты, т.к. конфиг уже инициализирован
 from routes.ollama_routes import router as ollama_router
 from routes.config_routes import router as config_router
 from routes.preset_routes import router as preset_router
@@ -23,10 +29,7 @@ from routes.ws_routes import ws_router
 from routes.embed_routes import router as embed_router
 from routes.vector_routes import router as vector_router
 
-from core.initialize import run_startup_checks
 from loops.loop_core import run_loop
-
-run_startup_checks()
 
 app = FastAPI()
 
@@ -51,6 +54,7 @@ app.include_router(vector_router)
 
 # Start background loops
 run_loop()
+
 
 @app.get("/api/ping")
 def ping():

@@ -8,20 +8,19 @@
     align-items: center;
     justify-content: center;
     z-index: 1000;
-    font-family: "JetBrains Mono", monospace;
+    font-family: var(--font-family, "JetBrains Mono", monospace);
 }
 
 .modal-backdrop {
     position: absolute;
     width: 100%;
     height: 100%;
-    background: rgba(13, 13, 13, 0.85); // @color-bg с альфой
+    background: rgba(12, 12, 13, 0.85); // var(--color-bg) с альфой
     backdrop-filter: blur(4px);
 }
 
 .modal-content {
     &[appearance="fullscreen"] {
-        // width: 100%;
         height: 100%;
         border-radius: 0;
     }
@@ -31,16 +30,16 @@
     }
 
     position: relative;
-    background: #1a1a1a; // @color-surface
-    border-radius: 8px; // @radius
+    background: var(--color-surface);
+    border-radius: var(--radius, 8px);
     width: 90%;
     max-height: 90vh;
     overflow: hidden;
-    box-shadow: 0 0 16px rgba(0, 216, 255, 0.25); // @shadow-soft усилен
+    box-shadow: 0 0 16px rgba(0, 216, 255, 0.25); // можно заменить на var(--shadow-soft), если нужно слабее
     z-index: 1;
     display: flex;
     flex-direction: column;
-    border: 1px solid #2b2b2b; // @color-border
+    border: 1px solid var(--color-border);
 }
 
 .modal-header {
@@ -48,16 +47,17 @@
     align-items: center;
     justify-content: space-between;
     padding: 1rem 1.25rem;
-    border-bottom: 1px solid #2b2b2b;
-    background: #1a1a1a;
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-surface);
 
     .modal-title {
         font-size: 1.25rem;
         font-weight: 600;
-        color: #cccccc; // @color-text
+        color: var(--color-text);
     }
 
     .close-button {
+        color: inherit;
         background: transparent;
         border: none;
         cursor: pointer;
@@ -68,21 +68,21 @@
         transition: color 0.2s ease-in-out;
 
         svg {
-            stroke: #cccccc; // @color-text
+            stroke: var(--color-text);
             transition: stroke 0.2s;
         }
 
         &:hover svg {
-            stroke: #ff4b4b; // @color-danger
+            stroke: var(--color-danger);
         }
     }
 }
 
 .modal-body {
     padding: 1.25rem;
-    color: #cccccc; // @color-text
+    color: var(--color-text);
     overflow-y: auto;
-    background: #1a1a1a;
+    background: var(--color-surface);
     height: 100%;
 }
 
@@ -90,6 +90,6 @@
     display: flex;
     justify-content: flex-end;
     padding: 1rem 1.25rem;
-    border-top: 1px solid #2b2b2b;
-    background: #1a1a1a;
+    border-top: 1px solid var(--color-border);
+    background: var(--color-surface);
 }

@@ -12,6 +12,7 @@ from services.lorebook_service import (
     add_lorebook_entry,
     update_lorebook_entry,
     delete_lorebook_entry,
+    search_lore_entries,
 )
 
 router = APIRouter(prefix="/api/lorebook", tags=["Lorebook"])
@@ -26,19 +27,21 @@ def get_all_entries():
 @router.post("/", response_model=Dict[str, Any])
 def create_entry(entry: Dict[str, Any]):
     """Создать новую запись в Lorebook"""
-    if add_lorebook_entry(entry):
-        return {"status": "success", "entry": entry}
-    else:
-        raise HTTPException(status_code=500, detail="Failed to create entry")
+    created = add_lorebook_entry(entry)
+    if created:
+        return {"status": "success", "entry": created}
+
+    raise HTTPException(status_code=500, detail="Failed to create entry")
 
 
 @router.put("/{entry_id}", response_model=Dict[str, Any])
 def update_entry(entry_id: int, entry: Dict[str, Any]):
     """Обновить запись в Lorebook"""
-    if update_lorebook_entry(entry_id, entry):
-        return {"status": "success", "entry": entry}
-    else:
-        raise HTTPException(status_code=404, detail="Entry not found")
+    updated = update_lorebook_entry(entry_id, entry)
+    if updated:
+        return {"status": "success", "entry": updated}
+
+    raise HTTPException(status_code=404, detail="Entry not found")
 
 
 @router.delete("/{entry_id}")
@@ -53,18 +56,4 @@ def delete_entry(entry_id: int):
 @router.get("/search")
 def search_entries(query: str = ""):
     """Поиск записей по ключевым словам"""
-    entries = get_lorebook_entries()
-    if not query:
-        return entries
-
-    query = query.lower()
-    filtered_entries = []
-    for entry in entries:
-        content = entry.get("content", "").lower()
-        keywords = entry.get("keywords", "").lower()
-        category = entry.get("category", "").lower()
-
-        if query in content or query in keywords or query in category:
-            filtered_entries.append(entry)
-
-    return filtered_entries
+    return search_lore_entries(query=query, use_keyword_fallback=True)

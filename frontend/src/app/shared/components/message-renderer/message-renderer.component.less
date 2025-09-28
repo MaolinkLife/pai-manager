@@ -2,6 +2,13 @@
 
 // message-renderer.component.less
 
+.divider-block {
+    height: 1px;
+    background: fade(@color-border, 60%);
+    margin: 12px 0;
+    border: none;
+}
+
 .message-renderer {
     .block {
         margin: 8px 0;
@@ -14,7 +21,7 @@
 
     .text-block {
         line-height: 1.5;
-        color: #e1e1e1;
+        color: var(--color-text);
 
         &.streaming::after {
             content: "▋";
@@ -57,7 +64,7 @@
                     Menlo, monospace;
                 font-size: 12px;
                 line-height: 1.45;
-                color: #d4d4d4;
+                color: var(--color-text);
             }
         }
 
@@ -74,7 +81,7 @@
         h3 {
             margin: 0;
             font-weight: 600;
-            color: #ffffff;
+            color: var(--color-text);
         }
     }
 
@@ -85,7 +92,7 @@
 
             li {
                 margin: 4px 0;
-                color: #e1e1e1;
+                color: var(--color-text);
             }
         }
     }
@@ -100,7 +107,7 @@
         transition: box-shadow 0.2s ease, border-color 0.2s ease;
 
         &::before {
-            content: '';
+            content: "";
             position: absolute;
             inset: 0;
             border-radius: inherit;
@@ -180,17 +187,22 @@
             max-height: 0;
             opacity: 0;
             overflow: hidden;
-            transition: max-height 0.45s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease-in-out;
+            transition: max-height 0.45s cubic-bezier(0.4, 0, 0.2, 1),
+                opacity 0.3s ease-in-out;
 
             &::before {
-                content: '';
+                content: "";
                 position: absolute;
                 left: 0;
                 top: 18px;
                 bottom: 12px;
                 width: 2px;
                 border-radius: 2px;
-                background: linear-gradient(180deg, fade(@color-accent, 45%), fade(@color-accent, 0%));
+                background: linear-gradient(
+                    180deg,
+                    fade(@color-accent, 45%),
+                    fade(@color-accent, 0%)
+                );
             }
 
             code {

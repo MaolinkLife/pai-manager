@@ -1,4 +1,6 @@
 # routes/resources_routes.py (updated)
+import edge_tts
+import re
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from services.logger_service import get_debug_log
@@ -9,6 +11,16 @@ from services.monitor_service import (
 )  # Add import
 
 router = APIRouter(prefix="/api/resources", tags=["Resources"])
+
+
+def parse_voice_shortname(raw_name: str) -> str:
+    # Пример: "Microsoft Server Speech Text to Speech Voice (ru-RU, SvetlanaNeural)"
+    match = re.search(r"\(([^,]+),\s*([^)]+)\)", raw_name)
+    if match:
+        locale = match.group(1)
+        shortname = match.group(2)
+        return f"{locale}-{shortname}"
+    return raw_name
 
 
 @router.get("/devices")
@@ -50,4 +62,26 @@ def get_monitor_info_endpoint():
             "status": "error",
             "message": f"Error getting monitor info: {str(e)}",
             "data": {},
+        }
+
+
+@router.get("/voices")
+async def get_edge_voices():
+    try:
+        voices = await edge_tts.list_voices()
+        simplified = [
+            {
+                "name": parse_voice_shortname(v.get("Name")),
+                "gender": v.get("Gender", "Unknown"),
+                "styles": v.get("VoicePersonalities", []),
+                "categories": v.get("ContentCategories", []),
+            }
+            for v in voices
+        ]
+        return {"status": "success", "voices": simplified}
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Error getting voices: {str(e)}",
+            "voices": [],
         }

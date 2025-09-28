@@ -41,4 +41,13 @@ export class ResourcesService {
             }
             ));
     }
+
+    getEdgeVoices$(): Observable<any> {
+        return this.http.get(`${this.apiUrl}/resources/voices`).pipe(
+            catchError((error) => {
+                console.error('Error getting edge voices:', error);
+                return of({ voices: [] });
+            })
+        );
+    }
 }

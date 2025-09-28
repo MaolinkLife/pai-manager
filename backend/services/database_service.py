@@ -77,12 +77,12 @@ def add_message_to_history(
     return history_service.add_history(char.id, role, content, timestamp)
 
 
-def get_history(character_name: str, limit: int = 20):
+def get_history(character_name: str, limit: int = 20, offset: int = 0):
     char = character_service.get_character(character_name)
     if not char:
         return []
 
-    rows = history_service.get_history(char.id, limit)
+    rows = history_service.get_history(char.id, limit, offset)
 
     return [
         {

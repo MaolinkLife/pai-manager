@@ -83,10 +83,11 @@ async def websocket_endpoint(websocket: WebSocket):
 
             elif action == "fetch_history":
                 limit = data.get("limit", 32)
+                offset = data.get("offset", 0)
                 char_name = config_service.get_config_value(
                     "char_name", "default_waifu"
                 )
-                history = database_service.get_history(char_name, limit)
+                history = database_service.get_history(char_name, limit, offset)
                 if not await _safe_send_json(
                     websocket, {"type": "history", "items": history}
                 ):

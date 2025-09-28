@@ -21,7 +21,7 @@
             <div *ngSwitchCase="'header'" class="block header-block">
                 <h3>{{ block.content }}</h3>
             </div>
-            
+
             <div *ngSwitchCase="'list'" class="block list-block">
                 <ul>
                     <li>{{ block.content }}</li>
@@ -42,7 +42,11 @@
                 >
                     <span class="icon">✦</span>
                     <span class="label">Размышляет</span>
-                    <span class="chevron" [class.rotated]="block.isExpanded || isStreaming">▾</span>
+                    <span
+                        class="chevron"
+                        [class.rotated]="block.isExpanded || isStreaming"
+                        >▾</span
+                    >
                 </button>
                 <div
                     class="thinking-body"
@@ -50,6 +54,8 @@
                     [innerHTML]="block.safeContent || block.rawContent"
                 ></div>
             </div>
+
+            <hr *ngSwitchCase="'divider'" class="divider-block" />
         </ng-container>
     </ng-container>
 </div>

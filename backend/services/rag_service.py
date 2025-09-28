@@ -3,26 +3,33 @@
 # Purpose: Retrieve relevant lore from the DB for response generation
 # ===========================================================
 
-import re
 from services.logger_service import log_audit_entry, AuditStatus
 from services import lorebook_service
 
 
-# Simple keyword extractor
-def extract_keywords(text: str) -> list:
-    words = re.findall(r"\b\w{4,}\b", text.lower())
-    return list(set(words))
+def retrieve_lore_fragments(
+    text: str,
+    top_k: int = 5,
+    min_similarity: float = 0.75,
+):
+    if not text.strip():
+        return []
 
-
-# Retrieve lore fragments by keywords
-def retrieve_lore_fragments(text):
     try:
-        for word in text.split():
-            found = lorebook_service.get_lore_by_keyword(word, limit=1)
-            # process `found`
-    except Exception as e:
-        print(f"Error retrieving lore for word '{word}': {e}")
-        raise  # re-raise if you want it to propagate
+        entries = lorebook_service.search_lore_entries(
+            query=text,
+            top_k=top_k,
+            min_similarity=min_similarity,
+        )
+        return entries
+    except Exception as exc:
+        log_audit_entry(
+            event_type="rag_lore_error",
+            msg="[RAG] Failed to retrieve lore fragments",
+            status=AuditStatus.ERROR,
+            details={"error": str(exc)},
+        )
+        return []
 
 
 # Format lore entries for the prompt
@@ -30,10 +37,13 @@ def format_lore_block(lore_entries: list) -> str:
     if not lore_entries:
         return ""
 
-    header = "[LOREBOOK CONTEXT]\n"
-    block = "\n".join(
-        [f"• {entry['title']}: {entry['content']}" for entry in lore_entries]
-    )
+    bullet_lines = []
+    for entry in lore_entries:
+        title = entry.get("title") or ""
+        content = entry.get("content") or ""
+        bullet_lines.append(f"• {title}: {content}" if title else f"• {content}")
+
+    block = "\n".join(bullet_lines)
 
     log_audit_entry(
         event_type="rag_format",
@@ -42,4 +52,4 @@ def format_lore_block(lore_entries: list) -> str:
         details={"entries_count": len(lore_entries)},
     )
 
-    return f"{header}{block}\n"
+    return f"[CONTEXT]\n{block}\n"

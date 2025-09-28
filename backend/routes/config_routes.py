@@ -8,12 +8,17 @@
 # ========================================================
 
 from fastapi import APIRouter, Request
-
+from services.character_service import (
+    get_character_prompt,
+    save_character_prompt,
+)
 from services.config_service import (
-    update_config_bulk, 
-    save_config, 
-    apply_preset_by_name, 
-    get_config
+    update_config_bulk,
+    save_config,
+    apply_preset_by_name,
+    get_config,
+    get_config_value,
+    set_config_value,
 )
 
 router = APIRouter(prefix="/api/config", tags=["Config"])
@@ -42,9 +47,10 @@ async def update_config_bulk_route(request: Request):
     return {
         "status": "partial" if failed else "ok",
         "updated": updated,
-        "failed": failed
+        "failed": failed,
     }
-    
+
+
 # Applies the selected preset
 @router.post("/apply_preset")
 async def apply_preset(request: Request):
@@ -59,3 +65,39 @@ async def apply_preset(request: Request):
         return {"status": "ok", "message": f"Preset '{preset_name}' applied."}
     else:
         return {"status": "error", "message": "Preset not found"}
+
+
+@router.get("/system")
+def get_system_info():
+    char_name = get_config_value("char_name", "default_waifu")
+    try:
+        prompt = get_character_prompt(char_name)
+    except FileNotFoundError:
+        prompt = ""
+
+    return {"system": {"char_name": char_name, "prompt": prompt}}
+
+
+@router.post("/system")
+async def update_system_info(request: Request):
+    data = await request.json()
+    prompt = data.get("prompt")
+    char_name = data.get("char_name")  # опционально
+
+    if not prompt:
+        return {"status": "error", "message": "prompt is required"}
+
+    # Если char_name не передан — берем из конфига
+    if not char_name:
+        char_name = get_config_value("char_name", "default_waifu")
+
+    # Обновляем YAML и БД
+    save_character_prompt(char_name, prompt)
+
+    # Обновляем char_name в конфиге, если передан
+    if data.get("char_name"):
+        from services.config_service import set_config_value
+
+        set_config_value("char_name", char_name)
+
+    return {"status": "ok", "message": f"System prompt for '{char_name}' updated."}

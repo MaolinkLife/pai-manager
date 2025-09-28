@@ -99,4 +99,11 @@ backend/temp/logs/*
 backend/temp/vision/*
 backend/temp/voice/*
 
-backend/logs/*
+backend/logs/
+
+# Временно, потом удалится вместо с игнором.
+open-webui
+old-project
+docs
+
+

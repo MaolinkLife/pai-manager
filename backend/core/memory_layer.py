@@ -1,10 +1,13 @@
 # core/memory_layer.py
-from typing import Dict, Any, List
-import numpy as np
-import traceback
 
-from services import database_service, embed_service
+from typing import Dict, Any, List, Optional
+import numpy as np
+from datetime import datetime
+
+from services import database_service, lorebook_service
+from services.config_service import get_config_value
 from services.logger_service import log_audit_entry, AuditStatus
+from services.embed_service import get_embedding, Provider
 from constants.memory import (
     SESSION_MEMORY_LIMIT,
     FALLBACK_RECENT_CONVERSATION,
@@ -12,156 +15,218 @@ from constants.memory import (
 )
 
 
-class MemoryLayer:
-    """
-    MemoryLayer manages session memory and lorebook retrieval.
-    Provides:
-    - Recent conversation context (session memory)
-    - Relevant knowledge from lorebook (embedding similarity search)
-    """
+def cosine_similarity(a: List[float], b: List[float]) -> float:
+    dot_product = sum(i * j for i, j in zip(a, b))
+    magnitude_a = sum(i * i for i in a) ** 0.5
+    magnitude_b = sum(i * i for i in b) ** 0.5
+    if magnitude_a == 0 or magnitude_b == 0:
+        return 0.0
+    return dot_product / (magnitude_a * magnitude_b)
 
+
+class MemoryLayer:
     def __init__(self):
         self.session_memory_limit = SESSION_MEMORY_LIMIT
+        self.threshold = 0.7  # можно из конфига
 
     async def get_context(self, current_message: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Collect recent context from session memory.
-
-        Args:
-            current_message: Current incoming user message
-
-        Returns:
-            Dictionary with recent conversation, historical context and session length
-        """
         try:
+            user_content = current_message.get("content", "")
+            user_embedding = get_embedding(user_content, provider=Provider.AUTO)
+
+            if not user_embedding:
+                log_audit_entry(
+                    event_type="memory_layer.embed_error",
+                    msg="[MemoryLayer] Failed to get embedding for user content.",
+                    status=AuditStatus.ERROR,
+                )
+                return {
+                    "key_facts": ["В ближайшей памяти не найдено."],
+                    "session_length": 0,
+                }
+
+            # 1. Получить последние 32 сообщения
+            recent_messages = self._get_recent_messages(limit=32)
+
             log_audit_entry(
-                event_type="memory_layer.processing",
-                msg="[MemoryLayer] Collecting session context.",
+                event_type="memory_layer.search_phase_1",
+                msg="[MemoryLayer] Searching in recent messages (last 32).",
                 status=AuditStatus.INFO,
                 details={
-                    "session_memory_limit": self.session_memory_limit,
-                    "current_message_preview": (
-                        current_message.get("content", "")[:50]
-                        if current_message and current_message.get("content")
-                        else "No content"
-                    ),
+                    "total_messages": len(recent_messages),
+                    "threshold": self.threshold,
                 },
             )
 
-            # Lazy import to avoid circular dependencies
-            from services.database_service import get_history
-            from services.config_service import get_config_value
+            # 2. Найти релевантные
+            relevant_messages, scores = self._find_relevant_messages_with_scores(
+                recent_messages, user_embedding, threshold=self.threshold
+            )
 
-            char_name = get_config_value("char_name", "default_waifu")
+            if relevant_messages:
+                formatted_context = self._format_conversation(relevant_messages)
+                log_audit_entry(
+                    event_type="memory_layer.found_in_recent",
+                    msg="[MemoryLayer] Found relevant messages in recent context.",
+                    status=AuditStatus.INFO,
+                    details={
+                        "found_count": len(relevant_messages),
+                        "scores": scores,
+                        "content_preview": (
+                            formatted_context[:200] + "..."
+                            if len(formatted_context) > 200
+                            else formatted_context
+                        ),
+                    },
+                )
+                return {
+                    "key_facts": [formatted_context],
+                    "session_length": len(relevant_messages),
+                }
+
+            # 3. Идём до начала сессии (до первого сообщения за сегодня)
+            start_of_session = self._get_session_start(current_message.get("timestamp"))
+            session_messages = self._get_messages_since(start_of_session)
 
             log_audit_entry(
-                event_type="memory_layer.db_query",
-                msg="[MemoryLayer] Requesting history from DB.",
+                event_type="memory_layer.search_phase_2",
+                msg="[MemoryLayer] Searching in session (since start of day).",
                 status=AuditStatus.INFO,
                 details={
-                    "character_name": char_name,
-                    "limit": self.session_memory_limit,
+                    "total_messages": len(session_messages),
+                    "threshold": self.threshold,
+                    "start_of_session": start_of_session,
                 },
             )
 
-            # Fetch recent messages from DB
-            recent_messages = get_history(char_name, self.session_memory_limit)
-
-            log_audit_entry(
-                event_type="memory_layer.db_result",
-                msg="[MemoryLayer] History fetched from DB.",
-                status=AuditStatus.INFO,
-                details={
-                    "messages_count": len(recent_messages),
-                    "character_name": char_name,
-                },
+            relevant_session, scores = self._find_relevant_messages_with_scores(
+                session_messages, user_embedding, threshold=self.threshold
             )
 
-            # Format conversation
-            recent_conversation = self._format_recent_conversation(recent_messages)
+            if relevant_session:
+                formatted_context = self._format_conversation(relevant_session)
+                first_message = relevant_session[0] if relevant_session else None
+                log_audit_entry(
+                    event_type="memory_layer.found_in_session",
+                    msg="[MemoryLayer] Found relevant messages in session context.",
+                    status=AuditStatus.INFO,
+                    details={
+                        "found_count": len(relevant_session),
+                        "scores": scores,
+                        "first_message_in_session": first_message,
+                        "content_preview": (
+                            formatted_context[:200] + "..."
+                            if len(formatted_context) > 200
+                            else formatted_context
+                        ),
+                    },
+                )
+                return {
+                    "key_facts": [formatted_context],
+                    "session_length": len(relevant_session),
+                }
 
-            result = {
-                "recent_conversation": recent_conversation,
-                "historical_context": FALLBACK_HISTORICAL_CONTEXT,
-                "session_length": len(recent_messages),
+            # 4. Fallback
+            log_audit_entry(
+                event_type="memory_layer.fallback",
+                msg="[MemoryLayer] No relevant messages found, using fallback.",
+                status=AuditStatus.WARNING,
+                details={
+                    "total_messages_processed": len(recent_messages)
+                    + len(session_messages),
+                },
+            )
+            return {
+                "key_facts": ["В ближайшей памяти не найдено."],
+                "session_length": 0,
             }
 
-            conversation_preview = (
-                result["recent_conversation"][:100] + "..."
-                if len(result["recent_conversation"]) > 100
-                else result["recent_conversation"]
-            )
-            log_audit_entry(
-                event_type="memory_layer.completed",
-                msg="[MemoryLayer] Session context successfully built.",
-                status=AuditStatus.SUCCESS,
-                details={
-                    "session_length": result["session_length"],
-                    "conversation_preview": conversation_preview,
-                },
-            )
-
-            return result
-
         except Exception as e:
-            error_msg = (
-                f"[MemoryLayer] Error while retrieving session context: {str(e)}"
-            )
-            print(error_msg)
-            traceback.print_exc()
-
             log_audit_entry(
                 event_type="memory_layer.error",
-                msg=error_msg,
+                msg=f"[MemoryLayer] Error in get_context: {e}",
                 status=AuditStatus.ERROR,
                 details={
                     "error": str(e),
-                    "traceback": traceback.format_exc()[:500],
+                    "traceback": __import__("traceback").format_exc(),
                 },
             )
-
-            # Fallback context
             return {
-                "recent_conversation": FALLBACK_RECENT_CONVERSATION,
-                "historical_context": FALLBACK_HISTORICAL_CONTEXT,
-                "session_length": 1,
+                "key_facts": ["В ближайшей памяти не найдено."],
+                "session_length": 0,
             }
 
-    def _format_recent_conversation(self, messages: List[Dict]) -> str:
-        """
-        Format recent conversation into readable string.
+    def _get_recent_messages(self, limit: int = 32) -> List[Dict]:
+        char_name = get_config_value("char_name", "default_waifu")
+        return database_service.get_history(char_name, limit)
 
-        Args:
-            messages: List of messages with role/content
+    def _find_relevant_messages_with_scores(
+        self, messages: List[Dict], user_embedding: List[float], threshold: float
+    ) -> tuple[List[Dict], List[float]]:
+        relevant = []
+        scores = []
+        total_processed = 0
 
-        Returns:
-            String with formatted dialogue
-        """
-        if not messages:
-            return FALLBACK_RECENT_CONVERSATION
+        for msg in messages:
+            content = msg.get("content", "")
+            emb = get_embedding(content, provider=Provider.AUTO)
+            if emb:
+                sim = cosine_similarity(user_embedding, emb)
+                total_processed += 1
+                if sim >= threshold:
+                    relevant.append(msg)
+                    scores.append(sim)
+            else:
+                log_audit_entry(
+                    event_type="memory_layer.embed_missing",
+                    msg="[MemoryLayer] Failed to get embedding for message, skipping.",
+                    status=AuditStatus.WARNING,
+                    details={"message_content": content[:100]},
+                )
 
+        log_audit_entry(
+            event_type="memory_layer.search_summary",
+            msg="[MemoryLayer] Search completed.",
+            status=AuditStatus.INFO,
+            details={
+                "total_messages_processed": total_processed,
+                "total_relevant_found": len(relevant),
+                "threshold_used": threshold,
+                "max_similarity": max(scores) if scores else 0.0,
+                "min_similarity": min(scores) if scores else 0.0,
+            },
+        )
+        return relevant, scores
+
+    def _get_session_start(self, timestamp: str) -> str:
+        dt = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+        start_of_day = dt.replace(hour=0, minute=0, second=0, microsecond=0)
+        return start_of_day.isoformat()
+
+    def _get_messages_since(self, start_time: str) -> List[Dict]:
+        char_name = get_config_value("char_name", "default_waifu")
+        return database_service.get_history_since(char_name, start_time)
+
+    def _format_conversation(self, messages: List[Dict]) -> str:
         formatted = []
         for msg in messages:
-            role = "User" if msg.get("role") == "user" else "Lim"
+            role = "User" if msg.get("role") == "user" else "Assistant"
             formatted.append(f"{role}: {msg.get('content', '')}")
-
         return "\n".join(formatted)
 
     async def get_lore_context(
-        self, text: str, threshold: float = 0.7, top_k: int = 3
+        self,
+        text: str,
+        threshold: Optional[float] = None,
+        top_k: Optional[int] = None,
     ) -> Dict[str, Any]:
-        """
-        Retrieve relevant knowledge from lorebook using embeddings.
-
-        Args:
-            text: Input text query
-            threshold: Similarity threshold
-            top_k: Maximum number of top matches
-
-        Returns:
-            Dictionary with lore matches and their count
-        """
+        # твой старый метод — оставляем как есть
         try:
+            if threshold is None:
+                threshold = float(get_config_value("lorebook.similarityThreshold", 0.7))
+            if top_k is None:
+                top_k = int(get_config_value("lorebook.topK", 3))
+
             log_audit_entry(
                 event_type="memory_layer.lore_query",
                 msg="[MemoryLayer] Starting lore context search.",
@@ -169,27 +234,34 @@ class MemoryLayer:
                 details={"threshold": threshold, "top_k": top_k},
             )
 
-            query_emb = embed_service.get_embedding(text)
-            lore_entries = database_service.get_lorebook()  # [{id, content, embedding}]
+            entries = lorebook_service.search_lore_entries(
+                query=text,
+                top_k=top_k,
+                min_similarity=threshold,
+            )
 
-            results = []
-            for entry in lore_entries:
-                emb = np.array(entry["embedding"])
-                sim = self._cosine_similarity(query_emb, emb)
-                if sim >= threshold:
-                    results.append((sim, entry["content"]))
-
-            results.sort(key=lambda x: x[0], reverse=True)
-            top_results = [content for _, content in results[:top_k]]
+            top_results = []
+            for entry in entries:
+                title = entry.get("title") or ""
+                content = entry.get("content") or ""
+                phrase = f"{title}: {content}" if title else content
+                top_results.append(phrase)
 
             log_audit_entry(
                 event_type="memory_layer.lore_success",
                 msg="[MemoryLayer] Lore context search completed.",
                 status=AuditStatus.SUCCESS,
-                details={"matches_count": len(top_results)},
+                details={
+                    "matches_count": len(top_results),
+                    "preview": top_results[:2],
+                },
             )
 
-            return {"lore_matches": top_results, "count": len(top_results)}
+            return {
+                "lore_matches": top_results,
+                "count": len(top_results),
+                "raw_lore_entries": entries,
+            }
 
         except Exception as e:
             log_audit_entry(
@@ -198,17 +270,4 @@ class MemoryLayer:
                 status=AuditStatus.ERROR,
                 details={"error": str(e)},
             )
-            return {"lore_matches": [], "count": 0}
-
-    def _cosine_similarity(self, a, b) -> float:
-        """
-        Compute cosine similarity between two vectors.
-
-        Args:
-            a: First vector
-            b: Second vector
-
-        Returns:
-            Cosine similarity score (float)
-        """
-        return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b)))
+            return {"lore_matches": [], "count": 0, "raw_lore_entries": []}

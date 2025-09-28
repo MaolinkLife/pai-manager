@@ -37,6 +37,7 @@ version: 0.2
 - UX polish
   - Redesigned the thinking block with LIM palette, accordion-style expand/collapse, and auto-collapse after streaming.
   - Ensured reasoning removal on history deletion and tightened audit logs around VAD, visual context, and API generation flows.
+
 version: 0.3
 - Config & Backend
   - Moved the default config into constants/default_config.py, expanded it with system/core sections, voice module settings, STT defaults, and snake_case audio/vision keys.

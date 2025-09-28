@@ -21,6 +21,8 @@ import { VisionSettingsComponent } from './layout/components/modals/main-modal/v
 import { RagSettingsComponent } from './layout/components/modals/main-modal/rag-settings/rag-settings.component';
 import { GenerationSettingsComponent } from './layout/components/modals/main-modal/generation-settings/generation-settings.component';
 import { MonitorSelectionModalComponent } from './layout/components/modals/monitor-selection-modal/monitor-selection-modal.component';
+import { CoreSettingsComponent } from './layout/components/modals/main-modal/core-settings/core-settings.component';
+import { SystemSettingsComponent } from './layout/components/modals/main-modal/system-settings/system-settings.component';
 
 
 @NgModule({
@@ -37,7 +39,9 @@ import { MonitorSelectionModalComponent } from './layout/components/modals/monit
         AudioSettingsComponent,
         RagSettingsComponent,
         GenerationSettingsComponent,
-        MonitorSelectionModalComponent
+        MonitorSelectionModalComponent,
+        CoreSettingsComponent,
+        SystemSettingsComponent,
     ],
     imports: [
         BrowserModule,

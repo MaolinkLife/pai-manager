@@ -1,13 +1,14 @@
-import { Component, HostListener, OnDestroy, OnInit } from '@angular/core';
+﻿import { Component, HostListener, OnDestroy, OnInit } from '@angular/core';
 import { FormControl } from '@angular/forms';
 import { Observable } from 'rxjs';
-import { map } from 'rxjs/operators';
+import { finalize, map } from 'rxjs/operators';
 import { Message } from '../../core/models/message.model';
 import { ProjectConfig } from './../../core/models/project-config.model';
 import { ApiService } from '../../core/services/api.service';
 import { ConfigService } from '../../core/services/config.service';
-import { VoiceService } from '../../core/services/voice.service';
+import { VoiceModeResponse, VoiceService } from '../../core/services/voice.service';
 import { WebsocketService } from '../../core/services/websocket.service';
+import { NotificationService } from '../../shared/components/notification/notification.service';
 
 function generateTempId(): string {
     if ((crypto as any).randomUUID) {
@@ -28,152 +29,18 @@ export class ChatComponent implements OnInit, OnDestroy {
         this.showEmojiPicker = false;
     }
 
-    showEmojiPicker = false;
-    allEmojis = [
-        // Smileys
-        { symbol: '😀', name: 'grinning face', category: 'smileys' },
-        { symbol: '😃', name: 'grinning face with big eyes', category: 'smileys' },
-        { symbol: '😄', name: 'grinning face with smiling eyes', category: 'smileys' },
-        { symbol: '😁', name: 'beaming face with smiling eyes', category: 'smileys' },
-        { symbol: '😆', name: 'grinning squinting face', category: 'smileys' },
-        { symbol: '😅', name: 'grinning face with sweat', category: 'smileys' },
-        { symbol: '🤣', name: 'rolling on the floor laughing', category: 'smileys' },
-        { symbol: '😂', name: 'face with tears of joy', category: 'smileys' },
-        { symbol: '🙂', name: 'slightly smiling face', category: 'smileys' },
-        { symbol: '🙃', name: 'upside-down face', category: 'smileys' },
-        { symbol: '😉', name: 'winking face', category: 'smileys' },
-        { symbol: '😊', name: 'smiling face with smiling eyes', category: 'smileys' },
-        { symbol: '😇', name: 'smiling face with halo', category: 'smileys' },
-
-        // People
-        { symbol: '👋', name: 'waving hand', category: 'people' },
-        { symbol: '🤚', name: 'raised back of hand', category: 'people' },
-        { symbol: '🖐️', name: 'hand with fingers splayed', category: 'people' },
-        { symbol: '✋', name: 'raised hand', category: 'people' },
-        { symbol: '🖖', name: 'vulcan salute', category: 'people' },
-        { symbol: '👌', name: 'OK hand', category: 'people' },
-        { symbol: '🤌', name: 'pinched fingers', category: 'people' },
-        { symbol: '🤏', name: 'pinching hand', category: 'people' },
-        { symbol: '✌️', name: 'victory hand', category: 'people' },
-        { symbol: '🤞', name: 'crossed fingers', category: 'people' },
-        { symbol: '🤟', name: 'love-you gesture', category: 'people' },
-        { symbol: '🤘', name: 'sign of the horns', category: 'people' },
-        { symbol: '🤙', name: 'call me hand', category: 'people' },
-
-        // Nature
-        { symbol: '🐶', name: 'dog face', category: 'nature' },
-        { symbol: '🐱', name: 'cat face', category: 'nature' },
-        { symbol: '🐭', name: 'mouse face', category: 'nature' },
-        { symbol: '🐹', name: 'hamster', category: 'nature' },
-        { symbol: '🐰', name: 'rabbit face', category: 'nature' },
-        { symbol: '🦊', name: 'fox', category: 'nature' },
-        { symbol: '🐻', name: 'bear', category: 'nature' },
-        { symbol: '🐼', name: 'panda', category: 'nature' },
-        { symbol: '🐨', name: 'koala', category: 'nature' },
-        { symbol: '🐯', name: 'tiger face', category: 'nature' },
-        { symbol: '🦁', name: 'lion', category: 'nature' },
-        { symbol: '🐮', name: 'cow face', category: 'nature' },
-        { symbol: '🐷', name: 'pig face', category: 'nature' },
-
-        // Food
-        { symbol: '🍇', name: 'grapes', category: 'food' },
-        { symbol: '🍈', name: 'melon', category: 'food' },
-        { symbol: '🍉', name: 'watermelon', category: 'food' },
-        { symbol: '🍊', name: 'tangerine', category: 'food' },
-        { symbol: '🍋', name: 'lemon', category: 'food' },
-        { symbol: '🍌', name: 'banana', category: 'food' },
-        { symbol: '🍍', name: 'pineapple', category: 'food' },
-        { symbol: '🥭', name: 'mango', category: 'food' },
-        { symbol: '🍎', name: 'red apple', category: 'food' },
-        { symbol: '🍏', name: 'green apple', category: 'food' },
-        { symbol: '🍐', name: 'pear', category: 'food' },
-        { symbol: '🍑', name: 'peach', category: 'food' },
-        { symbol: '🍒', name: 'cherries', category: 'food' },
-
-        // Activity
-        { symbol: '⚽', name: 'soccer ball', category: 'activity' },
-        { symbol: '🏀', name: 'basketball', category: 'activity' },
-        { symbol: '🏈', name: 'american football', category: 'activity' },
-        { symbol: '⚾', name: 'baseball', category: 'activity' },
-        { symbol: '🎾', name: 'tennis', category: 'activity' },
-        { symbol: '🏐', name: 'volleyball', category: 'activity' },
-        { symbol: '🏉', name: 'rugby football', category: 'activity' },
-        { symbol: '🎱', name: 'pool 8 ball', category: 'activity' },
-        { symbol: '🏓', name: 'ping pong', category: 'activity' },
-        { symbol: '🏸', name: 'badminton', category: 'activity' },
-        { symbol: '🥅', name: 'goal net', category: 'activity' },
-        { symbol: '🏒', name: 'ice hockey', category: 'activity' },
-        { symbol: '🥍', name: 'lacrosse', category: 'activity' },
-
-        // Travel
-        { symbol: '🚗', name: 'automobile', category: 'travel' },
-        { symbol: '🚕', name: 'taxi', category: 'travel' },
-        { symbol: '🚙', name: 'sport utility vehicle', category: 'travel' },
-        { symbol: '🚌', name: 'bus', category: 'travel' },
-        { symbol: '🚎', name: 'trolleybus', category: 'travel' },
-        { symbol: '🏎️', name: 'racing car', category: 'travel' },
-        { symbol: '🚓', name: 'police car', category: 'travel' },
-        { symbol: '🚑', name: 'ambulance', category: 'travel' },
-        { symbol: '🚒', name: 'fire engine', category: 'travel' },
-        { symbol: '🚐', name: 'minibus', category: 'travel' },
-        { symbol: '🚚', name: 'delivery truck', category: 'travel' },
-        { symbol: '🚛', name: 'articulated lorry', category: 'travel' },
-        { symbol: '🚜', name: 'tractor', category: 'travel' },
-
-        // Objects
-        { symbol: '⌚', name: 'watch', category: 'objects' },
-        { symbol: '📱', name: 'mobile phone', category: 'objects' },
-        { symbol: '💻', name: 'laptop', category: 'objects' },
-        { symbol: '⌨️', name: 'keyboard', category: 'objects' },
-        { symbol: '🖥️', name: 'desktop computer', category: 'objects' },
-        { symbol: '🖨️', name: 'printer', category: 'objects' },
-        { symbol: '🖱️', name: 'computer mouse', category: 'objects' },
-        { symbol: '🖲️', name: 'trackball', category: 'objects' },
-        { symbol: '🕹️', name: 'joystick', category: 'objects' },
-        { symbol: '🗜️', name: 'clamp', category: 'objects' },
-        { symbol: '💽', name: 'computer disk', category: 'objects' },
-        { symbol: '💾', name: 'floppy disk', category: 'objects' },
-        { symbol: '💿', name: 'optical disk', category: 'objects' },
-
-        // Symbols
-        { symbol: '❤️', name: 'red heart', category: 'symbols' },
-        { symbol: '🧡', name: 'orange heart', category: 'symbols' },
-        { symbol: '💛', name: 'yellow heart', category: 'symbols' },
-        { symbol: '💚', name: 'green heart', category: 'symbols' },
-        { symbol: '💙', name: 'blue heart', category: 'symbols' },
-        { symbol: '💜', name: 'purple heart', category: 'symbols' },
-        { symbol: '🖤', name: 'black heart', category: 'symbols' },
-        { symbol: '🤍', name: 'white heart', category: 'symbols' },
-        { symbol: '🤎', name: 'brown heart', category: 'symbols' },
-        { symbol: '💔', name: 'broken heart', category: 'symbols' },
-        { symbol: '❣️', name: 'heart exclamation', category: 'symbols' },
-        { symbol: '💕', name: 'two hearts', category: 'symbols' },
-        { symbol: '💞', name: 'revolving hearts', category: 'symbols' }
-    ];
-
-
-    emojiSearchTerm = '';
-    selectedEmojiCategory = 'smileys';
-    filteredEmojis: any[] = [];
-
-    emojiCategories = [
-        { name: 'smileys', icon: '😀', label: 'Смайлики' },
-        { name: 'people', icon: '👋', label: 'Люди' },
-        { name: 'nature', icon: '🐶', label: 'Природа' },
-        { name: 'food', icon: '🍎', label: 'Еда' },
-        { name: 'activity', icon: '⚽', label: 'Активность' },
-        { name: 'travel', icon: '🚗', label: 'Путешествия' },
-        { name: 'objects', icon: '⌚', label: 'Объекты' },
-        { name: 'symbols', icon: '❤️', label: 'Символы' }
-    ];
-
-
     // Pagination properties
     hasMoreMessages = true;
     isLoadingHistory = false;
     currentOffset = 0;
     readonly MESSAGES_PER_PAGE = 32;
-    emojiDropdownPosition = { x: 0, y: 0 };
+
+    showEmojiPicker = false;
+    emojiDropdownPosition: { x: number; y: number } = { x: 0, y: 0 };
+    emojiPickerMode: 'dropdown' | 'side-panel' = 'side-panel';
+    emojiPickerSide: 'left' | 'right' | 'top' | 'bottom' = 'right';
+    readonly emojiPanelWidth = 360;
+    readonly emojiPanelHeight = 360;
     chatInput = new FormControl('');
     chatHistory: Message[] = [];
     loading = false;
@@ -184,6 +51,8 @@ export class ChatComponent implements OnInit, OnDestroy {
     config$: Observable<{ userName: string; charName: string } | null> | null = null;
 
     recording = false;
+    voiceModeEnabled = false;
+    voiceModeLoading = false;
     activeDropdown: string | null = null;
     currentPlayingMessage: string | null = null;
     private currentStreamingMessage: Message | null = null;
@@ -193,11 +62,13 @@ export class ChatComponent implements OnInit, OnDestroy {
         private configService: ConfigService,
         private voiceService: VoiceService,
         private websocketService: WebsocketService,
+        private notificationService: NotificationService
     ) { }
 
     ngOnInit(): void {
         this.getSettings();
         this.loadHistory();
+        this.fetchVoiceModeStatus();
 
         this.websocketService.messages$.subscribe((rawMsg: string) => {
             let event: any;
@@ -301,7 +172,9 @@ export class ChatComponent implements OnInit, OnDestroy {
                     break;
 
                 case 'system':
-                    if (event.event === 'stream_end') {
+                    if (event.event === 'typing_start') {
+                        this.loading = true;
+                    } else if (event.event === 'stream_end') {
                         this.loading = false;
                         this.currentStreamingMessage = null;
                     }
@@ -338,44 +211,45 @@ export class ChatComponent implements OnInit, OnDestroy {
         event.stopPropagation();
 
         if (!this.showEmojiPicker) {
-            // Получаем кнопку и ее позицию
-            const button = event.target as HTMLElement;
-            const rect = button.getBoundingClientRect();
+            if (this.emojiPickerMode === 'dropdown') {
+                const target = (event.currentTarget as HTMLElement) || (event.target as HTMLElement);
+                if (!target) {
+                    return;
+                }
+                const rect = target.getBoundingClientRect();
+                const dropdownWidth = 320;
+                const dropdownHeight = 300;
 
-            // Вычисляем позицию дропдауна
-            const dropdownWidth = 320;
-            const dropdownHeight = 300;
+                let x = rect.left;
+                if (x + dropdownWidth > window.innerWidth) {
+                    x = window.innerWidth - dropdownWidth;
+                }
+                if (x < 0) {
+                    x = 0;
+                }
 
-            // Позиция по X - выравниваем по левому краю кнопки
-            let x = rect.left;
+                let y = rect.top - dropdownHeight - 10;
+                if (y < 0) {
+                    y = rect.bottom + 10;
+                }
+                if (y + dropdownHeight > window.innerHeight) {
+                    y = Math.max(10, window.innerHeight - dropdownHeight - 10);
+                }
 
-            // Проверяем, не выходит ли дропдаун за правую границу экрана
-            if (x + dropdownWidth > window.innerWidth) {
-                x = window.innerWidth - dropdownWidth;
+                this.emojiDropdownPosition = { x, y };
             }
 
-            // Проверяем, не выходит ли дропдаун за левую границу экрана
-            if (x < 0) {
-                x = 0;
-            }
-
-            // Позиция по Y - показываем над кнопкой
-            let y = rect.top - dropdownHeight - 10;
-
-            // Если нет места сверху, показываем под кнопкой
-            if (y < 0) {
-                y = rect.bottom + 10;
-            }
-
-            this.emojiDropdownPosition = { x, y };
+            this.showEmojiPicker = true;
+            this.activeDropdown = 'emoji';
+        } else {
+            this.closeEmojiPicker();
         }
+    }
 
-        this.showEmojiPicker = !this.showEmojiPicker;
-        this.activeDropdown = this.showEmojiPicker ? 'emoji' : null;
-
-        if (this.showEmojiPicker) {
-            this.emojiSearchTerm = '';
-            this.filteredEmojis = this.allEmojis.filter(e => e.category === 'smileys');
+    closeEmojiPicker(): void {
+        this.showEmojiPicker = false;
+        if (this.activeDropdown === 'emoji') {
+            this.activeDropdown = null;
         }
     }
 
@@ -398,7 +272,7 @@ export class ChatComponent implements OnInit, OnDestroy {
         const currentValue = this.chatInput.value || '';
         const newValue = currentValue + emoji;
         this.chatInput.setValue(newValue);
-        this.showEmojiPicker = false;
+        this.closeEmojiPicker();
 
         setTimeout(() => {
             const textarea = document.querySelector('.chat-input') as HTMLTextAreaElement;
@@ -409,29 +283,23 @@ export class ChatComponent implements OnInit, OnDestroy {
         });
     }
 
-    onEmojiSearchInput(event: any): void {
-        this.emojiSearchTerm = event.target.value;
-        this.filterEmojis();
-    }
-
-    filterEmojis(): void {
-        if (!this.emojiSearchTerm) {
-            this.filteredEmojis = this.allEmojis.filter(e => e.category === this.selectedEmojiCategory);
-            return;
+    get sidePanelOffsetStyle(): { [key: string]: string } {
+        if (!this.showEmojiPicker || this.emojiPickerMode !== 'side-panel') {
+            return {};
         }
 
-        const term = this.emojiSearchTerm.toLowerCase();
-        this.filteredEmojis = this.allEmojis.filter(emoji =>
-            emoji.name.toLowerCase().includes(term) ||
-            emoji.symbol.includes(this.emojiSearchTerm)
-        );
-    }
-
-
-    selectEmojiCategory(category: string): void {
-        this.selectedEmojiCategory = category;
-        this.emojiSearchTerm = '';
-        this.filteredEmojis = this.allEmojis.filter(e => e.category === category);
+        switch (this.emojiPickerSide) {
+            case 'right':
+                return { 'padding-right': `${this.emojiPanelWidth}px` };
+            case 'left':
+                return { 'padding-left': `${this.emojiPanelWidth}px` };
+            case 'top':
+                return { 'padding-top': `${this.emojiPanelHeight}px` };
+            case 'bottom':
+                return { 'padding-bottom': `${this.emojiPanelHeight}px` };
+            default:
+                return {};
+        }
     }
 
     loadHistory(): void {
@@ -443,6 +311,49 @@ export class ChatComponent implements OnInit, OnDestroy {
             action: 'fetch_history',
             payload: { limit: this.MESSAGES_PER_PAGE }
         }));
+    }
+    private fetchVoiceModeStatus(): void {
+        this.voiceModeLoading = true;
+        this.voiceService.voiceModeStatus$()
+            .pipe(finalize(() => this.voiceModeLoading = false))
+            .subscribe({
+                next: (res: VoiceModeResponse) => {
+                    if (res && typeof res.running !== 'undefined') {
+                        this.voiceModeEnabled = !!res.running;
+                    } else {
+                        this.fetchVoiceModeStatus();
+                    }
+                },
+                error: (err: any) => {
+                    console.error('[VoiceMode] Status error', err);
+                },
+            });
+    }
+
+    toggleVoiceMode(): void {
+        if (this.voiceModeLoading) {
+            return;
+        }
+
+        this.voiceModeLoading = true;
+        const request$ = this.voiceModeEnabled
+            ? this.voiceService.voiceModeStop$()
+            : this.voiceService.voiceModeStart$();
+
+        request$
+            .pipe(
+                finalize(() => {
+                    this.fetchVoiceModeStatus();
+                }),
+            )
+            .subscribe({
+                next: (res: VoiceModeResponse) => {
+                    this.voiceModeEnabled = !!res?.running;
+                },
+                error: (err: any) => {
+                    console.error('[VoiceMode] Toggle error', err);
+                },
+            });
     }
 
     getSettings(): void {
@@ -651,3 +562,9 @@ export class ChatComponent implements OnInit, OnDestroy {
         return msg.role === 'assistant' && index === this.chatHistory.length - 1;
     }
 }
+
+
+
+
+
+

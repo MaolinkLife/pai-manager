@@ -13,7 +13,8 @@ import json
 import os
 from utils.open_file_w_utf8 import open_utf8
 from services.logger_service import log_audit_entry, AuditStatus
-from models.config_model import DEFAULT_CONFIG, CONFIG_PATHS
+from models.config_model import CONFIG_PATHS
+from constants.default_config import DEFAULT_CONFIG
 
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "..", CONFIG_PATHS["config"])
 PRESETS_PATH = os.path.join(os.path.dirname(__file__), "..", CONFIG_PATHS["presets"])
@@ -136,8 +137,37 @@ def _recursive_update(
     updated = []
     failed = []
 
+    log_audit_entry(
+        event_type="config_debug_recursive_start",
+        msg=f"[Config Service]: Starting recursive update",
+        status=AuditStatus.INFO,
+        details={
+            "path": path,
+            "updates_keys": (
+                list(updates.keys()) if isinstance(updates, dict) else "not_dict"
+            ),
+            "existing_type": type(existing).__name__,
+        },
+    )
+
     for key, value in updates.items():
         current_path = f"{path}.{key}" if path else key
+
+        log_audit_entry(
+            event_type="config_debug_recursive_item",
+            msg=f"[Config Service]: Processing item in recursive update",
+            status=AuditStatus.INFO,
+            details={
+                "current_path": current_path,
+                "key": key,
+                "value_type": type(value).__name__,
+                "value": (
+                    str(value)[:200] + "..."
+                    if isinstance(value, (dict, list)) and len(str(value)) > 200
+                    else value
+                ),
+            },
+        )
 
         # Protect existing user_id from being overwritten
         if current_path == "user_id":
@@ -152,6 +182,15 @@ def _recursive_update(
 
         if isinstance(value, dict) and isinstance(existing.get(key), dict):
             # Recursively update nested dictionaries
+            log_audit_entry(
+                event_type="config_debug_recursive_nested",
+                msg=f"[Config Service]: Recursively updating nested dict",
+                status=AuditStatus.INFO,
+                details={
+                    "path": current_path,
+                    "key": key,
+                },
+            )
             u, f = _recursive_update(existing[key], value, current_path)
             updated.extend(u)
             failed.extend(f)
@@ -168,10 +207,21 @@ def _recursive_update(
                 status=AuditStatus.SUCCESS,
                 details={
                     "path": current_path,
-                    "old_value": old_value,
-                    "new_value": value,
+                    "old_value": str(old_value)[:100] if old_value else old_value,
+                    "new_value": str(value)[:100] if value else value,
                 },
             )
+
+    log_audit_entry(
+        event_type="config_debug_recursive_end",
+        msg=f"[Config Service]: Finished recursive update",
+        status=AuditStatus.INFO,
+        details={
+            "path": path,
+            "updated_count": len(updated),
+            "failed_count": len(failed),
+        },
+    )
 
     return updated, failed
 
@@ -183,11 +233,11 @@ def validate_config(config: dict) -> tuple[bool, list]:
     """
     errors = []
 
-    # Check required fields
-    required_fields = ["user_id", "char_name", "user_name", "language"]
-    for field in required_fields:
-        if field not in config or config[field] is None:
-            errors.append(f"Missing required field: {field}")
+    # Для user_id делаем отдельную проверку - он может быть None при создании дефолтного конфига
+    # Но если он есть, то должен быть не пустым
+    user_id = config.get("user_id")
+    if user_id is not None and user_id == "":
+        errors.append("user_id cannot be empty string")
 
     # Validate voice section
     if "voice" in config:

@@ -1,234 +1,384 @@
-<div class="settings-wrapper">
-    <form
-        [formGroup]="generationForm"
-        (ngSubmit)="saveChanges()"
-        class="settings-form"
-    >
-        <h2>⚡ API Settings</h2>
+<ng-container *ngIf="isLoading$ | async; else formContent">
+    <div class="settings-wrapper">
+        <div class="settings-form">
+            <h2><app-skeleton height="2rem" width="150px"></app-skeleton></h2>
 
-        <div class="form-group">
-            <label for="apiType">API Type</label>
-            <input id="apiType" type="text" formControlName="apiType" />
-        </div>
+            <div class="form-group">
+                <label
+                    ><app-skeleton height="1rem" width="120px"></app-skeleton
+                ></label>
+                <app-skeleton height="2.5rem" width="100%"></app-skeleton>
+            </div>
 
-        <div class="form-group">
-            <label for="modelName">Model Name</label>
-            <div
-                class="custom-select"
-                (click)="toggleDropdown()"
-                [ngClass]="{ open: dropdownOpen }"
-            >
-                <div class="selected">
-                    {{
-                        generationForm.get("modelName")?.value || "Select Model"
-                    }}
-                </div>
-                <ul class="options" *ngIf="dropdownOpen">
-                    <li
-                        *ngFor="let model of availableModels"
-                        (click)="selectModel(model); $event.stopPropagation()"
-                        [class.active]="model === selectedModel"
-                    >
-                        {{ model.split(":")[0] }} ({{
-                            model.split(":")[1] || "latest"
-                        }})
-                    </li>
-                </ul>
+            <div class="form-group">
+                <label
+                    ><app-skeleton height="1rem" width="120px"></app-skeleton
+                ></label>
+                <app-skeleton height="2.5rem" width="100%"></app-skeleton>
+            </div>
+
+            <div class="form-group">
+                <label
+                    ><app-skeleton height="1rem" width="120px"></app-skeleton
+                ></label>
+                <app-skeleton height="2.5rem" width="100%"></app-skeleton>
+            </div>
+
+            <div class="form-group token-limit-block">
+                <label
+                    ><app-skeleton height="1rem" width="120px"></app-skeleton
+                ></label>
+                <app-skeleton height="2.5rem" width="100%"></app-skeleton>
+            </div>
+
+            <div class="form-group">
+                <label
+                    ><app-skeleton height="1rem" width="120px"></app-skeleton
+                ></label>
+                <app-skeleton height="2.5rem" width="100%"></app-skeleton>
+            </div>
+
+            <div class="form-group">
+                <label
+                    ><app-skeleton height="1rem" width="120px"></app-skeleton
+                ></label>
+                <app-skeleton height="2.5rem" width="100%"></app-skeleton>
+            </div>
+
+            <div class="button-row">
+                <app-skeleton height="2.5rem" width="150px"></app-skeleton>
             </div>
         </div>
-
-        <div class="form-group">
-            <label for="visualModel">Visual Model</label>
-            <input id="visualModel" type="text" formControlName="visualModel" />
-        </div>
-
-        <div class="form-group token-limit-block">
-            <label for="tokenLimit">Token Limit</label>
-            <input
-                #tokenInput
-                id="tokenLimit"
-                type="number"
-                min="512"
-                max="131072"
-                step="256"
-                formControlName="tokenLimit"
-            />
-            <input
-                #tokenSlider
-                type="range"
-                min="512"
-                max="131072"
-                step="256"
-                formControlName="tokenLimit"
-            />
-            <div class="token-range-labels">
-                <span>512</span>
-                <span>128k</span>
-            </div>
-        </div>
-
-        <div class="form-group">
-            <label for="messagePairLimit">Message Pair Limit</label>
-            <input
-                id="messagePairLimit"
-                type="number"
-                formControlName="messagePairLimit"
-                min="1"
-                max="50"
-            />
-        </div>
-
-        <div class="form-group">
-            <label class="checkbox">
-                <input type="checkbox" formControlName="streaming" />
-                Enable Streaming
-            </label>
-        </div>
-
-        <div class="button-row">
-            <button type="submit" [disabled]="!hasChanges()">
-                💾 Save API Settings
-            </button>
-        </div>
-    </form>
-</div>
-
-<div class="settings-wrapper">
-    <h2>🎨 Generation Presets</h2>
-
-    <div class="form-group">
-        <label for="presetSelect">Select Preset</label>
-        <select
-            id="presetSelect"
-            [value]="selectedPresetName"
-            (change)="onPresetChange($event)"
-        >
-            <option *ngFor="let p of presets" [value]="p.name">
-                {{ p.name }}
-            </option>
-        </select>
     </div>
 
-    <form
-        [formGroup]="generationSettingsForm"
-        (ngSubmit)="saveOrUpdatePreset()"
-    >
+    <div class="settings-wrapper">
+        <h2><app-skeleton height="2rem" width="150px"></app-skeleton></h2>
+
         <div class="form-group">
-            <label>Preset Name</label>
-            <input type="text" formControlName="name" />
+            <label
+                ><app-skeleton height="1rem" width="120px"></app-skeleton
+            ></label>
+            <app-skeleton height="2.5rem" width="100%"></app-skeleton>
         </div>
 
         <div class="form-group">
-            <label>Description</label>
-            <input type="text" formControlName="description" />
+            <label
+                ><app-skeleton height="1rem" width="120px"></app-skeleton
+            ></label>
+            <app-skeleton height="2.5rem" width="100%"></app-skeleton>
         </div>
 
         <div class="form-group">
-            <label>
-                Temperature:
-                <span>{{
-                    generationSettingsForm.get("temperature")?.value
-                        | number : "1.2-2"
-                }}</span>
-            </label>
-            <input
-                type="range"
-                min="0.1"
-                max="2.0"
-                step="0.01"
-                formControlName="temperature"
-            />
+            <label
+                ><app-skeleton height="1rem" width="120px"></app-skeleton
+            ></label>
+            <app-skeleton height="2.5rem" width="100%"></app-skeleton>
         </div>
 
         <div class="form-group">
-            <label>
-                Top P:
-                <span>{{
-                    generationSettingsForm.get("topP")?.value | number : "1.2-2"
-                }}</span>
-            </label>
-            <input
-                type="range"
-                min="0.1"
-                max="1.0"
-                step="0.01"
-                formControlName="topP"
-            />
+            <label
+                ><app-skeleton height="1rem" width="120px"></app-skeleton
+            ></label>
+            <app-skeleton height="2.5rem" width="100%"></app-skeleton>
         </div>
 
         <div class="form-group">
-            <label>
-                Top K:
-                <span>{{ generationSettingsForm.get("topK")?.value }}</span>
-            </label>
-            <input
-                type="range"
-                min="1"
-                max="100"
-                step="1"
-                formControlName="topK"
-            />
+            <label
+                ><app-skeleton height="1rem" width="120px"></app-skeleton
+            ></label>
+            <app-skeleton height="2.5rem" width="100%"></app-skeleton>
         </div>
 
         <div class="form-group">
-            <label>
-                Min P:
-                <span>{{
-                    generationSettingsForm.get("minP")?.value | number : "1.2-2"
-                }}</span>
-            </label>
-            <input
-                type="range"
-                min="0.0"
-                max="1.0"
-                step="0.01"
-                formControlName="minP"
-            />
+            <label
+                ><app-skeleton height="1rem" width="120px"></app-skeleton
+            ></label>
+            <app-skeleton height="2.5rem" width="100%"></app-skeleton>
         </div>
 
         <div class="form-group">
-            <label>
-                Repeat Penalty:
-                <span>{{
-                    generationSettingsForm.get("repeatPenalty")?.value
-                        | number : "1.2-2"
-                }}</span>
-            </label>
-            <input
-                type="range"
-                min="0.5"
-                max="2.0"
-                step="0.01"
-                formControlName="repeatPenalty"
-            />
+            <label
+                ><app-skeleton height="1rem" width="120px"></app-skeleton
+            ></label>
+            <app-skeleton height="2.5rem" width="100%"></app-skeleton>
         </div>
 
         <div class="form-group">
-            <label>
-                Max Tokens:
-                <span>{{
-                    generationSettingsForm.get("numPredict")?.value
-                }}</span>
-            </label>
-            <input
-                type="range"
-                min="64"
-                max="4096"
-                step="64"
-                formControlName="numPredict"
-            />
+            <label
+                ><app-skeleton height="1rem" width="120px"></app-skeleton
+            ></label>
+            <app-skeleton height="2.5rem" width="100%"></app-skeleton>
         </div>
 
         <div class="form-group">
-            <label>Stop Tokens</label>
-            <textarea
-                formControlName="stop"
-                placeholder="User:,Assistant:,</s>"
-            ></textarea>
+            <label
+                ><app-skeleton height="1rem" width="120px"></app-skeleton
+            ></label>
+            <app-skeleton height="6rem" width="100%"></app-skeleton>
         </div>
 
         <div class="button-row">
-            <button type="submit">💾 Save Preset</button>
+            <app-skeleton height="2.5rem" width="150px"></app-skeleton>
         </div>
-    </form>
-</div>
+    </div>
+</ng-container>
+
+<ng-template #formContent>
+    <div class="settings-wrapper">
+        <form
+            [formGroup]="generationForm"
+            (ngSubmit)="saveChanges()"
+            class="settings-form"
+        >
+            <h2>⚡ {{ "settings.apiSettings" | translate }}</h2>
+
+            <div class="form-group">
+                <label for="apiType">{{
+                    "settings.apiType" | translate
+                }}</label>
+                <input id="apiType" type="text" formControlName="apiType" />
+            </div>
+
+            <div class="form-group">
+                <label for="modelName">{{
+                    "settings.textModel" | translate
+                }}</label>
+                <div
+                    class="custom-select"
+                    (click)="toggleDropdown()"
+                    [ngClass]="{ open: dropdownOpen }"
+                >
+                    <div class="selected">
+                        {{
+                            generationForm.get("modelName")?.value ||
+                                ("settings.selectModel" | translate)
+                        }}
+                    </div>
+                    <ul class="options" *ngIf="dropdownOpen">
+                        <li
+                            *ngFor="let model of availableModels"
+                            (click)="
+                                selectModel(model); $event.stopPropagation()
+                            "
+                            [class.active]="model === selectedModel"
+                        >
+                            {{ model.split(":")[0] }} ({{
+                                model.split(":")[1] || "latest"
+                            }})
+                        </li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="visualModel">{{
+                    "settings.visualModel" | translate
+                }}</label>
+                <input
+                    id="visualModel"
+                    type="text"
+                    formControlName="visualModel"
+                />
+            </div>
+
+            <div class="form-group token-limit-block">
+                <label for="tokenLimit">{{
+                    "settings.tokenLimit" | translate
+                }}</label>
+                <input
+                    #tokenInput
+                    id="tokenLimit"
+                    type="number"
+                    min="512"
+                    max="131072"
+                    step="256"
+                    formControlName="tokenLimit"
+                />
+                <input
+                    #tokenSlider
+                    type="range"
+                    min="512"
+                    max="131072"
+                    step="256"
+                    formControlName="tokenLimit"
+                />
+                <div class="token-range-labels">
+                    <span>512</span>
+                    <span>128k</span>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="messagePairLimit">{{
+                    "settings.messagePairLimit" | translate
+                }}</label>
+                <input
+                    id="messagePairLimit"
+                    type="number"
+                    formControlName="messagePairLimit"
+                    min="1"
+                    max="50"
+                />
+            </div>
+
+            <div class="form-group">
+                <label class="checkbox">
+                    <input type="checkbox" formControlName="streaming" />
+                    {{ "settings.streaming" | translate }}
+                </label>
+            </div>
+
+            <div class="button-row">
+                <button type="submit" [disabled]="!hasChanges()">
+                    💾 {{ "general.save" | translate }}
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <div class="settings-wrapper">
+        <h2>{{ "settings.generationPresets" | translate }}</h2>
+
+        <div class="form-group">
+            <label for="presetSelect">{{
+                "settings.selectPreset" | translate
+            }}</label>
+            <select
+                id="presetSelect"
+                [value]="selectedPresetName"
+                (change)="onPresetChange($event)"
+            >
+                <option *ngFor="let p of presets" [value]="p.name">
+                    {{ p.name }}
+                </option>
+            </select>
+        </div>
+
+        <form
+            [formGroup]="generationSettingsForm"
+            (ngSubmit)="saveOrUpdatePreset()"
+        >
+            <div class="form-group">
+                <label>{{ "settings.presetName" | translate }}</label>
+                <input type="text" formControlName="name" />
+            </div>
+
+            <div class="form-group">
+                <label>{{ "settings.description" | translate }}</label>
+                <input type="text" formControlName="description" />
+            </div>
+
+            <div class="form-group">
+                <label>
+                    {{ "settings.temperature" | translate }}:
+                    <span>{{
+                        generationSettingsForm.get("temperature")?.value
+                            | number : "1.2-2"
+                    }}</span>
+                </label>
+                <input
+                    type="range"
+                    min="0.1"
+                    max="2.0"
+                    step="0.01"
+                    formControlName="temperature"
+                />
+            </div>
+
+            <div class="form-group">
+                <label>
+                    {{ "settings.topP" | translate }}:
+                    <span>{{
+                        generationSettingsForm.get("topP")?.value
+                            | number : "1.2-2"
+                    }}</span>
+                </label>
+                <input
+                    type="range"
+                    min="0.1"
+                    max="1.0"
+                    step="0.01"
+                    formControlName="topP"
+                />
+            </div>
+
+            <div class="form-group">
+                <label>
+                    {{ "settings.topK" | translate }}:
+                    <span>{{ generationSettingsForm.get("topK")?.value }}</span>
+                </label>
+                <input
+                    type="range"
+                    min="1"
+                    max="100"
+                    step="1"
+                    formControlName="topK"
+                />
+            </div>
+
+            <div class="form-group">
+                <label>
+                    {{ "settings.minP" | translate }}:
+                    <span>{{
+                        generationSettingsForm.get("minP")?.value
+                            | number : "1.2-2"
+                    }}</span>
+                </label>
+                <input
+                    type="range"
+                    min="0.0"
+                    max="1.0"
+                    step="0.01"
+                    formControlName="minP"
+                />
+            </div>
+
+            <div class="form-group">
+                <label>
+                    {{ "settings.repeatPenalty" | translate }}:
+                    <span>{{
+                        generationSettingsForm.get("repeatPenalty")?.value
+                            | number : "1.2-2"
+                    }}</span>
+                </label>
+                <input
+                    type="range"
+                    min="0.5"
+                    max="2.0"
+                    step="0.01"
+                    formControlName="repeatPenalty"
+                />
+            </div>
+
+            <div class="form-group">
+                <label>
+                    {{ "settings.maxTokens" | translate }}:
+                    <span>{{
+                        generationSettingsForm.get("numPredict")?.value
+                    }}</span>
+                </label>
+                <input
+                    type="range"
+                    min="64"
+                    max="4096"
+                    step="64"
+                    formControlName="numPredict"
+                />
+            </div>
+
+            <div class="form-group">
+                <label>{{ "settings.stopTokens" | translate }}</label>
+                <textarea
+                    formControlName="stop"
+                    [placeholder]="'settings.stopTokensPlaceholder' | translate"
+                ></textarea>
+            </div>
+
+            <div class="button-row">
+                <button type="submit">
+                    💾 {{ "settings.savePreset" | translate }}
+                </button>
+            </div>
+        </form>
+    </div>
+</ng-template>

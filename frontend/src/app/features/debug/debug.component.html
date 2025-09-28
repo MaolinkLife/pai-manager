@@ -70,7 +70,11 @@
                 }}
             </div>
 
-            <div class="log-toggle" (click)="toggleDetails(i)">
+            <div
+                class="log-toggle"
+                *ngIf="hasDetails(log)"
+                (click)="toggleDetails(i)"
+            >
                 <span>
                     {{
                         expandedLogs.has(i)

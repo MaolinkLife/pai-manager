@@ -2,8 +2,9 @@ import { Component, OnInit } from '@angular/core';
 import { FormBuilder, FormGroup } from '@angular/forms';
 import { ConfigService } from '../../../../../core/services/config.service';
 import { ResourcesService } from '../../../../../core/services/resources.service';
-import { Observable } from 'rxjs';
-import { map, startWith } from 'rxjs/operators';
+import { Observable, BehaviorSubject, combineLatest } from 'rxjs';
+import { map, startWith, tap, finalize } from 'rxjs/operators';
+import { LocalizationService } from '../../../../../shared/pipes/translation/localization.service';
 
 interface AudioDevice {
     id: number;
@@ -22,20 +23,22 @@ interface AudioDevicesData {
 export class AudioSettingsComponent implements OnInit {
     audioForm: FormGroup;
     originalConfig: any = {};
+    isLoading$ = new BehaviorSubject<boolean>(true);
 
     devices$: Observable<AudioDevicesData> = new Observable<AudioDevicesData>();
 
     constructor(
         private fb: FormBuilder,
         private configService: ConfigService,
-        private resourcesService: ResourcesService
+        private resourcesService: ResourcesService,
+        private localizationService: LocalizationService,
     ) {
         this.audioForm = this.createForm();
     }
 
     ngOnInit(): void {
-        this.loadConfig();
-        this.loadDevices();
+        this.loadConfigAndDevices();
+        this.localizationService.init();
     }
 
     private createForm(): FormGroup {
@@ -52,18 +55,20 @@ export class AudioSettingsComponent implements OnInit {
         });
     }
 
-    private loadConfig(): void {
-        this.configService.getConfig$().subscribe(config => {
-            if (config && config.audio) {
-                this.originalConfig = { ...config.audio };
-                this.audioForm.patchValue(config.audio);
-            }
-        });
-    }
+    private loadConfigAndDevices(): void {
+        combineLatest([
+            this.configService.getConfig$(),
+            this.resourcesService.getAudioDevices$()
+        ]).pipe(
+            tap(() => this.isLoading$.next(true)),
+            map(([config, devices]) => {
+                // Load config
+                if (config && config.audio) {
+                    this.originalConfig = { ...config.audio };
+                    this.audioForm.patchValue(config.audio);
+                }
 
-    private loadDevices(): void {
-        this.devices$ = this.resourcesService.getAudioDevices$().pipe(
-            map((devices: any) => {
+                // Load devices
                 const inputDevices: AudioDevice[] = [
                     { id: 0, name: 'Default Device' },
                     ...(devices.recording_devices || []).map(
@@ -73,17 +78,20 @@ export class AudioSettingsComponent implements OnInit {
 
                 return { inputDevices };
             }),
-            startWith({
-                inputDevices: [{ id: 0, name: 'Loading...' }]
-            })
-        );
+            finalize(() => this.isLoading$.next(false))
+        ).subscribe(devicesData => {
+            this.devices$ = new Observable<AudioDevicesData>(subscriber => {
+                subscriber.next(devicesData);
+                subscriber.complete();
+            });
+        });
     }
 
     saveChanges(): void {
         const changes = this.getChanges();
         if (Object.keys(changes).length > 0) {
             const updateData = { audio: changes };
-            this.configService.updateCongif$(updateData).subscribe({
+            this.configService.updateConfig$(updateData).subscribe({
                 next: (response) => {
                     console.log('Audio settings updated:', response);
                     this.originalConfig = { ...this.audioForm.value };

@@ -82,8 +82,7 @@ def get_monitor_info() -> Dict[str, Any]:
         with mss.mss() as sct:
             monitors = sct.monitors
             return {
-                "total_monitors": len(monitors)
-                - 1,  # subtract 1 because the first element is the combined screen
+                "total_monitors": max(0, len(monitors) - 1),  # subtract 1 because the first element is the combined screen
                 "monitors": [
                     {
                         "index": i,
@@ -92,8 +91,9 @@ def get_monitor_info() -> Dict[str, Any]:
                         "left": monitor["left"],
                         "top": monitor["top"],
                     }
-                    for i, monitor in enumerate(monitors[1:], 1)
+                    for i, monitor in enumerate(monitors[1:])
                 ],
             }
     except Exception as e:
         return {"total_monitors": 0, "monitors": [], "error": str(e)}
+

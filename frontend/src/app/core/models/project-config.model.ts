@@ -1,5 +1,5 @@
 export interface ProjectConfig {
-    userId?: string;
+    userId: string;
     charName: string;
     userName: string;
     language: string;
@@ -11,6 +11,7 @@ export interface ProjectConfig {
     api: ApiConfig;
     openrouter: OpenRouterConfig;
     generateSettings: GenerationConfig;
+    system: SystemConfig;
 }
 
 export interface VoiceConfig {
@@ -22,6 +23,9 @@ export interface VoiceConfig {
     voiceLanguage: string;
     useWindowsOutput: boolean;
     streamingTts: boolean;
+    enableFallback: boolean;
+    activeModule: string;
+    voiceModules: Record<string, any>
 }
 
 export interface ModuleConfig {
@@ -35,28 +39,54 @@ export interface ModuleConfig {
     visual: boolean;
 }
 
+export interface VisionModuleConfig {
+    modelId: string;
+    maxTokens: number;
+}
+
+export interface SystemConfig {
+    userId: string;
+    charName: string;
+    userName: string;
+    systemPrompt: string;
+    language: string;
+    theme: string;
+}
+
 export interface VisionConfig {
     enabled: boolean;
-    monitorIndex: number;
+    activeProvider: string;              // ✅ было: active_provider
+    monitorIndex: number;                // ✅ было: monitor_index
     fps: number;
-    bufferSec: number;
-    downscaleWidth: number;
-    yoloEnabled: boolean;
-    ocrLang: string;
-    ocrMinConf: number;
-    ocrMaxLines: number;
+    bufferSec: number;                   // ✅ было: buffer_sec
+    downscaleWidth: number;              // ✅ было: downscale_width
+    yoloEnabled: boolean;                // ✅ было: yolo_enabled
+    ocrLang: string;                     // ✅ было: ocr_lang
+    ocrMinConf: number;                  // ✅ было: ocr_min_conf
+    ocrMaxLines: number;                 // ✅ было: ocr_max_lines
     region: any;
+    captureMode: string;                 // ✅ было: capture_mode
+    windowTitle: string;                 // ✅ было: window_title
+    windowProcess: string;               // ✅ было: window_process
+    debugSave: boolean;                  // ✅ было: debug_save
+    debugPath: string;                   // ✅ было: debug_path
+    visionModules: {                    // ✅ было: vision_modules
+        [key: string]: VisionModuleConfig;
+    };
 }
 
 export interface AudioConfig {
-    inputDevice?: string;
-    outputDevice?: string;
+    inputDeviceId?: number;
     sampleRate?: number;
-    bufferSize?: number;
-    enableNoiseReduction?: boolean;
-    enableEchoCancellation?: boolean;
-    volumeThreshold?: number;
-    silenceDuration?: number;
+    channels?: number;
+    chunkSize?: number;
+    enableVad?: boolean;
+    vadThreshold?: number;
+    silenceTimeout?: number;
+    minAudioLength?: number;
+    maxAudioLength?: number;
+    triggerWords?: string[];
+    ignoreTriggerWords?: boolean;
 }
 
 export interface RagConfig {

@@ -4,23 +4,23 @@
     display: flex;
     width: 100%;
     height: 100%;
-    background-color: @color-bg;
-    color: @color-text;
-    font-family: @font-family;
+    background-color: var(--color-bg);
+    color: var(--color-text);
+    font-family: var(--font-family);
 }
 
 .sidebar {
     display: flex;
     flex-direction: column;
-    background-color: @color-surface;
-    border-right: 1px solid @color-border;
+    background-color: var(--color-surface);
+    border-right: 1px solid var(--color-border);
     width: 200px;
     padding: 16px;
-    box-shadow: inset -1px 0 0 @color-border;
+    box-shadow: inset -1px 0 0 var(--color-border);
 }
 
 .sidebar-title {
-    color: @color-text-active;
+    color: var(--color-text-active);
     font-weight: bold;
     margin-bottom: 12px;
     font-size: 18px;
@@ -33,27 +33,27 @@
 
     button {
         background-color: transparent;
-        border: 1px solid @color-border;
-        border-radius: @radius;
-        color: @color-text;
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius);
+        color: var(--color-text);
         padding: 10px 12px;
         text-align: left;
         transition: all 0.2s ease;
         cursor: pointer;
-        font-family: @font-family;
+        font-family: var(--font-family);
         font-size: 14px;
 
         &:hover {
-            background-color: @color-accent-dark;
-            color: @color-text-active;
-            border-color: @color-accent;
+            background-color: var(--color-accent-dark);
+            color: var(--color-text-active);
+            border-color: var(--color-accent);
         }
 
         &.active {
-            background-color: @color-accent;
-            color: @color-bg;
-            border-color: @color-accent;
-            box-shadow: @shadow-soft;
+            background-color: var(--color-accent);
+            color: var(--color-bg);
+            border-color: var(--color-accent);
+            box-shadow: var(--shadow-soft);
         }
     }
 }
@@ -61,43 +61,37 @@
 .main-content {
     flex-grow: 1;
     padding: 24px;
-    background-color: @color-bg;
+    background-color: var(--color-bg);
     overflow-y: auto;
 
-    // Стили скроллбара в стиле LIM-UI
     &::-webkit-scrollbar {
         width: 8px;
     }
 
     &::-webkit-scrollbar-track {
-        background: @color-bg;
+        background: var(--color-bg);
         border-radius: 4px;
     }
 
     &::-webkit-scrollbar-thumb {
-        background: @color-border;
+        background: var(--color-border);
         border-radius: 4px;
         transition: background 0.2s ease;
 
         &:hover {
-            background: @color-accent-dark;
+            background: var(--color-accent-dark);
         }
     }
 
-    // Для Firefox
     scrollbar-width: thin;
-    scrollbar-color: @color-border @color-bg;
-
-    // Добавим плавный скролл
+    scrollbar-color: var(--color-border) var(--color-bg);
     scroll-behavior: smooth;
 
-    // Улучшим отступы для контента
     > * {
         max-width: 100%;
     }
 }
 
-// Адаптивность для меньших экранов
 @media (max-width: 768px) {
     .content {
         flex-direction: column;
@@ -106,6 +100,6 @@
     .sidebar {
         width: 100%;
         border-right: none;
-        border-bottom: 1px solid @color-border;
+        border-bottom: 1px solid var(--color-border);
     }
 }

@@ -1,241 +1,204 @@
-@import "../../../assets/styles/lim-ui/colors.less";
-
 :host {
     display: block;
 }
 
 .settings-wrapper {
-    background-color: @color-surface;
+    background-color: var(--color-surface);
     padding: 24px;
-    border-radius: @radius;
-    box-shadow: @shadow-soft;
-    font-family: @font-family;
-    color: @color-text;
+    border-radius: var(--radius);
+    font-family: var(--font-family);
+    color: var(--color-text);
     max-width: 700px;
-    margin: 0 auto;
-    margin-bottom: 24px;
+    margin: 0 auto 24px auto;
 
     h2 {
-        color: @color-text-active;
+        color: var(--color-text-active);
         margin-top: 0;
         margin-bottom: 12px;
         font-size: 20px;
     }
-}
 
-.form-group {
-    display: flex;
-    flex-direction: column;
-    margin-bottom: 20px;
-
-    label {
-        font-weight: 500;
-        margin-bottom: 6px;
-
-        &.checkbox {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            cursor: pointer;
-            font-weight: normal;
-
-            input[type="checkbox"] {
-                accent-color: @color-accent;
-                width: 16px;
-                height: 16px;
-            }
-        }
-    }
-
-    input[type="text"] {
-        background-color: @color-bg;
-        color: @color-text-active;
-        border: 1px solid @color-border;
-        padding: 10px;
-        border-radius: @radius;
-        font-size: 14px;
-        transition: border-color 0.2s;
-
-        &:focus {
-            border-color: @color-accent;
-            box-shadow: 0 0 6px @color-focus;
-            outline: none;
-        }
-    }
-
-    select {
-        appearance: none;
-        -webkit-appearance: none;
-        -moz-appearance: none;
-
-        background-color: @color-bg;
-        color: @color-text-active;
-        border: 1px solid @color-border;
-        padding: 10px 40px 10px 12px;
-        border-radius: @radius;
-        font-size: 14px;
-        font-family: @font-family;
-        background-image: url("data:image/svg+xml;utf8,<svg fill='%2300d8ff' height='20' viewBox='0 0 24 24' width='20' xmlns='http://www.w3.org/2000/svg'><path d='M7 10l5 5 5-5z'/></svg>");
-        background-repeat: no-repeat;
-        background-position: right 10px center;
-        background-size: 16px;
-
-        option {
-            background-color: @color-surface;
-            color: @color-text;
-        }
-
-        &:focus {
-            border-color: @color-accent;
-            box-shadow: 0 0 6px @color-focus;
-            outline: none;
-        }
-    }
-}
-
-.button-row {
-    display: flex;
-    justify-content: flex-end;
-    gap: 12px;
-
-    button {
-        background: @color-accent;
-        color: @color-text-active;
-        border: none;
-        padding: 10px 16px;
-        border-radius: @radius;
-        font-family: @font-family;
-        transition: background 0.2s ease;
-        box-shadow: @shadow-soft;
-        cursor: pointer;
-
-        &:hover {
-            background: @color-accent-dark;
-        }
-
-        &:disabled {
-            background: @color-border;
-            color: #777;
-            cursor: not-allowed;
-            box-shadow: none;
-            opacity: 0.6;
-        }
-    }
-}
-
-.settings-wrapper {
     .section {
         margin-bottom: 30px;
         padding: 20px;
-        border: 1px solid #444;
-        border-radius: 8px;
-        background-color: #2d2d2d;
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius);
+        background-color: var(--color-bg);
 
         h3 {
             margin-top: 0;
-            color: #fff;
-            border-bottom: 2px solid #007bff;
+            color: var(--color-text-active);
+            border-bottom: 2px solid var(--color-accent);
             padding-bottom: 10px;
+            font-size: 16px;
         }
 
         .subsection {
             margin: 15px 0;
             padding: 15px;
-            background-color: #3a3a3a;
-            border-radius: 6px;
+            background-color: color-mix(
+                in srgb,
+                var(--color-bg) 98%,
+                white
+            ); // заменяет lighten(@color-bg, 2%)
+            border-radius: var(--radius);
 
             h4 {
                 margin-top: 0;
-                color: #e0e0e0;
+                color: var(--color-text);
+                font-size: 14px;
             }
         }
     }
 
     .form-group {
+        display: flex;
+        flex-direction: column;
         margin-bottom: 15px;
 
         label {
-            color: #e0e0e0;
-        }
+            color: var(--color-text);
+            font-weight: 500;
+            margin-bottom: 6px;
 
-        label.checkbox {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            font-weight: normal;
-            cursor: pointer;
+            &.checkbox {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                font-weight: normal;
+                cursor: pointer;
 
-            input[type="checkbox"] {
-                width: 18px;
-                height: 18px;
+                input[type="checkbox"] {
+                    accent-color: var(--color-accent);
+                    width: 18px;
+                    height: 18px;
+                }
             }
         }
 
         input[type="text"],
         input[type="number"] {
-            // width: 100%;
             padding: 8px 12px;
-            background-color: #3a3a3a;
-            border: 1px solid #555;
-            border-radius: 4px;
-            color: #fff;
+            background-color: var(--color-surface);
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius);
+            color: var(--color-text-active);
+            font-size: 14px;
 
             &:focus {
                 outline: none;
-                border-color: #007bff;
-                box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+                border-color: var(--color-accent);
+                box-shadow: 0 0 0 2px
+                    color-mix(in srgb, var(--color-accent) 25%, transparent); // fade(@color-accent, 25%)
             }
 
             &::placeholder {
-                color: #888;
+                color: color-mix(
+                    in srgb,
+                    var(--color-text) 80%,
+                    white
+                ); // lighten(@color-text, 20%)
             }
         }
 
         input[type="range"] {
             width: 100%;
+            background: var(--color-border);
+            height: 6px;
+            border-radius: 4px;
+            appearance: none;
+
+            &::-webkit-slider-thumb {
+                appearance: none;
+                width: 16px;
+                height: 16px;
+                border-radius: 50%;
+                background: var(--color-accent);
+                border: 2px solid var(--color-surface);
+                cursor: pointer;
+                box-shadow: 0 0 4px var(--color-focus);
+            }
+
+            &::-moz-range-thumb {
+                width: 16px;
+                height: 16px;
+                border-radius: 50%;
+                background: var(--color-accent);
+                border: 2px solid var(--color-surface);
+                cursor: pointer;
+                box-shadow: 0 0 4px var(--color-focus);
+            }
+        }
+
+        select {
+            appearance: none;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+
+            background-color: var(--color-surface);
+            color: var(--color-text-active);
+            border: 1px solid var(--color-border);
+            padding: 8px 40px 8px 12px;
+            border-radius: var(--radius);
+            font-size: 14px;
+            font-family: var(--font-family);
+
+            // Цвет стрелки не делаем динамическим из-за ограничения CSS, остаётся жёстко зашитый
+            background-image: url("data:image/svg+xml;utf8,<svg fill='%2300d8ff' height='20' viewBox='0 0 24 24' width='20' xmlns='http://www.w3.org/2000/svg'><path d='M7 10l5 5 5-5z'/></svg>");
+            background-repeat: no-repeat;
+            background-position: right 10px center;
+            background-size: 16px;
+
+            option {
+                background-color: var(--color-surface);
+                color: var(--color-text);
+            }
+
+            &:focus {
+                border-color: var(--color-accent);
+                box-shadow: 0 0 6px var(--color-focus);
+                outline: none;
+            }
         }
 
         span {
-            color: #e0e0e0;
+            color: var(--color-text);
             margin-left: 10px;
         }
     }
 
     .button-row {
         margin-top: 20px;
-        text-align: center;
+        display: flex;
+        justify-content: flex-end;
+        gap: 12px;
 
         button {
-            background-color: #007bff;
-            color: white;
+            background-color: var(--color-accent);
             border: none;
             padding: 10px 20px;
-            border-radius: 4px;
+            border-radius: var(--radius);
             cursor: pointer;
-            font-size: 16px;
+            font-size: 14px;
+            font-family: var(--font-family);
+            transition: background 0.2s ease, box-shadow 0.2s ease;
+            box-shadow: var(--shadow-soft);
 
             &:hover:not(:disabled) {
-                background-color: #0056b3;
+                background-color: var(--color-accent-dark);
+                box-shadow: 0 0 6px var(--color-focus);
             }
 
             &:disabled {
-                background-color: #6c757d;
+                background-color: var(--color-border);
+                color: color-mix(
+                    in srgb,
+                    var(--color-text) 50%,
+                    transparent
+                ); // fade(@color-text, 50%)
                 cursor: not-allowed;
+                box-shadow: none;
             }
         }
-    }
-}
-
-// Темные стили для селектов и других элементов
-select {
-    background-color: #3a3a3a;
-    color: #fff;
-    border: 1px solid #555;
-    border-radius: 4px;
-    padding: 8px 12px;
-
-    option {
-        background-color: #3a3a3a;
-        color: #fff;
     }
 }

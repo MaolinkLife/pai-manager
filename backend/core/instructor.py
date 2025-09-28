@@ -1,10 +1,7 @@
 # core/instructor.py
 from typing import Dict, Any
-
-from services.api_service import (
-    load_system_prompt,
-    add_vision_context_to_system_prompt,
-)
+from datetime import datetime
+from services.api_service import load_system_prompt
 from services.logger_service import log_audit_entry, AuditStatus
 from constants.rules import SYSTEM_RULES
 from constants.messages import (
@@ -13,6 +10,8 @@ from constants.messages import (
     NO_KNOWLEDGE,
     DEFAULT_PERSONA_STYLE,
 )
+
+from core.visual_module import VisualModule
 
 
 class Instructor:
@@ -37,6 +36,7 @@ class Instructor:
         - Current emotional state
         - Hard system rules
         - Active decisions
+        - Environment/context info (date, time, location, etc.)
 
         Args:
             analysis: Cognitive analysis result
@@ -88,6 +88,11 @@ class Instructor:
                 else f"[CONTEXT]\n{DEFAULT_CONTEXT}"
             )
 
+            # [ENVIRONMENT] - date, time, location, etc.
+            env_info = self._get_environment_info()
+            if env_info:
+                sections.append(f"[SYSTEM]\n{env_info}")
+
             # [MEMORY] - important facts
             key_facts = memory_context.get("key_facts")
             if key_facts:
@@ -134,13 +139,24 @@ class Instructor:
             final_prompt = "\n\n".join(sections)
 
             user_text = (
-                analysis.get("input_analysis", {})
-                .get("original_message", "")
-                or ""
+                analysis.get("input_analysis", {}).get("original_message", "") or ""
             )
-            final_prompt = add_vision_context_to_system_prompt(
-                final_prompt, user_text
-            )
+
+            # ✅ Проверяем, нужно ли визуальное понимание
+            if decisions.get("needs_vision", False):
+                visual_module = VisualModule()
+                # Передаём решения в add_vision_context_to_system_prompt
+                final_prompt = visual_module.add_vision_context_to_system_prompt(
+                    final_prompt, user_text, decisions=decisions
+                )
+            else:
+                # Логируем, что визуальный контекст не добавляется
+                log_audit_entry(
+                    "instructor_vision_skipped",
+                    "[Instructor] Vision context skipped based on decisions.",
+                    AuditStatus.INFO,
+                    details={"needs_vision": False},
+                )
 
             log_audit_entry(
                 "instructor_prompt_build_success",
@@ -160,6 +176,37 @@ class Instructor:
             )
             # fallback — minimal prompt
             return "[CORE]\nSystem prompt unavailable due to error."
+
+    def _get_environment_info(self) -> str:
+        """
+        Собирает информацию об окружении: дата, время, локация и т.д.
+        Можно расширять: погода, координаты, часовой пояс и т.п.
+        """
+        now = datetime.now()
+        date_str = now.strftime("%d %B %Y")
+        time_str = now.strftime("%H:%M:%S")
+        # timezone_str = now.astimezone().strftime("%Z")
+
+        # Пример: добавить локацию из конфига
+        from services.config_service import get_config_value
+
+        location = get_config_value("location", "unknown")  # например, "Moscow"
+        coordinates = get_config_value(
+            "coordinates", None
+        )  # например, "55.7558, 37.6173"
+
+        parts = [
+            f"Date: {date_str}",
+            f"Time: {time_str}",
+        ]
+
+        if location and location != "unknown":
+            parts.append(f"Location: {location}")
+
+        if coordinates:
+            parts.append(f"Coordinates: {coordinates}")
+
+        return "\n".join(parts)
 
     async def format_for_api(
         self, system_prompt: str, user_message: Dict[str, Any]
@@ -181,11 +228,32 @@ class Instructor:
             details={"message_id": user_message.get("id")},
         )
 
-        return [
-            {"role": "system", "content": system_prompt},
+        # Извлекаем последние N сообщений (например, 10)
+        history = user_message.get("history", [])
+        recent_history = history[-10:]  # последние 10 сообщений
+
+        # Формируем сообщения
+        messages = [{"role": "system", "content": system_prompt}]
+
+        for msg in recent_history:
+            # Пропускаем старые system-сообщения
+            if msg.get("role") == "system":
+                continue
+            messages.append(
+                {
+                    "role": msg.get("role"),
+                    "content": msg.get("content"),
+                    "id": msg.get("id"),  # если нужно
+                }
+            )
+
+        # Добавляем текущее сообщение пользователя
+        messages.append(
             {
                 "role": "user",
                 "content": user_message.get("content", ""),
                 "id": user_message.get("id"),
-            },
-        ]
+            }
+        )
+
+        return messages

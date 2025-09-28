@@ -19,7 +19,11 @@ from services.logger_service import log_audit_entry, log_error, AuditStatus
 
 
 OLLAMA_API_URL = "http://localhost:11434/api"
-ollama_model_visual = get_config_value("api.visual_model")
+
+
+def get_ollama_visual_model():
+    """Получить модель визуального анализа"""
+    return get_config_value("api.visual_model")
 
 
 # ===========================================================
@@ -92,6 +96,9 @@ async def api_stream(history: list, options: dict):
 # Visual model: regular
 # ===========================================================
 def api_standard_image(history):
+    ollama_model_visual = (
+        get_ollama_visual_model()
+    )  # Получаем модель при вызове функции
     try:
         r = requests.post(
             f"{OLLAMA_API_URL}/chat",
@@ -120,6 +127,9 @@ def api_standard_image(history):
 # Visual model: streaming
 # ===========================================================
 async def api_stream_image(history):
+    ollama_model_visual = (
+        get_ollama_visual_model()
+    )  # Получаем модель при вызове функции
     url = f"{OLLAMA_API_URL}/chat"
 
     async with aiohttp.ClientSession() as session:

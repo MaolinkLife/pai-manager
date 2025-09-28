@@ -15,6 +15,7 @@ from services.config_service import get_config_value
 from core.decision_layer import decision_layer
 from core.instructor import Instructor
 from core.websocket_manager import manager
+from services.voice_state import voice_state, VoiceStage
 from services.voice_service import (
     log_last_output,
     is_self_trigger,
@@ -36,7 +37,13 @@ class VADListener:
         self.silence_threshold = 10
         self.vad_threshold = 0.5
         self.sample_rate = 16000
-        self.loop = None  # main asyncio loop used to schedule tasks from the audio callback
+        self.loop = (
+            None  # main asyncio loop used to schedule tasks from the audio callback
+        )
+        self.processing_lock = asyncio.Lock()
+        self.active_transcripts: set[str] = set()
+        self.last_processed_transcript: str | None = None
+        self.last_processed_at: datetime | None = None
 
     async def start_voice_vad_loop(self):
         """Entry point for the main listening loop."""
@@ -55,11 +62,11 @@ class VADListener:
         )
 
         try:
-            device_id = get_config_value("audio.inputDeviceId", 0)
-            self.sample_rate = get_config_value("audio.sampleRate", 16000)
-            chunk_size = get_config_value("audio.chunkSize", 1024)
-            self.vad_threshold = get_config_value("audio.vadThreshold", 0.5)
-            silence_timeout = get_config_value("audio.silenceTimeout", 3.0)
+            device_id = get_config_value("audio.input_device_id", 0)
+            self.sample_rate = get_config_value("audio.sample_rate", 16000)
+            chunk_size = get_config_value("audio.chunk_size", 1024)
+            self.vad_threshold = get_config_value("audio.vad_threshold", 0.5)
+            silence_timeout = get_config_value("audio.silence_timeout", 3.0)
 
             if self.sample_rate not in [8000, 16000, 32000, 48000]:
                 self.sample_rate = 16000
@@ -118,6 +125,10 @@ class VADListener:
             raise
 
     def process_audio_chunk(self, audio_data):
+        if not voice_state.is_listening():
+            self.reset_detection()
+            return
+
         is_speech = self.is_speech_detected(audio_data)
 
         if is_speech:
@@ -238,7 +249,29 @@ class VADListener:
             details={"transcript": transcript},
         )
 
-        has_trigger = self.contains_trigger_word(transcript)
+        if voice_state.stage() != VoiceStage.LISTENING:
+            log_audit_entry(
+                event_type="vad_stage_blocked",
+                msg="[VAD] Стадия не позволяет обрабатывать расшифровку",
+                status=AuditStatus.INFO,
+                details={"stage": voice_state.stage().value, "transcript": transcript},
+            )
+            return
+
+        normalized_transcript = self._normalize_text(transcript)
+        has_trigger = False
+
+        if self._should_bypass_triggers():
+            log_audit_entry(
+                event_type="vad_trigger_passthrough",
+                msg="[VAD] Пропускаем фильтр триггеров",
+                status=AuditStatus.INFO,
+                details={"transcript": transcript},
+            )
+            has_trigger = True
+            normalized_transcript = normalized_transcript or transcript
+        else:
+            has_trigger = self.contains_trigger_word(transcript)
 
         if not has_trigger:
             log_audit_entry(
@@ -254,6 +287,10 @@ class VADListener:
             msg="[VAD] Триггер найден, готовим сообщение",
             status=AuditStatus.SUCCESS,
             details={"transcript": transcript},
+        )
+
+        normalized_transcript = normalized_transcript or self._normalize_text(
+            transcript
         )
 
         if is_self_trigger(transcript):
@@ -275,42 +312,121 @@ class VADListener:
             force_cut_voice()
             await asyncio.sleep(0.1)
 
-        user_message = {
-            "id": str(uuid.uuid4()),
-            "role": "user",
-            "content": transcript,
-            "timestamp": datetime.utcnow().isoformat(),
-        }
+        normalized_transcript = self._normalize_text(transcript)
+        if self._should_bypass_triggers():
+            log_audit_entry(
+                event_type="vad_trigger_passthrough",
+                msg="[VAD] Пропускаем фильтр триггеров",
+                status=AuditStatus.INFO,
+                details={"transcript": transcript},
+            )
+            normalized_transcript = normalized_transcript or transcript
+            has_trigger = True
+        else:
+            has_trigger = self.contains_trigger_word(transcript)
 
-        message_payload = {
-            "type": "message",
-            "id": user_message["id"],
-            "role": "user",
-            "content": transcript,
-            "timestamp": user_message["timestamp"],
-        }
-        await manager.send_message(json.dumps(message_payload, ensure_ascii=False))
+        if not has_trigger:
+            log_audit_entry(
+                event_type="vad_trigger_miss",
+                msg="[VAD] Триггер не найден, пропускаем сообщение",
+                status=AuditStatus.INFO,
+                details={"transcript": transcript},
+            )
+            return
 
-        instructor = Instructor()
-        processing_result = await decision_layer.process_message(user_message, None)
-        formatted_history = await instructor.format_for_api(
-            processing_result["system_prompt"],
-            processing_result["user_message"],
+        normalized_transcript = normalized_transcript or self._normalize_text(
+            transcript
         )
+        if not normalized_transcript:
+            log_audit_entry(
+                event_type="vad_empty_transcript",
+                msg="[VAD] Расшифровка пустая после нормализации — пропускаем",
+                status=AuditStatus.INFO,
+                details={"raw": transcript},
+            )
+            return
 
-        async def broadcast_send(payload: dict) -> bool:
-            await manager.send_message(json.dumps(payload, ensure_ascii=False))
+        if normalized_transcript in self.active_transcripts:
+            log_audit_entry(
+                event_type="vad_duplicate_suppressed",
+                msg="[VAD] Дубликат активного запроса подавлен",
+                status=AuditStatus.INFO,
+                details={"transcript": transcript},
+            )
+            return
+        if (
+            self.last_processed_transcript
+            and self.last_processed_at
+            and self.last_processed_transcript == normalized_transcript
+            and (datetime.utcnow() - self.last_processed_at).total_seconds() < 5
+        ):
+            log_audit_entry(
+                event_type="vad_recent_duplicate",
+                msg="[VAD] Повторная расшифровка в пределах 5 секунд — пропускаем",
+                status=AuditStatus.INFO,
+                details={"transcript": transcript},
+            )
+            return
+
+        voice_state.enter_waiting("generation_in_progress")
+
+        async with self.processing_lock:
+            self.active_transcripts.add(normalized_transcript)
+            try:
+                user_message = {
+                    "id": str(uuid.uuid4()),
+                    "role": "user",
+                    "content": transcript,
+                    "timestamp": datetime.utcnow().isoformat(),
+                }
+
+                message_payload = {
+                    "type": "message",
+                    "id": user_message["id"],
+                    "role": "user",
+                    "content": transcript,
+                    "timestamp": user_message["timestamp"],
+                }
+                await manager.send_message(
+                    json.dumps(message_payload, ensure_ascii=False)
+                )
+
+                instructor = Instructor()
+                processing_result = await decision_layer.process_message(
+                    user_message, None
+                )
+                formatted_history = await instructor.format_for_api(
+                    processing_result["system_prompt"],
+                    processing_result["user_message"],
+                )
+
+                async def broadcast_send(payload: dict) -> bool:
+                    await manager.send_message(json.dumps(payload, ensure_ascii=False))
+                    return True
+
+                await run_stream_message(
+                    None, formatted_history, send_fn=broadcast_send
+                )
+                log_last_output(transcript)
+            finally:
+                self.active_transcripts.discard(normalized_transcript)
+                if voice_state.stage() == VoiceStage.WAITING:
+                    voice_state.enter_listening("generation_interrupted")
+                self.last_processed_transcript = normalized_transcript
+                self.last_processed_at = datetime.utcnow()
+
+    def _should_bypass_triggers(self) -> bool:
+        if get_config_value("audio.ignore_trigger_words", False):
             return True
-
-        await run_stream_message(None, formatted_history, send_fn=broadcast_send)
-        log_last_output(transcript)
+        trigger_words = get_config_value("audio.trigger_words", []) or []
+        return len(trigger_words) == 0
 
     def contains_trigger_word(self, text):
         normalized_text = self._normalize_text(text)
         if not normalized_text:
             return False
 
-        trigger_words = get_config_value("audio.triggerWords", []) or []
+        trigger_words = get_config_value("audio.trigger_words", []) or []
         if not trigger_words:
             fallback_name = get_config_value("char_name", "") or ""
             if fallback_name:
@@ -365,11 +481,11 @@ async def start_vad_background():
     global _vad_task
     # Respect config flags before spawning
     if not get_config_value("voice.enabled", False) or not get_config_value(
-        "audio.enableVad", False
+        "audio.enable_vad", False
     ):
         return (
             False,
-            "VAD disabled by config (voice.enabled/audio.enableVad)",
+            "VAD disabled by config (voice.enabled/audio.enable_vad)",
         )
 
     if vad_listener.is_listening or (_vad_task and not _vad_task.done()):

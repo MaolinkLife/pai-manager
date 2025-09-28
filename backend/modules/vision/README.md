@@ -27,7 +27,7 @@ Configuration is handled via `config_service`. Keys:
 - `vision.enabled` (bool)
 - `vision.fps` (int)
 - `vision.buffer_sec` (int)
-- `vision.monitor_index` (int)
+- `vision.monitor_index` (int) - индекс физического монитора (0 = первый, 1 = второй и т.д., -1 = весь рабочий стол)
 - `vision.downscale_width` (int)
 - `vision.region` (dict or None)
 - `vision.ocr_lang` (str)
@@ -48,3 +48,5 @@ context = vision.analyze_recent_context(4.0)
 print(context["summary"])
 
 vision.stop()
+
+
