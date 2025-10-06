@@ -23,6 +23,7 @@ def add_message(
             content=encrypt(content),
             dialog_id=dialog_id,
             volatile=volatile,
+            tags=json.dumps(list(tags or []), ensure_ascii=False),
         )
         session.add(msg)
         session.commit()
@@ -45,6 +46,7 @@ def add_message(
             "role": msg.role,
             "content": decrypt(msg.content),
             "timestamp": format_user_datetime(msg.timestamp),
+            "tags": json.loads(getattr(msg, "tags", "[]") or "[]"),
         }
 
     finally:
@@ -67,6 +69,7 @@ def get_messages(user_id: str, limit: int = 20):
                 "role": m.role,
                 "content": decrypt(m.content),
                 "timestamp": format_user_datetime(m.timestamp),
+                "tags": json.loads(getattr(m, "tags", "[]") or "[]"),
             }
             for m in reversed(messages)
         ]

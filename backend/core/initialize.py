@@ -17,6 +17,7 @@ from services import preset_service
 from services import character_service, config_service
 from services.logger_service import initialize_log_files, log_audit_entry, AuditStatus
 from modules.vision.service import VisionService
+from modules.memory.short_term import ensure_short_term_schema, refresh_recent_days
 from services.config_service import get_config_value
 from utils.structure_utils import get_label_from_file
 
@@ -54,10 +55,13 @@ def run_startup_checks():
 
     # Create a database
     database_service.create_database()
+    ensure_short_term_schema()
 
     char_name = config_service.get_config_value("char_name")
+    character = None
     if char_name:
-        character_service.get_or_create_character(char_name)
+        character = character_service.get_or_create_character(char_name)
+        refresh_recent_days(character.id)
         log_audit_entry(
             event_type="character_bootstrap",
             msg=f"[Initialize] ensured character '{char_name}' exists",

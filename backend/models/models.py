@@ -31,6 +31,7 @@ class History(Base):
     role = Column(String, nullable=False)  # 'user' / 'assistant'
     content = Column(Text, nullable=False)
     timestamp = Column(DateTime, default=datetime.now(timezone.utc))
+    tags = Column(Text, default='[]')
 
     character = relationship("Character", back_populates="history")
     reasoning = relationship(
@@ -71,8 +72,25 @@ class Message(Base):
     content = Column(Text, nullable=False)  # plain text for now; encryption later
     volatile = Column(Boolean, default=False)  # temporary message
     timestamp = Column(DateTime, default=datetime.now(timezone.utc))
+    tags = Column(Text, default='[]')
 
     user = relationship("User")
+
+
+
+class ShortTermMemory(Base):
+    __tablename__ = "short_term_memory"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    summary = Column(Text, nullable=False)
+    dialogue_ids = Column(Text, nullable=False)
+    themes = Column(Text, default='[]')
+    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+    updated_at = Column(
+        DateTime,
+        default=datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
 
 
 class Storage(Base):

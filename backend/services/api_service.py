@@ -12,7 +12,7 @@ import asyncio
 import json
 import re
 from datetime import datetime, timezone
-from typing import Awaitable, Callable
+from typing import Awaitable, Callable, Any, Dict, Iterable, List, Optional
 
 from fastapi import WebSocket
 from starlette.websockets import WebSocketDisconnect
@@ -25,11 +25,71 @@ from services.logger_service import log_audit_entry, AuditStatus
 from modules.tts.state import VoiceStage, voice_state
 from services.config_service import get_config_value
 from services.database_service import get_message_by_id, add_message_to_history
-from services.rag_service import retrieve_lore_fragments, format_lore_block
-from utils.context_builder import build_memory_context
+from modules.memory import MemoryModule, MemoryContextResult
 from utils.structure_utils import get_label_from_file
 from core.prompt_loader import load_system_prompt
 from core.emotion_intent_analyzer import analyze_emotion, generate_instruction
+
+
+memory_module = MemoryModule()
+
+def _render_memory_block(context: Dict[str, Any]) -> str:
+    key_facts = context.get("key_facts") or []
+    sections: List[str] = []
+    if key_facts:
+        facts_block = "\n".join(f"• {fact}" for fact in key_facts)
+        sections.append("[MEMORY]\n" + facts_block)
+    summary = context.get("short_term_summary")
+    if summary:
+        daily_block = "[DAILY SUMMARY]\n" + summary
+        themes = context.get("short_term_themes") or []
+        if themes:
+            daily_block += "\nТемы: " + ', '.join(themes)
+        sections.append(daily_block)
+    return "\n\n".join(sections)
+
+
+def _render_lore_block(context: Dict[str, Any]) -> str:
+    lore_block = context.get("lore_block")
+    if lore_block:
+        if lore_block.strip().startswith("[CONTEXT]"):
+            return lore_block
+        return "[CONTEXT]\n" + lore_block
+    matches = context.get("lore_matches") or []
+    if matches:
+        bullets = "\n".join(f"• {match}" for match in matches)
+        return "[CONTEXT]\n" + bullets
+    return ""
+
+
+
+def _generate_tags_for_text(
+    text: str,
+    extra: Iterable[str] | None = None,
+    *,
+    limit: int = 8,
+) -> List[str]:
+    tags: List[str] = []
+    seen = set()
+    for candidate in extra or []:
+        normalized = str(candidate).strip()
+        if not normalized:
+            continue
+        key = normalized.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        tags.append(normalized)
+        if len(tags) >= limit:
+            return tags
+    for match in re.findall(r"[\w\-]{4,}", text.lower()):
+        if match in seen:
+            continue
+        seen.add(match)
+        tags.append(match)
+        if len(tags) >= limit:
+            break
+    return tags
 
 
 THINK_PATTERN = re.compile(r"<think>.*?</think>", re.IGNORECASE | re.DOTALL)
@@ -127,6 +187,7 @@ async def run_standard(
     char_name = get_config_value("char_name", "default")
     options = get_generation_options_from_config()
     last_user_message = extract_last_user_message(history)
+    memory_result_data: Optional[MemoryContextResult] = None
 
     # Build system prompt with lore, memory, emotions
     system_prompt = None
@@ -139,24 +200,20 @@ async def run_standard(
     if not system_prompt:
         base_system_prompt = load_system_prompt()
         system_prompt = base_system_prompt
-        # Only append RAG, memory, and emotion blocks when using the fallback
+        # Only append memory and emotion blocks when using the fallback
         if last_user_message:
-            rag_block = format_lore_block(
-                retrieve_lore_fragments(last_user_message["content"])
+            memory_result = await memory_module.collect_context(
+                last_user_message.get("content", ""), last_user_message
             )
-            # Use MemoryLayer to obtain context
-            from core.memory_layer import MemoryLayer
-
-            memory_layer = MemoryLayer()
-            # Use await instead of asyncio.run because we are already inside an async function
-            memory_context = await memory_layer.get_context(last_user_message)
-            memory_block = memory_context.get("recent_conversation", "")
-
+            memory_result_data = memory_result
+            memory_context = memory_result.context
+            memory_block = _render_memory_block(memory_context)
+            lore_block = _render_lore_block(memory_context)
             emotion_instruction = get_emotional_instruction(
                 last_user_message["content"]
             )
-            if rag_block:
-                system_prompt += f"\n\n{rag_block}"
+            if lore_block:
+                system_prompt += f"\n\n{lore_block}"
             if memory_block:
                 system_prompt += f"\n\n{memory_block}"
             if emotion_instruction:
@@ -188,21 +245,41 @@ async def run_standard(
 
     # === Save messages ===
     if last_user_message:
+        if memory_result_data is None:
+            memory_result_data = await memory_module.collect_context(
+                last_user_message.get("content", ""), last_user_message
+            )
+        memory_context_for_tags = memory_result_data.context
+        extra_tags = list(memory_context_for_tags.get("short_term_themes") or [])
+        user_tags = _generate_tags_for_text(
+            last_user_message.get("content", ""), extra=extra_tags
+        )
         database_service.add_message_to_history(
             character_name=char_name,
             role="user",
             content=last_user_message["content"],
             timestamp=last_user_message.get("timestamp"),
             media=last_user_message.get("media"),
+            tags=user_tags,
         )
 
     new_message_obj = None
     if store and assistant_content:
+        if memory_result_data is None:
+            memory_result_data = await memory_module.collect_context(
+                assistant_content, {"content": assistant_content}
+            )
+        memory_context_for_tags = memory_result_data.context
+        extra_tags = list(memory_context_for_tags.get("short_term_themes") or [])
+        assistant_tags = _generate_tags_for_text(
+            assistant_content, extra=extra_tags
+        )
         new_message_obj = database_service.add_message_to_history(
             character_name=char_name,
             role="assistant",
             content=assistant_content,
             timestamp=datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
+            tags=assistant_tags,
         )
         if assistant_reasoning:
             database_service.add_reasoning_entry(
@@ -292,6 +369,7 @@ async def run_stream_message(
         char_name = get_config_value("char_name", "default")
         options = get_generation_options_from_config()
         last_user_message = extract_last_user_message(history)
+        memory_result_data: Optional[MemoryContextResult] = None
 
         # Extract system prompt from history or build a fallback
         system_prompt = None
@@ -304,20 +382,21 @@ async def run_stream_message(
         if not system_prompt:
             base_system_prompt = load_system_prompt()
             system_prompt = base_system_prompt
-            # Only append RAG, memory, and emotion blocks when using the fallback
+            # Only append memory and emotion blocks when using the fallback
             if last_user_message:
-                rag_block = format_lore_block(
-                    retrieve_lore_fragments(last_user_message["content"])
+                memory_result = await memory_module.collect_context(
+                    last_user_message.get("content", ""), last_user_message
                 )
-                memory_block = build_memory_context(
-                    last_user_message["content"], char_name
-                )
+                memory_result_data = memory_result
+                memory_context = memory_result.context
+                memory_block = _render_memory_block(memory_context)
+                lore_block = _render_lore_block(memory_context)
                 emotion_instruction = get_emotional_instruction(
                     last_user_message["content"]
                 )
 
-                if rag_block:
-                    system_prompt += f"\n\n{rag_block}"
+                if lore_block:
+                    system_prompt += f"\n\n{lore_block}"
                 if memory_block:
                     system_prompt += f"\n\n{memory_block}"
                 if emotion_instruction:
@@ -329,12 +408,22 @@ async def run_stream_message(
         # Save the user message and send ack back to the client
         user_message_obj = None
         if last_user_message:
+            if memory_result_data is None:
+                memory_result_data = await memory_module.collect_context(
+                    last_user_message.get("content", ""), last_user_message
+                )
+            memory_context_for_tags = memory_result_data.context
+            extra_tags = list(memory_context_for_tags.get("short_term_themes") or [])
+            user_tags = _generate_tags_for_text(
+                last_user_message.get("content", ""), extra=extra_tags
+            )
             user_message_obj = add_message_to_history(
                 character_name=char_name,
                 role="user",
                 content=last_user_message["content"],
                 timestamp=normalize_timestamp(last_user_message.get("timestamp")),
                 media=last_user_message.get("media"),
+                tags=user_tags,
             )
             if last_user_message.get("id"):
                 if not await safe_send(
@@ -408,11 +497,19 @@ async def run_stream_message(
         # Persist the assistant response
         assistant_message_obj = None
         if assistant_content:
+            if memory_result_data is None:
+                memory_result_data = await memory_module.collect_context(
+                    assistant_content, {"content": assistant_content}
+                )
+            memory_context_for_tags = memory_result_data.context
+            extra_tags = list(memory_context_for_tags.get("short_term_themes") or [])
+            assistant_tags = _generate_tags_for_text(assistant_content, extra=extra_tags)
             assistant_message_obj = add_message_to_history(
                 character_name=char_name,
                 role="assistant",
                 content=assistant_content,
                 timestamp=datetime.now(timezone.utc),
+                tags=assistant_tags,
             )
             if assistant_reasoning:
                 database_service.add_reasoning_entry(
@@ -496,3 +593,4 @@ def play_message(msg_id: str):
 
 
 decision_layer_router = DecisionLayer()
+

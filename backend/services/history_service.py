@@ -5,8 +5,9 @@ from models.models import History, Reasoning
 from services.db_core import SessionLocal
 from services.logger_service import log_audit_entry, AuditStatus
 from utils.time_utils import format_user_datetime
+import json
 import asyncio
-from typing import Optional
+from typing import Optional, Sequence
 from services.storage_service import (
     save_media_for_message,
     serialize_media_entries,
@@ -21,6 +22,7 @@ def add_history(
     timestamp: Optional[datetime] = None,
     session: Optional[Session] = None,
     media_items: Optional[list] = None,
+    tags: Optional[Sequence[str]] = None,
 ):
     """Добавление сообщения в историю"""
     own_session = False
@@ -38,6 +40,7 @@ def add_history(
             role=role,
             content=content,
             timestamp=timestamp,
+            tags=json.dumps(list(tags or []), ensure_ascii=False),
         )
         session.add(entry)
         session.commit()
@@ -327,6 +330,23 @@ def get_last_messages(character_id: str, limit: int = 10):
     finally:
         session.close()
 
+
+
+
+def get_messages_by_ids(message_ids: Sequence[str]):
+    """Получить сообщения истории по списку идентификаторов."""
+    if not message_ids:
+        return []
+    session: Session = SessionLocal()
+    try:
+        return (
+            session.query(History)
+            .filter(History.id.in_(message_ids))
+            .order_by(History.timestamp.asc())
+            .all()
+        )
+    finally:
+        session.close()
 
 # =========================
 # REROLL functionality

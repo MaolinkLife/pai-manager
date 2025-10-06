@@ -6,6 +6,7 @@
 # ==========================================================
 
 from datetime import datetime, timezone
+import json
 
 from services import user_service, message_service, history_service, character_service
 from services.storage_service import serialize_media_entries
@@ -67,6 +68,7 @@ def add_message_to_history(
     content: str,
     timestamp: datetime = None,
     media: list | None = None,
+    tags: list | None = None,
 ):
     if isinstance(timestamp, str):
         try:
@@ -80,7 +82,7 @@ def add_message_to_history(
         raise ValueError(f"Персонаж '{character_name}' не найден")
 
     return history_service.add_history(
-        char.id, role, content, timestamp, media_items=media
+        char.id, role, content, timestamp, media_items=media, tags=tags
     )
 
 
@@ -117,6 +119,10 @@ async def reroll_message(message_id: str):
 
 def get_last_user_message_time(character_name: str):
     return history_service.get_last_user_message_time(character_name)
+
+
+def get_history_by_ids(message_ids):
+    return history_service.get_messages_by_ids(message_ids)
 
 
 def get_last_messages(character_name: str, limit: int = 10):
@@ -158,6 +164,7 @@ def _serialize_history_rows(rows):
                     else str(r.timestamp)
                 ),
                 "media": serialize_media_entries(getattr(r, "media", [])),
+                "tags": json.loads(getattr(r, "tags", "[]") or "[]"),
             }
         )
     return serialized

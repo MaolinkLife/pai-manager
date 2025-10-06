@@ -140,27 +140,28 @@ class DecisionLayer:
             AuditStatus.INFO,
             details={"user_message": user_message},
         )
-        memory_result, lore_context = await asyncio.gather(
-            self.memory_module.collect_context(
-                user_message.get("content", ""), user_message
-            ),
-            self.memory_module.collect_lore_context(user_message.get("content", "")),
+        memory_result = await self.memory_module.collect_context(
+            user_message.get("content", ""), user_message
         )
-        print("[DecisionLayer] Контекст из памяти и легенд собран.")
+        print("[DecisionLayer] Контекст из памяти собран.")
         log_audit_entry(
             "decision_layer_memory_context_collected",
-            "[DecisionLayer/MemoryModule] Контекст из памяти и легенд собран.",
+            "[DecisionLayer/MemoryModule] Контекст из памяти собран.",
             AuditStatus.INFO,
             details={
                 "memory_result": {
                     "context": memory_result.context,
                     "meta": memory_result.meta,
-                },
-                "lore_context": lore_context,
+                }
             },
         )
         memory_context = memory_result.context
         memory_meta = memory_result.meta
+        lore_context = {
+            "lore_matches": memory_context.get("lore_matches", []),
+            "lore_block": memory_context.get("lore_block"),
+            "count": memory_context.get("count"),
+        }
 
         # --------------------------------------------------------------- #
         # 5️⃣  Evaluate moral state
@@ -191,7 +192,7 @@ class DecisionLayer:
             details={
                 "analysis_result": analysis_result,
                 "decisions": decisions,
-                "memory_context": {**memory_context, **lore_context},
+                "memory_context": memory_context,
                 "moral_state": moral_state,
                 "visual_context": visual_context,
             },
@@ -199,7 +200,7 @@ class DecisionLayer:
         system_prompt = await self.instructor.build_system_prompt(
             analysis_result,
             decisions,
-            {**memory_context, **lore_context},
+            memory_context,
             moral_state,
             visual_context=visual_context,
         )
@@ -439,6 +440,19 @@ class DecisionLayer:
             )
             return {}
 
+        media_payload = user_message.get("media") or []
+        has_images = self._has_image_attachments(media_payload)
+        needs_vision = decisions.get("needs_vision", False)
+        if not needs_vision and not has_images:
+            print("[DecisionLayer] Визуальный анализ не требуется — пропускаем.")
+            log_audit_entry(
+                "decision_layer_vision_skipped",
+                "[DecisionLayer/VisionModule] Визуальный анализ пропущен.",
+                AuditStatus.INFO,
+                details={"needs_vision": needs_vision, "has_images": has_images},
+            )
+            return {}
+
         module = self._get_visual_module()
         if not module:
             print("[DecisionLayer] Визуальный модуль недоступен.")
@@ -457,9 +471,6 @@ class DecisionLayer:
                 AuditStatus.WARNING,
             )
             return {}
-
-        media_payload = user_message.get("media") or []
-        has_images = self._has_image_attachments(media_payload)
 
         # ----------------------------------------------------------------- #
         # Run two potentially heavy visual operations in separate threads
