@@ -5,9 +5,11 @@ from services import stt_service
 
 TEMP_AUDIO_PATH = os.path.join("temp", "voice", "temp_recording.wav")
 
+
 def start_recording():
     stt_service.start_recording_background(TEMP_AUDIO_PATH)
     return {"status": "ok", "message": "Запись началась."}
+
 
 def stop_recording_and_process(character_name: str) -> dict:
     """
@@ -29,5 +31,5 @@ def stop_recording_and_process(character_name: str) -> dict:
         "id": message_id,
         "role": "user",
         "content": transcript,
-        "timestamp": timestamp.isoformat()
+        "timestamp": timestamp.isoformat(),
     }

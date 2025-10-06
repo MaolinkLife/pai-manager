@@ -85,7 +85,10 @@ export class SettingsComponent implements OnInit {
                 model: [''],
                 visualModel: [''],
                 tokenLimit: [0],
-                messagePairLimit: [0]
+                messagePairLimit: [0],
+                activeProvider: [''],
+                fallbackOrder: this.fb.control([]),
+                providers: this.fb.control({})
             })
         });
 
@@ -110,6 +113,20 @@ export class SettingsComponent implements OnInit {
         this.selectedModel = model;
         this.dropdownOpen = false;
         this.settingsForm.get('api.model')?.setValue(model);
+
+        const activeProvider = this.settingsForm.get('api.activeProvider')?.value;
+        const providersControl = this.settingsForm.get('api.providers');
+        const providers = providersControl?.value ?? {};
+
+        if (activeProvider && providers[activeProvider]) {
+            providersControl?.setValue({
+                ...providers,
+                [activeProvider]: {
+                    ...providers[activeProvider],
+                    model,
+                }
+            });
+        }
 
         this.zone.run(() => {
             this.dropdownOpen = false;

@@ -21,9 +21,9 @@ import {
     mapRagModelToDto
 } from './rag-config-mapper';
 import {
-    mapOpenRouterDtoToModel,
-    mapOpenRouterModelToDto
-} from './openrouter-config-mapper';
+    mapAnalyzerDtoToModel,
+    mapAnalyzerModelToDto
+} from './analyzer-config-mapper';
 import {
     mapApiDtoToModel,
     mapApiModelToDto
@@ -33,6 +33,7 @@ import {
     mapGenerationModelToDto
 } from './generation-config-mapper';
 import { mapSystemDtoToModel, mapSystemModelToDto } from './system-config-mapper';
+import { mapMemoryDtoToModel, mapMemoryModelToDto } from './memory-config-mapper';
 
 
 export const mapProjectConfigDtoToModel = (dto: ProjectConfigDto): ProjectConfig => ({
@@ -45,7 +46,8 @@ export const mapProjectConfigDtoToModel = (dto: ProjectConfigDto): ProjectConfig
     vision: mapVisionDtoToModel(dto.vision),
     audio: mapAudioDtoToModel(dto.audio),
     rag: mapRagDtoToModel(dto.rag),
-    openrouter: mapOpenRouterDtoToModel(dto.openrouter),
+    analyzer: mapAnalyzerDtoToModel(dto.analyzer),
+    memory: mapMemoryDtoToModel(dto.memory),
     api: mapApiDtoToModel(dto.api),
     generateSettings: mapGenerationDtoToModel(dto.generate_settings),
     system: mapSystemDtoToModel(dto.system)
@@ -61,7 +63,8 @@ export const mapProjectConfigModelToDto = (model: ProjectConfig): ProjectConfigD
     vision: mapVisionModelToDto(model.vision),
     audio: mapAudioModelToDto(model.audio),
     rag: mapRagModelToDto(model.rag),
-    openrouter: mapOpenRouterModelToDto(model.openrouter),
+    analyzer: mapAnalyzerModelToDto(model.analyzer),
+    memory: mapMemoryModelToDto(model.memory),
     api: mapApiModelToDto(model.api),
     generate_settings: mapGenerationModelToDto(model.generateSettings),
     system: mapSystemModelToDto(model.system),
@@ -99,10 +102,21 @@ export const mapPartialModelToDto = (
                 dto.audio = mapAudioModelToDto(model.audio!);
                 break;
             case 'rag':
-                dto.rag = mapRagModelToDto(model.rag!);
+                if (model.rag && Object.keys(model.rag).some((k) => k.includes('.'))) {
+                    dto.rag = model.rag as any;
+                } else {
+                    dto.rag = mapRagModelToDto(model.rag!);
+                }
                 break;
-            case 'openrouter':
-                dto.openrouter = mapOpenRouterModelToDto(model.openrouter!);
+            case 'analyzer':
+                if (model.analyzer && Object.keys(model.analyzer).some((k) => k.includes('.'))) {
+                    dto.analyzer = model.analyzer as any;
+                } else {
+                    dto.analyzer = mapAnalyzerModelToDto(model.analyzer!);
+                }
+                break;
+            case 'memory':
+                dto.memory = mapMemoryModelToDto(model.memory);
                 break;
             case 'api':
                 dto.api = mapApiModelToDto(model.api!);

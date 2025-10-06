@@ -10,11 +10,9 @@ from services.logger_service import log_audit_entry, AuditStatus
 
 
 class VoiceStage(str, Enum):
-    """High-level stages of the voice pipeline."""
-
-    LISTENING = "listening"  # VAD may capture and route messages
-    WAITING = "waiting"  # Awaiting LLM response; VAD should stay idle
-    SPEAKING = "speaking"  # TTS playback in progress
+    LISTENING = "listening"
+    WAITING = "waiting"
+    SPEAKING = "speaking"
 
 
 @dataclass
@@ -24,7 +22,7 @@ class VoiceStateSnapshot:
     reason: Optional[str]
 
 
-class _VoiceStateController:
+class VoiceStateController:
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._stage = VoiceStage.LISTENING
@@ -40,9 +38,9 @@ class _VoiceStateController:
             self._reason = reason
 
         log_audit_entry(
-            event_type="voice_state_transition",
-            msg="[Voice] Stage updated",
-            status=AuditStatus.INFO,
+            "voice_state_transition",
+            "[Voice] Stage updated",
+            AuditStatus.INFO,
             details={"stage": stage.value, "reason": reason},
         )
 
@@ -67,7 +65,6 @@ class _VoiceStateController:
         return self.stage() == VoiceStage.LISTENING
 
 
-voice_state = _VoiceStateController()
+voice_state = VoiceStateController()
 
-
-__all__ = ["VoiceStage", "VoiceStateSnapshot", "voice_state"]
+__all__ = ["VoiceStage", "VoiceStateSnapshot", "voice_state", "VoiceStateController"]

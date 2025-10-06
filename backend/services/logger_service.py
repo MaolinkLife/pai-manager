@@ -21,11 +21,13 @@ DEBUG_FILE_CURRENT = os.path.join(LOGS_DIR, "debug_log.jsonl")  # Last active
 os.makedirs(LOGS_DIR, exist_ok=True)
 os.makedirs(TEMP_LOGS_DIR, exist_ok=True)
 
+
 class AuditStatus(str, Enum):
-    SUCCESS = 'Success'
-    ERROR = 'Error'
-    WARNING = 'Warning'
-    INFO = 'Info'
+    SUCCESS = "Success"
+    ERROR = "Error"
+    WARNING = "Warning"
+    INFO = "Info"
+
 
 @dataclass
 class AuditLog:
@@ -34,7 +36,9 @@ class AuditLog:
     status: AuditStatus = AuditStatus.INFO
     details: dict = field(default_factory=dict)
     meta: Optional[dict] = field(default_factory=dict)
-    timestamp: str = field(default_factory=lambda: datetime.now().isoformat(timespec="seconds"))
+    timestamp: str = field(
+        default_factory=lambda: datetime.now().isoformat(timespec="seconds")
+    )
     session_id: str = field(default_factory=lambda: SESSION_ID)
 
     def as_dict(self) -> dict:
@@ -43,6 +47,7 @@ class AuditLog:
 
 def get_session_id():
     return SESSION_ID
+
 
 def initialize_log_files():
     """
@@ -53,19 +58,23 @@ def initialize_log_files():
             with open_utf8(path, "w") as f:
                 pass  # just create an empty file
 
+
 def _write_jsonl(filepath, record):
     with open_utf8(filepath, "a") as f:
         f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
+
 def log_error(error_msg, context=None, severity="error"):
-    """ 
+    """
     Errors on temp-log and debug
     """
     date_str = datetime.now().strftime("%Y-%m-%d")
     temp_path = os.path.join(TEMP_LOGS_DIR, f"{date_str}_log.txt")
 
     with open_utf8(temp_path, "a") as f:
-        f.write(f"[{datetime.now().isoformat(timespec='seconds')}] [SESSION: {SESSION_ID}] ERROR: {error_msg}\n")
+        f.write(
+            f"[{datetime.now().isoformat(timespec='seconds')}] [SESSION: {SESSION_ID}] ERROR: {error_msg}\n"
+        )
         if context:
             f.write(f"Context: {context}\n")
 
@@ -74,15 +83,21 @@ def log_error(error_msg, context=None, severity="error"):
         msg=f"Error occurred: {error_msg}",
         status=AuditStatus.ERROR,
         details={"error": error_msg, "context": context},
-        meta={"source": "system", "severity": severity, "context": context or {}}
+        meta={"source": "system", "severity": severity, "context": context or {}},
     )
 
 
-def log_audit_entry(event_type: str, msg: str, status: AuditStatus = AuditStatus.INFO, details: dict = None, meta: dict = None):
+def log_audit_entry(
+    event_type: str,
+    msg: str,
+    status: AuditStatus = AuditStatus.INFO,
+    details: dict = None,
+    meta: dict = None,
+):
     """
     Logging key events to DEBUG_LOG using a strict format
     """
-    
+
     log = AuditLog(
         event_type=event_type,
         msg=msg,
@@ -90,11 +105,11 @@ def log_audit_entry(event_type: str, msg: str, status: AuditStatus = AuditStatus
         meta=meta or {},
         details=details or {},
         timestamp=datetime.now().isoformat(timespec="seconds"),
-        session_id=SESSION_ID
+        session_id=SESSION_ID,
     )
     _write_jsonl(DEBUG_FILE_PER_SESSION, log.as_dict())
     _write_jsonl(DEBUG_FILE_CURRENT, log.as_dict())
-    
+
 
 def log_debug(message, tag="DEBUG"):
     """

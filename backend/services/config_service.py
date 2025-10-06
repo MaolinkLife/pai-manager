@@ -19,7 +19,8 @@ from constants.default_config import DEFAULT_CONFIG
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "..", CONFIG_PATHS["config"])
 PRESETS_PATH = os.path.join(os.path.dirname(__file__), "..", CONFIG_PATHS["presets"])
 
-_config_cache = None
+_config_cache: Optional[dict] = None
+_config_mtime: Optional[float] = None
 
 
 # Creates a config.json file with defaults if it does not exist.
@@ -39,10 +40,14 @@ def ensure_config_exists():
 
 
 def _load_config_from_file() -> dict:
-    global _config_cache
+    global _config_cache, _config_mtime
     ensure_config_exists()
     with open_utf8(CONFIG_PATH, "r") as f:
         _config_cache = json.load(f)
+    try:
+        _config_mtime = os.path.getmtime(CONFIG_PATH)
+    except OSError:
+        _config_mtime = None
     return _config_cache
 
 
@@ -53,15 +58,24 @@ def _save_config_to_file(data: dict):
 
 # Returns the current config (with caching).
 def get_config() -> dict:
-    global _config_cache
+    global _config_cache, _config_mtime
     if _config_cache is None:
         return _load_config_from_file()
+
+    try:
+        current_mtime = os.path.getmtime(CONFIG_PATH)
+    except OSError:
+        current_mtime = None
+
+    if _config_mtime is None or current_mtime != _config_mtime:
+        return _load_config_from_file()
+
     return _config_cache.copy()
 
 
 # Overwrites the entire config with new contents.
 def save_config(new_data: dict):
-    global _config_cache
+    global _config_cache, _config_mtime
 
     # Validation
     is_valid, errors = validate_config(new_data)
@@ -76,6 +90,10 @@ def save_config(new_data: dict):
 
     _config_cache = new_data
     _save_config_to_file(_config_cache)
+    try:
+        _config_mtime = os.path.getmtime(CONFIG_PATH)
+    except OSError:
+        _config_mtime = None
     log_audit_entry(
         event_type="config_saved",
         msg="[Config Service]: Save config file",
@@ -252,8 +270,35 @@ def validate_config(config: dict) -> tuple[bool, list]:
         api = config["api"]
         if not isinstance(api, dict):
             errors.append("api must be an object")
-        elif not api.get("model"):
-            errors.append("api.model is required")
+        else:
+            providers = api.get("providers")
+            if providers is None or not isinstance(providers, dict):
+                errors.append("api.providers must be an object")
+            else:
+                for name, provider_cfg in providers.items():
+                    if not isinstance(provider_cfg, dict):
+                        errors.append(f"api.providers.{name} must be an object")
+            active_provider = api.get("active_provider")
+            if active_provider and providers and active_provider not in providers:
+                errors.append(
+                    "api.active_provider must exist inside api.providers"
+                )
+            if not active_provider:
+                errors.append("api.active_provider is required")
+
+    if "memory" in config:
+        memory_cfg = config["memory"]
+        if not isinstance(memory_cfg, dict):
+            errors.append("memory must be an object")
+        else:
+            recent_limit = memory_cfg.get("recent_limit")
+            if recent_limit is not None and (
+                not isinstance(recent_limit, int) or recent_limit <= 0
+            ):
+                errors.append("memory.recent_limit must be a positive integer")
+            similarity = memory_cfg.get("similarity_threshold")
+            if similarity is not None and not isinstance(similarity, (float, int)):
+                errors.append("memory.similarity_threshold must be a number")
 
     # Validate newly added sections
     if "audio" in config and not isinstance(config["audio"], dict):

@@ -1,8 +1,8 @@
-﻿import { Component, HostListener, OnDestroy, OnInit } from '@angular/core';
+import { Component, ElementRef, HostListener, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { FormControl } from '@angular/forms';
 import { Observable } from 'rxjs';
 import { finalize, map } from 'rxjs/operators';
-import { Message } from '../../core/models/message.model';
+import { Message, MessageMedia, MessageMediaCategory } from '../../core/models/message.model';
 import { ProjectConfig } from './../../core/models/project-config.model';
 import { ApiService } from '../../core/services/api.service';
 import { ConfigService } from '../../core/services/config.service';
@@ -16,6 +16,9 @@ function generateTempId(): string {
     }
     return 'temp-' + Math.random().toString(36).substr(2, 9);
 }
+
+const DEFAULT_MIME_TYPE = 'application/octet-stream';
+const DOCUMENT_EXTENSIONS = new Set(['pdf', 'doc', 'docx', 'txt', 'rtf', 'xls', 'xlsx', 'csv', 'ppt', 'pptx']);
 
 @Component({
     selector: 'app-chat',
@@ -47,6 +50,9 @@ export class ChatComponent implements OnInit, OnDestroy {
     chatInputValue: string = '';
     userName: string = '';
     charName: string = '';
+    attachments: MessageMedia[] = [];
+    selectedMedia: MessageMedia | null = null;
+    isProcessingAttachments = false;
 
     config$: Observable<{ userName: string; charName: string } | null> | null = null;
 
@@ -56,6 +62,7 @@ export class ChatComponent implements OnInit, OnDestroy {
     activeDropdown: string | null = null;
     currentPlayingMessage: string | null = null;
     private currentStreamingMessage: Message | null = null;
+    @ViewChild('fileInput') private fileInputRef?: ElementRef<HTMLInputElement>;
 
     constructor(
         private apiService: ApiService,
@@ -90,11 +97,15 @@ export class ChatComponent implements OnInit, OnDestroy {
                             role: event.role,
                             content: event.content,
                             timestamp: new Date().toISOString(),
-                            isPending: true
+                            isPending: true,
+                            media: this.normalizeMediaList(event.media),
                         };
                         this.chatHistory.push(this.currentStreamingMessage);
                     } else {
                         this.currentStreamingMessage.content += event.content;
+                        if (event.media !== undefined && this.currentStreamingMessage) {
+                            this.currentStreamingMessage.media = this.normalizeMediaList(event.media);
+                        }
                     }
                     break;
 
@@ -103,6 +114,9 @@ export class ChatComponent implements OnInit, OnDestroy {
                         this.currentStreamingMessage.id = event.id || this.currentStreamingMessage.id;
                         this.currentStreamingMessage.isPending = false;
                         this.currentStreamingMessage.content = event.content;
+                        if (event.media !== undefined) {
+                            this.currentStreamingMessage.media = this.normalizeMediaList(event.media);
+                        }
                         this.currentStreamingMessage = null;
                     } else {
                         this.chatHistory.push({
@@ -110,7 +124,8 @@ export class ChatComponent implements OnInit, OnDestroy {
                             role: event.role,
                             content: event.content,
                             timestamp: new Date().toISOString(),
-                            isPending: false
+                            isPending: false,
+                            media: this.normalizeMediaList(event.media),
                         });
                     }
                     this.loading = false;
@@ -119,7 +134,8 @@ export class ChatComponent implements OnInit, OnDestroy {
                 case 'history':
                     const newMessages = event.items.map((m: any) => ({
                         ...m,
-                        isPending: false
+                        isPending: false,
+                        media: this.normalizeMediaList(m.media),
                     })).sort(
                         (a: any, b: any) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
                     );
@@ -165,7 +181,8 @@ export class ChatComponent implements OnInit, OnDestroy {
                         role: event.new_message.role,
                         content: event.new_message.content,
                         timestamp: event.new_message.timestamp,
-                        isPending: false
+                        isPending: false,
+                        media: this.normalizeMediaList(event.new_message?.media),
                     });
                     this.loading = false;
                     setTimeout(() => this.scrollToBottom(), 0);
@@ -190,6 +207,9 @@ export class ChatComponent implements OnInit, OnDestroy {
                     if (idx !== -1) {
                         this.chatHistory[idx].id = event.realId;
                         this.chatHistory[idx].isPending = false;
+                        if (event.media) {
+                            this.chatHistory[idx].media = this.normalizeMediaList(event.media);
+                        }
                     }
                     break;
 
@@ -201,7 +221,9 @@ export class ChatComponent implements OnInit, OnDestroy {
         });
     }
 
-    ngOnDestroy() { }
+    ngOnDestroy(): void {
+        this.resetAttachments();
+    }
 
     isMessageStreaming(msg: Message): boolean {
         return msg.isPending === true && msg.role === 'assistant';
@@ -378,7 +400,21 @@ export class ChatComponent implements OnInit, OnDestroy {
     // Message handling methods
     sendMessage(): void {
         const trimmed = this.chatInput.value?.trim();
-        if (!trimmed) return;
+        const mediaPayload = this.attachments.map((attachment) => ({ ...attachment }));
+        const hasContent = !!(trimmed && trimmed.length > 0);
+
+        if (!hasContent && mediaPayload.length === 0) {
+            return;
+        }
+
+        if (this.isProcessingAttachments) {
+            this.notificationService.open({
+                type: 'warning',
+                message: 'Дождитесь завершения обработки вложений перед отправкой.',
+                autoClose: true,
+            });
+            return;
+        }
 
         const tempId = generateTempId();
         const timestamp = new Date().toISOString();
@@ -386,9 +422,10 @@ export class ChatComponent implements OnInit, OnDestroy {
         const userMessage: Message = {
             id: tempId,
             role: 'user',
-            content: trimmed,
+            content: trimmed ?? '',
             timestamp,
-            isPending: true
+            isPending: true,
+            media: mediaPayload,
         };
 
         this.chatHistory.push(userMessage);
@@ -397,10 +434,17 @@ export class ChatComponent implements OnInit, OnDestroy {
         this.loading = true;
         setTimeout(() => this.scrollToBottom(), 0);
 
+        const transportPayload = {
+            ...userMessage,
+            media: mediaPayload.map((media) => this.serializeMediaForTransport(media)),
+        };
+
         this.websocketService.send(JSON.stringify({
             action: 'send_message',
-            payload: userMessage
+            payload: transportPayload,
         }));
+
+        this.resetAttachments();
     }
 
     copyMessage(msg: Message): void {
@@ -555,16 +599,199 @@ export class ChatComponent implements OnInit, OnDestroy {
     }
 
     toggleAttachDropdown(): void {
-        console.log('Opening attachments dropdown...');
+        if (this.isProcessingAttachments) {
+            return;
+        }
+        if (this.fileInputRef?.nativeElement) {
+            this.fileInputRef.nativeElement.click();
+        }
+    }
+
+    async onFilesSelected(event: Event): Promise<void> {
+        event.stopPropagation();
+        const input = event.target as HTMLInputElement;
+        const files = Array.from(input?.files ?? []);
+
+        if (!files.length) {
+            return;
+        }
+
+        this.isProcessingAttachments = true;
+
+        try {
+            const processed = await Promise.all(
+                files.map((file) =>
+                    this.buildMediaFromFile(file).catch((error) => {
+                        const message = error instanceof Error ? error.message : String(error);
+                        this.notificationService.open({
+                            type: 'error',
+                            message,
+                            autoClose: true,
+                        });
+                        return null;
+                    })
+                )
+            );
+
+            const validMedia = processed.filter((item): item is MessageMedia => !!item);
+            if (validMedia.length) {
+                this.attachments = [...this.attachments, ...validMedia];
+            }
+        } finally {
+            this.isProcessingAttachments = false;
+            if (this.fileInputRef?.nativeElement) {
+                this.fileInputRef.nativeElement.value = '';
+            }
+        }
+    }
+
+    removeAttachment(id: string): void {
+        this.attachments = this.attachments.filter((item) => item.id !== id);
+    }
+
+    private resetAttachments(): void {
+        this.attachments = [];
+        this.isProcessingAttachments = false;
+        this.selectedMedia = null;
+        if (this.fileInputRef?.nativeElement) {
+            this.fileInputRef.nativeElement.value = '';
+        }
+    }
+
+    private serializeMediaForTransport(media: MessageMedia): Omit<MessageMedia, 'dataUrl'> {
+        const { dataUrl, ...rest } = media;
+        return rest;
+    }
+
+    private async buildMediaFromFile(file: File): Promise<MessageMedia> {
+        if (!file) {
+            throw new Error('Файл не найден.');
+        }
+
+        const mimeType = file.type || DEFAULT_MIME_TYPE;
+        const category = this.determineMediaCategory(mimeType, file.name);
+        const dataUrl = await this.readFileAsDataUrl(file);
+        const base64 = dataUrl.split(',')[1];
+
+        if (!base64) {
+            throw new Error(`Не удалось прочитать файл ${file.name}.`);
+        }
+
+        return {
+            id: generateTempId(),
+            name: file.name,
+            mimeType,
+            size: file.size,
+            category,
+            data: base64,
+            dataUrl,
+        };
+    }
+
+    private readFileAsDataUrl(file: File): Promise<string> {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result as string);
+            reader.onerror = () => reject(new Error(`Ошибка чтения файла ${file.name}.`));
+            reader.readAsDataURL(file);
+        });
+    }
+
+    private determineMediaCategory(mimeType: string, fileName: string): MessageMediaCategory {
+        if (mimeType?.startsWith('image/')) {
+            return 'image';
+        }
+        if (mimeType?.startsWith('audio/')) {
+            return 'audio';
+        }
+        if (mimeType?.startsWith('video/')) {
+            return 'video';
+        }
+
+        const extension = fileName?.split('.').pop()?.toLowerCase();
+        if (extension && DOCUMENT_EXTENSIONS.has(extension)) {
+            return 'document';
+        }
+
+        return 'other';
+    }
+
+    private normalizeMediaList(media?: any[]): MessageMedia[] {
+        if (!Array.isArray(media)) {
+            return [];
+        }
+
+        return media.map((item: any) => {
+            const mimeType = item.mimeType || item.type || DEFAULT_MIME_TYPE;
+            const name = item.name || item.originalName || 'file';
+            const category: MessageMediaCategory = item.category || this.determineMediaCategory(mimeType, name);
+            const data: string | undefined = item.data || undefined;
+            const dataUrl: string | undefined = item.dataUrl || (data ? 'data:' + mimeType + ';base64,' + data : undefined);
+
+            return {
+                id: item.id || generateTempId(),
+                name,
+                mimeType,
+                size: item.size ?? 0,
+                category,
+                description: item.description || undefined,
+                url: item.url || undefined,
+                data,
+                dataUrl,
+            } as MessageMedia;
+        });
+    }
+
+    getMediaSource(media: MessageMedia | null | undefined): string {
+        if (!media) {
+            return '';
+        }
+        if (media.dataUrl) {
+            return media.dataUrl;
+        }
+        if (media.data) {
+            return `data:${media.mimeType};base64,${media.data}`;
+        }
+        return media.url ?? '';
+    }
+
+    previewMedia(media: MessageMedia): void {
+        if (media.category === 'image') {
+            this.selectedMedia = media;
+            return;
+        }
+
+        if (media.category === 'document' || media.category === 'other') {
+            this.downloadMedia(media);
+        }
+    }
+
+    closeMediaPreview(): void {
+        this.selectedMedia = null;
+    }
+
+    downloadMedia(media: MessageMedia): void {
+        const source = this.getMediaSource(media);
+        if (!source) {
+            this.notificationService.open({
+                type: 'warning',
+                message: 'Не удалось загрузить файл.',
+                autoClose: true,
+            });
+            return;
+        }
+
+        const link = document.createElement('a');
+        link.href = source;
+        link.download = media.name;
+        link.target = '_blank';
+        link.rel = 'noopener';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
     }
 
     shouldShowReroll(msg: Message, index: number): boolean {
         return msg.role === 'assistant' && index === this.chatHistory.length - 1;
     }
 }
-
-
-
-
-
-

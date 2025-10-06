@@ -8,6 +8,7 @@
 from datetime import datetime, timezone
 
 from services import user_service, message_service, history_service, character_service
+from services.storage_service import serialize_media_entries
 from services.logger_service import log_error
 from services.config_service import get_config_value
 from fastapi import HTTPException
@@ -61,7 +62,11 @@ def get_messages(user_id: str, limit: int = 20):
 # History (legacy support)
 # =========================
 def add_message_to_history(
-    character_name: str, role: str, content: str, timestamp: datetime = None
+    character_name: str,
+    role: str,
+    content: str,
+    timestamp: datetime = None,
+    media: list | None = None,
 ):
     if isinstance(timestamp, str):
         try:
@@ -74,7 +79,9 @@ def add_message_to_history(
     if not char:
         raise ValueError(f"Персонаж '{character_name}' не найден")
 
-    return history_service.add_history(char.id, role, content, timestamp)
+    return history_service.add_history(
+        char.id, role, content, timestamp, media_items=media
+    )
 
 
 def get_history(character_name: str, limit: int = 20, offset: int = 0):
@@ -84,19 +91,16 @@ def get_history(character_name: str, limit: int = 20, offset: int = 0):
 
     rows = history_service.get_history(char.id, limit, offset)
 
-    return [
-        {
-            "id": r.id,
-            "role": r.role,
-            "content": _merge_reasoning(r),
-            "timestamp": (
-                r.timestamp.isoformat()
-                if hasattr(r.timestamp, "isoformat")
-                else str(r.timestamp)
-            ),
-        }
-        for r in rows
-    ]
+    return _serialize_history_rows(rows)
+
+
+def get_history_since(character_name: str, start_time):
+    char = character_service.get_character(character_name)
+    if not char:
+        return []
+
+    rows = history_service.get_history_since(char.id, start_time)
+    return _serialize_history_rows(rows)
 
 
 def delete_message_chain(message_id: str):
@@ -138,6 +142,25 @@ def add_reasoning_entry(message_id: str, content: str):
 
 def get_reasoning_by_message_id(message_id: str):
     return history_service.get_reasoning_by_message_id(message_id)
+
+
+def _serialize_history_rows(rows):
+    serialized = []
+    for r in rows:
+        serialized.append(
+            {
+                "id": r.id,
+                "role": r.role,
+                "content": _merge_reasoning(r),
+                "timestamp": (
+                    r.timestamp.isoformat()
+                    if hasattr(r.timestamp, "isoformat")
+                    else str(r.timestamp)
+                ),
+                "media": serialize_media_entries(getattr(r, "media", [])),
+            }
+        )
+    return serialized
 
 
 def _merge_reasoning(history_row) -> str:

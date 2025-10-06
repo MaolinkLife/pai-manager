@@ -4,7 +4,7 @@
 # ===========================================================
 
 from services.logger_service import log_audit_entry, AuditStatus
-from services import lorebook_service
+from modules.memory import lorebook
 
 
 def retrieve_lore_fragments(
@@ -16,7 +16,7 @@ def retrieve_lore_fragments(
         return []
 
     try:
-        entries = lorebook_service.search_lore_entries(
+        entries = lorebook.search_entries(
             query=text,
             top_k=top_k,
             min_similarity=min_similarity,

@@ -1,7 +1,6 @@
 import { ProjectConfig } from '../models/project-config.model';
 import { ProjectConfigDto } from '../models/project-config.dto';
 
-// DTO -> Model
 export function mapVisionDtoToModel(dtoVision: ProjectConfigDto['vision']): ProjectConfig['vision'] {
     return {
         enabled: dtoVision.enabled,
@@ -20,12 +19,10 @@ export function mapVisionDtoToModel(dtoVision: ProjectConfigDto['vision']): Proj
         windowProcess: dtoVision.window_process || '',
         debugSave: dtoVision.debug_save || true,
         debugPath: dtoVision.debug_path || './temp/vision',
-        // Обрабатываем vision_modules
         visionModules: dtoVision.vision_modules || [],
     };
 }
 
-// Model -> DTO
 export function mapVisionModelToDto(vision: ProjectConfig['vision']): ProjectConfigDto['vision'] {
     const dto: any = {
         enabled: vision.enabled,
@@ -46,7 +43,6 @@ export function mapVisionModelToDto(vision: ProjectConfig['vision']): ProjectCon
         debug_path: vision.debugPath,
     };
 
-    // Обрабатываем vision_modules
     if (vision.visionModules) {
         dto.vision_modules = {};
 

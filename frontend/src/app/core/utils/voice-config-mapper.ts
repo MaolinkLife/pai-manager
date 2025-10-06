@@ -14,14 +14,11 @@ export const mapVoiceDtoToModel = (dto: any) => {
         activeModule: dto.active_module,
     };
 
-    // Обрабатываем voiceModules - преобразуем snake_case в camelCase
     if (dto.voice_modules) {
         model.voiceModules = {};
 
         Object.keys(dto.voice_modules).forEach(moduleName => {
             model.voiceModules[moduleName] = {};
-
-            // Преобразуем поля модуля из snake_case в camelCase
             Object.keys(dto.voice_modules[moduleName] || {}).forEach(fieldName => {
                 const camelFieldName = fieldName.replace(/_([a-z])/g, (m) => m[1].toUpperCase());
                 model.voiceModules[moduleName][camelFieldName] = dto.voice_modules[moduleName][fieldName];
@@ -46,14 +43,11 @@ export const mapVoiceModelToDto = (voice: ProjectConfig['voice']) => {
         active_module: voice.activeModule,
     };
 
-    // Обрабатываем voiceModules - преобразуем camelCase в snake_case
     if (voice.voiceModules) {
         dto.voice_modules = {};
 
         Object.keys(voice.voiceModules).forEach(moduleName => {
             dto.voice_modules[moduleName] = {};
-
-            // Преобразуем поля модуля из camelCase в snake_case
             Object.keys(voice.voiceModules[moduleName] || {}).forEach(fieldName => {
                 const snakeFieldName = fieldName.replace(/([A-Z])/g, '_$1').toLowerCase();
                 dto.voice_modules[moduleName][snakeFieldName] = voice.voiceModules[moduleName][fieldName];

@@ -1,24 +1,15 @@
 # core/instructor.py
-from typing import Dict, Any
+from typing import Dict, Any, List, Optional
 from datetime import datetime
-from services.api_service import load_system_prompt
+
+from core.prompt_loader import load_system_prompt
 from services.logger_service import log_audit_entry, AuditStatus
 from constants.rules import SYSTEM_RULES
-from constants.messages import (
-    DEFAULT_CONTEXT,
-    NO_MEMORY,
-    NO_KNOWLEDGE,
-    DEFAULT_PERSONA_STYLE,
-)
-
-from core.visual_module import VisualModule
+from constants.messages import DEFAULT_CONTEXT, NO_MEMORY, NO_KNOWLEDGE
 
 
 class Instructor:
-    """
-    Instructor assembles the final structured system prompt
-    based on analysis, decisions, memory and moral state.
-    """
+    """Assembles the final structured system prompt."""
 
     async def build_system_prompt(
         self,
@@ -26,27 +17,9 @@ class Instructor:
         decisions: Dict[str, bool],
         memory_context: Dict[str, Any],
         moral_state: Dict[str, Any],
+        visual_context: Optional[Dict[str, Any]] = None,
     ) -> str:
-        """
-        Build structured system prompt combining:
-        - Base persona prompt
-        - Dialogue context
-        - Memory and lore knowledge
-        - Style/persona constraints
-        - Current emotional state
-        - Hard system rules
-        - Active decisions
-        - Environment/context info (date, time, location, etc.)
-
-        Args:
-            analysis: Cognitive analysis result
-            decisions: Dictionary of active decision flags
-            memory_context: Memory and lore context
-            moral_state: Current moral/emotional state
-
-        Returns:
-            Final system prompt string
-        """
+        """Build the system prompt that will guide the model response."""
         try:
             log_audit_entry(
                 "instructor_prompt_build_start",
@@ -55,145 +28,195 @@ class Instructor:
             )
 
             base_prompt = load_system_prompt()
-            sections = []
+            sections: List[str] = []
 
-            # [CORE] - base persona
+            # [CORE] base persona prompt
             sections.append(f"[CORE]\n{base_prompt}")
 
-            # [CONTEXT] - summary of current dialogue
-            context_parts = []
-            themes = analysis.get("input_analysis", {}).get("dominant_themes", [])
-            if themes:
-                context_parts.append(f"Themes: {', '.join(themes)}")
+            # [CONTEXT] cognitive summary
+            sections.append(self._build_context_section(analysis))
 
-            intent = (
-                analysis.get("input_analysis", {})
-                .get("intent_analysis", {})
-                .get("primary_intent", "")
-            )
-            if intent:
-                context_parts.append(f"Intent: {intent}")
-
-            emotional_tone = (
-                analysis.get("input_analysis", {})
-                .get("emotional_tone", {})
-                .get("primary", "")
-            )
-            if emotional_tone:
-                context_parts.append(f"Emotional tone: {emotional_tone}")
-
-            sections.append(
-                f"[CONTEXT]\n{'; '.join(context_parts)}"
-                if context_parts
-                else f"[CONTEXT]\n{DEFAULT_CONTEXT}"
-            )
-
-            # [ENVIRONMENT] - date, time, location, etc.
+            # [SYSTEM] environment data
             env_info = self._get_environment_info()
             if env_info:
                 sections.append(f"[SYSTEM]\n{env_info}")
 
-            # [MEMORY] - important facts
-            key_facts = memory_context.get("key_facts")
-            if key_facts:
-                joined_facts = "; ".join(key_facts)
-                sections.append(f"[MEMORY]\n{joined_facts}")
-            else:
-                sections.append(f"[MEMORY]\n{NO_MEMORY}")
+            # [MEMORY] memory layer facts
+            sections.append(self._build_memory_section(memory_context))
 
-            # [KNOWLEDGE] - relevant lore knowledge
-            if memory_context.get("lore_matches"):
-                joined_knowledge = "\n---\n".join(memory_context["lore_matches"])
-                sections.append(f"[KNOWLEDGE]\n{joined_knowledge}")
-            else:
-                sections.append(f"[KNOWLEDGE]\n{NO_KNOWLEDGE}")
+            # [KNOWLEDGE] lore context
+            sections.append(self._build_knowledge_section(memory_context))
 
-            # [INSTRUCTION] - persona style
-            persona_constraints = (
-                analysis.get("response_guidance", {})
-                .get("generation_parameters", {})
-                .get("persona_constraints", [])
-            )
-            # TODO: Temporarily disabled to avoid overwriting the PAI persona
-            # if persona_constraints:
-            #     sections.append(
-            #         f"[INSTRUCTION]\nPersona style: {', '.join(persona_constraints)}"
-            #     )
-            # else:
-            #     sections.append(f"[INSTRUCTION]\n{DEFAULT_PERSONA_STYLE}")
+            # [INSTRUCTION] persona tweaks (currently disabled, reserved)
+            persona_section = self._build_persona_section(analysis)
+            if persona_section:
+                sections.append(persona_section)
 
-            # [EMOTION] - current mood
+            # [EMOTION] moral state summary
             current_emotion = moral_state.get("current_emotion", "neutral")
             sections.append(f"[EMOTION]\nCurrent emotional state: {current_emotion}")
 
-            # [RULES] - strict constraints
+            # [RULES] hard constraints
             sections.append(f"[RULES]\n" + "\n".join(SYSTEM_RULES))
 
-            # [DECISIONS] - active modes
-            active_decisions = [k for k, v in decisions.items() if v]
+            # [DECISIONS] active routing decisions
+            active_decisions = [key for key, value in decisions.items() if value]
             if active_decisions:
                 sections.append(
                     f"[DECISIONS]\nActive modes: {', '.join(active_decisions)}"
                 )
 
-            final_prompt = "\n\n".join(sections)
-
-            user_text = (
-                analysis.get("input_analysis", {}).get("original_message", "") or ""
-            )
-
-            # ✅ Проверяем, нужно ли визуальное понимание
-            if decisions.get("needs_vision", False):
-                visual_module = VisualModule()
-                # Передаём решения в add_vision_context_to_system_prompt
-                final_prompt = visual_module.add_vision_context_to_system_prompt(
-                    final_prompt, user_text, decisions=decisions
+            # [VISUAL] visual context supplied by decision layer
+            visual_section = self._render_visual_context(visual_context)
+            if visual_section:
+                sections.append(f"[VISUAL]\n{visual_section}")
+                attachments_count = len(
+                    (visual_context or {}).get("attachments", {}).get("items", [])
+                )
+                log_audit_entry(
+                    "instructor_visual_context_added",
+                    "[Instructor] Visual context appended to system prompt.",
+                    AuditStatus.SUCCESS,
+                    details={
+                        "attachments": attachments_count,
+                        "has_screen": bool((visual_context or {}).get("screen")),
+                    },
                 )
             else:
-                # Логируем, что визуальный контекст не добавляется
                 log_audit_entry(
-                    "instructor_vision_skipped",
-                    "[Instructor] Vision context skipped based on decisions.",
+                    "instructor_visual_context_skipped",
+                    "[Instructor] No visual context appended to system prompt.",
                     AuditStatus.INFO,
-                    details={"needs_vision": False},
+                    details={
+                        "provided": bool(visual_context),
+                        "attachments": (
+                            len(
+                                (visual_context or {})
+                                .get("attachments", {})
+                                .get("items", [])
+                            )
+                            if visual_context
+                            else 0
+                        ),
+                        "has_screen": bool((visual_context or {}).get("screen")),
+                    },
                 )
+
+            final_prompt = "\n\n".join(sections)
 
             log_audit_entry(
                 "instructor_prompt_build_success",
                 "[Instructor] System prompt successfully built.",
                 AuditStatus.SUCCESS,
-                details={"sections_count": len(sections)},
+                details={
+                    "sections_count": len(sections),
+                    "has_visual_context": bool(visual_section),
+                },
             )
 
             return final_prompt
 
-        except Exception as e:
+        except Exception as exc:
             log_audit_entry(
                 "instructor_prompt_build_error",
-                f"[Instructor] Error while building system prompt: {e}",
+                f"[Instructor] Error while building system prompt: {exc}",
                 AuditStatus.ERROR,
-                details={"error": str(e), "error_type": type(e).__name__},
+                details={"error": str(exc), "error_type": type(exc).__name__},
             )
-            # fallback — minimal prompt
             return "[CORE]\nSystem prompt unavailable due to error."
 
+    # ------------------------------------------------------------------
+    # Section builders
+    # ------------------------------------------------------------------
+    def _build_context_section(self, analysis: Dict[str, Any]) -> str:
+        context_parts: List[str] = []
+
+        themes = analysis.get("input_analysis", {}).get("dominant_themes", [])
+        if themes:
+            context_parts.append(f"Themes: {', '.join(themes)}")
+
+        intent = (
+            analysis.get("input_analysis", {})
+            .get("intent_analysis", {})
+            .get("primary_intent", "")
+        )
+        if intent:
+            context_parts.append(f"Intent: {intent}")
+
+        emotional_tone = (
+            analysis.get("input_analysis", {})
+            .get("emotional_tone", {})
+            .get("primary", "")
+        )
+        if emotional_tone:
+            context_parts.append(f"Emotional tone: {emotional_tone}")
+
+        if context_parts:
+            return f"[CONTEXT]\n{'; '.join(context_parts)}"
+        return f"[CONTEXT]\n{DEFAULT_CONTEXT}"
+
+    def _build_memory_section(self, memory_context: Dict[str, Any]) -> str:
+        key_facts = memory_context.get("key_facts")
+        if key_facts:
+            return f"[MEMORY]\n{'; '.join(key_facts)}"
+        return f"[MEMORY]\n{NO_MEMORY}"
+
+    def _build_knowledge_section(self, memory_context: Dict[str, Any]) -> str:
+        lore_matches = memory_context.get("lore_matches")
+        if lore_matches:
+            return f"[KNOWLEDGE]\n" + "\n---\n".join(lore_matches)
+        return f"[KNOWLEDGE]\n{NO_KNOWLEDGE}"
+
+    def _build_persona_section(self, analysis: Dict[str, Any]) -> str:
+        persona_constraints = (
+            analysis.get("response_guidance", {})
+            .get("generation_parameters", {})
+            .get("persona_constraints", [])
+        )
+        # Persona adjustments are intentionally disabled to preserve the base character profile.
+        if persona_constraints:  # pragma: no cover - informative branch only
+            return ""
+        return ""
+
+    def _render_visual_context(self, visual_context: Optional[Dict[str, Any]]) -> str:
+        if not visual_context:
+            return ""
+
+        lines: List[str] = []
+
+        attachments = (visual_context.get("attachments") or {}).get("items", [])
+        for idx, item in enumerate(attachments, start=1):
+            description = (item.get("description") or "").strip()
+            if not description:
+                continue
+            label = (
+                item.get("label")
+                or item.get("name")
+                or item.get("filename")
+                or f"Attachment {idx}"
+            )
+            lines.append(f"{label}: {description}")
+
+        screen_info = visual_context.get("screen") or {}
+        screen_description = (screen_info.get("description") or "").strip()
+        if screen_description:
+            timestamp = screen_info.get("captured_at")
+            prefix = "Screen snapshot"
+            if timestamp:
+                prefix = f"{prefix} ({timestamp})"
+            lines.append(f"{prefix}: {screen_description}")
+
+        return "\n".join(lines)
+
     def _get_environment_info(self) -> str:
-        """
-        Собирает информацию об окружении: дата, время, локация и т.д.
-        Можно расширять: погода, координаты, часовой пояс и т.п.
-        """
         now = datetime.now()
         date_str = now.strftime("%d %B %Y")
         time_str = now.strftime("%H:%M:%S")
-        # timezone_str = now.astimezone().strftime("%Z")
 
-        # Пример: добавить локацию из конфига
         from services.config_service import get_config_value
 
-        location = get_config_value("location", "unknown")  # например, "Moscow"
-        coordinates = get_config_value(
-            "coordinates", None
-        )  # например, "55.7558, 37.6173"
+        location = get_config_value("location", "unknown")
+        coordinates = get_config_value("coordinates", None)
 
         parts = [
             f"Date: {date_str}",
@@ -208,19 +231,32 @@ class Instructor:
 
         return "\n".join(parts)
 
+    def _build_attachment_summary(
+        self, media_list: Optional[List[Dict[str, Any]]]
+    ) -> str:
+        if not media_list:
+            return ""
+
+        image_descriptions: List[str] = []
+        image_index = 0
+        for media in media_list:
+            if (media.get("category") or "").lower() != "image":
+                continue
+            image_index += 1
+            summary = (media.get("description") or "").strip()
+            if summary:
+                label = f"Image {image_index}" if image_index > 1 else "Image"
+                image_descriptions.append(f"{label}: {summary}")
+
+        if not image_descriptions:
+            return ""
+
+        lines = "\n".join(image_descriptions)
+        return "User provided image attachments:\n" + lines
+
     async def format_for_api(
         self, system_prompt: str, user_message: Dict[str, Any]
     ) -> list:
-        """
-        Format message history for API consumption.
-
-        Args:
-            system_prompt: Final system prompt string
-            user_message: Incoming user message dictionary
-
-        Returns:
-            List of messages in OpenAI-compatible format
-        """
         log_audit_entry(
             "instructor_format_for_api",
             "[Instructor] Formatting message history for API.",
@@ -228,32 +264,30 @@ class Instructor:
             details={"message_id": user_message.get("id")},
         )
 
-        # Извлекаем последние N сообщений (например, 10)
         history = user_message.get("history", [])
-        recent_history = history[-10:]  # последние 10 сообщений
+        recent_history = history[-10:]
 
-        # Формируем сообщения
         messages = [{"role": "system", "content": system_prompt}]
 
         for msg in recent_history:
-            # Пропускаем старые system-сообщения
             if msg.get("role") == "system":
                 continue
-            messages.append(
-                {
-                    "role": msg.get("role"),
-                    "content": msg.get("content"),
-                    "id": msg.get("id"),  # если нужно
-                }
-            )
-
-        # Добавляем текущее сообщение пользователя
-        messages.append(
-            {
-                "role": "user",
-                "content": user_message.get("content", ""),
-                "id": user_message.get("id"),
+            enriched_msg = {
+                "role": msg.get("role"),
+                "content": msg.get("content"),
+                "id": msg.get("id"),
             }
-        )
+            if "media" in msg:
+                enriched_msg["media"] = msg.get("media")
+            messages.append(enriched_msg)
+
+        enriched_user = {
+            "role": "user",
+            "content": user_message.get("content", ""),
+            "id": user_message.get("id"),
+        }
+        if "media" in user_message:
+            enriched_user["media"] = user_message.get("media")
+        messages.append(enriched_user)
 
         return messages

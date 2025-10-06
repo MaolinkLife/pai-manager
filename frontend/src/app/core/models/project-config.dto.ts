@@ -86,9 +86,37 @@ export interface RagConfigDto {
     memory?: any;
 }
 
-export interface OpenRouterConfigDto {
+export interface AnalyzerProviderConfigDto {
     api_key?: string;
     model?: string;
+    temperature?: number;
+    max_tokens?: number;
+}
+
+export interface AnalyzerConfigDto {
+    active_provider: string;
+    fallback_order: string[];
+    providers: {
+        [key: string]: AnalyzerProviderConfigDto;
+    };
+}
+
+export interface MemoryConfigDto {
+    recent_limit: number;
+    similarity_threshold: number;
+    session_window: string;
+    session_enabled: boolean;
+    embedding_provider: string;
+    embedding_model: string;
+}
+
+export interface GeneratorProviderConfigDto {
+    model: string;
+    temperature: number;
+    max_tokens: number;
+    streaming?: boolean;
+    api_key?: string;
+    base_url?: string;
 }
 
 export interface ApiConfigDto {
@@ -98,6 +126,11 @@ export interface ApiConfigDto {
     visual_model: string;
     token_limit: number;
     message_pair_limit: number;
+    active_provider: string;
+    fallback_order: string[];
+    providers: {
+        [key: string]: GeneratorProviderConfigDto;
+    };
 }
 
 export interface GenerationConfigDto {
@@ -126,7 +159,8 @@ export interface ProjectConfigDto extends BaseConfigDto {
     audio: AudioConfigDto;
     vision: VisionConfigDto;
     rag: RagConfigDto;
-    openrouter: OpenRouterConfigDto;
+    analyzer: AnalyzerConfigDto;
+    memory: MemoryConfigDto;
     api: ApiConfigDto;
     generate_settings: GenerationConfigDto;
     system: SystemConfigDto;

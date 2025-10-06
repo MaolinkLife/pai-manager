@@ -118,7 +118,27 @@ DEFAULT_CONFIG = {
             "graph": {"enabled": True, "relationships": True, "inference": True},
         },
     },
-    "openrouter": {"api_key": "", "model": ""},
+    "analyzer": {
+        "active_provider": "openrouter",
+        "fallback_order": ["ollama"],
+        "providers": {
+            "openrouter": {
+                "api_key": "",
+                "model": "openai/gpt-4o-mini",
+                "temperature": 0.7,
+                "max_tokens": 1024,
+            },
+            "ollama": {"model": "llama3.2", "temperature": 0.7, "max_tokens": 1024},
+        },
+    },
+    "memory": {
+        "recent_limit": 32,
+        "similarity_threshold": 0.7,
+        "session_window": "day",
+        "session_enabled": True,
+        "embedding_provider": "auto",
+        "embedding_model": "nomic-embed-text",
+    },
     "api": {
         "type": "Ollama",
         "streaming": True,
@@ -126,6 +146,23 @@ DEFAULT_CONFIG = {
         "visual_model": "apple/FastVLM-1.5B",
         "token_limit": 4096,
         "message_pair_limit": 10,
+        "active_provider": "ollama",
+        "fallback_order": ["openrouter"],
+        "providers": {
+            "ollama": {
+                "model": "llama3.2",
+                "temperature": 0.85,
+                "max_tokens": 2048,
+                "streaming": True,
+            },
+            "openrouter": {
+                "api_key": "",
+                "model": "openai/gpt-4o-mini",
+                "temperature": 0.85,
+                "max_tokens": 2048,
+                "base_url": "https://openrouter.ai/api/v1",
+            },
+        },
     },
     "generate_settings": {
         "temperature": 0.85,

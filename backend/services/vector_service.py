@@ -14,8 +14,7 @@ _client = chromadb.PersistentClient(path=CHROMA_DIR)
 
 def _get_collection(name: str = "pai_memory"):
     return _client.get_or_create_collection(
-        name=name,
-        metadata={"hnsw:space": "cosine"}
+        name=name, metadata={"hnsw:space": "cosine"}
     )
 
 

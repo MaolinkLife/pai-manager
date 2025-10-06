@@ -2,7 +2,7 @@ import json
 import asyncio
 from fastapi import APIRouter, Body
 
-from services.voice_service import force_cut_voice
+from modules.tts.service import force_cut_voice
 from services.api_service import play_message, run_standard
 from services import config_service, voice_controller
 from modules.voice.vad_listener import (

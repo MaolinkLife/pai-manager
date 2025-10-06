@@ -12,7 +12,9 @@ from utils.crypto_utils import encrypt, decrypt
 from services.logger_service import log_audit_entry, AuditStatus
 
 
-def add_message(user_id: str, role: str, content: str, dialog_id: str = None, volatile: bool = False):
+def add_message(
+    user_id: str, role: str, content: str, dialog_id: str = None, volatile: bool = False
+):
     session: Session = SessionLocal()
     try:
         msg = Message(
@@ -20,7 +22,7 @@ def add_message(user_id: str, role: str, content: str, dialog_id: str = None, vo
             role=role,
             content=encrypt(content),
             dialog_id=dialog_id,
-            volatile=volatile
+            volatile=volatile,
         )
         session.add(msg)
         session.commit()
@@ -30,14 +32,19 @@ def add_message(user_id: str, role: str, content: str, dialog_id: str = None, vo
             event_type="Message.Insert",
             msg="Message added to DB",
             status=AuditStatus.SUCCESS,
-            details={"id": msg.id, "role": role, "user_id": user_id, "volatile": volatile}
+            details={
+                "id": msg.id,
+                "role": role,
+                "user_id": user_id,
+                "volatile": volatile,
+            },
         )
 
         return {
             "id": msg.id,
             "role": msg.role,
             "content": decrypt(msg.content),
-            "timestamp": format_user_datetime(msg.timestamp)
+            "timestamp": format_user_datetime(msg.timestamp),
         }
 
     finally:
@@ -59,7 +66,7 @@ def get_messages(user_id: str, limit: int = 20):
                 "id": m.id,
                 "role": m.role,
                 "content": decrypt(m.content),
-                "timestamp": format_user_datetime(m.timestamp)
+                "timestamp": format_user_datetime(m.timestamp),
             }
             for m in reversed(messages)
         ]

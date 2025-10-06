@@ -19,6 +19,7 @@ import { VoiceSettingsComponent } from './layout/components/modals/main-modal/vo
 import { AudioSettingsComponent } from './layout/components/modals/main-modal/audio-settings/audio-settings.component';
 import { VisionSettingsComponent } from './layout/components/modals/main-modal/vision-settings/vision-settings.component';
 import { RagSettingsComponent } from './layout/components/modals/main-modal/rag-settings/rag-settings.component';
+import { AnalyzerSettingsComponent } from './layout/components/modals/main-modal/analyzer-settings/analyzer-settings.component';
 import { GenerationSettingsComponent } from './layout/components/modals/main-modal/generation-settings/generation-settings.component';
 import { MonitorSelectionModalComponent } from './layout/components/modals/monitor-selection-modal/monitor-selection-modal.component';
 import { CoreSettingsComponent } from './layout/components/modals/main-modal/core-settings/core-settings.component';
@@ -38,6 +39,7 @@ import { SystemSettingsComponent } from './layout/components/modals/main-modal/s
         VisionSettingsComponent,
         AudioSettingsComponent,
         RagSettingsComponent,
+        AnalyzerSettingsComponent,
         GenerationSettingsComponent,
         MonitorSelectionModalComponent,
         CoreSettingsComponent,

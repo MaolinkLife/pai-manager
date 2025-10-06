@@ -136,38 +136,34 @@
                 <label for="apiType">{{
                     "settings.apiType" | translate
                 }}</label>
-                <input id="apiType" type="text" formControlName="apiType" />
+                <select id="apiType" formControlName="apiType">
+                    <option *ngFor="let option of apiTypeOptions" [value]="option">
+                        {{ option }}
+                    </option>
+                </select>
             </div>
 
             <div class="form-group">
-                <label for="modelName">{{
-                    "settings.textModel" | translate
+                <label for="activeProvider">{{
+                    "settings.activeProvider" | translate
                 }}</label>
-                <div
-                    class="custom-select"
-                    (click)="toggleDropdown()"
-                    [ngClass]="{ open: dropdownOpen }"
-                >
-                    <div class="selected">
-                        {{
-                            generationForm.get("modelName")?.value ||
-                                ("settings.selectModel" | translate)
-                        }}
-                    </div>
-                    <ul class="options" *ngIf="dropdownOpen">
-                        <li
-                            *ngFor="let model of availableModels"
-                            (click)="
-                                selectModel(model); $event.stopPropagation()
-                            "
-                            [class.active]="model === selectedModel"
-                        >
-                            {{ model.split(":")[0] }} ({{
-                                model.split(":")[1] || "latest"
-                            }})
-                        </li>
-                    </ul>
-                </div>
+                <select id="activeProvider" formControlName="activeProvider">
+                    <option *ngFor="let provider of providerKeys" [value]="provider">
+                        {{ provider | titlecase }}
+                    </option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="fallbackOrder">{{
+                    "settings.fallbackOrder" | translate
+                }}</label>
+                <input
+                    id="fallbackOrder"
+                    type="text"
+                    formControlName="fallbackOrder"
+                    placeholder="provider1, provider2"
+                />
             </div>
 
             <div class="form-group">
@@ -226,6 +222,71 @@
                     <input type="checkbox" formControlName="streaming" />
                     {{ "settings.streaming" | translate }}
                 </label>
+            </div>
+
+            <div class="provider-settings" *ngIf="currentProviderForm as providerForm">
+                <h3>
+                    {{ "settings.providerSettings" | translate }}
+                    — {{ generationForm.get('activeProvider')?.value | titlecase }}
+                </h3>
+
+                <div [formGroup]="providerForm">
+                    <ng-container *ngFor="let field of currentProviderFields">
+                        <div class="form-group" *ngIf="field.key !== 'model'">
+                            <ng-container [ngSwitch]="field.type">
+                                <label *ngSwitchCase="'checkbox'" class="checkbox">
+                                    <input
+                                        type="checkbox"
+                                        [formControlName]="field.key"
+                                        [id]="'provider-' + field.key"
+                                    />
+                                    {{ formatFieldLabel(field.key) }}
+                                </label>
+                                <ng-container *ngSwitchDefault>
+                                    <label [for]="'provider-' + field.key">
+                                        {{ formatFieldLabel(field.key) }}
+                                    </label>
+                                    <input
+                                        [id]="'provider-' + field.key"
+                                        [type]="field.type === 'number' ? 'number' : 'text'"
+                                        [formControlName]="field.key"
+                                    />
+                                </ng-container>
+                            </ng-container>
+                        </div>
+                    </ng-container>
+
+                    <div class="form-group" *ngIf="providerForm.get('model') as modelControl">
+                        <label for="provider-model">{{
+                            "settings.textModel" | translate
+                        }}</label>
+
+                        <ng-container *ngIf="generationForm.get('activeProvider')?.value === 'ollama'; else textModelInput">
+                            <div
+                                class="custom-select"
+                                (click)="toggleDropdown()"
+                                [ngClass]="{ open: dropdownOpen }"
+                            >
+                                <div class="selected">
+                                    {{ modelControl.value || ("settings.selectModel" | translate) }}
+                                </div>
+                                <ul class="options" *ngIf="dropdownOpen">
+                                    <li
+                                        *ngFor="let model of availableModels"
+                                        (click)="selectModel(model); $event.stopPropagation()"
+                                        [class.active]="model === selectedModel"
+                                    >
+                                        {{ model.split(":")[0] }} ({{ model.split(":")[1] || "latest" }})
+                                    </li>
+                                </ul>
+                            </div>
+                        </ng-container>
+
+                        <ng-template #textModelInput>
+                            <input id="provider-model" type="text" formControlName="model" />
+                        </ng-template>
+                    </div>
+                </div>
             </div>
 
             <div class="button-row">

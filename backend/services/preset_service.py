@@ -4,20 +4,24 @@ from services import config_service  # Import to make changes to the config
 
 from utils.open_file_w_utf8 import open_utf8
 
-PRESET_PATH = os.path.join(os.path.dirname(__file__), "..", "config", "generation_presets.json")
+PRESET_PATH = os.path.join(
+    os.path.dirname(__file__), "..", "config", "generation_presets.json"
+)
 
 # Standard preset if file is missing
-DEFAULT_PRESET = [{
-    "name": "Default",
-    "description": "Base parameters for generation",
-    "temperature": 1.0,
-    "min_p": 0.05,
-    "top_p": 0.9,
-    "top_k": 40,
-    "repeat_penalty": 1.0,
-    "stop": None,
-    "num_predict": 1024
-}]
+DEFAULT_PRESET = [
+    {
+        "name": "Default",
+        "description": "Base parameters for generation",
+        "temperature": 1.0,
+        "min_p": 0.05,
+        "top_p": 0.9,
+        "top_k": 40,
+        "repeat_penalty": 1.0,
+        "stop": None,
+        "num_predict": 1024,
+    }
+]
 
 
 def ensure_presets_exist():
@@ -60,8 +64,13 @@ def apply_preset_to_config(preset: dict):
     gen_settings = {
         key: preset.get(key)
         for key in [
-            "temperature", "min_p", "top_p", "top_k",
-            "repeat_penalty", "stop", "num_predict"
+            "temperature",
+            "min_p",
+            "top_p",
+            "top_k",
+            "repeat_penalty",
+            "stop",
+            "num_predict",
         ]
         if key in preset
     }
@@ -70,6 +79,7 @@ def apply_preset_to_config(preset: dict):
     gen_settings["description"] = preset.get("description", "")
 
     config_service.set_config_value("generate_settings", gen_settings)
+
 
 def get_preset_by_name(name: str) -> dict | None:
     presets = get_all_presets()

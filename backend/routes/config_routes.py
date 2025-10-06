@@ -96,8 +96,6 @@ async def update_system_info(request: Request):
 
     # Обновляем char_name в конфиге, если передан
     if data.get("char_name"):
-        from services.config_service import set_config_value
-
         set_config_value("char_name", char_name)
 
     return {"status": "ok", "message": f"System prompt for '{char_name}' updated."}

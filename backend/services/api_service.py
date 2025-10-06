@@ -9,35 +9,26 @@
 # ===========================================================
 
 import asyncio
-import yaml
-import os
-import threading
 import json
-import gc
-import torch
 import re
-from datetime import datetime
-from services.config_service import get_config_value
+from datetime import datetime, timezone
+from typing import Awaitable, Callable
+
 from fastapi import WebSocket
 from starlette.websockets import WebSocketDisconnect
-from typing import Callable, Awaitable
-from datetime import datetime, timezone
-from services import ollama_service, database_service
+
+from modules.generative import NoProviderResolved, generation_manager
+from modules.generative.types import GenerateRequest
+from core.decision_layer import DecisionLayer
+from services import database_service
 from services.logger_service import log_audit_entry, AuditStatus
-from services.voice_service import (
-    speak_line,
-    set_speaking,
-    stream_speak_line,
-    tts_queue,
-)
-from services.voice_state import VoiceStage, voice_state
+from modules.tts.state import VoiceStage, voice_state
 from services.config_service import get_config_value
 from services.database_service import get_message_by_id, add_message_to_history
 from services.rag_service import retrieve_lore_fragments, format_lore_block
-from services.ollama_service import api_stream
 from utils.context_builder import build_memory_context
 from utils.structure_utils import get_label_from_file
-from utils.open_file_w_utf8 import open_utf8
+from core.prompt_loader import load_system_prompt
 from core.emotion_intent_analyzer import analyze_emotion, generate_instruction
 
 
@@ -87,39 +78,26 @@ def strip_reasoning_from_chunk(chunk: str, in_reasoning: bool) -> tuple[str, str
 
 
 # ===========================================================
-# System prompt loader
+# History sanitization
 # ===========================================================
-def load_system_prompt() -> str:
-    base_path = os.path.join(os.path.dirname(__file__), "..", "config", "characters")
-    char_name = get_config_value("char_name", default="default")
-    filename = f"{char_name}.yaml"
-    full_path = os.path.join(base_path, filename)
-    fallback_path = os.path.join(base_path, "default.yaml")
-
-    try:
-        if os.path.exists(full_path):
-            with open_utf8(full_path, "r") as f:
-                data = yaml.safe_load(f)
-                return data.get("prompt", "")
-        elif os.path.exists(fallback_path):
-            with open_utf8(fallback_path, "r") as f:
-                data = yaml.safe_load(f)
-                return data.get("prompt", "")
-        else:
-            log_audit_entry(
-                event_type="character_prompt_not_found",
-                msg=f"[Api Service]: Character prompt not found",
-                status=AuditStatus.ERROR,
-            )
-            return "[System Error] Character prompt not found."
-    except Exception as e:
-        log_audit_entry(
-            event_type="prompt_loading_failed",
-            msg=f"[Api Service]: Prompt loading failed",
-            status=AuditStatus.ERROR,
-            details={"error": str(e)},
-        )
-        return "[System Error] Prompt loading failed."
+def _sanitize_history(history: list, *, drop_media: bool) -> list:
+    sanitized: list = []
+    for message in history or []:
+        base = {k: v for k, v in message.items() if k != "timestamp"}
+        media = base.get("media")
+        if media:
+            if drop_media:
+                base.pop("media", None)
+            else:
+                safe_media = []
+                for item in media or []:
+                    if isinstance(item, dict):
+                        safe_media.append(
+                            {k: v for k, v in item.items() if k != "data"}
+                        )
+                base["media"] = safe_media
+        sanitized.append(base)
+    return sanitized
 
 
 # ===========================================================
@@ -129,11 +107,7 @@ def build_chat_request(history, include_system=True):
     """
     System prompt is already embedded in history; we only strip timestamps.
     """
-    sanitized_history = [
-        {k: v for k, v in msg.items() if k != "timestamp"} for msg in history
-    ]
-    # Do not append system prompt here; it already exists in history
-    return sanitized_history
+    return _sanitize_history(history, drop_media=True)
 
 
 # ===========================================================
@@ -146,7 +120,7 @@ async def run_standard(
         event_type="ApiService.RunStandard",
         msg="[Api Service]: Generation function started",
         status=AuditStatus.INFO,
-        details={"inputs": {"history": history}},
+        details={"inputs": {"history": _sanitize_history(history, drop_media=False)}},
     )
 
     full_history = build_chat_request(history, include_system=False)
@@ -191,12 +165,25 @@ async def run_standard(
     full_history.insert(0, {"role": "system", "content": system_prompt})
 
     # === Call model ===
-    response = ollama_service.api_standard(full_history, options)
+    request_payload = GenerateRequest(
+        messages=full_history,
+        options=options,
+        metadata={"mode": "standard"},
+    )
 
-    if "error" in response:
-        raise RuntimeError(response["error"])
+    try:
+        generate_result = generation_manager.generate(request_payload)
+    except NoProviderResolved as exc:
+        log_audit_entry(
+            event_type="generation_provider_failure",
+            msg="[API] Не удалось подобрать провайдера генерации",
+            status=AuditStatus.ERROR,
+            details={"error": str(exc)},
+        )
+        raise RuntimeError("Generation provider not available") from exc
 
-    assistant_raw = response.get("message", {}).get("content", "").strip()
+    assistant_raw = (generate_result.content or "").strip()
+    raw_response = generate_result.raw
     assistant_content, assistant_reasoning = split_reasoning(assistant_raw)
 
     # === Save messages ===
@@ -206,6 +193,7 @@ async def run_standard(
             role="user",
             content=last_user_message["content"],
             timestamp=last_user_message.get("timestamp"),
+            media=last_user_message.get("media"),
         )
 
     new_message_obj = None
@@ -224,8 +212,7 @@ async def run_standard(
 
     # Voice
     if get_config_value("voice.enabled", False) and assistant_content:
-        set_speaking(True)
-        threading.Thread(target=speak_line, args=(assistant_content, False)).start()
+        decision_layer_router.handle_response(assistant_content)
 
     # Logging
     log_audit_entry(
@@ -236,11 +223,13 @@ async def run_standard(
             "user_input": last_user_message["content"] if last_user_message else None,
             "assistant_output": assistant_content,
             "assistant_reasoning": assistant_reasoning,
+            "provider": generate_result.provider,
         },
         meta={
             "source": "model",
             "mode": "standard",
-            "full_response": response,
+            "provider": generate_result.provider,
+            "full_response": raw_response,
             "assistant_raw": assistant_raw,
         },
     )
@@ -293,7 +282,7 @@ async def run_stream_message(
         event_type="ApiService.RunStream",
         msg="[Api Service]: Start streaming generation",
         status=AuditStatus.INFO,
-        details={"inputs": {"history": history}},
+        details={"inputs": {"history": _sanitize_history(history, drop_media=False)}},
     )
 
     await safe_send({"type": "system", "event": "typing_start"})
@@ -345,6 +334,7 @@ async def run_stream_message(
                 role="user",
                 content=last_user_message["content"],
                 timestamp=normalize_timestamp(last_user_message.get("timestamp")),
+                media=last_user_message.get("media"),
             )
             if last_user_message.get("id"):
                 if not await safe_send(
@@ -352,73 +342,65 @@ async def run_stream_message(
                         "type": "ack_message",
                         "tempId": last_user_message.get("id"),
                         "realId": user_message_obj.id,
+                        "media": getattr(user_message_obj, "media_payload", []),
                     }
                 ):
                     return
 
         raw_chunks: list[str] = []
-        buffer: list[str] = []
         streaming_in_reasoning = False
         voice_enabled = get_config_value("voice.enabled", False)
         streaming_tts = get_config_value("voice.streaming_tts", False)
 
+        if voice_enabled and streaming_tts:
+            log_audit_entry(
+                "voice_streaming_unsupported",
+                "[Voice] Streaming TTS not supported in current implementation",
+                AuditStatus.WARNING,
+            )
+            streaming_tts = False
+
         speech_started = False
+        provider_used_stream = None
 
-        async for chunk in api_stream(full_history, options):
-            if not chunk:
-                continue
-            if "error" in chunk:
-                await safe_send({"type": "error", "message": chunk["error"]})
-                return
+        request_payload = GenerateRequest(
+            messages=full_history,
+            options=options,
+            metadata={"mode": "stream"},
+        )
 
-            content = chunk.get("message", {}).get("content", "")
-            if isinstance(content, str) and content:
-                if not await safe_send(
-                    {"type": "message_chunk", "role": "assistant", "content": content}
-                ):
-                    return
-                raw_chunks.append(content)
+        try:
+            async for chunk in generation_manager.stream(request_payload):
+                if provider_used_stream is None:
+                    provider_used_stream = chunk.provider
 
-                speech_chunk, _, streaming_in_reasoning = strip_reasoning_from_chunk(
-                    content, streaming_in_reasoning
-                )
+                content = chunk.content or ""
+                if isinstance(content, str) and content:
+                    if not await safe_send(
+                        {
+                            "type": "message_chunk",
+                            "role": "assistant",
+                            "content": content,
+                        }
+                    ):
+                        return
+                    raw_chunks.append(content)
 
-                if voice_enabled and streaming_tts and speech_chunk:
-                    if not speech_started and voice_state.stage() == VoiceStage.WAITING:
-                        voice_state.enter_listening("generation_complete_stream")
-                    if not speech_started:
-                        set_speaking(True)
-                        speech_started = True
-                    buffer.append(speech_chunk)
-                    buf_text = "".join(buffer)
+                    speech_chunk, _, streaming_in_reasoning = (
+                        strip_reasoning_from_chunk(content, streaming_in_reasoning)
+                    )
 
-                    if len(buf_text) > 50 or buf_text.endswith((".", "!", "?")):
-                        devices = []
-                        if get_config_value("voice.use_windows_output", True):
-                            devices.append(
-                                get_config_value("voice.windows_output_id", 0)
-                            )
-                        if get_config_value("voice.use_rvc", False):
-                            devices.append(get_config_value("voice.output_id", 0))
-
-                        tts_queue.put((buf_text, devices))
-                        buffer = []
-
-        if voice_enabled and streaming_tts and buffer:
-            if not speech_started and voice_state.stage() == VoiceStage.WAITING:
-                voice_state.enter_listening("generation_complete_stream")
-            if not speech_started:
-                set_speaking(True)
-                speech_started = True
-            buf_text = "".join(buffer)
-            if buf_text:
-                devices = []
-                if get_config_value("voice.use_windows_output", True):
-                    devices.append(get_config_value("voice.windows_output_id", 0))
-                if get_config_value("voice.use_rvc", False):
-                    devices.append(get_config_value("voice.output_id", 0))
-                tts_queue.put((buf_text, devices))
-            buffer = []
+        except NoProviderResolved as exc:
+            await safe_send(
+                {"type": "error", "message": "Generation provider not available"}
+            )
+            log_audit_entry(
+                event_type="generation_provider_stream_failure",
+                msg="[API] Потоковый провайдер недоступен",
+                status=AuditStatus.ERROR,
+                details={"error": str(exc)},
+            )
+            return
 
         assistant_raw = "".join(raw_chunks).strip()
         assistant_content, assistant_reasoning = split_reasoning(assistant_raw)
@@ -452,8 +434,7 @@ async def run_stream_message(
             voice_state.enter_listening("generation_complete")
 
         if voice_enabled and not streaming_tts and assistant_content:
-            set_speaking(True)
-            threading.Thread(target=speak_line, args=(assistant_content, False)).start()
+            decision_layer_router.handle_response(assistant_content)
 
         log_audit_entry(
             event_type="generation_stream",
@@ -469,6 +450,7 @@ async def run_stream_message(
             meta={
                 "source": "model",
                 "mode": "stream",
+                "provider": provider_used_stream,
                 "full_response": assistant_raw,
             },
         )
@@ -502,12 +484,15 @@ def get_generation_options_from_config(exclude: list = None) -> dict:
 def extract_last_user_message(history):
     return next((msg for msg in reversed(history) if msg.get("role") == "user"), None)
 
+
 # ===========================================================
 # Playback
 # ===========================================================
 def play_message(msg_id: str):
     message = get_message_by_id(msg_id)
     if get_config_value("voice.enabled", False):
-        set_speaking(True)
-        threading.Thread(target=speak_line, args=(message["content"], False)).start()
+        decision_layer_router.handle_response(message.get("content", ""))
     return message
+
+
+decision_layer_router = DecisionLayer()

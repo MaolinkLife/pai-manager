@@ -16,6 +16,7 @@ export class MainModalComponent implements OnInit {
         { key: 'audio', label: 'Audio' },
         { key: 'vision', label: 'Vision' },
         { key: 'rag', label: 'RAG' },
+        { key: 'analyzer', label: 'Analyzer' },
         { key: 'generate', label: 'Generation' },
         { key: 'core', label: 'Core' },
         { key: 'system', label: 'System' }

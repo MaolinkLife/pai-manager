@@ -58,3 +58,23 @@ version: 0.3
   - Refreshed chat/settings/layout styles and tabs to surface the new settings groups and debug affordances.
 
 
+
+version: 0.4
+- Backend & LLM orchestration
+  - Introduced modular analyzer and generative packages with provider managers that fail over between OpenRouter and Ollama, plus shared Ollama client helpers for text and vision chats.
+  - Rewired generation streaming and synchronous paths through the new providers, centralizing error handling and audit logging around the fallback chain.
+- Memory & Storage
+  - Added a MemoryModule that can collect recent/session context via embeddings, integrate lorebook lookups, and report retrieval metadata.
+  - Implemented a storage service + /api/media route to persist message attachments on disk, auto-upgrade the storage schema, and expose safe downloads.
+- Config & API surface
+  - Expanded config models, DTOs, and routes to cover analyzer, generator, memory, and media settings; refreshed mappers on both backend and frontend to keep camelCase ↔ snake_case conversions in sync.
+  - Updated vector/service helpers and new storage endpoints to cooperate with the modular services.
+- Voice & TTS
+  - Added a gTTS provider with automatic pyttsx3 fallback, expanded audit logging, and folded it into the provider sequence so fallback order is ElevenLabs → gTTS → offline.
+  - Reworked the TTS stop pipeline to raise the interrupt flag, clear the playback queue, and leave the worker thread ready for future jobs, fixing cases where new chunks were still spoken after Stop.
+- Decision & diagnostics
+  - DecisionLayer now delegates to the shared TTS service, emits richer analyzer/vision logs, and keeps the troubleshooting prints inline with the new modules.
+- Frontend
+  - Added analyzer settings modal, analyzer/memory config mappers, and expanded settings UI to surface provider selection, fallbacks, and new API fields.
+  - Synced chat/settings components with the backend schema so media, analyzer, and memory options stay editable from the UI.
+

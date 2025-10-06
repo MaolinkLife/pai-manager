@@ -26,7 +26,7 @@
 
 ### 📂 `services/`
 - `memory_service.py` – coordination layer over `memory_engine`
-- `ollama_service.py` – interaction with the local model
+- `modules/ollama/client.py` – interaction with the local Ollama server
 - `voice_service.py` – TTS and STT handling
 - `history_service.py` – conversation history management
 - `api_service.py` – prompt shaping and data aggregation

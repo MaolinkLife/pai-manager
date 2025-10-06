@@ -28,7 +28,7 @@ export class ConfigService {
 
     updateConfig$(body: any): Observable<any> {
         // Если передается частичный конфиг - используем PATCH
-        if (body.voice || body.modules || body.api || body.vision || body.rag) {
+        if (body.voice || body.modules || body.api || body.vision || body.rag || body.analyzer) {
             return this.http.patch(`${this.apiUrl}/config`, mapPartialModelToDto(body));
         }
         // Иначе - используем POST для полной замены

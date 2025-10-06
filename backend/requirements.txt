@@ -10,11 +10,13 @@ numpy
 sounddevice
 pydub
 edge-tts
+gTTS>=2.5.0
 emoji>=2.0.0
 faster-whisper
 python-dateutil
 sentence-transformers
 openai
+pyttsx3
 
 # Async/HTTP
 aiohttp

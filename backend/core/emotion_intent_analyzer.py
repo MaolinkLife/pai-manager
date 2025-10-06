@@ -8,7 +8,7 @@ INTENT_PATTERNS = {
     "угроза": r"(убью|разнесу|уничтожу|поквитаюсь)",
     "вопрос": r"(ты\s+знаешь|можешь|почему|зачем|что если)",
     "обида": r"(всегда так|опять|ты даже не|как всегда|обидно)",
-    "забота": r"(волнуешься|тебе важно|позаботиться|будь осторожна)"
+    "забота": r"(волнуешься|тебе важно|позаботиться|будь осторожна)",
 }
 
 EMOTION_KEYWORDS = {
@@ -16,7 +16,7 @@ EMOTION_KEYWORDS = {
     "радость": ["счастлив", "рад", "ура", "восторг", "приятно", "улыбка"],
     "злость": ["ненавижу", "раздражает", "бесит", "злой", "убил бы", "ярость"],
     "любовь": ["дорога", "люблю", "нравишься", "значишь", "ценю", "не безразлична"],
-    "страх": ["боюсь", "страшно", "тревожно", "опасаюсь", "паника", "дрожь"]
+    "страх": ["боюсь", "страшно", "тревожно", "опасаюсь", "паника", "дрожь"],
 }
 
 # EN Segment
@@ -25,7 +25,7 @@ INTENT_PATTERNS_EN = {
     "threat": r"(I'll kill you|I'll smash you|I'll destroy you|I'll get even)",
     "question": r"(you\s+know|you can|why|what for|what if)",
     "offense": r"(always like this|again|you don't even|like always|offensive)",
-    "care": r"(you're worried|it's important to you|to take care|be careful)"
+    "care": r"(you're worried|it's important to you|to take care|be careful)",
 }
 
 EMOTION_KEYWORDS_EN = {
@@ -33,7 +33,7 @@ EMOTION_KEYWORDS_EN = {
     "joy": ["happy", "glad", "hooray", "delight", "pleased", "smile"],
     "anger": ["hate", "annoying", "infuriating", "angry", "would kill", "rage"],
     "love": ["road", "love", "like you", "mean", "appreciate", "care about you"],
-    "fear": ["afraid", "scared", "anxious", "fearful", "panic", "trembling"]
+    "fear": ["afraid", "scared", "anxious", "fearful", "panic", "trembling"],
 }
 
 POLARITY_MAP = {
@@ -41,8 +41,9 @@ POLARITY_MAP = {
     "gladness": "positive",
     "anger": "negative",
     "love": "positive",
-    "fear": "negative"
+    "fear": "negative",
 }
+
 
 def analyze_emotion(text: str) -> Dict:
     text_lower = text.lower()
@@ -90,16 +91,17 @@ def analyze_emotion(text: str) -> Dict:
             "detected_emotions": detected_emotions,
             "dominant_emotions": detected_emotions[:2],
             "secondary_emotions": detected_emotions[2:],
-            "polarity": dominant_polarity
-        }
+            "polarity": dominant_polarity,
+        },
     }
+
 
 def generate_instruction(analysis: Dict) -> str:
     tone = analysis["tone"]
     polarity = analysis["meta"]["polarity"]
     primary = ", ".join(analysis["meta"]["dominant_emotions"])
     secondary = ", ".join(analysis["meta"]["secondary_emotions"])
-    
+
     description = f"You feel {primary} ({polarity} emotions)"
     if secondary:
         description += f", also present {secondary}."

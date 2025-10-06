@@ -15,8 +15,8 @@ from services.config_service import get_config_value
 from core.decision_layer import decision_layer
 from core.instructor import Instructor
 from core.websocket_manager import manager
-from services.voice_state import voice_state, VoiceStage
-from services.voice_service import (
+from modules.tts.state import voice_state, VoiceStage
+from modules.tts.service import (
     log_last_output,
     is_self_trigger,
     force_cut_voice,

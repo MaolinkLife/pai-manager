@@ -7,6 +7,11 @@ from services.logger_service import log_audit_entry, AuditStatus
 from utils.time_utils import format_user_datetime
 import asyncio
 from typing import Optional
+from services.storage_service import (
+    save_media_for_message,
+    serialize_media_entries,
+    delete_media_files,
+)
 
 
 def add_history(
@@ -15,6 +20,7 @@ def add_history(
     content: str,
     timestamp: Optional[datetime] = None,
     session: Optional[Session] = None,
+    media_items: Optional[list] = None,
 ):
     """Добавление сообщения в историю"""
     own_session = False
@@ -36,6 +42,36 @@ def add_history(
         session.add(entry)
         session.commit()
         session.refresh(entry)
+
+        media_count_in = len(media_items) if media_items else 0
+        log_audit_entry(
+            "history_media_received",
+            "[History] Incoming media payload.",
+            AuditStatus.INFO,
+            details={
+                "message_id": entry.id,
+                "role": role,
+                "media_count": media_count_in,
+            },
+        )
+
+        media_payload = []
+        if media_items:
+            storage_entries = save_media_for_message(entry.id, media_items)
+            media_payload = serialize_media_entries(storage_entries)
+
+        log_audit_entry(
+            "history_media_saved",
+            "[History] Saved message with media payload.",
+            AuditStatus.INFO,
+            details={
+                "message_id": entry.id,
+                "role": role,
+                "media_count": len(media_payload),
+            },
+        )
+
+        entry.media_payload = media_payload
         return entry
     finally:
         if own_session:
@@ -67,6 +103,7 @@ def add_reasoning_entry(
         session.add(entry)
         session.commit()
         session.refresh(entry)
+
         return entry
     finally:
         if own_session:
@@ -88,11 +125,41 @@ def get_history(character_id: str, limit: int = 20, offset: int = 0):
     try:
         return (
             session.query(History)
-            .options(joinedload(History.reasoning))
+            .options(joinedload(History.reasoning), joinedload(History.media))
             .filter_by(character_id=character_id)
             .order_by(History.timestamp.desc())
             .offset(offset)
             .limit(limit)
+            .all()
+        )
+    finally:
+        session.close()
+
+
+def get_history_since(character_id: str, start_time):
+    """Возвращает историю сообщений, начиная с указанного времени (включительно)."""
+    if isinstance(start_time, str):
+        try:
+            start_time = datetime.fromisoformat(start_time.replace("Z", "+00:00"))
+        except Exception:
+            start_time = datetime.now(timezone.utc).replace(
+                hour=0, minute=0, second=0, microsecond=0
+            )
+    elif not isinstance(start_time, datetime):
+        start_time = datetime.now(timezone.utc).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+
+    session: Session = SessionLocal()
+    try:
+        return (
+            session.query(History)
+            .options(joinedload(History.reasoning), joinedload(History.media))
+            .filter(
+                History.character_id == character_id,
+                History.timestamp >= start_time,
+            )
+            .order_by(History.timestamp.asc())
             .all()
         )
     finally:
@@ -105,13 +172,14 @@ def delete_message(message_id: str) -> bool:
     try:
         message = (
             session.query(History)
-            .options(joinedload(History.reasoning))
+            .options(joinedload(History.reasoning), joinedload(History.media))
             .filter_by(id=message_id)
             .first()
         )
         if not message:
             return False
 
+        delete_media_files(message.media)
         session.delete(message)
         session.commit()
         return True
@@ -130,7 +198,7 @@ def delete_message_chain(user_message_id: str) -> int:
         # Locate the user message
         user_msg = (
             session.query(History)
-            .options(joinedload(History.reasoning))
+            .options(joinedload(History.reasoning), joinedload(History.media))
             .filter_by(id=user_message_id)
             .first()
         )
@@ -140,7 +208,7 @@ def delete_message_chain(user_message_id: str) -> int:
         # Locate the following assistant reply
         assistant_msg = (
             session.query(History)
-            .options(joinedload(History.reasoning))
+            .options(joinedload(History.reasoning), joinedload(History.media))
             .filter(
                 History.character_id == user_msg.character_id,
                 History.timestamp > user_msg.timestamp,
@@ -151,10 +219,12 @@ def delete_message_chain(user_message_id: str) -> int:
         )
 
         count = 0
+        delete_media_files(user_msg.media)
         session.delete(user_msg)
         count += 1
 
         if assistant_msg:
+            delete_media_files(assistant_msg.media)
             session.delete(assistant_msg)
             count += 1
 
@@ -172,7 +242,12 @@ def get_message_by_id(message_id: str):
     """Fetch a message by its ID."""
     session: Session = SessionLocal()
     try:
-        message = session.query(History).filter_by(id=message_id).first()
+        message = (
+            session.query(History)
+            .options(joinedload(History.media))
+            .filter_by(id=message_id)
+            .first()
+        )
         if not message:
             return None
 
@@ -182,6 +257,7 @@ def get_message_by_id(message_id: str):
             "content": message.content,
             "timestamp": format_user_datetime(message.timestamp),
             "character_id": message.character_id,
+            "media": serialize_media_entries(message.media),
         }
     finally:
         session.close()
@@ -293,7 +369,8 @@ def get_last_user_message_before(session, character_id, before_timestamp):
 def delete_messages_from_database(session, messages: list):
     """Delete a list of messages within an existing session."""
     try:
-        for msg in messages:
+        for msg in messages or []:
+            delete_media_files(getattr(msg, "media", []))
             session.delete(msg)
         session.commit()
     except Exception as e:
@@ -346,20 +423,17 @@ async def reroll_assistant_message(message_id: str) -> dict:
     """Regenerate an assistant message."""
     session: Session = SessionLocal()
     try:
-        print(f"[DEBUG] Reroll called with message_id: {message_id}")
 
         # 1. Locate the assistant message
         try:
             assistant_msg = get_message_from_database(
                 session, filters={"id": message_id}, expected_role="assistant"
             )
-            print(f"[DEBUG] Found assistant message: {assistant_msg.id}")
         except ValueError as e:
             print(f"[ERROR] Message not found: {e}")
             raise
 
         assistant_timestamp = assistant_msg.timestamp
-        print(f"[DEBUG] Assistant timestamp: {assistant_timestamp}")
 
         # 2. Locate the paired user message
         user_msg = get_last_user_message_before(
@@ -367,37 +441,23 @@ async def reroll_assistant_message(message_id: str) -> dict:
             character_id=assistant_msg.character_id,
             before_timestamp=assistant_msg.timestamp,
         )
-        print(f"[DEBUG] Found user message: {user_msg.id}")
 
         # 3. Delete the existing messages
         print(
-            "[DEBUG] Deleting assistant:",
             assistant_msg.id,
             "=>",
             assistant_msg.content[:30],
         )
-        print("[DEBUG] Deleting user:", user_msg.id, "=>", user_msg.content[:30])
         delete_messages_from_database(session, [assistant_msg, user_msg])
-        print(f"[DEBUG] Messages deleted")
-
-        # Verify that the assistant message was removed
-        check = session.query(History).filter_by(id=assistant_msg.id).first()
-        print("[DEBUG] Assistant still in DB?", check is not None)
-
-        # Verify that the user message was removed
-        check = session.query(History).filter_by(id=user_msg.id).first()
-        print("[DEBUG] User still in DB?", check is not None)
 
         # 4. Build history up to the user message
         history = build_history_up_to_user_message(
             session, character_id=user_msg.character_id, user_msg=user_msg, limit=32
         )
-        print(f"[DEBUG] History built, length: {len(history)}")
 
         from services import api_service
 
         new_response = await api_service.run_standard(history=history, return_full=True)
-        print(f"[DEBUG] New response generated")
 
         return {
             "role": "assistant",

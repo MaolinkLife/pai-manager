@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 import uuid
 from services.db_core import Base
 
+
 # Character Table
 class Character(Base):
     __tablename__ = "characters"
@@ -12,7 +13,11 @@ class Character(Base):
     name = Column(String, unique=True, index=True, nullable=False)
     configs = Column(Text, default="{}")  # JSON as a string
     created_at = Column(DateTime, default=datetime.now(timezone.utc))
-    updated_at = Column(DateTime, default=datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    updated_at = Column(
+        DateTime,
+        default=datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
 
     history = relationship("History", back_populates="character")
 
@@ -34,6 +39,12 @@ class History(Base):
         uselist=False,
         cascade="all, delete-orphan",
     )
+    media = relationship(
+        "Storage",
+        back_populates="message",
+        cascade="all, delete-orphan",
+    )
+
 
 # =======================
 # Users
@@ -56,12 +67,31 @@ class Message(Base):
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id = Column(String, ForeignKey("users.uuid"), nullable=False)
     dialog_id = Column(String, nullable=True)  # group messages by dialog
-    role = Column(String, nullable=False)      # 'user' / 'assistant'
-    content = Column(Text, nullable=False)     # plain text for now; encryption later
+    role = Column(String, nullable=False)  # 'user' / 'assistant'
+    content = Column(Text, nullable=False)  # plain text for now; encryption later
     volatile = Column(Boolean, default=False)  # temporary message
     timestamp = Column(DateTime, default=datetime.now(timezone.utc))
 
     user = relationship("User")
+
+
+class Storage(Base):
+    __tablename__ = "storage"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    message_id = Column(
+        String, ForeignKey("history.id", ondelete="CASCADE"), nullable=False
+    )
+    file_name = Column(String, nullable=False)
+    file_path = Column(String, nullable=False)
+    mime_type = Column(String, nullable=False, default="application/octet-stream")
+    size = Column(Integer, default=0)
+    category = Column(String, nullable=False, default="other")
+    description = Column(Text, nullable=True)
+    meta = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+
+    message = relationship("History", back_populates="media")
 
 
 class Reasoning(Base):

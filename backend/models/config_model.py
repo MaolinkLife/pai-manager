@@ -4,6 +4,7 @@
 # Used in: config_service.py, API routes, validation
 # ===========================================================
 
+from constants.settings import DEFAULT_MAX_TOKENS, DEFAULT_TEMPERATURE, OPENROUTER_BASE_URL
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
 
@@ -185,9 +186,57 @@ class RAGConfig(BaseModel):
     memory: RAGMemory = RAGMemory()
 
 
-class OpenRouterConfig(BaseModel):
+class AnalyzerProviderOpenRouterConfig(BaseModel):
     api_key: str = ""
-    model: str = ""
+    model: str = "openai/gpt-4o-mini"
+    temperature: float = DEFAULT_TEMPERATURE
+    max_tokens: int = DEFAULT_MAX_TOKENS
+
+
+class AnalyzerProviderOllamaConfig(BaseModel):
+    model: str = "llama3.2"
+    temperature: float = DEFAULT_TEMPERATURE
+    max_tokens: int = DEFAULT_MAX_TOKENS
+
+
+class AnalyzerProvidersConfig(BaseModel):
+    openrouter: AnalyzerProviderOpenRouterConfig = AnalyzerProviderOpenRouterConfig()
+    ollama: AnalyzerProviderOllamaConfig = AnalyzerProviderOllamaConfig()
+
+
+class AnalyzerConfig(BaseModel):
+    active_provider: str = "openrouter"
+    fallback_order: List[str] = ["ollama"]
+    providers: AnalyzerProvidersConfig = AnalyzerProvidersConfig()
+
+
+class MemoryConfig(BaseModel):
+    recent_limit: int = 32
+    similarity_threshold: float = 0.7
+    session_window: str = "day"
+    session_enabled: bool = True
+    embedding_provider: str = "auto"
+    embedding_model: str = "nomic-embed-text"
+
+
+class GeneratorProviderBaseConfig(BaseModel):
+    model: str = "llama3.2"
+    temperature: float = DEFAULT_TEMPERATURE
+    max_tokens: int = DEFAULT_MAX_TOKENS
+
+
+class GeneratorProviderOllamaConfig(GeneratorProviderBaseConfig):
+    streaming: bool = True
+
+
+class GeneratorProviderOpenRouterConfig(GeneratorProviderBaseConfig):
+    api_key: str = ""
+    base_url: str = OPENROUTER_BASE_URL
+
+
+class APIProvidersConfig(BaseModel):
+    ollama: GeneratorProviderOllamaConfig = GeneratorProviderOllamaConfig()
+    openrouter: GeneratorProviderOpenRouterConfig = GeneratorProviderOpenRouterConfig()
 
 
 class APIConfig(BaseModel):
@@ -197,6 +246,9 @@ class APIConfig(BaseModel):
     visual_model: str = "apple/FastVLM-1.5B"
     token_limit: int = 4096
     message_pair_limit: int = 10
+    active_provider: str = "ollama"
+    fallback_order: List[str] = Field(default_factory=list)
+    providers: APIProvidersConfig = APIProvidersConfig()
 
 
 class GenerateSettingsConfig(BaseModel):
@@ -228,7 +280,8 @@ class AppConfig(BaseModel):
     audio: "AudioConfig" = None
     vision: "VisionConfig" = None
     rag: "RAGConfig" = None
-    openrouter: "OpenRouterConfig" = None
+    analyzer: "AnalyzerConfig" = None
+    memory: "MemoryConfig" = None
     api: "APIConfig" = None
     generate_settings: "GenerateSettingsConfig" = None
 

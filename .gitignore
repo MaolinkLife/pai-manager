@@ -91,6 +91,7 @@ backend/config/lorebook.json
 backend/config/generation_presets.json
 
 backend/storage/history/*
+backend/storage/files/*
 backend/storage/database/core.db
 backend/storage/vector_store
 

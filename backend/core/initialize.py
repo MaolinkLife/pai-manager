@@ -10,7 +10,6 @@
 # - Can be called separately as a setup procedure
 # =========================================================
 import uuid
-import threading
 
 from services import config_service
 from services import database_service
@@ -19,7 +18,6 @@ from services import character_service, config_service
 from services.logger_service import initialize_log_files, log_audit_entry, AuditStatus
 from modules.vision.service import VisionService
 from services.config_service import get_config_value
-from services.voice_service import tts_worker
 from utils.structure_utils import get_label_from_file
 
 
@@ -86,8 +84,6 @@ def run_startup_checks():
         msg=f"{get_label_from_file(__file__)} Initialization complete",
         status=AuditStatus.SUCCESS,
     )
-
-    threading.Thread(target=tts_worker, daemon=True).start()
 
 
 def shutdown_services():

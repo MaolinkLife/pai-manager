@@ -9,7 +9,8 @@ export interface ProjectConfig {
     audio: AudioConfig;
     rag: RagConfig;
     api: ApiConfig;
-    openrouter: OpenRouterConfig;
+    analyzer: AnalyzerConfig;
+    memory: MemoryConfig;
     generateSettings: GenerationConfig;
     system: SystemConfig;
 }
@@ -55,24 +56,48 @@ export interface SystemConfig {
 
 export interface VisionConfig {
     enabled: boolean;
-    activeProvider: string;              // ✅ было: active_provider
-    monitorIndex: number;                // ✅ было: monitor_index
+    activeProvider: string;
+    monitorIndex: number;
     fps: number;
-    bufferSec: number;                   // ✅ было: buffer_sec
-    downscaleWidth: number;              // ✅ было: downscale_width
-    yoloEnabled: boolean;                // ✅ было: yolo_enabled
-    ocrLang: string;                     // ✅ было: ocr_lang
-    ocrMinConf: number;                  // ✅ было: ocr_min_conf
-    ocrMaxLines: number;                 // ✅ было: ocr_max_lines
+    bufferSec: number;
+    downscaleWidth: number;
+    yoloEnabled: boolean;
+    ocrLang: string;
+    ocrMinConf: number;
+    ocrMaxLines: number;
     region: any;
-    captureMode: string;                 // ✅ было: capture_mode
-    windowTitle: string;                 // ✅ было: window_title
-    windowProcess: string;               // ✅ было: window_process
-    debugSave: boolean;                  // ✅ было: debug_save
-    debugPath: string;                   // ✅ было: debug_path
-    visionModules: {                    // ✅ было: vision_modules
+    captureMode: string;
+    windowTitle: string;
+    windowProcess: string;
+    debugSave: boolean;
+    debugPath: string;
+    visionModules: {
         [key: string]: VisionModuleConfig;
     };
+}
+
+export interface AnalyzerProviderConfig {
+    apiKey?: string;
+    model?: string;
+    temperature?: number;
+    maxTokens?: number;
+}
+
+export interface AnalyzerConfig {
+    activeProvider: string;
+    fallbackOrder: string[];
+    providers: {
+        [key: string]: AnalyzerProviderConfig;
+    };
+}
+
+export interface MemoryConfig {
+    recentLimit: number;
+    similarityThreshold: number;
+    sessionWindow: string;
+    sessionEnabled: boolean;
+    embeddingProvider: string;
+    embeddingModel: string;
 }
 
 export interface AudioConfig {
@@ -108,11 +133,9 @@ export interface ApiConfig {
     visualModel: string;
     tokenLimit: number;
     messagePairLimit: number;
-}
-
-export interface OpenRouterConfig {
-    apiKey?: string;
-    model?: string;
+    activeProvider: string;
+    fallbackOrder: string[];
+    providers: Record<string, GeneratorProviderConfig>;
 }
 
 export interface GenerationConfig {
@@ -125,4 +148,13 @@ export interface GenerationConfig {
     numPredict: number;
     name?: string;
     description?: string;
+}
+
+export interface GeneratorProviderConfig {
+    model: string;
+    temperature: number;
+    maxTokens: number;
+    streaming?: boolean;
+    apiKey?: string;
+    baseUrl?: string;
 }

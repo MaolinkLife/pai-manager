@@ -8,12 +8,6 @@
             <div class="module-icon">🧠</div>
         </div>
 
-        <div class="module-card" (click)="openCaModal()">
-            <h3>{{ "coreSettings.caTitle" | translate }}</h3>
-            <p>{{ "coreSettings.caDescription" | translate }}</p>
-            <div class="module-icon">🧠</div>
-        </div>
-
         <div class="module-card">
             <h3>{{ "coreSettings.instructorTitle" | translate }}</h3>
             <p>{{ "coreSettings.instructorDescription" | translate }}</p>
@@ -21,7 +15,6 @@
         </div>
     </div>
 
-    <!-- Decision Layer Modal -->
     <div class="modal" *ngIf="showDlModal" (click)="closeDlModal()">
         <div class="modal-content" (click)="$event.stopPropagation()">
             <div class="modal-header">
@@ -37,28 +30,24 @@
                         <h4>
                             {{ "coreSettings.availableModules" | translate }}
                         </h4>
-
                         <div class="form-group">
                             <label class="checkbox">
                                 <input type="checkbox" />
                                 {{ "coreSettings.logicReasoning" | translate }}
                             </label>
                         </div>
-
                         <div class="form-group">
                             <label class="checkbox">
                                 <input type="checkbox" />
                                 {{ "coreSettings.contextAnalysis" | translate }}
                             </label>
                         </div>
-
                         <div class="form-group">
                             <label class="checkbox">
                                 <input type="checkbox" />
                                 {{ "coreSettings.decisionTrees" | translate }}
                             </label>
                         </div>
-
                         <div class="form-group">
                             <label class="checkbox">
                                 <input type="checkbox" />
@@ -68,7 +57,6 @@
                                 }}
                             </label>
                         </div>
-
                         <div class="form-group">
                             <label class="checkbox">
                                 <input type="checkbox" />
@@ -87,216 +75,6 @@
                         </button>
                         <button type="button" class="btn-primary">
                             {{ "coreSettings.saveDlSettings" | translate }}
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    </div>
-
-    <!-- Cognitive Analyzer Modal -->
-    <div class="modal" *ngIf="showCaModal" (click)="closeCaModal()">
-        <div class="modal-content" (click)="$event.stopPropagation()">
-            <div class="modal-header">
-                <h3>{{ "coreSettings.caModalTitle" | translate }}</h3>
-                <button class="close-btn" (click)="closeCaModal()">
-                    &times;
-                </button>
-            </div>
-
-            <div class="modal-body">
-                <form [formGroup]="caForm" class="settings-form">
-                    <div class="section">
-                        <h4>
-                            {{ "coreSettings.basicConfiguration" | translate }}
-                        </h4>
-
-                        <div class="form-group">
-                            <label class="checkbox">
-                                <input
-                                    type="checkbox"
-                                    formControlName="enabled"
-                                />
-                                {{ "coreSettings.enableCa" | translate }}
-                            </label>
-                        </div>
-
-                        <div class="form-group">
-                            <label class="checkbox">
-                                <input
-                                    type="checkbox"
-                                    formControlName="use_api"
-                                    (change)="onUseApiChange($event)"
-                                />
-                                {{ "coreSettings.useExternalApi" | translate }}
-                            </label>
-                        </div>
-                    </div>
-
-                    <!-- API Configuration Section -->
-                    <div class="section" *ngIf="caForm.get('use_api')?.value">
-                        <h4>
-                            {{ "coreSettings.apiConfiguration" | translate }}
-                        </h4>
-
-                        <div class="form-group">
-                            <label for="provider">{{
-                                "coreSettings.provider" | translate
-                            }}</label>
-                            <select
-                                id="provider"
-                                formControlName="provider"
-                                (change)="onProviderChange($event)"
-                            >
-                                <option value="openrouter">OpenRouter</option>
-                                <option value="openai">OpenAI</option>
-                                <option value="anthropic">Anthropic</option>
-                                <option value="groq">Groq</option>
-                                <option value="mistral">Mistral</option>
-                            </select>
-                        </div>
-
-                        <div class="form-group">
-                            <label for="api_key">{{
-                                "coreSettings.apiKey" | translate
-                            }}</label>
-                            <input
-                                id="api_key"
-                                type="password"
-                                formControlName="api_key"
-                                [placeholder]="
-                                    'coreSettings.enterApiKey' | translate
-                                "
-                            />
-                        </div>
-
-                        <div class="form-group">
-                            <label for="api_base">{{
-                                "coreSettings.apiBaseUrl" | translate
-                            }}</label>
-                            <input
-                                id="api_base"
-                                type="text"
-                                formControlName="api_base"
-                                [placeholder]="
-                                    'coreSettings.apiBaseUrlPlaceholder'
-                                        | translate
-                                "
-                            />
-                        </div>
-
-                        <div class="form-group">
-                            <label for="model">{{
-                                "coreSettings.model" | translate
-                            }}</label>
-                            <input
-                                id="model"
-                                type="text"
-                                formControlName="model"
-                                [placeholder]="
-                                    'coreSettings.modelPlaceholder' | translate
-                                "
-                            />
-                        </div>
-                    </div>
-
-                    <!-- Local Model Configuration Section -->
-                    <div class="section" *ngIf="!caForm.get('use_api')?.value">
-                        <h4>
-                            {{
-                                "coreSettings.localModelConfiguration"
-                                    | translate
-                            }}
-                        </h4>
-
-                        <div class="form-group">
-                            <label for="local_model">{{
-                                "coreSettings.localModel" | translate
-                            }}</label>
-                            <input
-                                id="local_model"
-                                type="text"
-                                formControlName="local_model"
-                                placeholder="llama3.2"
-                            />
-                        </div>
-                    </div>
-
-                    <!-- Advanced Settings -->
-                    <div class="section">
-                        <h4>
-                            {{ "coreSettings.advancedSettings" | translate }}
-                        </h4>
-
-                        <div class="form-group">
-                            <label for="temperature">{{
-                                "coreSettings.temperature" | translate
-                            }}</label>
-                            <input
-                                id="temperature"
-                                type="range"
-                                formControlName="temperature"
-                                min="0"
-                                max="2"
-                                step="0.1"
-                            />
-                            <span>{{
-                                caForm.get("temperature")?.value
-                                    | number : "1.1-1"
-                            }}</span>
-                        </div>
-
-                        <div class="form-group">
-                            <label for="max_tokens">{{
-                                "coreSettings.maxTokens" | translate
-                            }}</label>
-                            <input
-                                id="max_tokens"
-                                type="number"
-                                formControlName="max_tokens"
-                                min="1"
-                                max="4096"
-                            />
-                        </div>
-
-                        <div class="form-group">
-                            <label for="analysis_timeout">{{
-                                "coreSettings.analysisTimeout" | translate
-                            }}</label>
-                            <input
-                                id="analysis_timeout"
-                                type="number"
-                                formControlName="analysis_timeout"
-                                min="1"
-                                max="300"
-                            />
-                        </div>
-
-                        <div class="form-group">
-                            <label class="checkbox">
-                                <input
-                                    type="checkbox"
-                                    formControlName="fallback_to_local"
-                                />
-                                {{ "coreSettings.fallbackToLocal" | translate }}
-                            </label>
-                        </div>
-                    </div>
-
-                    <div class="button-row">
-                        <button
-                            type="button"
-                            (click)="closeCaModal()"
-                            class="btn-secondary"
-                        >
-                            {{ "general.cancel" | translate }}
-                        </button>
-                        <button
-                            type="button"
-                            (click)="saveCaSettings()"
-                            class="btn-primary"
-                        >
-                            {{ "coreSettings.saveCaSettings" | translate }}
                         </button>
                     </div>
                 </form>

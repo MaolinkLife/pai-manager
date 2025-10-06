@@ -1,12 +1,15 @@
 import json
-import asyncio
+
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+
 from core.websocket_manager import manager
 from services import api_service, database_service, config_service
-from core.cognitive_analyzer import cognitive_analyzer
+from services.logger_service import log_audit_entry, AuditStatus
 from core.decision_layer import decision_layer
 
 ws_router = APIRouter(prefix="/api", tags=["WebSocket"])
+
+
 
 
 async def _safe_send_json(websocket: WebSocket, payload: dict) -> bool:
@@ -30,7 +33,12 @@ async def websocket_endpoint(websocket: WebSocket):
                 # WebSocket may not be connected or already closed
                 break
 
-            print(f"[WS] ⬅️ From client: {raw_data}")
+            log_audit_entry(
+                'ws_receive',
+                '[WS] Received payload from client.',
+                AuditStatus.INFO,
+                details={'size': len(raw_data)},
+            )
 
             try:
                 payload = json.loads(raw_data)
@@ -63,6 +71,45 @@ async def websocket_endpoint(websocket: WebSocket):
 
                     # Format history for the API service
                     instructor = Instructor()
+                    media_payload = data.get("media")
+                    if media_payload:
+                        log_audit_entry(
+                            "ws_media_received",
+                            "[WS] Incoming media payload for send_message.",
+                            AuditStatus.INFO,
+                            details={"count": len(media_payload)},
+                        )
+                        visual_context = processing_result.get("visual_context") or {}
+                        attachments_info = (visual_context.get("attachments") or {}).get("items", [])
+                        applied = 0
+                        for item in attachments_info:
+                            idx = item.get("index")
+                            description = (item.get("description") or "").strip()
+                            if (
+                                isinstance(idx, int)
+                                and 0 <= idx < len(media_payload)
+                                and description
+                            ):
+                                media_payload[idx]["description"] = description
+                                applied += 1
+                        if applied:
+                            log_audit_entry(
+                                "ws_media_described",
+                                "[WS] Image attachments described via decision layer vision.",
+                                AuditStatus.INFO,
+                                details={"count": applied},
+                            )
+                        elif attachments_info:
+                            log_audit_entry(
+                                "ws_media_description_missing",
+                                "[WS] Vision module returned attachment metadata without summaries.",
+                                AuditStatus.WARNING,
+                                details={"count": len(attachments_info)},
+                            )
+                        user_message_ctx = processing_result.get("user_message", {})
+                        user_message_ctx["media"] = media_payload
+                        processing_result["user_message"] = user_message_ctx
+
                     formatted_history = await instructor.format_for_api(
                         processing_result["system_prompt"],
                         processing_result["user_message"],
@@ -72,7 +119,12 @@ async def websocket_endpoint(websocket: WebSocket):
                     await api_service.run_stream_message(websocket, formatted_history)
 
                 except Exception as e:
-                    print(f"[WS] Error while processing message: {e}")
+                    log_audit_entry(
+                        'ws_send_message_error',
+                        '[WS] Error while processing message.',
+                        AuditStatus.ERROR,
+                        details={'error': str(e)},
+                    )
                     import traceback
 
                     traceback.print_exc()  # For debugging
@@ -155,6 +207,10 @@ async def websocket_endpoint(websocket: WebSocket):
 
     except WebSocketDisconnect:
         manager.disconnect(websocket)
-        print("[WS] ⚠️ Client disconnected")
+        log_audit_entry(
+            'ws_disconnect',
+            '[WS] Client disconnected.',
+            AuditStatus.INFO,
+        )
     finally:
         manager.disconnect(websocket)
