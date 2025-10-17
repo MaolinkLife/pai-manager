@@ -17,6 +17,7 @@ python-dateutil
 sentence-transformers
 openai
 pyttsx3
+timm
 
 # Async/HTTP
 aiohttp
