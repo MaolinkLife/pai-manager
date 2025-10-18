@@ -160,7 +160,7 @@
                         <option
                             *ngFor="let module of voiceModules"
                             [value]="module.value"
-                            [disabled]="!module.available"
+                            [disabled]="module.disabled"
                             [title]="getModuleTooltip(module)"
                         >
                             {{ getModuleLabel(module) }}
@@ -383,16 +383,15 @@
 
                         <div class="form-group">
                             <label class="checkbox">
-                                <input
-                                    type="checkbox"
-                                    formControlName="slow"
-                                />
+                                <input type="checkbox" formControlName="slow" />
                                 Slow mode (gTTS)
                             </label>
                         </div>
 
                         <div class="form-group">
-                            <label for="gtts-fallback">Fallback voice (pyttsx3)</label>
+                            <label for="gtts-fallback"
+                                >Fallback voice (pyttsx3)</label
+                            >
                             <input
                                 id="gtts-fallback"
                                 type="text"

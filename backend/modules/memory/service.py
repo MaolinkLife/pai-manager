@@ -164,7 +164,9 @@ class MemoryModule:
                 meta=meta,
             )
 
-        recent_payloads = self._load_recent_messages(char_name, settings["recent_limit"])
+        recent_payloads = self._load_recent_messages(
+            char_name, settings["recent_limit"]
+        )
         session_payloads = self._load_session_messages(
             char_name,
             message_payload.get("timestamp"),
@@ -221,7 +223,9 @@ class MemoryModule:
                     score_key="short_term",
                     score_value=short_match.score,
                     source_label="short_term",
-                    extras={"record_id": short_meta.get("record_id") if short_meta else None},
+                    extras={
+                        "record_id": short_meta.get("record_id") if short_meta else None
+                    },
                 )
                 short_term_meta = short_meta or {}
 
@@ -348,9 +352,9 @@ class MemoryModule:
                 if phrase:
                     formatted.append(phrase)
 
-            lore_block = "\n".join(
-                f"• {item}" for item in formatted
-            ) if formatted else ""
+            lore_block = (
+                "\n".join(f"• {item}" for item in formatted) if formatted else ""
+            )
 
             log_audit_entry(
                 "memory_module.lore_success",
@@ -373,15 +377,24 @@ class MemoryModule:
                 AuditStatus.ERROR,
                 details={"error": str(exc)},
             )
-            return {"lore_matches": [], "lore_block": "", "count": 0, "raw_lore_entries": []}
+            return {
+                "lore_matches": [],
+                "lore_block": "",
+                "count": 0,
+                "raw_lore_entries": [],
+            }
 
     def _load_settings(self) -> Dict[str, Any]:
         rag_cfg = get_config_value("rag", {}) or {}
         retrieval_raw = rag_cfg.get("retrieval") if isinstance(rag_cfg, dict) else {}
         retrieval_cfg = retrieval_raw if isinstance(retrieval_raw, dict) else {}
-        vectors_raw = retrieval_cfg.get("vectors") if isinstance(retrieval_cfg, dict) else {}
+        vectors_raw = (
+            retrieval_cfg.get("vectors") if isinstance(retrieval_cfg, dict) else {}
+        )
         vectors_cfg = vectors_raw if isinstance(vectors_raw, dict) else {}
-        profiles_raw = vectors_cfg.get("profiles") if isinstance(vectors_cfg, dict) else {}
+        profiles_raw = (
+            vectors_cfg.get("profiles") if isinstance(vectors_cfg, dict) else {}
+        )
         profiles_cfg = profiles_raw if isinstance(profiles_raw, dict) else {}
 
         vector_settings: Dict[str, Dict[str, Any]] = {}
@@ -432,24 +445,20 @@ class MemoryModule:
             or not vector_settings[primary_vector]["enabled"]
         ):
             primary_vector = next(
-                (
-                    name
-                    for name, cfg in vector_settings.items()
-                    if cfg.get("enabled")
-                ),
+                (name for name, cfg in vector_settings.items() if cfg.get("enabled")),
                 next(iter(vector_settings)),
             )
 
-        keyword_raw = retrieval_cfg.get("keyword") if isinstance(retrieval_cfg, dict) else {}
+        keyword_raw = (
+            retrieval_cfg.get("keyword") if isinstance(retrieval_cfg, dict) else {}
+        )
         keyword_cfg = keyword_raw if isinstance(keyword_raw, dict) else {}
         keyword_settings = {
             "enabled": bool(keyword_cfg.get("enabled", True)),
             "max_candidates": int(
                 keyword_cfg.get("max_candidates", DEFAULT_KEYWORD_MAX_CANDIDATES)
             ),
-            "min_score": float(
-                keyword_cfg.get("min_score", DEFAULT_KEYWORD_MIN_SCORE)
-            ),
+            "min_score": float(keyword_cfg.get("min_score", DEFAULT_KEYWORD_MIN_SCORE)),
             "min_overlap": float(
                 keyword_cfg.get("min_overlap", DEFAULT_KEYWORD_MIN_OVERLAP)
             ),
@@ -458,7 +467,9 @@ class MemoryModule:
             "boost_assistant": float(keyword_cfg.get("boost_assistant", 0.9)),
         }
 
-        rerank_raw = retrieval_cfg.get("rerank") if isinstance(retrieval_cfg, dict) else {}
+        rerank_raw = (
+            retrieval_cfg.get("rerank") if isinstance(retrieval_cfg, dict) else {}
+        )
         rerank_cfg = rerank_raw if isinstance(rerank_raw, dict) else {}
         weights_raw = rerank_cfg.get("weights") if isinstance(rerank_cfg, dict) else {}
         weights_cfg = weights_raw if isinstance(weights_raw, dict) else {}
@@ -482,7 +493,9 @@ class MemoryModule:
             "use_primary_rerank": bool(rerank_cfg.get("use_primary_rerank", True)),
         }
 
-        short_term_raw = retrieval_cfg.get("short_term") if isinstance(retrieval_cfg, dict) else {}
+        short_term_raw = (
+            retrieval_cfg.get("short_term") if isinstance(retrieval_cfg, dict) else {}
+        )
         short_term_cfg = short_term_raw if isinstance(short_term_raw, dict) else {}
         short_term_settings = {
             "enabled": bool(short_term_cfg.get("enabled", True)),
@@ -491,7 +504,9 @@ class MemoryModule:
             ),
         }
 
-        session_raw = retrieval_cfg.get("session") if isinstance(retrieval_cfg, dict) else {}
+        session_raw = (
+            retrieval_cfg.get("session") if isinstance(retrieval_cfg, dict) else {}
+        )
         session_cfg = session_raw if isinstance(session_raw, dict) else {}
         session_settings = {
             "enabled": bool(
@@ -506,7 +521,9 @@ class MemoryModule:
             ),
         }
 
-        recent_raw = retrieval_cfg.get("recent") if isinstance(retrieval_cfg, dict) else {}
+        recent_raw = (
+            retrieval_cfg.get("recent") if isinstance(retrieval_cfg, dict) else {}
+        )
         recent_cfg = recent_raw if isinstance(recent_raw, dict) else {}
         recent_limit = int(
             recent_cfg.get(
@@ -521,11 +538,7 @@ class MemoryModule:
             "vectors": {
                 "primary": primary_vector,
                 "profiles": {
-                    name: {
-                        key: value
-                        for key, value in cfg.items()
-                        if key != "name"
-                    }
+                    name: {key: value for key, value in cfg.items() if key != "name"}
                     for name, cfg in vector_settings.items()
                 },
             },
@@ -568,7 +581,11 @@ class MemoryModule:
 
         history_rows = database_service.get_history_by_ids(record.dialogue_ids)
         if not history_rows:
-            return None, None, {"record_id": record.id, "dialogue_ids": record.dialogue_ids}
+            return (
+                None,
+                None,
+                {"record_id": record.id, "dialogue_ids": record.dialogue_ids},
+            )
 
         payloads = [self._prepare_history_payload(row) for row in history_rows]
         match = self._find_best_match(
@@ -585,7 +602,9 @@ class MemoryModule:
         payload_map = {item.get("id"): item for item in payloads if item.get("id")}
         payload_item: Optional[Dict[str, Any]] = None
         if match:
-            payload_item = payload_map.get(match.message_id) or (payloads[0] if payloads else None)
+            payload_item = payload_map.get(match.message_id) or (
+                payloads[0] if payloads else None
+            )
             if payload_item is not None:
                 match.details = {
                     "source": "short_term",
@@ -627,7 +646,6 @@ class MemoryModule:
                 "content": preview,
             },
         )
-
 
     def _find_best_match(
         self,
@@ -794,7 +812,9 @@ class MemoryModule:
         if not char_name or not session_cfg.get("enabled", True):
             return []
 
-        start = self._compute_session_start(timestamp, session_cfg.get("window", DEFAULT_SESSION_WINDOW))
+        start = self._compute_session_start(
+            timestamp, session_cfg.get("window", DEFAULT_SESSION_WINDOW)
+        )
         try:
             payloads = database_service.get_history_since(char_name, start) or []
         except Exception:
@@ -861,7 +881,9 @@ class MemoryModule:
             )
 
         scored.sort(key=lambda item: item[1], reverse=True)
-        max_candidates = max(1, int(keyword_cfg.get("max_candidates", DEFAULT_KEYWORD_MAX_CANDIDATES)))
+        max_candidates = max(
+            1, int(keyword_cfg.get("max_candidates", DEFAULT_KEYWORD_MAX_CANDIDATES))
+        )
 
         for payload, score, extras in scored[:max_candidates]:
             self._register_candidate(
@@ -979,14 +1001,26 @@ class MemoryModule:
             return []
 
         rerank_cfg = settings.get("retrieval", {}).get("rerank", {})
-        weights_cfg = rerank_cfg.get("weights", {}) if isinstance(rerank_cfg, dict) else {}
-        embedding_weight = float(weights_cfg.get("embedding", DEFAULT_RERANK_WEIGHT_EMBEDDING))
-        keyword_weight = float(weights_cfg.get("keyword", DEFAULT_RERANK_WEIGHT_KEYWORD))
-        short_term_weight = float(weights_cfg.get("short_term", DEFAULT_RERANK_WEIGHT_SHORT_TERM))
+        weights_cfg = (
+            rerank_cfg.get("weights", {}) if isinstance(rerank_cfg, dict) else {}
+        )
+        embedding_weight = float(
+            weights_cfg.get("embedding", DEFAULT_RERANK_WEIGHT_EMBEDDING)
+        )
+        keyword_weight = float(
+            weights_cfg.get("keyword", DEFAULT_RERANK_WEIGHT_KEYWORD)
+        )
+        short_term_weight = float(
+            weights_cfg.get("short_term", DEFAULT_RERANK_WEIGHT_SHORT_TERM)
+        )
 
         primary_vector = settings.get("primary_vector")
-        primary_cfg = settings.get("vectors", {}).get(primary_vector) if primary_vector else None
-        primary_query_vec = query_vectors.get(primary_vector) if primary_vector else None
+        primary_cfg = (
+            settings.get("vectors", {}).get(primary_vector) if primary_vector else None
+        )
+        primary_query_vec = (
+            query_vectors.get(primary_vector) if primary_vector else None
+        )
 
         if (
             rerank_cfg.get("use_primary_rerank", True)
@@ -1018,13 +1052,17 @@ class MemoryModule:
             for entry in candidate_map.values():
                 embedding = entry.embeddings.get(primary_vector)
                 if embedding is not None and primary_query_vec is not None:
-                    entry.scores[f"vector.{primary_vector}.rerank"] = _cosine_similarity(
-                        primary_query_vec,
-                        embedding,
+                    entry.scores[f"vector.{primary_vector}.rerank"] = (
+                        _cosine_similarity(
+                            primary_query_vec,
+                            embedding,
+                        )
                     )
 
         ranked: List[Tuple[CandidateEntry, float]] = []
-        recency_boost = float(rerank_cfg.get("boost_recency", DEFAULT_RERANK_BOOST_RECENCY))
+        recency_boost = float(
+            rerank_cfg.get("boost_recency", DEFAULT_RERANK_BOOST_RECENCY)
+        )
 
         for entry in candidate_map.values():
             embedding_scores = [
@@ -1075,9 +1113,7 @@ class MemoryModule:
     @staticmethod
     def _tokenize(text: str, stopwords: Optional[Set[str]] = None) -> List[str]:
         tokens = [
-            token
-            for token in re.findall(r"[\w-]{2,}", text.lower())
-            if len(token) > 2
+            token for token in re.findall(r"[\w-]{2,}", text.lower()) if len(token) > 2
         ]
         if stopwords:
             lowered = {s.lower() for s in stopwords}
@@ -1140,7 +1176,12 @@ class MemoryModule:
         if not timestamp:
             return None
         try:
-            return datetime.fromisoformat(str(timestamp).replace("Z", "+00:00"))
+            parsed = datetime.fromisoformat(str(timestamp).replace("Z", "+00:00"))
         except Exception:
             return None
 
+        # Always work in UTC to avoid mixing naive and aware datetimes downstream.
+        if parsed.tzinfo is None:
+            return parsed.replace(tzinfo=timezone.utc)
+
+        return parsed.astimezone(timezone.utc)
