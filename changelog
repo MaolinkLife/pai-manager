@@ -25,7 +25,16 @@ version: 0.5
 - Frontend & Tooling
   - Updated Angular config service/mappers to handle partial updates for new sections (moral, analyzer, system prompt) and aligned UI logging with backend schema changes.
   - Added RU/EN translation assets and localization helpers so the frontend mirrors backend language selection during diagnostics.
-
+- Bugfix & Stability Improvements
+  - Voice & TTS
+    - Edge-TTS provider now checks service availability before fetching voices; if the service is unreachable, voices are skipped and not loaded into the frontend (8-second timeout threshold).
+    - Added configuration flag for selecting offline TTS mode directly from the Audio settings.
+  - Configuration & Visual Module
+    - Fixed monitor selection and value assignment issues affecting the Vision module.
+    - Restored proper handling of character name and owner name fields in configuration.
+    - Fixed analyzer settings not applying correctly after updates.
+    - Resolved an issue where Audio settings overwrote unrelated config sections on save.
+    - Improved visual provider initialization and parameter mapping for stability.
 
 version: 0.4
 - Backend & LLM orchestration
