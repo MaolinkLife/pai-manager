@@ -1,0 +1,50 @@
+<ng-container *ngIf="usesCustomDropdown; else nativeSelect">
+    <app-ui-dropdown [open]="open" (openChange)="open = $event" [disabled]="disabled">
+        <div uiDropdownTrigger class="ui-select-trigger" [class.disabled]="disabled" [class.open]="open">
+            <span class="ui-select-trigger__value">
+                {{ selectedLabel || placeholder }}
+            </span>
+            <app-custom-svg
+                class="ui-select-trigger__arrow-icon"
+                name="chevronDown"
+                [size]="14"
+            ></app-custom-svg>
+        </div>
+
+        <div uiDropdownMenu class="ui-select-menu">
+            <button
+                type="button"
+                class="ui-select-option"
+                *ngFor="let option of normalizedOptions; trackBy: trackByValue"
+                [class.active]="option.value === value"
+                [disabled]="option.disabled"
+                (click)="onOptionSelect(option.value)"
+            >
+                {{ option.label }}
+            </button>
+        </div>
+    </app-ui-dropdown>
+</ng-container>
+
+<ng-template #nativeSelect>
+    <div class="ui-select-trigger" [class.disabled]="disabled">
+        <select
+            class="ui-select-native"
+            [disabled]="disabled"
+            [value]="value ?? ''"
+            (change)="onNativeChange($event)"
+            (blur)="markTouched()"
+        >
+            <option
+                *ngIf="includePlaceholderOption"
+                value=""
+                [disabled]="true"
+                [selected]="value === null || value === undefined || value === ''"
+            >
+                {{ placeholder }}
+            </option>
+            <ng-content select="option,optgroup"></ng-content>
+        </select>
+        <span class="ui-select-trigger__arrow"></span>
+    </div>
+</ng-template>

@@ -6,7 +6,7 @@ from modules.generative.providers.base import GenerateProvider, ProviderError
 from modules.generative.providers.ollama import OllamaGenerateProvider
 from modules.generative.providers.openrouter import OpenRouterGenerateProvider
 from modules.generative.types import GenerateRequest, GenerateResult, GenerateStreamChunk
-from services.config_service import get_config_value
+from services import config_service
 from services.logger_service import AuditStatus, log_audit_entry
 
 
@@ -22,8 +22,8 @@ class GenerationManager:
         }
 
     def _ordered_provider_names(self) -> List[str]:
-        active = get_config_value("api.active_provider", "ollama")
-        fallbacks = get_config_value("api.fallback_order", []) or []
+        active = config_service.get_config_value("api.active_provider", "ollama")
+        fallbacks = config_service.get_config_value("api.fallback_order", []) or []
         ordered = [active] if active else []
         for name in fallbacks:
             if name not in ordered:

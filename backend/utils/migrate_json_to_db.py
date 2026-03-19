@@ -4,9 +4,10 @@ import os
 import json
 from datetime import datetime, timezone
 from services import database_service
+from constants.paths import STORAGE_DIR
 
 # 📁 Directory with exported history files
-HISTORY_DIR = os.path.join("storage", "history")
+HISTORY_DIR = os.path.join(STORAGE_DIR, "history")
 
 # 🔍 Keys that must be present in every message
 REQUIRED_KEYS = {"role", "content", "timestamp"}

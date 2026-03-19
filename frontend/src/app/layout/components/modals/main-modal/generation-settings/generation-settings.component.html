@@ -132,106 +132,107 @@
         >
             <h2>⚡ {{ "settings.apiSettings" | translate }}</h2>
 
-            <div class="form-group">
-                <label for="apiType">{{
-                    "settings.apiType" | translate
-                }}</label>
-                <select id="apiType" formControlName="apiType">
-                    <option *ngFor="let option of apiTypeOptions" [value]="option">
-                        {{ option }}
-                    </option>
-                </select>
-            </div>
+            <div class="section">
+                <h3>General</h3>
 
-            <div class="form-group">
-                <label for="activeProvider">{{
-                    "settings.activeProvider" | translate
-                }}</label>
-                <select id="activeProvider" formControlName="activeProvider">
-                    <option *ngFor="let provider of providerKeys" [value]="provider">
-                        {{ provider | titlecase }}
-                    </option>
-                </select>
-            </div>
+                <div class="form-group">
+                    <label for="apiType">{{
+                        "settings.apiType" | translate
+                    }}</label>
+                    <app-ui-select
+                        id="apiType"
+                        formControlName="apiType"
+                        [options]="apiTypeSelectOptions"
+                    ></app-ui-select>
+                </div>
 
-            <div class="form-group">
-                <label for="fallbackOrder">{{
-                    "settings.fallbackOrder" | translate
-                }}</label>
-                <input
-                    id="fallbackOrder"
-                    type="text"
-                    formControlName="fallbackOrder"
-                    placeholder="provider1, provider2"
-                />
-            </div>
+                <div class="form-group">
+                    <label for="activeProvider">{{
+                        "settings.activeProvider" | translate
+                    }}</label>
+                    <app-ui-select
+                        id="activeProvider"
+                        formControlName="activeProvider"
+                        [options]="activeProviderOptions"
+                    ></app-ui-select>
+                </div>
 
-            <div class="form-group">
-                <label for="visualModel">{{
-                    "settings.visualModel" | translate
-                }}</label>
-                <input
-                    id="visualModel"
-                    type="text"
-                    formControlName="visualModel"
-                />
-            </div>
+                <div class="form-group">
+                    <label for="fallbackOrder">{{
+                        "settings.fallbackOrder" | translate
+                    }}</label>
+                    <app-ui-input
+                        id="fallbackOrder"
+                        type="text"
+                        formControlName="fallbackOrder"
+                        placeholder="provider1, provider2"
+                    ></app-ui-input>
+                </div>
 
-            <div class="form-group token-limit-block">
-                <label for="tokenLimit">{{
-                    "settings.tokenLimit" | translate
-                }}</label>
-                <input
-                    #tokenInput
-                    id="tokenLimit"
-                    type="number"
-                    min="512"
-                    max="131072"
-                    step="256"
-                    formControlName="tokenLimit"
-                />
-                <input
-                    #tokenSlider
-                    type="range"
-                    min="512"
-                    max="131072"
-                    step="256"
-                    formControlName="tokenLimit"
-                />
-                <div class="token-range-labels">
-                    <span>512</span>
-                    <span>128k</span>
+                <div class="form-group">
+                    <label for="visualModel">{{
+                        "settings.visualModel" | translate
+                    }}</label>
+                    <app-ui-input
+                        id="visualModel"
+                        type="text"
+                        formControlName="visualModel"
+                    ></app-ui-input>
+                </div>
+
+                <div class="form-group token-limit-block">
+                    <label for="tokenLimit">{{
+                        "settings.tokenLimit" | translate
+                    }}</label>
+                    <app-ui-input
+                        id="tokenLimit"
+                        type="number"
+                        min="512"
+                        max="131072"
+                        step="256"
+                        formControlName="tokenLimit"
+                    ></app-ui-input>
+                    <app-ui-range
+                        [value]="generationForm.get('tokenLimit')?.value ?? 2048"
+                        [min]="512"
+                        [max]="131072"
+                        [step]="256"
+                        [showEdgeLabels]="true"
+                        minLabel="512"
+                        maxLabel="128k"
+                        (valueChange)="onTokenLimitRangeChange($event)"
+                    ></app-ui-range>
+                </div>
+
+                <div class="form-group">
+                    <label for="messagePairLimit">{{
+                        "settings.messagePairLimit" | translate
+                    }}</label>
+                    <app-ui-input
+                        id="messagePairLimit"
+                        type="number"
+                        formControlName="messagePairLimit"
+                        min="1"
+                        max="50"
+                    ></app-ui-input>
+                </div>
+
+                <div class="form-group">
+                    <label class="checkbox">
+                        <input type="checkbox" formControlName="streaming" />
+                        {{ "settings.streaming" | translate }}
+                    </label>
                 </div>
             </div>
 
-            <div class="form-group">
-                <label for="messagePairLimit">{{
-                    "settings.messagePairLimit" | translate
-                }}</label>
-                <input
-                    id="messagePairLimit"
-                    type="number"
-                    formControlName="messagePairLimit"
-                    min="1"
-                    max="50"
-                />
-            </div>
-
-            <div class="form-group">
-                <label class="checkbox">
-                    <input type="checkbox" formControlName="streaming" />
-                    {{ "settings.streaming" | translate }}
-                </label>
-            </div>
-
-            <div class="provider-settings" *ngIf="currentProviderForm as providerForm">
+            <div class="section provider-settings" *ngIf="currentProviderForm as providerForm">
                 <h3>
                     {{ "settings.providerSettings" | translate }}
                     — {{ generationForm.get('activeProvider')?.value | titlecase }}
                 </h3>
 
                 <div [formGroup]="providerForm">
-                    <ng-container *ngFor="let field of currentProviderFields">
+                    <ng-container *ngFor="let field of currentProviderFields; trackBy: trackByProviderField">
                         <div class="form-group" *ngIf="field.key !== 'model'">
                             <ng-container [ngSwitch]="field.type">
                                 <label *ngSwitchCase="'checkbox'" class="checkbox">
@@ -246,11 +247,11 @@
                                     <label [for]="'provider-' + field.key">
                                         {{ formatFieldLabel(field.key) }}
                                     </label>
-                                    <input
+                                    <app-ui-input
                                         [id]="'provider-' + field.key"
                                         [type]="field.type === 'number' ? 'number' : 'text'"
                                         [formControlName]="field.key"
-                                    />
+                                    ></app-ui-input>
                                 </ng-container>
                             </ng-container>
                         </div>
@@ -262,28 +263,17 @@
                         }}</label>
 
                         <ng-container *ngIf="generationForm.get('activeProvider')?.value === 'ollama'; else textModelInput">
-                            <div
-                                class="custom-select"
-                                (click)="toggleDropdown()"
-                                [ngClass]="{ open: dropdownOpen }"
-                            >
-                                <div class="selected">
-                                    {{ modelControl.value || ("settings.selectModel" | translate) }}
-                                </div>
-                                <ul class="options" *ngIf="dropdownOpen">
-                                    <li
-                                        *ngFor="let model of availableModels"
-                                        (click)="selectModel(model); $event.stopPropagation()"
-                                        [class.active]="model === selectedModel"
-                                    >
-                                        {{ model.split(":")[0] }} ({{ model.split(":")[1] || "latest" }})
-                                    </li>
-                                </ul>
-                            </div>
+                            <app-ui-select
+                                id="provider-model"
+                                [options]="availableModels"
+                                [value]="modelControl.value"
+                                [placeholder]="'settings.selectModel' | translate"
+                                (change)="selectModel($event.target.value)"
+                            ></app-ui-select>
                         </ng-container>
 
                         <ng-template #textModelInput>
-                            <input id="provider-model" type="text" formControlName="model" />
+                            <app-ui-input id="provider-model" type="text" formControlName="model" ></app-ui-input>
                         </ng-template>
                     </div>
                 </div>
@@ -300,139 +290,138 @@
     <div class="settings-wrapper">
         <h2>{{ "settings.generationPresets" | translate }}</h2>
 
-        <div class="form-group">
-            <label for="presetSelect">{{
-                "settings.selectPreset" | translate
-            }}</label>
-            <select
-                id="presetSelect"
-                [value]="selectedPresetName"
-                (change)="onPresetChange($event)"
-            >
-                <option *ngFor="let p of presets" [value]="p.name">
-                    {{ p.name }}
-                </option>
-            </select>
+        <div class="section">
+            <h3>Preset</h3>
+
+            <div class="form-group">
+                <label for="presetSelect">{{
+                    "settings.selectPreset" | translate
+                }}</label>
+                <app-ui-select
+                    id="presetSelect"
+                    [value]="selectedPresetName"
+                    [options]="presetOptions"
+                    (change)="onPresetChange($event)"
+                ></app-ui-select>
+            </div>
         </div>
 
         <form
             [formGroup]="generationSettingsForm"
             (ngSubmit)="saveOrUpdatePreset()"
         >
-            <div class="form-group">
-                <label>{{ "settings.presetName" | translate }}</label>
-                <input type="text" formControlName="name" />
-            </div>
+            <div class="section">
+                <h3>Parameters</h3>
 
-            <div class="form-group">
-                <label>{{ "settings.description" | translate }}</label>
-                <input type="text" formControlName="description" />
-            </div>
+                <div class="form-group">
+                    <label>{{ "settings.presetName" | translate }}</label>
+                    <app-ui-input type="text" formControlName="name" ></app-ui-input>
+                </div>
 
-            <div class="form-group">
-                <label>
-                    {{ "settings.temperature" | translate }}:
-                    <span>{{
-                        generationSettingsForm.get("temperature")?.value
-                            | number : "1.2-2"
-                    }}</span>
-                </label>
-                <input
-                    type="range"
-                    min="0.1"
-                    max="2.0"
-                    step="0.01"
-                    formControlName="temperature"
-                />
-            </div>
+                <div class="form-group">
+                    <label>{{ "settings.description" | translate }}</label>
+                    <app-ui-input type="text" formControlName="description" ></app-ui-input>
+                </div>
 
-            <div class="form-group">
-                <label>
-                    {{ "settings.topP" | translate }}:
-                    <span>{{
-                        generationSettingsForm.get("topP")?.value
-                            | number : "1.2-2"
-                    }}</span>
-                </label>
-                <input
-                    type="range"
-                    min="0.1"
-                    max="1.0"
-                    step="0.01"
-                    formControlName="topP"
-                />
-            </div>
+                <div class="form-group">
+                    <label>
+                        {{ "settings.temperature" | translate }}:
+                        <span>{{
+                            generationSettingsForm.get("temperature")?.value
+                                | number : "1.2-2"
+                        }}</span>
+                    </label>
+                    <app-ui-range
+                        formControlName="temperature"
+                        [min]="0.1"
+                        [max]="2.0"
+                        [step]="0.01"
+                    ></app-ui-range>
+                </div>
 
-            <div class="form-group">
-                <label>
-                    {{ "settings.topK" | translate }}:
-                    <span>{{ generationSettingsForm.get("topK")?.value }}</span>
-                </label>
-                <input
-                    type="range"
-                    min="1"
-                    max="100"
-                    step="1"
-                    formControlName="topK"
-                />
-            </div>
+                <div class="form-group">
+                    <label>
+                        {{ "settings.topP" | translate }}:
+                        <span>{{
+                            generationSettingsForm.get("topP")?.value
+                                | number : "1.2-2"
+                        }}</span>
+                    </label>
+                    <app-ui-range
+                        formControlName="topP"
+                        [min]="0.1"
+                        [max]="1.0"
+                        [step]="0.01"
+                    ></app-ui-range>
+                </div>
 
-            <div class="form-group">
-                <label>
-                    {{ "settings.minP" | translate }}:
-                    <span>{{
-                        generationSettingsForm.get("minP")?.value
-                            | number : "1.2-2"
-                    }}</span>
-                </label>
-                <input
-                    type="range"
-                    min="0.0"
-                    max="1.0"
-                    step="0.01"
-                    formControlName="minP"
-                />
-            </div>
+                <div class="form-group">
+                    <label>
+                        {{ "settings.topK" | translate }}:
+                        <span>{{ generationSettingsForm.get("topK")?.value }}</span>
+                    </label>
+                    <app-ui-range
+                        formControlName="topK"
+                        [min]="1"
+                        [max]="100"
+                        [step]="1"
+                    ></app-ui-range>
+                </div>
 
-            <div class="form-group">
-                <label>
-                    {{ "settings.repeatPenalty" | translate }}:
-                    <span>{{
-                        generationSettingsForm.get("repeatPenalty")?.value
-                            | number : "1.2-2"
-                    }}</span>
-                </label>
-                <input
-                    type="range"
-                    min="0.5"
-                    max="2.0"
-                    step="0.01"
-                    formControlName="repeatPenalty"
-                />
-            </div>
+                <div class="form-group">
+                    <label>
+                        {{ "settings.minP" | translate }}:
+                        <span>{{
+                            generationSettingsForm.get("minP")?.value
+                                | number : "1.2-2"
+                        }}</span>
+                    </label>
+                    <app-ui-range
+                        formControlName="minP"
+                        [min]="0.0"
+                        [max]="1.0"
+                        [step]="0.01"
+                    ></app-ui-range>
+                </div>
 
-            <div class="form-group">
-                <label>
-                    {{ "settings.maxTokens" | translate }}:
-                    <span>{{
-                        generationSettingsForm.get("numPredict")?.value
-                    }}</span>
-                </label>
-                <input
-                    type="range"
-                    min="64"
-                    max="4096"
-                    step="64"
-                    formControlName="numPredict"
-                />
-            </div>
+                <div class="form-group">
+                    <label>
+                        {{ "settings.repeatPenalty" | translate }}:
+                        <span>{{
+                            generationSettingsForm.get("repeatPenalty")?.value
+                                | number : "1.2-2"
+                        }}</span>
+                    </label>
+                    <app-ui-range
+                        formControlName="repeatPenalty"
+                        [min]="0.5"
+                        [max]="2.0"
+                        [step]="0.01"
+                    ></app-ui-range>
+                </div>
 
-            <div class="form-group">
-                <label>{{ "settings.stopTokens" | translate }}</label>
-                <textarea
-                    formControlName="stop"
-                    [placeholder]="'settings.stopTokensPlaceholder' | translate"
-                ></textarea>
+                <div class="form-group">
+                    <label>
+                        {{ "settings.maxTokens" | translate }}:
+                        <span>{{
+                            generationSettingsForm.get("numPredict")?.value
+                        }}</span>
+                    </label>
+                    <app-ui-range
+                        formControlName="numPredict"
+                        [min]="64"
+                        [max]="4096"
+                        [step]="64"
+                    ></app-ui-range>
+                </div>
+
+                <div class="form-group">
+                    <label>{{ "settings.stopTokens" | translate }}</label>
+                    <textarea
+                        formControlName="stop"
+                        [placeholder]="'settings.stopTokensPlaceholder' | translate"
+                    ></textarea>
+                </div>
             </div>
 
             <div class="button-row">
@@ -443,3 +432,6 @@
         </form>
     </div>
 </ng-template>
+
+
+

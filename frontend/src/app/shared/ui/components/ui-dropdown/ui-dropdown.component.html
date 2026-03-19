@@ -1,0 +1,9 @@
+<div class="ui-dropdown" [class.open]="open" [class.ui-dropdown--right]="align === 'right'">
+    <div class="ui-dropdown__trigger" (click)="toggle($event)">
+        <ng-content select="[uiDropdownTrigger]"></ng-content>
+    </div>
+
+    <div class="ui-dropdown__menu" *ngIf="open" (click)="onMenuClick($event)">
+        <ng-content select="[uiDropdownMenu]"></ng-content>
+    </div>
+</div>

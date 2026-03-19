@@ -7,19 +7,23 @@ import ast
 import json
 import re
 import uuid
+import time
 from datetime import datetime, timezone
 import hashlib
 from typing import Any, Awaitable, Callable, Dict, Iterable, List, Optional, Tuple
 
 from modules.generative import NoProviderResolved, generation_manager
 from modules.generative.types import GenerateRequest, GenerateStreamChunk
+from modules.system.service import get_active_character_name
 from core.decision_layer import decision_layer
 from services import database_service
-from services.config_service import get_config_value
+from services import config_service
 from services.logger_service import AuditStatus, log_audit_entry
 from modules.tts.state import VoiceStage, voice_state
+from utils.time_utils import to_user_tz_iso
 
 THINK_PATTERN = re.compile(r"<think>(.*?)</think>", re.IGNORECASE | re.DOTALL)
+WHITESPACE_TOKEN_PATTERN = re.compile(r"\S+\s*")
 
 
 # ---------------------------------------------------------------------------
@@ -138,6 +142,22 @@ def strip_reasoning_from_chunk(chunk: str, in_reasoning: bool) -> tuple[str, str
     return "".join(speech_parts), "".join(reasoning_parts), in_reasoning
 
 
+def _truncate_by_token_budget(text: str, remaining_tokens: int) -> tuple[str, int]:
+    """
+    Token-like limiter for visible answer chunks.
+    Uses whitespace-delimited segments as a safe approximation.
+    """
+    if not text or remaining_tokens <= 0:
+        return "", 0
+    segments = WHITESPACE_TOKEN_PATTERN.findall(text)
+    if not segments:
+        return "", 0
+    if len(segments) <= remaining_tokens:
+        return text, len(segments)
+    truncated = "".join(segments[:remaining_tokens]).rstrip()
+    return truncated, remaining_tokens
+
+
 def _extract_provider_errors(exc: Exception) -> List[Dict[str, str]]:
     try:
         data = ast.literal_eval(str(exc))
@@ -190,12 +210,35 @@ def _generate_tags_for_text(
 
 def _build_generation_options() -> dict:
     exclude = ["name", "description"]
-    full_settings = get_config_value("generate_settings", {})
+    full_settings = config_service.get_config_value("generate_settings", {})
     return {k: v for k, v in full_settings.items() if k not in exclude}
 
 
+def _extract_usage_metadata(raw_chunk: Any) -> Dict[str, Any]:
+    if not isinstance(raw_chunk, dict):
+        return {}
+    keys = [
+        "total_duration",
+        "load_duration",
+        "prompt_eval_count",
+        "prompt_eval_duration",
+        "eval_count",
+        "eval_duration",
+        "prompt_tokens",
+        "response_tokens",
+        "completion_tokens",
+        "total_tokens",
+        "completion_tokens_details",
+    ]
+    usage: Dict[str, Any] = {}
+    for key in keys:
+        if key in raw_chunk:
+            usage[key] = raw_chunk.get(key)
+    return usage
+
+
 def _voice_streaming_available() -> bool:
-    return get_config_value("voice.enabled", False) and get_config_value(
+    return config_service.get_config_value("voice.enabled", False) and config_service.get_config_value(
         "voice.streaming_tts", False
     )
 
@@ -332,7 +375,11 @@ async def generate_standard(
         raise RuntimeError(summary or "Generation provider not available") from exc
 
     assistant_raw = (generate_result.content or "").strip()
-    assistant_content, assistant_reasoning = split_reasoning(assistant_raw)
+    assistant_reasoning = (generate_result.reasoning or "").strip()
+    if assistant_reasoning:
+        assistant_content = assistant_raw
+    else:
+        assistant_content, assistant_reasoning = split_reasoning(assistant_raw)
     log_audit_entry(
         "conversation_standard_result",
         "[Conversation] Результат стандартной генерации получен.",
@@ -346,15 +393,6 @@ async def generate_standard(
     )
     print("[Generator] Обработан ответ провайдера (standard).")
 
-    if emit_ws_fn and last_user_message:
-        await emit_ws_fn(
-            {
-                "type": "message",
-                "role": "user",
-                "content": last_user_message.get("content", ""),
-            }
-        )
-
     assistant_message_obj = None
     if store and assistant_content:
         memory_context_for_tags = memory_context
@@ -363,7 +401,7 @@ async def generate_standard(
             last_user_message.get("content", ""), extra=extra_tags
         )
         database_service.add_message_to_history(
-            character_name=get_config_value("system.char_name", "default"),
+            character_name=get_active_character_name(default="default"),
             role="user",
             content=last_user_message["content"],
             timestamp=datetime.now(timezone.utc),
@@ -375,7 +413,7 @@ async def generate_standard(
             assistant_content, extra=extra_tags + ["assistant"]
         )
         assistant_message_obj = database_service.add_message_to_history(
-            character_name=get_config_value("system.char_name", "default"),
+            character_name=get_active_character_name(default="default"),
             role="assistant",
             content=assistant_content,
             timestamp=datetime.now(timezone.utc),
@@ -436,7 +474,7 @@ async def generate_standard(
 
     timestamp_value = getattr(assistant_message_obj, "timestamp", None)
     if hasattr(timestamp_value, "isoformat"):
-        timestamp_serialized = timestamp_value.isoformat()
+        timestamp_serialized = to_user_tz_iso(timestamp_value)
     elif timestamp_value is None:
         timestamp_serialized = None
     else:
@@ -475,9 +513,16 @@ async def generate_stream(
     last_user_message: Optional[Dict[str, Any]] = None,
     raw_user_media: Optional[Iterable[dict]] = None,
     store: bool = True,
+    run_id: Optional[str] = None,
+    should_stop: Optional[Callable[[], bool]] = None,
 ) -> None:
     if not history:
         return
+
+    def _with_run(payload: Dict[str, Any]) -> Dict[str, Any]:
+        if run_id:
+            payload["run_id"] = run_id
+        return payload
 
     system_prompt = decision_context.get("system_prompt", "")
     memory_context = decision_context.get("memory_context", {}) or {}
@@ -528,7 +573,7 @@ async def generate_stream(
             last_user_message.get("content", ""), extra=extra_tags
         )
         stored_user_entry = database_service.add_message_to_history(
-            character_name=get_config_value("system.char_name", "default"),
+            character_name=get_active_character_name(default="default"),
             role="user",
             content=last_user_message.get("content", ""),
             timestamp=datetime.now(timezone.utc),
@@ -544,16 +589,18 @@ async def generate_stream(
         last_user_message["media"] = user_media_for_emit
     if last_user_message and emit_fn is not None:
         await emit_fn(
-            {
-                "type": "message",
-                "role": "user",
-                "content": last_user_message.get("content", ""),
-                "id": last_user_message.get("id"),
-                "timestamp": last_user_message.get("timestamp"),
-                "media": user_media_for_emit,
-            }
+            _with_run(
+                {
+                    "type": "message",
+                    "role": "user",
+                    "content": last_user_message.get("content", ""),
+                    "id": last_user_message.get("id"),
+                    "timestamp": last_user_message.get("timestamp"),
+                    "media": user_media_for_emit,
+                }
+            )
         )
-        await emit_fn({"type": "system", "event": "typing_start"})
+        await emit_fn(_with_run({"type": "system", "event": "typing_start"}))
         log_audit_entry(
             "conversation_user_message_emitted_stream",
             "[Conversation] Пользовательское сообщение отправлено в поток.",
@@ -583,49 +630,139 @@ async def generate_stream(
     )
 
     raw_chunks: List[str] = []
+    reasoning_chunks: List[str] = []
     speech_started = False
     streaming_in_reasoning = False
+    ui_reasoning_open = False
+    reasoning_started_at: Optional[float] = None
+    reasoning_finished_at: Optional[float] = None
     provider_used_stream: Optional[str] = None
     assistant_message_obj = None
     chunk_meta: List[Dict[str, Any]] = []
+    final_chunk_raw: Dict[str, Any] = {}
+    final_chunk_metadata: Dict[str, Any] = {}
+    stopped = False
+    output_soft_limit_tokens: Optional[int] = None
+    output_soft_used_tokens = 0
 
     try:
         async for chunk in generation_manager.stream(request_payload):
+            if should_stop and should_stop():
+                stopped = True
+                break
             if provider_used_stream is None:
                 provider_used_stream = chunk.provider
 
+            if output_soft_limit_tokens is None and isinstance(chunk.metadata, dict):
+                raw_limit = chunk.metadata.get("output_soft_limit_tokens")
+                try:
+                    parsed_limit = int(raw_limit) if raw_limit is not None else None
+                except (TypeError, ValueError):
+                    parsed_limit = None
+                if parsed_limit and parsed_limit > 0:
+                    output_soft_limit_tokens = parsed_limit
+
+            reasoning_part = chunk.reasoning if isinstance(chunk.reasoning, str) else ""
+            if reasoning_part:
+                if reasoning_started_at is None:
+                    reasoning_started_at = time.perf_counter()
+                reasoning_chunks.append(reasoning_part)
+                reasoning_prefix = "<think>" if not ui_reasoning_open else ""
+                if not await emit_fn(
+                    _with_run(
+                        {
+                            "type": "message_chunk",
+                            "role": "assistant",
+                            "content": f"{reasoning_prefix}{reasoning_part}",
+                            "provider": provider_used_stream,
+                        }
+                    )
+                ):
+                    return
+                ui_reasoning_open = True
+
             content = chunk.content or ""
             if isinstance(content, str) and content:
+                emitted_content = content
+                if output_soft_limit_tokens and output_soft_limit_tokens > 0:
+                    remaining_tokens = output_soft_limit_tokens - output_soft_used_tokens
+                    emitted_content, consumed_tokens = _truncate_by_token_budget(
+                        content,
+                        remaining_tokens,
+                    )
+                    output_soft_used_tokens += consumed_tokens
+                    if not emitted_content:
+                        emitted_content = ""
+
+                if reasoning_started_at is not None and reasoning_finished_at is None:
+                    reasoning_finished_at = time.perf_counter()
+                if ui_reasoning_open:
+                    if not await emit_fn(
+                        _with_run(
+                            {
+                                "type": "message_chunk",
+                                "role": "assistant",
+                                "content": "</think>\n\n",
+                                "provider": provider_used_stream,
+                            }
+                        )
+                    ):
+                        return
+                    ui_reasoning_open = False
                 chunk_meta.append(
                     {
                         "provider": chunk.provider,
-                        "length": len(content),
+                        "length": len(emitted_content),
                         "done": chunk.done,
                         "has_reasoning": bool(chunk.reasoning),
                     }
                 )
-                if not await emit_fn(
+                if emitted_content:
+                    if not await emit_fn(
+                        _with_run(
+                            {
+                                "type": "message_chunk",
+                                "role": "assistant",
+                                "content": emitted_content,
+                                "provider": provider_used_stream,
+                            }
+                        )
+                    ):
+                        return
+
+                    raw_chunks.append(emitted_content)
+                    speech_chunk, _, streaming_in_reasoning = strip_reasoning_from_chunk(
+                        emitted_content, streaming_in_reasoning
+                    )
+                    if voice_enabled and speech_chunk.strip():
+                        voice_state.on_stream_chunk(speech_chunk)
+                        if not speech_started:
+                            voice_state.on_stream_start()
+                            speech_started = True
+            if chunk.done:
+                final_chunk_raw = chunk.raw if isinstance(chunk.raw, dict) else {}
+                final_chunk_metadata = chunk.metadata or {}
+
+        if ui_reasoning_open:
+            if not await emit_fn(
+                _with_run(
                     {
                         "type": "message_chunk",
                         "role": "assistant",
-                        "content": content,
+                        "content": "</think>\n\n",
                         "provider": provider_used_stream,
                     }
-                ):
-                    return
-
-                raw_chunks.append(content)
-                speech_chunk, _, streaming_in_reasoning = strip_reasoning_from_chunk(
-                    content, streaming_in_reasoning
                 )
-                if voice_enabled and speech_chunk.strip():
-                    voice_state.on_stream_chunk(speech_chunk)
-                    if not speech_started:
-                        voice_state.on_stream_start()
-                        speech_started = True
+            ):
+                return
+            ui_reasoning_open = False
+        if reasoning_started_at is not None and reasoning_finished_at is None:
+            reasoning_finished_at = time.perf_counter()
 
         if voice_enabled and speech_started:
             voice_state.on_stream_end()
+        if should_stop and should_stop():
+            stopped = True
     except NoProviderResolved as exc:
         print("[Generator] Провайдеры недоступны для потока.")
         provider_errors = _extract_provider_errors(exc)
@@ -635,8 +772,8 @@ async def generate_stream(
         }
         if provider_errors:
             payload["details"] = provider_errors
-        await emit_fn(payload)
-        await emit_fn({"type": "system", "event": "typing_end"})
+        await emit_fn(_with_run(payload))
+        await emit_fn(_with_run({"type": "system", "event": "typing_end"}))
         log_audit_entry(
             event_type="generation_provider_stream_failure",
             msg="[Generator] Потоковый провайдер недоступен",
@@ -651,7 +788,16 @@ async def generate_stream(
         return
 
     assistant_raw = "".join(raw_chunks).strip()
-    assistant_content, assistant_reasoning = split_reasoning(assistant_raw)
+    assistant_reasoning = "".join(reasoning_chunks).strip()
+    if assistant_reasoning:
+        assistant_content = assistant_raw
+    else:
+        assistant_content, assistant_reasoning = split_reasoning(assistant_raw)
+    reasoning_elapsed_ms = (
+        round((reasoning_finished_at - reasoning_started_at) * 1000, 2)
+        if reasoning_started_at is not None and reasoning_finished_at is not None
+        else None
+    )
     print("[Generator] Потоковая генерация завершена.")
     log_audit_entry(
         "conversation_stream_completed",
@@ -666,13 +812,13 @@ async def generate_stream(
         },
     )
 
-    if assistant_content:
+    if assistant_content and not stopped:
         extra_tags = list(memory_context.get("short_term_themes") or [])
         assistant_tags = _generate_tags_for_text(
             assistant_content, extra=extra_tags + ["assistant"]
         )
         assistant_message_obj = database_service.add_message_to_history(
-            character_name=get_config_value("system.char_name", "default"),
+            character_name=get_active_character_name(default="default"),
             role="assistant",
             content=assistant_content,
             timestamp=datetime.now(timezone.utc),
@@ -684,7 +830,8 @@ async def generate_stream(
                 assistant_reasoning,
             )
 
-    decision_layer.handle_response(assistant_content)
+    if not stopped:
+        decision_layer.handle_response(assistant_content)
     assistant_timestamp = getattr(
         assistant_message_obj, "timestamp", datetime.now(timezone.utc)
     )
@@ -693,19 +840,15 @@ async def generate_stream(
     if assistant_reasoning:
         display_content = f"<think>\n{assistant_reasoning}\n</think>\n\n{assistant_content}"
 
-    final_message_payload = {
+    final_message_payload = _with_run({
         "type": "message",
         "role": "assistant",
         "content": display_content,
         "provider": provider_used_stream,
         "id": assistant_message_id,
-        "timestamp": (
-            assistant_timestamp.isoformat()
-            if hasattr(assistant_timestamp, "isoformat")
-            else str(assistant_timestamp)
-        ),
+        "timestamp": to_user_tz_iso(assistant_timestamp),
         "media": [],
-    }
+    })
     await emit_fn(final_message_payload)
     log_audit_entry(
         "conversation_stream_emit_end",
@@ -718,21 +861,48 @@ async def generate_stream(
             "message_id": assistant_message_id,
         },
     )
-    await emit_fn(
-        {
-            "type": "message_end",
+    usage = _extract_usage_metadata(final_chunk_raw)
+    model = final_chunk_metadata.get("model") if isinstance(final_chunk_metadata, dict) else None
+    meta = final_chunk_metadata if isinstance(final_chunk_metadata, dict) else {}
+    log_audit_entry(
+        "conversation_stream_payload_debug",
+        "[Conversation] Финальный payload потоковой генерации.",
+        AuditStatus.INFO,
+        details={
             "provider": provider_used_stream,
-            "content": display_content,
-            "reasoning": assistant_reasoning,
-            "id": assistant_message_id,
-        }
+            "assistant_content": assistant_content,
+            "assistant_reasoning": assistant_reasoning,
+            "usage": usage,
+            "meta": meta,
+            "final_chunk_raw": final_chunk_raw,
+            "reasoning_elapsed_ms": reasoning_elapsed_ms,
+            "chunks_received": len(chunk_meta),
+            "chunk_details": chunk_meta,
+        },
     )
-    await emit_fn({"type": "system", "event": "typing_end"})
+    await emit_fn(
+        _with_run(
+            {
+                "type": "message_end",
+                "provider": provider_used_stream,
+                "content": display_content,
+                "reasoning": assistant_reasoning,
+                "id": assistant_message_id,
+                "timestamp": to_user_tz_iso(assistant_timestamp),
+                "usage": usage,
+                "model": model,
+                "stopped": stopped,
+                "reasoning_elapsed_ms": reasoning_elapsed_ms,
+                "meta": meta,
+            }
+        )
+    )
+    await emit_fn(_with_run({"type": "system", "event": "typing_end"}))
 
 
 def play_message(msg_id: str):
     print("[Generator] Воспроизведение сохранённого сообщения.")
     message = database_service.get_message_by_id(msg_id)
-    if get_config_value("voice.enabled", False):
+    if config_service.get_config_value("voice.enabled", False):
         decision_layer.handle_response(message.get("content", ""))
     return message

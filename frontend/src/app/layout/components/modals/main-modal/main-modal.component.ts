@@ -12,7 +12,7 @@ export class MainModalComponent implements OnInit {
 
     tabs = [
         { key: 'lorebook', label: 'Lorebook' },
-        { key: 'voice', label: 'Voice' },
+        { key: 'voice', label: 'TTS' },
         { key: 'audio', label: 'Audio' },
         { key: 'vision', label: 'Vision' },
         { key: 'rag', label: 'RAG' },

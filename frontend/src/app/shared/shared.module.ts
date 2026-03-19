@@ -9,13 +9,15 @@ import { MessageRendererModule } from './components/message-renderer/message-ren
 import { EmojiModule } from './emoji/emoji.module';
 import { SkeletonModule } from './components/skeleton/skeleton.module';
 import { NotificationModule } from './components/notification/notification.module';
+import { CustomSvgModule } from './components/custom-svg/custom-svg.module';
+import { UiModule } from './ui/ui.module';
 
 @NgModule({
     imports: [
         CommonModule,
         ThemeModule,
         IconsToolbarModule,
-        TranslationModule.forRoot(),
+        TranslationModule,
         FormsModule,
         ReactiveFormsModule,
         ModalModule,
@@ -23,6 +25,8 @@ import { NotificationModule } from './components/notification/notification.modul
         EmojiModule,
         SkeletonModule,
         NotificationModule,
+        CustomSvgModule,
+        UiModule,
     ],
     exports: [
         ThemeModule,
@@ -35,6 +39,8 @@ import { NotificationModule } from './components/notification/notification.modul
         EmojiModule,
         SkeletonModule,
         NotificationModule,
+        CustomSvgModule,
+        UiModule,
     ]
 })
 export class SharedModule { }

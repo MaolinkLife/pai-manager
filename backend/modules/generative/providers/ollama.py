@@ -1,5 +1,5 @@
 from __future__ import annotations
-
+import re
 from typing import Any, AsyncIterator, Dict, Iterable, List
 
 from modules.generative.providers.base import GenerateProvider, ProviderError
@@ -9,23 +9,89 @@ from modules.generative.types import (
     GenerateStreamChunk,
 )
 from modules.ollama import client as ollama_client
-from services.config_service import get_config_value
+from services import config_service
 from services.logger_service import AuditStatus, log_audit_entry
 
 
 class OllamaGenerateProvider(GenerateProvider):
     name = "ollama"
+    _TOKEN_SEGMENT_PATTERN = re.compile(r"\S+\s*")
+    _REASONING_MODEL_HINTS = (
+        "r1",
+        "qwq",
+        "reason",
+        "thinking",
+    )
 
     def supports_streaming(self) -> bool:
         return True
 
     def _get_provider_config(self) -> Dict[str, Any]:
-        provider_cfg = get_config_value("api.providers.ollama", {}) or {}
+        provider_cfg = config_service.get_config_value("api.providers.ollama", {}) or {}
         # Backward compatibility: падаем в api.model, если в providers нет model.
-        legacy_model = get_config_value("api.model")
+        legacy_model = config_service.get_config_value("api.model")
         if legacy_model and "model" not in provider_cfg:
             provider_cfg["model"] = legacy_model
         return provider_cfg
+
+    def _looks_reasoning_model(self, model: str | None) -> bool:
+        model_name = (model or "").strip().lower()
+        if not model_name:
+            return False
+        return any(hint in model_name for hint in self._REASONING_MODEL_HINTS)
+
+    def _prepare_options_for_request(
+        self,
+        request: GenerateRequest,
+        *,
+        model: str | None,
+        cfg: Dict[str, Any],
+    ) -> tuple[Dict[str, Any], int | None]:
+        """
+        Best-effort policy:
+        - if provider/model supports reasoning split, do not bind reasoning to output limit;
+        - otherwise keep standard behavior.
+        """
+        options = dict(request.options or {})
+        soft_output_limit: int | None = None
+
+        base_limit_raw = options.get("num_predict", options.get("max_tokens", cfg.get("max_tokens")))
+        try:
+            base_limit = int(base_limit_raw) if base_limit_raw is not None else None
+        except (TypeError, ValueError):
+            base_limit = None
+
+        enable_unbounded = bool(
+            config_service.get_config_value(
+                "generate_settings.unbounded_reasoning_if_supported",
+                True,
+            )
+        )
+        if not (enable_unbounded and self._looks_reasoning_model(model) and base_limit and base_limit > 0):
+            return options, None
+
+        headroom_raw = config_service.get_config_value(
+            "generate_settings.reasoning_headroom_tokens",
+            max(512, base_limit),
+        )
+        try:
+            headroom = max(0, int(headroom_raw))
+        except (TypeError, ValueError):
+            headroom = max(512, base_limit)
+
+        expanded_limit = base_limit + headroom
+        options["num_predict"] = expanded_limit
+        options["max_tokens"] = expanded_limit
+        soft_output_limit = base_limit
+        return options, soft_output_limit
+
+    def _truncate_visible_content(self, content: str, soft_limit_tokens: int | None) -> str:
+        if not content or not soft_limit_tokens or soft_limit_tokens <= 0:
+            return content
+        segments = self._TOKEN_SEGMENT_PATTERN.findall(content)
+        if len(segments) <= soft_limit_tokens:
+            return content
+        return "".join(segments[:soft_limit_tokens]).rstrip()
 
     @staticmethod
     def _ensure_list(messages: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -40,6 +106,11 @@ class OllamaGenerateProvider(GenerateProvider):
             raise ProviderError("Ollama provider: не задана модель")
 
         messages = self._ensure_list(request.messages)
+        prepared_options, soft_output_limit = self._prepare_options_for_request(
+            request,
+            model=model,
+            cfg=cfg,
+        )
 
         print("[Generator] Ollama: синхронная генерация.")
         log_audit_entry(
@@ -49,13 +120,18 @@ class OllamaGenerateProvider(GenerateProvider):
             details={
                 "model": model,
                 "messages": messages,
-                "options": request.options,
+                "options": prepared_options,
                 "metadata": request.metadata,
             },
         )
 
-        raw = ollama_client.chat(messages, request.options, model=model)
-        content = raw.get("message", {}).get("content", "")
+        raw = ollama_client.chat(messages, prepared_options, model=model)
+        message_payload = raw.get("message", {}) or {}
+        content = self._truncate_visible_content(
+            message_payload.get("content", ""),
+            soft_output_limit,
+        )
+        reasoning = message_payload.get("thinking") or raw.get("thinking") or ""
 
         log_audit_entry(
             event_type="generator_ollama_success",
@@ -73,6 +149,7 @@ class OllamaGenerateProvider(GenerateProvider):
             provider=self.name,
             content=content,
             raw=raw,
+            reasoning=reasoning or None,
             metadata={"model": model},
         )
 
@@ -85,6 +162,11 @@ class OllamaGenerateProvider(GenerateProvider):
             raise ProviderError("Ollama provider: не задана модель")
 
         messages = self._ensure_list(request.messages)
+        prepared_options, soft_output_limit = self._prepare_options_for_request(
+            request,
+            model=model,
+            cfg=cfg,
+        )
 
         print("[Generator] Ollama: потоковая генерация.")
         log_audit_entry(
@@ -94,20 +176,23 @@ class OllamaGenerateProvider(GenerateProvider):
             details={
                 "model": model,
                 "messages": messages,
-                "options": request.options,
+                "options": prepared_options,
                 "metadata": request.metadata,
+                "output_soft_limit_tokens": soft_output_limit,
             },
         )
 
         chunk_index = 0
         async for chunk in ollama_client.stream_chat(
-            messages, request.options, model=model
+            messages, prepared_options, model=model
         ):
             if not chunk:
                 continue
             if "error" in chunk:
                 raise ProviderError(chunk["error"])
-            content = chunk.get("message", {}).get("content", "")
+            message_payload = chunk.get("message", {}) or {}
+            content = message_payload.get("content", "")
+            reasoning = message_payload.get("thinking") or chunk.get("thinking") or ""
             chunk_index += 1
             # log_audit_entry(
             #     event_type="generator_ollama_stream_chunk",
@@ -124,9 +209,13 @@ class OllamaGenerateProvider(GenerateProvider):
             yield GenerateStreamChunk(
                 provider=self.name,
                 content=content,
+                reasoning=reasoning or None,
                 raw=chunk,
                 done=bool(chunk.get("done")),
-                metadata={"model": model},
+                metadata={
+                    "model": model,
+                    "output_soft_limit_tokens": soft_output_limit,
+                },
             )
 
         log_audit_entry(

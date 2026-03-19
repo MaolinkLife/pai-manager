@@ -1,0 +1,278 @@
+<div class="memory-page">
+    <div class="memory-shell">
+        <header class="memory-header">
+            <div>
+                <h2>{{ "memory.title" | translate }}</h2>
+                <p>{{ "memory.subtitle" | translate }}</p>
+            </div>
+            <div class="header-actions">
+                <app-ui-button
+                    variant="secondary"
+                    [loading]="isRefreshing"
+                    (pressed)="refreshMemories()"
+                >
+                    {{ "memory.refresh" | translate }}
+                </app-ui-button>
+            </div>
+        </header>
+
+        <section class="tabs">
+            <app-ui-button
+                class="tab-btn-ui"
+                [variant]="activeTab === 'ai' ? 'primary' : 'ghost'"
+                size="sm"
+                (pressed)="setTab('ai')"
+            >
+                {{ "memory.tabs.ai" | translate }}
+            </app-ui-button>
+            <app-ui-button
+                class="tab-btn-ui"
+                [variant]="activeTab === 'short' ? 'primary' : 'ghost'"
+                size="sm"
+                (pressed)="setTab('short')"
+            >
+                {{ "memory.tabs.short" | translate }}
+            </app-ui-button>
+            <app-ui-button
+                class="tab-btn-ui"
+                [variant]="activeTab === 'all' ? 'primary' : 'ghost'"
+                size="sm"
+                (pressed)="setTab('all')"
+            >
+                {{ "memory.tabs.all" | translate }}
+            </app-ui-button>
+        </section>
+
+        <section class="search-panel" *ngIf="activeTab === 'ai'">
+            <div class="search-grid">
+                <div class="field">
+                    <label>{{ "memory.query" | translate }}</label>
+                    <app-ui-input
+                        type="text"
+                        [placeholder]="'memory.queryPlaceholder' | translate"
+                        [(ngModel)]="aiQuery"
+                    ></app-ui-input>
+                </div>
+
+                <div class="field">
+                    <label>{{ "memory.messageId" | translate }}</label>
+                    <app-ui-input
+                        type="text"
+                        [placeholder]="'memory.messageIdPlaceholder' | translate"
+                        [(ngModel)]="aiMessageId"
+                    ></app-ui-input>
+                </div>
+
+                <div class="field field-days">
+                    <label>{{ "memory.params.recentPairs" | translate }}</label>
+                    <app-ui-input type="number" [min]="1" [max]="200" [(ngModel)]="aiRecentPairs"></app-ui-input>
+                </div>
+
+                <div class="field field-days">
+                    <label>{{ "memory.params.windowPairs" | translate }}</label>
+                    <app-ui-input type="number" [min]="1" [max]="200" [(ngModel)]="aiWindowPairs"></app-ui-input>
+                </div>
+
+                <div class="field field-days">
+                    <label>{{ "memory.params.lookbackDays" | translate }}</label>
+                    <app-ui-input type="number" [min]="1" [max]="365" [(ngModel)]="aiLookbackDays"></app-ui-input>
+                </div>
+
+                <div class="field field-days">
+                    <label>{{ "memory.params.topK" | translate }}</label>
+                    <app-ui-input type="number" [min]="1" [max]="50" [(ngModel)]="aiTopK"></app-ui-input>
+                </div>
+            </div>
+
+            <div class="search-actions">
+                <app-ui-button [loading]="isLoading" (pressed)="runAiSearch()">
+                    {{ "memory.search" | translate }}
+                </app-ui-button>
+                <app-ui-button variant="ghost" (pressed)="resetAiFilters()">
+                    {{ "memory.reset" | translate }}
+                </app-ui-button>
+            </div>
+
+            <div class="search-meta">
+                <span>{{ "memory.found" | translate }}: {{ aiHits.length }}</span>
+            </div>
+        </section>
+
+        <section class="search-panel" *ngIf="activeTab === 'short'">
+            <div class="search-grid">
+                <div class="field">
+                    <label>{{ "memory.query" | translate }}</label>
+                    <app-ui-input
+                        type="text"
+                        [placeholder]="'memory.queryPlaceholder' | translate"
+                        [(ngModel)]="query"
+                    ></app-ui-input>
+                </div>
+
+                <div class="field">
+                    <label>{{ "memory.messageId" | translate }}</label>
+                    <app-ui-input
+                        type="text"
+                        [placeholder]="'memory.messageIdPlaceholder' | translate"
+                        [(ngModel)]="messageId"
+                    ></app-ui-input>
+                </div>
+
+                <div class="field field-days">
+                    <label>{{ "memory.days" | translate }}</label>
+                    <app-ui-input
+                        type="number"
+                        [min]="1"
+                        [max]="365"
+                        [step]="1"
+                        [(ngModel)]="days"
+                    ></app-ui-input>
+                </div>
+            </div>
+
+            <div class="search-actions">
+                <app-ui-button [loading]="isLoading" (pressed)="runSearch()">
+                    {{ "memory.search" | translate }}
+                </app-ui-button>
+                <app-ui-button variant="ghost" (pressed)="resetFilters()">
+                    {{ "memory.reset" | translate }}
+                </app-ui-button>
+            </div>
+
+            <div class="search-meta">
+                <span>{{ "memory.found" | translate }}: {{ total }}</span>
+                <span *ngIf="generatedAt">{{ "memory.generatedAt" | translate }}: {{ generatedAt }}</span>
+            </div>
+        </section>
+
+        <section class="search-panel" *ngIf="activeTab === 'all'">
+            <div class="search-meta">
+                <span>{{ "memory.all.loaded" | translate }}: {{ allMessages.length }}</span>
+                <span>{{ "memory.all.batch" | translate }}: {{ allLimit }}</span>
+            </div>
+        </section>
+
+        <ng-container *ngIf="isLoading; else resultsBlock">
+            <div class="loading-grid">
+                <app-skeleton height="120px" width="100%"></app-skeleton>
+                <app-skeleton height="120px" width="100%"></app-skeleton>
+                <app-skeleton height="120px" width="100%"></app-skeleton>
+            </div>
+        </ng-container>
+
+        <ng-template #resultsBlock>
+            <section *ngIf="activeTab === 'ai'" class="groups">
+                <div class="group">
+                    <h3>{{ "memory.traceTitle" | translate }}</h3>
+                    <div class="trace-list">
+                        <div class="trace-item" *ngFor="let step of aiTrace">
+                            <div class="trace-head">
+                                <span>{{ step.label }}</span>
+                                <span [class.hit]="step.status === 'hit'" [class.miss]="step.status === 'miss'">
+                                    {{ step.status }}
+                                </span>
+                            </div>
+                            <div class="trace-meta">
+                                {{ "memory.traceScanned" | translate }}: {{ step.scanned }} |
+                                {{ "memory.traceHits" | translate }}: {{ step.hits }}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="group">
+                    <h3>{{ "memory.hitsTitle" | translate }}</h3>
+                    <div class="records" *ngIf="aiHits.length; else emptyStateAi">
+                        <article class="record-card" *ngFor="let hit of aiHits; trackBy: trackByAiHit">
+                            <div class="card-top">
+                                <span class="record-id">{{ hit.id }}</span>
+                                <span class="score">{{ "memory.score" | translate }}: {{ hit.score | number: "1.2-2" }}</span>
+                            </div>
+                            <p class="summary">{{ hit.content }}</p>
+                            <div class="meta-line">
+                                <span>{{ hit.role }}</span>
+                                <span>{{ formatDateTime(hit.timestamp) }}</span>
+                            </div>
+                            <div class="meta-line" *ngIf="hit.from_short_term_day">
+                                <span>{{ "memory.fromDay" | translate }}: {{ hit.from_short_term_day }}</span>
+                            </div>
+                        </article>
+                    </div>
+                </div>
+            </section>
+
+            <section *ngIf="activeTab === 'short'">
+                <section *ngIf="groups.length; else emptyStateShort" class="groups">
+                    <div class="group" *ngFor="let group of groups">
+                        <h3>{{ group.dateLabel }}</h3>
+                        <div class="records">
+                            <article
+                                class="record-card"
+                                *ngFor="let record of group.records; trackBy: trackByRecord"
+                            >
+                                <div class="card-top">
+                                    <span class="record-id">{{ record.id }}</span>
+                                    <span *ngIf="record.score !== undefined" class="score">
+                                        {{ "memory.score" | translate }}: {{ record.score | number: "1.2-2" }}
+                                    </span>
+                                </div>
+
+                                <p class="summary">{{ record.summary }}</p>
+
+                                <div class="themes" *ngIf="record.themes?.length">
+                                    <span class="theme" *ngFor="let theme of record.themes">#{{ theme }}</span>
+                                </div>
+
+                                <div class="meta-line">
+                                    <span>
+                                        {{ "memory.updated" | translate }}:
+                                        {{ formatDateTime(record.updated_at || record.created_at) }}
+                                    </span>
+                                    <span>
+                                        {{ "memory.messages" | translate }}: {{ record.dialogue_ids.length || 0 }}
+                                    </span>
+                                </div>
+                            </article>
+                        </div>
+                    </div>
+                </section>
+            </section>
+
+            <section *ngIf="activeTab === 'all'" class="all-history-wrap">
+                <div class="all-history-scroll ui-scrollbar" (scroll)="onAllMessagesScroll($event)">
+                    <div class="all-pair" *ngFor="let pair of allPairs; trackBy: trackByAllPair">
+                        <div class="all-message" *ngFor="let item of pair.items">
+                            <div class="all-message-head">
+                                <span>{{ item.role }}</span>
+                                <span>{{ formatDateTime(item.timestamp) }}</span>
+                            </div>
+                            <p>{{ item.content }}</p>
+                        </div>
+                    </div>
+
+                    <div class="all-loader" *ngIf="allLoadingMore">
+                        {{ "memory.all.loading" | translate }}
+                    </div>
+
+                    <div class="all-loader" *ngIf="!allHasMore && allPairs.length">
+                        {{ "memory.all.end" | translate }}
+                    </div>
+                </div>
+            </section>
+
+            <ng-template #emptyStateAi>
+                <section class="empty-state">
+                    <h4>{{ "memory.emptyTitle" | translate }}</h4>
+                    <p>{{ "memory.emptyText" | translate }}</p>
+                </section>
+            </ng-template>
+
+            <ng-template #emptyStateShort>
+                <section class="empty-state">
+                    <h4>{{ "memory.emptyTitle" | translate }}</h4>
+                    <p>{{ "memory.emptyText" | translate }}</p>
+                </section>
+            </ng-template>
+        </ng-template>
+    </div>
+</div>

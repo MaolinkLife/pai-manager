@@ -1,4 +1,5 @@
 # Core backend dependencies
+setuptools<81
 fastapi>=0.100.0
 uvicorn[standard]>=0.20.0
 ollama
@@ -9,6 +10,12 @@ SQLAlchemy>=1.4
 numpy
 sounddevice
 pydub
+coqui-tts>=0.24.0
+librosa>=0.10.2
+soundfile>=0.12.1
+ffmpeg-python>=0.2.0
+einops>=0.8.0
+torchaudio
 edge-tts
 gTTS>=2.5.0
 emoji>=2.0.0
@@ -18,6 +25,12 @@ sentence-transformers
 openai
 pyttsx3
 timm
+diffusers>=0.35.0
+transformers>=4.46.0
+accelerate>=1.0.0
+safetensors>=0.4.5
+huggingface-hub>=0.26.0
+Pillow>=10.0.0
 
 # Async/HTTP
 aiohttp
@@ -40,3 +53,10 @@ webrtcvad
 # Do NOT pin torch here to keep installs platform-specific.
 # For NVIDIA CUDA 12.1, install via the dedicated requirements file:
 #   pip install -r backend/requirements.torch-cu121.txt
+
+# Optional RVC enhancements (install manually if you enable advanced RVC modes):
+# fairseq
+# local-attention
+# torchcrepe
+# pyworld
+# praat-parselmouth

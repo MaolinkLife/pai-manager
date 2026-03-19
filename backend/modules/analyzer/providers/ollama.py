@@ -1,4 +1,4 @@
-"""Ollama-based analyzer provider."""
+﻿"""Ollama-based analyzer provider."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from typing import Any, Dict, Optional
 from constants.prompts import COGNITIVE_ANALYSIS_PROMPT
 from constants.settings import DEFAULT_MAX_TOKENS, DEFAULT_TEMPERATURE
 from modules.ollama import client as ollama_client
-from services.config_service import get_config_value
+from services import config_service
 from services.logger_service import AuditStatus, log_audit_entry
 
 from .base import AnalyzerProvider
@@ -19,9 +19,9 @@ class OllamaAnalyzerProvider(AnalyzerProvider):
     name = "ollama"
 
     def _get_settings(self) -> Dict[str, Any]:
-        cfg = get_config_value("analyzer.providers.ollama", {}) or {}
+        cfg = config_service.get_config_value("analyzer.providers.ollama", {}) or {}
         return {
-            "model": cfg.get("model") or get_config_value("api.model", "llama3.2"),
+            "model": cfg.get("model") or config_service.get_config_value("api.model", "llama3.2"),
             "temperature": float(cfg.get("temperature", DEFAULT_TEMPERATURE)),
             "max_tokens": int(cfg.get("max_tokens", DEFAULT_MAX_TOKENS)),
         }
@@ -94,3 +94,4 @@ class OllamaAnalyzerProvider(AnalyzerProvider):
         if not assistant_content.strip():
             raise ValueError("Ollama returned empty response.")
         return json.loads(assistant_content)
+

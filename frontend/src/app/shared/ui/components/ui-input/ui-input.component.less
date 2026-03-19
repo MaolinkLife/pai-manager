@@ -1,0 +1,117 @@
+:host {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+}
+
+.ui-input-wrap {
+    position: relative;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+}
+
+.ui-input-wrap--number {
+    .ui-input {
+        padding-right: 30px;
+    }
+}
+
+.ui-input {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    height: 38px;
+    border-radius: 10px;
+    border: 1px solid var(--color-border);
+    background: var(--color-surface);
+    color: var(--color-text-active);
+    padding: 0 0.75rem;
+    outline: none;
+    box-sizing: border-box;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    font-family: var(--font-family);
+
+    &:focus {
+        border-color: color-mix(in srgb, var(--color-accent) 60%, transparent);
+        box-shadow: none;
+    }
+
+    &:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+
+    &[type='number'] {
+        -moz-appearance: textfield;
+        appearance: textfield;
+    }
+
+    &[type='number']::-webkit-outer-spin-button,
+    &[type='number']::-webkit-inner-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+    }
+}
+
+.ui-number-stepper {
+    position: absolute;
+    top: 8px;
+    right: 3px;
+    bottom: 8px;
+    width: 22px;
+    display: flex;
+    flex-direction: column;
+    border-left: 1px solid color-mix(in srgb, var(--color-border) 80%, transparent);
+    border-radius: 0 7px 7px 0;
+    overflow: hidden;
+}
+
+.ui-number-stepper__btn {
+    flex: 1;
+    border: none;
+    border-bottom: 1px solid color-mix(in srgb, var(--color-border) 55%, transparent);
+    background: color-mix(in srgb, var(--color-surface) 92%, black 8%);
+    color: var(--color-text);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    cursor: pointer;
+    transition: background 0.2s ease, color 0.2s ease;
+
+    &:last-child {
+        border-bottom: none;
+    }
+
+    &:hover:not(:disabled) {
+        background: color-mix(in srgb, var(--color-accent) 18%, transparent);
+        color: var(--color-text-active);
+    }
+
+    &:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+    }
+
+}
+
+.ui-number-stepper__chevron {
+    width: 7px;
+    height: 7px;
+    border-left: 1.5px solid currentColor;
+    border-top: 1.5px solid currentColor;
+    display: block;
+    transform-origin: center;
+    opacity: 0.9;
+    pointer-events: none;
+}
+
+.ui-number-stepper__chevron--up {
+    transform: rotate(45deg) translate(1px, 1px);
+}
+
+.ui-number-stepper__chevron--down {
+    transform: rotate(-135deg) translate(1px, 1px);
+}

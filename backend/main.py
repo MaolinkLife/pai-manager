@@ -9,10 +9,22 @@
 # - Contains the /api/ping endpoint for checking the status
 # =======================================================
 
+import asyncio
+import os
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from core.initialize import run_startup_checks
+
+# Windows: ProactorEventLoop may emit noisy ConnectionResetError traces
+# on abrupt client disconnects (WinError 10054). Selector loop is more stable
+# for this backend/websocket workload.
+if os.name == "nt":
+    try:
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    except Exception:
+        pass
 
 # Запускаем инициализацию ДО импортов маршрутов
 run_startup_checks()
@@ -30,8 +42,13 @@ from routes.embed_routes import router as embed_router
 from routes.vector_routes import router as vector_router
 from routes.storage_routes import router as storage_router
 from routes.memory_routes import router as memory_router
+from routes.moral_routes import router as moral_router
+from routes.auth_routes import router as auth_router
+from routes.tunnel_routes import router as tunnel_router
+from routes.synthesis_routes import router as synthesis_router
 
 from loops.loop_core import run_loop
+from services import tunnel_service
 
 app = FastAPI()
 
@@ -55,9 +72,23 @@ app.include_router(embed_router)
 app.include_router(vector_router)
 app.include_router(storage_router)
 app.include_router(memory_router)
+app.include_router(moral_router)
+app.include_router(auth_router)
+app.include_router(tunnel_router)
+app.include_router(synthesis_router)
 
 # Start background loops
 run_loop()
+
+
+@app.on_event("startup")
+def app_startup() -> None:
+    tunnel_service.autostart_owner_tunnel()
+
+
+@app.on_event("shutdown")
+def app_shutdown() -> None:
+    tunnel_service.stop_tunnel()
 
 
 @app.get("/api/ping")

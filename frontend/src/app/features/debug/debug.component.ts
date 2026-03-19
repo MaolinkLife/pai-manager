@@ -1,6 +1,5 @@
 import { Component, OnInit } from '@angular/core';
 import { LoggerService } from '../../core/services/logger.service';
-import { trigger, state, style, transition, animate } from '@angular/animations';
 
 const TAG_RE = /\[([^\]]+)\]/g;
 
@@ -8,13 +7,6 @@ const TAG_RE = /\[([^\]]+)\]/g;
     selector: 'app-debug',
     templateUrl: './debug.component.html',
     styleUrls: ['./debug.component.less'],
-    animations: [
-        trigger('expandCollapse', [
-            state('closed', style({ height: '0px', opacity: 0, overflow: 'hidden' })),
-            state('open', style({ height: '*', opacity: 1 })),
-            transition('closed <=> open', [animate('200ms ease-in-out')]),
-        ]),
-    ],
 })
 export class DebugComponent implements OnInit {
     logs: any[] = [];

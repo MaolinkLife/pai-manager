@@ -1,4 +1,4 @@
-"""Embedding helpers for memory and lorebook subsystems."""
+﻿"""Embedding helpers for memory and lorebook subsystems."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ import requests
 from requests import Response
 from sentence_transformers import SentenceTransformer
 
-from services.config_service import get_config_value
+from services import config_service
 
 _LOG_LEVEL = os.getenv("EMBED_SVC_LOG_LEVEL", "INFO").upper()
 logging.basicConfig(level=_LOG_LEVEL, format="%(levelname)s %(name)s: %(message)s")
@@ -26,6 +26,7 @@ OLLAMA_DEFAULT_MODEL: str = os.getenv("OLLAMA_EMBED_MODEL", "nomic-embed-text")
 OLLAMA_TIMEOUT_SEC: float = float(os.getenv("OLLAMA_TIMEOUT_SEC", "30"))
 OLLAMA_MAX_RETRIES: int = int(os.getenv("OLLAMA_MAX_RETRIES", "2"))
 OLLAMA_RETRY_BACKOFF_SEC: float = float(os.getenv("OLLAMA_RETRY_BACKOFF_SEC", "0.75"))
+OLLAMA_DOWN_COOLDOWN_SEC: float = float(os.getenv("OLLAMA_DOWN_COOLDOWN_SEC", "45"))
 
 DEFAULT_ST_MODEL_NAME: str = os.getenv(
     "ST_DEFAULT_MODEL", "paraphrase-multilingual-MiniLM-L12-v2"
@@ -52,10 +53,13 @@ class STModelError(EmbeddingError):
 
 _st_model_lock = Lock()
 _st_models_cache: Dict[str, SentenceTransformer] = {}
+_ollama_state_lock = Lock()
+_ollama_unavailable_until: float = 0.0
+_ollama_last_error: str = ""
 
 
 def _resolve_profile_settings(profile_name: Optional[str] = None) -> Dict[str, Any]:
-    retrieval_cfg = get_config_value("rag.retrieval", {}) or {}
+    retrieval_cfg = config_service.get_config_value("rag.retrieval", {}) or {}
     vectors_cfg = retrieval_cfg.get("vectors", {}) if isinstance(retrieval_cfg, dict) else {}
     profiles_cfg = vectors_cfg.get("profiles", {}) if isinstance(vectors_cfg, dict) else {}
     if profile_name and profile_name in profiles_cfg:
@@ -197,6 +201,26 @@ def _post_with_retries(
     raise OllamaError(f"Ollama request failed after retries: {last_exc}")
 
 
+def _is_ollama_temporarily_unavailable() -> bool:
+    with _ollama_state_lock:
+        return time.time() < _ollama_unavailable_until
+
+
+def _mark_ollama_unavailable(error_text: str) -> None:
+    global _ollama_unavailable_until, _ollama_last_error
+    until = time.time() + max(1.0, OLLAMA_DOWN_COOLDOWN_SEC)
+    with _ollama_state_lock:
+        should_log = time.time() >= _ollama_unavailable_until
+        _ollama_unavailable_until = until
+        _ollama_last_error = error_text
+    if should_log:
+        logger.warning(
+            "Ollama embeddings unavailable; fallback enabled for %.0fs. Reason: %s",
+            OLLAMA_DOWN_COOLDOWN_SEC,
+            error_text,
+        )
+
+
 # Ollama embeddings ---------------------------------------------------------
 
 
@@ -205,6 +229,10 @@ def _ollama_embed_one(
     model: str,
     settings: Optional[Dict[str, Any]] = None,
 ) -> Optional[List[float]]:
+    if _is_ollama_temporarily_unavailable():
+        logger.debug("Skipping Ollama embeddings during cooldown window.")
+        return None
+
     cfg = _normalize_ollama_settings(settings)
     payload = {"model": model, "prompt": text}
     payload.update(cfg.get("request_overrides") or {})
@@ -225,7 +253,7 @@ def _ollama_embed_one(
             return None
         return vector
     except (OllamaError, ValueError, json.JSONDecodeError) as exc:
-        logger.error("Ollama embedding failure: %s", exc)
+        _mark_ollama_unavailable(str(exc))
         return None
 
 
@@ -410,3 +438,4 @@ def get_embeddings_batch_both(
     embeddings_384 = get_embeddings_st(texts, settings=cfg)
     embeddings_768 = get_embeddings_ollama(texts, settings=cfg)
     return embeddings_384, embeddings_768
+

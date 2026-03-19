@@ -27,30 +27,30 @@
                 class="entry-block"
             >
                 <div class="entry-header">
-                    <input
+                    <app-ui-input
                         [(ngModel)]="entry.title"
                         class="entry-title"
                         [placeholder]="'lorebook.titlePlaceholder' | translate"
                         (blur)="updateEntry(entry)"
-                    />
-                    <input
+                    ></app-ui-input>
+                    <app-ui-input
                         [(ngModel)]="entry.category"
                         class="entry-category"
                         [placeholder]="
                             'lorebook.categoryPlaceholder' | translate
                         "
                         (blur)="updateEntry(entry)"
-                    />
+                    ></app-ui-input>
 
                     <div class="entry-toolbar">
-                        <input
+                        <app-ui-input
                             [(ngModel)]="entry.keywords"
                             class="entry-keywords"
                             [placeholder]="
                                 'lorebook.keywordsPlaceholder' | translate
                             "
                             (blur)="updateEntry(entry)"
-                        />
+                        ></app-ui-input>
 
                         <label class="active-toggle">
                             <input
@@ -65,19 +65,10 @@
                             class="icon delete-icon"
                             (click)="clickDelete(entry)"
                         >
-                            <svg
-                                xmlns="http://www.w3.org/2000/svg"
-                                fill="none"
-                                viewBox="0 0 24 24"
-                                stroke="currentColor"
-                            >
-                                <path
-                                    stroke-linecap="round"
-                                    stroke-linejoin="round"
-                                    stroke-width="2"
-                                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M9 7h6m2 0H7m4-3h2a1 1 0 011 1v1H8V5a1 1 0 011-1z"
-                                />
-                            </svg>
+                            <app-custom-svg
+                                name="trash"
+                                [size]="20"
+                            ></app-custom-svg>
                         </div>
                     </div>
                 </div>
@@ -94,24 +85,12 @@
         <div class="modal-footer">
             <div>
                 <button class="btn-transparent" (click)="addNewEntry()">
-                    <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="20"
-                        height="20"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                    >
-                        <path
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                            stroke-width="2"
-                            d="M12 4v16m8-8H4"
-                        />
-                    </svg>
+                    <app-custom-svg name="plus" [size]="20"></app-custom-svg>
                     <span>{{ "lorebook.addEntry" | translate }}</span>
                 </button>
             </div>
         </div>
     </ng-container>
 </ng-template>
+
+

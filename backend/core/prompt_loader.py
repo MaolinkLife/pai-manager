@@ -1,35 +1,25 @@
-"""Utility for loading character system prompts."""
+"""Utility for loading character system prompts (DB-first)."""
 
 from __future__ import annotations
 
-import os
-import yaml
-
-from services.config_service import get_config_value
-from services.logger_service import log_audit_entry, AuditStatus
-from utils.open_file_w_utf8 import open_utf8
+from services import character_service, config_service
+from services.logger_service import AuditStatus, log_audit_entry
 
 
 def load_system_prompt() -> str:
-    base_path = os.path.join(os.path.dirname(__file__), "..", "config", "characters")
-    char_name = get_config_value("system.char_name", default="default")
-    filename = f"{char_name}.yaml"
-    full_path = os.path.join(base_path, filename)
-    fallback_path = os.path.join(base_path, "default.yaml")
-
+    char_name = character_service.resolve_active_character_name_for_user(
+        config_service.get_active_user_uuid(),
+        fallback_char_name="default",
+    )
     try:
-        if os.path.exists(full_path):
-            with open_utf8(full_path, "r") as file:
-                data = yaml.safe_load(file)
-                return data.get("prompt", "")
-        if os.path.exists(fallback_path):
-            with open_utf8(fallback_path, "r") as file:
-                data = yaml.safe_load(file)
-                return data.get("prompt", "")
+        prompt = character_service.get_character_prompt(char_name)
+        if prompt:
+            return prompt
         log_audit_entry(
             event_type="character_prompt_not_found",
             msg="[PromptLoader]: Character prompt not found",
             status=AuditStatus.ERROR,
+            details={"char_name": char_name},
         )
         return "[System Error] Character prompt not found."
     except Exception as exc:  # pragma: no cover

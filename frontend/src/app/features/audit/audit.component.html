@@ -1,0 +1,53 @@
+<div class="audit-page custom-scrollbar">
+    <div class="audit-shell" *ngIf="featureEnabled; else auditWip">
+        <header class="audit-header">
+            <div>
+                <h2>{{ 'audit.title' | translate }}</h2>
+                <p>{{ 'audit.subtitle' | translate }}</p>
+            </div>
+            <app-ui-button [loading]="isAuditing" [disabled]="isAuditing" (pressed)="runAudit()">
+                {{ isAuditing ? ('audit.analyzing' | translate) : ('audit.run' | translate) }}
+            </app-ui-button>
+        </header>
+
+        <section class="audit-list" *ngIf="records.length; else emptyState">
+            <article class="audit-card" *ngFor="let record of records; let i = index" [class.latest]="i === 0">
+                <div class="audit-top">
+                    <div>
+                        <div class="label">{{ 'audit.report' | translate }}</div>
+                        <div class="date">{{ record.timestamp | date:'dd.MM.yyyy, HH:mm:ss' }}</div>
+                    </div>
+                    <div class="score">
+                        <span>{{ 'audit.score' | translate }}</span>
+                        <strong>{{ record.score }}</strong>
+                    </div>
+                </div>
+
+                <p class="summary">{{ record.summary }}</p>
+
+                <div class="insights">
+                    <div class="insight" *ngFor="let insight of record.insights" [class.warn]="insight.level === 'warn'" [class.ok]="insight.level === 'ok'">
+                        {{ insight.text }}
+                    </div>
+                </div>
+            </article>
+        </section>
+
+        <ng-template #emptyState>
+            <section class="empty-state">
+                <app-skeleton height="140px" width="100%"></app-skeleton>
+                <p>{{ 'audit.empty' | translate }}</p>
+            </section>
+        </ng-template>
+    </div>
+
+    <ng-template #auditWip>
+        <div class="audit-shell">
+            <section class="wip-card">
+                <h2>{{ 'feature.wipTitle' | translate }}</h2>
+                <p>{{ 'feature.wipText' | translate }}</p>
+                <p class="wip-hint">{{ 'feature.wipDevHint' | translate }}</p>
+            </section>
+        </div>
+    </ng-template>
+</div>

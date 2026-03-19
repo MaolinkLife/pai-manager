@@ -1,4 +1,4 @@
-"""OpenRouter-backed MoralMatrix provider."""
+﻿"""OpenRouter-backed MoralMatrix provider."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ from constants.settings import (
     OPENROUTER_BASE_URL,
     PROJECT_NAME,
 )
-from services.config_service import get_config_value
+from services import config_service
 from services.logger_service import AuditStatus, log_audit_entry
 
 from .base import MoralMatrixProvider
@@ -27,7 +27,7 @@ class OpenRouterMoralProvider(MoralMatrixProvider):
     name = "openrouter"
 
     def _get_settings(self) -> Dict[str, Any]:
-        cfg = get_config_value("moral.providers.openrouter", {}) or {}
+        cfg = config_service.get_config_value("moral.providers.openrouter", {}) or {}
         return {
             "api_key": cfg.get("api_key", ""),
             "model": cfg.get("model") or DEFAULT_MODEL,
@@ -104,4 +104,5 @@ class OpenRouterMoralProvider(MoralMatrixProvider):
         if not response_content or not response_content.strip():
             raise ValueError("OpenRouter returned empty response.")
         return json.loads(response_content)
+
 

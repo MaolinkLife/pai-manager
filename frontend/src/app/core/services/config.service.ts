@@ -8,6 +8,22 @@ import { mapProjectConfigDtoToModel, mapPartialModelToDto } from '../utils/proje
 import { environment } from '../../../environments/environment';
 import { GenerationPreset } from '../models/generation-preset.model';
 
+export interface SystemCharacter {
+    id?: string;
+    name: string;
+    prompt: string;
+    has_prompt?: boolean;
+    source?: string;
+    updated_at?: string | null;
+}
+
+export interface SystemPayload {
+    active_character_id?: string | null;
+    char_name: string;
+    prompt: string;
+    characters?: SystemCharacter[];
+}
+
 @Injectable({
     providedIn: 'root'
 })
@@ -31,6 +47,7 @@ export class ConfigService {
         if (
             body.voice ||
             body.modules ||
+            body.connector ||
             body.api ||
             body.vision ||
             body.audio ||
@@ -41,10 +58,10 @@ export class ConfigService {
             body.memory ||
             body.generateSettings
         ) {
-            return this.http.patch(`${this.apiUrl}/config`, mapPartialModelToDto(body));
+            return this.http.patch(`${this.apiUrl}/config/`, mapPartialModelToDto(body));
         }
         // Иначе - используем POST для полной замены
-        return this.http.post(`${this.apiUrl}/config`, mapPartialModelToDto(body));
+        return this.http.post(`${this.apiUrl}/config/`, mapPartialModelToDto(body));
     }
 
     getGenerationPresets$(): Observable<GenerationPreset[]> {
@@ -59,17 +76,40 @@ export class ConfigService {
     }
 
     // Новый метод для получения system
-    getSystem$(): Observable<{ system: { char_name: string; prompt: string } } | null> {
-        return this.http.get<{ system: { char_name: string; prompt: string } }>(`${this.apiUrl}/config/system`).pipe(
+    getSystem$(): Observable<{ system: SystemPayload } | null> {
+        return this.http.get<{ system: SystemPayload }>(`${this.apiUrl}/config/system`).pipe(
             catchError((_err) => of(null))
         );
     }
 
 
     // Новый метод для обновления system
-    updateSystem$(prompt: string, charName?: string): Observable<any> {
-        const body = { prompt, char_name: charName };
+    updateSystem$(prompt?: string, charName?: string, activeCharacterId?: string): Observable<any> {
+        const body: any = {};
+        if (prompt !== undefined) {
+            body.prompt = prompt;
+        }
+        if (charName !== undefined) {
+            body.char_name = charName;
+        }
+        if (activeCharacterId !== undefined) {
+            body.active_character_id = activeCharacterId;
+        }
         return this.http.post(`${this.apiUrl}/config/system`, body);
+    }
+
+    getSystemCharacters$(): Observable<{ active_character_id?: string | null; active_char_name: string; characters: SystemCharacter[] } | null> {
+        return this.http.get<{ active_character_id?: string | null; active_char_name: string; characters: SystemCharacter[] }>(`${this.apiUrl}/config/system/characters`).pipe(
+            catchError((_err) => of(null))
+        );
+    }
+
+    importSystemCharacterYaml$(fileName: string, content: string, setActive = true): Observable<any> {
+        return this.http.post(`${this.apiUrl}/config/system/characters/import`, {
+            file_name: fileName,
+            content,
+            set_active: setActive,
+        });
     }
 
     // Новый метод для получения конкретного значения из конфига (если нужно)

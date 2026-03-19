@@ -6,6 +6,8 @@ Includes YOLO object detection, OCR text extraction, SSIM comparison, and optica
 import cv2
 import numpy as np
 from typing import List, Tuple, Dict, Any, Optional
+from pathlib import Path
+from constants.paths import VISION_MODELS_DIR
 
 # Optional OCR
 try:
@@ -48,8 +50,9 @@ class VisionAnalyzer:
         # YOLO detector
         from services.yolo_detector import YOLODetector
 
+        yolo_weights = str(Path(VISION_MODELS_DIR) / "yolov8n.pt")
         self.yolo_detector = YOLODetector(
-            model_path="storage/models/yolov8n.pt",
+            model_path=yolo_weights,
             conf_threshold=0.5,
         )
 

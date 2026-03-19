@@ -3,6 +3,9 @@ import subprocess
 import os
 import signal
 import sys
+import time
+import urllib.request
+import urllib.error
 
 
 sys.dont_write_bytecode = True
@@ -14,8 +17,57 @@ def load_ports():
     return data.get("frontend", 4200), data.get("backend", 8000)
 
 
+def sync_frontend_proxy_target(backend_port: int) -> None:
+    proxy_path = os.path.join("frontend", "proxy.conf.json")
+    if not os.path.exists(proxy_path):
+        return
+    try:
+        with open(proxy_path, "r", encoding="utf-8") as file:
+            proxy_cfg = json.load(file)
+        api_cfg = proxy_cfg.get("/api", {})
+        if not isinstance(api_cfg, dict):
+            return
+        desired_target = f"http://127.0.0.1:{backend_port}"
+        if api_cfg.get("target") == desired_target:
+            return
+        api_cfg["target"] = desired_target
+        proxy_cfg["/api"] = api_cfg
+        with open(proxy_path, "w", encoding="utf-8") as file:
+            json.dump(proxy_cfg, file, ensure_ascii=False, indent=4)
+            file.write("\n")
+        print(f"Proxy target updated: {desired_target}")
+    except Exception as exc:
+        print(f"Warning: failed to sync proxy target: {exc}")
+
+
+def wait_backend_ready(
+    backend_process: subprocess.Popen, backend_port: int, timeout_sec: int = 120
+) -> bool:
+    deadline = time.time() + timeout_sec
+    ping_url = f"http://127.0.0.1:{backend_port}/api/ping"
+    stable_hits = 0
+
+    while time.time() < deadline:
+        if backend_process.poll() is not None:
+            print(
+                f"Backend process exited early with code {backend_process.returncode}."
+            )
+            return False
+        try:
+            with urllib.request.urlopen(ping_url, timeout=1.5) as response:
+                if response.status == 200:
+                    stable_hits += 1
+                    if stable_hits >= 3:
+                        return True
+        except (urllib.error.URLError, TimeoutError, ConnectionError, OSError):
+            stable_hits = 0
+        time.sleep(0.5)
+    return False
+
+
 def main():
     frontend_port, backend_port = load_ports()
+    sync_frontend_proxy_target(backend_port)
 
     print(f"Start Frontend (port {frontend_port})")
     print(f"Start Backend (port {backend_port})")
@@ -24,10 +76,32 @@ def main():
     processes = []
 
     try:
+        # Backend first
+        backend = subprocess.Popen(
+            ["uvicorn", "main:app", "--port", str(backend_port)],
+            cwd="backend",
+            stdout=sys.stdout,
+            stderr=sys.stderr,
+            shell=False,
+        )
+        processes.append(backend)
+
+        print(f"Waiting backend readiness: http://127.0.0.1:{backend_port}/api/ping")
+        ready = wait_backend_ready(backend, backend_port, timeout_sec=120)
+        if not ready:
+            print(
+                f"Backend did not become ready within timeout on port {backend_port}. "
+                "Frontend start is cancelled."
+            )
+            if backend.poll() is None:
+                backend.send_signal(signal.SIGINT)
+            return
+
+        print("Backend is ready. Starting frontend...")
         # Angular
         frontend = subprocess.Popen(
             [
-                "npx",
+                "npx.cmd",
                 "ng",
                 "serve",
                 "--port",
@@ -38,19 +112,9 @@ def main():
             cwd="frontend",
             stdout=sys.stdout,
             stderr=sys.stderr,
-            shell=True,
+            shell=False,
         )
         processes.append(frontend)
-
-        # Backend
-        backend = subprocess.Popen(
-            ["uvicorn", "main:app", "--port", str(backend_port)],
-            cwd="backend",
-            stdout=sys.stdout,
-            stderr=sys.stderr,
-            shell=True,
-        )
-        processes.append(backend)
 
         # Waiting for completion
         for p in processes:

@@ -77,3 +77,13 @@ Rules:
 - Provide `soft_recommendations` only when relevant, otherwise []
 - Do NOT echo user content
 """
+
+SHORT_TERM_DAILY_SUMMARY_TASK_PROMPT = (
+    "Составь краткую выжимку за день и перечисли ключевые темы."
+)
+
+SHORT_TERM_DAILY_SUMMARY_SYSTEM_PROMPT = (
+    "You are an assistant that summarizes daily conversations. "
+    "Return JSON with fields: "
+    "summary (string) and themes (list of 3–7 short tags, in Latin or transliterated)."
+)

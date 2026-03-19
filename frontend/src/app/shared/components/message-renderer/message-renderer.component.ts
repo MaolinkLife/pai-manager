@@ -1,6 +1,5 @@
-import { Component, Input, OnChanges, SimpleChanges, OnDestroy } from '@angular/core';
+import { Component, Input, OnChanges, OnDestroy, SimpleChanges, signal } from '@angular/core';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
-import { BehaviorSubject } from 'rxjs';
 import { MessageBlock, MessageParserService } from './services/message-parser.service';
 
 interface SafeMessageBlock extends MessageBlock {
@@ -126,10 +125,9 @@ const PY_KEYWORDS = [
 export class MessageRendererComponent implements OnChanges, OnDestroy {
     @Input() content: string = '';
     @Input() isStreaming: boolean = false;
+    @Input() thinkingDurationMs?: number;
 
-    // теперь Observable
-    private blocksSubject = new BehaviorSubject<SafeMessageBlock[]>([]);
-    blocks$ = this.blocksSubject.asObservable();
+    readonly blocks = signal<SafeMessageBlock[]>([]);
 
     private previousBlocks: MessageBlock[] = [];
     private expandedState = new Map<string, boolean>();
@@ -155,7 +153,7 @@ export class MessageRendererComponent implements OnChanges, OnDestroy {
 
     private parseContent(): void {
         if (!this.content) {
-            this.blocksSubject.next([]);
+            this.blocks.set([]);
             this.previousBlocks = [];
             this.expandedState.clear();
             return;
@@ -220,13 +218,12 @@ export class MessageRendererComponent implements OnChanges, OnDestroy {
             };
         });
 
-        this.blocksSubject.next(safeBlocks);
+        this.blocks.set(safeBlocks);
         this.previousBlocks = [...parsedBlocks];
     }
 
     ngOnDestroy(): void {
         this.previousBlocks = [];
-        this.blocksSubject.complete();
     }
 
     trackByBlock(index: number, block: MessageBlock): string {
@@ -241,7 +238,16 @@ export class MessageRendererComponent implements OnChanges, OnDestroy {
         block.isExpanded = !block.isExpanded;
         const key = this.buildSafeBlockKey(block);
         this.expandedState.set(key, !!block.isExpanded);
-        this.blocksSubject.next([...this.blocksSubject.value]);
+        this.blocks.update((items) => [...items]);
+    }
+
+    getThinkingLabel(): string {
+        const ms = this.thinkingDurationMs;
+        if (typeof ms !== 'number' || Number.isNaN(ms) || ms <= 0) {
+            return 'Рассуждение';
+        }
+        const seconds = Math.max(0, Math.round(ms / 10) / 100);
+        return `Рассуждение заняло ${seconds} сек`;
     }
 
     private buildBlockKey(block: MessageBlock): string {

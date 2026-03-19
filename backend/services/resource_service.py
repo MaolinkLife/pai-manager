@@ -1,9 +1,8 @@
-# services/resource_service.py (updated)
 from utils.audio_devices import (
     get_output_devices,
     get_windows_output_candidates,
     get_device_name_by_id,
-    get_input_devices,  # Add import
+    get_input_devices,
 )
 
 
@@ -14,7 +13,7 @@ def get_audio_resources():
             "status": "success",
             "all_devices": get_output_devices(),
             "get_windows_output": get_windows_output_candidates(),
-            "recording_devices": get_input_devices(),  # Include recording devices
+            "recording_devices": get_input_devices(),
             "message": "Audio resources retrieved successfully",
         }
     except Exception as e:

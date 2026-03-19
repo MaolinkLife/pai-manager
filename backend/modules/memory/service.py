@@ -1,4 +1,4 @@
-"""Memory module: encapsulates retrieval of conversational context."""
+﻿"""Memory module: encapsulates retrieval of conversational context."""
 
 from __future__ import annotations
 
@@ -10,8 +10,9 @@ import re
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
 from services import database_service
-from services.config_service import get_config_value
+from services import config_service
 from services.logger_service import AuditStatus, log_audit_entry
+from modules.system.service import get_active_character_name
 from modules.memory.embeddings import Provider, get_embedding, get_embeddings
 from modules.memory import lorebook
 from modules.memory.short_term import (
@@ -101,7 +102,7 @@ class MemoryModule:
     ) -> MemoryContextResult:
         print("[Memory] Модуль запущен, выполняем гибридный поиск.")
         settings = self._load_settings()
-        char_name = get_config_value("system.char_name", "default_waifu")
+        char_name = get_active_character_name(default="default_waifu")
         content = (input_text or "").strip()
         meta: Dict[str, Any] = {
             "character": char_name,
@@ -317,17 +318,17 @@ class MemoryModule:
 
     def _collect_lore_context(self, text: str) -> Dict[str, Any]:
         try:
-            lore_cfg = get_config_value("rag.lore", {}) or {}
+            lore_cfg = config_service.get_config_value("rag.lore", {}) or {}
             threshold = float(
                 lore_cfg.get(
                     "similarity_threshold",
-                    get_config_value("lorebook.similarityThreshold", 0.7),
+                    config_service.get_config_value("lorebook.similarityThreshold", 0.7),
                 )
             )
             top_k = int(
                 lore_cfg.get(
                     "top_k",
-                    get_config_value("lorebook.topK", 3),
+                    config_service.get_config_value("lorebook.topK", 3),
                 )
             )
 
@@ -385,7 +386,7 @@ class MemoryModule:
             }
 
     def _load_settings(self) -> Dict[str, Any]:
-        rag_cfg = get_config_value("rag", {}) or {}
+        rag_cfg = config_service.get_config_value("rag", {}) or {}
         retrieval_raw = rag_cfg.get("retrieval") if isinstance(rag_cfg, dict) else {}
         retrieval_cfg = retrieval_raw if isinstance(retrieval_raw, dict) else {}
         vectors_raw = (
@@ -421,11 +422,11 @@ class MemoryModule:
 
         if not vector_settings:
             default_provider = (
-                get_config_value("memory.embedding_provider", DEFAULT_EMBED_PROVIDER)
+                config_service.get_config_value("memory.embedding_provider", DEFAULT_EMBED_PROVIDER)
                 or DEFAULT_EMBED_PROVIDER
             )
             default_model = (
-                get_config_value("memory.embedding_model", DEFAULT_EMBED_MODEL)
+                config_service.get_config_value("memory.embedding_model", DEFAULT_EMBED_MODEL)
                 or DEFAULT_EMBED_MODEL
             )
             vector_settings["default"] = {
@@ -512,12 +513,12 @@ class MemoryModule:
             "enabled": bool(
                 session_cfg.get(
                     "enabled",
-                    get_config_value("memory.session_enabled", True),
+                    config_service.get_config_value("memory.session_enabled", True),
                 )
             ),
             "window": session_cfg.get(
                 "window",
-                get_config_value("memory.session_window", DEFAULT_SESSION_WINDOW),
+                config_service.get_config_value("memory.session_window", DEFAULT_SESSION_WINDOW),
             ),
         }
 
@@ -528,7 +529,7 @@ class MemoryModule:
         recent_limit = int(
             recent_cfg.get(
                 "limit",
-                get_config_value("memory.recent_limit", DEFAULT_RECENT_LIMIT),
+                config_service.get_config_value("memory.recent_limit", DEFAULT_RECENT_LIMIT),
             )
         )
 
@@ -754,7 +755,7 @@ class MemoryModule:
         return list(reversed(recent))
 
     def _resolve_history_limit(self) -> int:
-        raw_limit = get_config_value("rag.history_limit", DEFAULT_HISTORY_LIMIT)
+        raw_limit = config_service.get_config_value("rag.history_limit", DEFAULT_HISTORY_LIMIT)
         try:
             limit = int(raw_limit)
         except (TypeError, ValueError):
@@ -1185,3 +1186,4 @@ class MemoryModule:
             return parsed.replace(tzinfo=timezone.utc)
 
         return parsed.astimezone(timezone.utc)
+

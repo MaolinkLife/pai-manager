@@ -16,7 +16,7 @@ from modules.generative.types import (
     GenerateResult,
     GenerateStreamChunk,
 )
-from services.config_service import get_config_value
+from services import config_service
 from services.logger_service import AuditStatus, log_audit_entry
 
 
@@ -30,7 +30,7 @@ class OpenRouterGenerateProvider(GenerateProvider):
         return True
 
     def _get_provider_config(self) -> Dict[str, Any]:
-        cfg = get_config_value("api.providers.openrouter", {}) or {}
+        cfg = config_service.get_config_value("api.providers.openrouter", {}) or {}
         return {
             "api_key": cfg.get("api_key", ""),
             "model": cfg.get("model", "openai/gpt-4o-mini"),

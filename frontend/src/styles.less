@@ -12,6 +12,7 @@
 
     --btn-bg: #202020;
     --btn-fg: #ffffff;
+    --scrollbar-size: 10px;
 }
 
 html,
@@ -23,6 +24,13 @@ body {
     background: var(--color-bg);
     color: var(--color-text);
     font-family: "JetBrains Mono", monospace;
+}
+
+app-root {
+    display: block;
+    width: 100%;
+    min-height: 100vh;
+    min-height: 100dvh;
 }
 // =====================================================
 // CSS Custom Properties auto-generated from LESS palette
@@ -82,6 +90,40 @@ body {
     color: var(--color-text);
 }
 
+.main-content {
+    overflow-x: hidden;
+}
+
+.main-content .settings-wrapper,
+.main-content .core-settings-wrapper {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+}
+
+.main-content .form-group {
+    min-width: 0;
+}
+
+.main-content .form-group input[type='text'],
+.main-content .form-group input[type='password'],
+.main-content .form-group input[type='number'],
+.main-content .form-group select,
+.main-content .form-group textarea,
+.main-content .form-group .custom-select,
+.main-content .form-group .voice-select {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+}
+
+.main-content .form-group input[type='checkbox'] {
+    width: 16px;
+    max-width: 16px;
+}
+
 .btn-transparent {
     display: inline-flex;
     align-items: center;
@@ -113,4 +155,62 @@ body {
     &:active {
         background-color: rgba(255, 255, 255, 0.08);
     }
+}
+
+// Reusable scrollbar style for UI-kit surfaces.
+.ui-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in srgb, var(--color-accent) 70%, var(--color-border))
+        color-mix(in srgb, var(--color-bg) 80%, var(--color-surface));
+}
+
+.ui-scrollbar::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+.ui-scrollbar::-webkit-scrollbar-track {
+    background: color-mix(in srgb, var(--color-bg) 80%, var(--color-surface));
+    border-radius: 999px;
+}
+
+.ui-scrollbar::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--color-accent) 70%, var(--color-border));
+    border-radius: 999px;
+    border: 2px solid color-mix(in srgb, var(--color-bg) 80%, var(--color-surface));
+}
+
+.ui-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: color-mix(in srgb, var(--color-accent) 85%, var(--color-border));
+}
+
+// Global scrollbar skin for the whole app (UI-kit baseline).
+* {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in srgb, var(--color-accent) 70%, var(--color-border))
+        color-mix(in srgb, var(--color-bg) 85%, var(--color-surface));
+}
+
+*::-webkit-scrollbar {
+    width: var(--scrollbar-size);
+    height: var(--scrollbar-size);
+}
+
+*::-webkit-scrollbar-track {
+    background: color-mix(in srgb, var(--color-bg) 85%, var(--color-surface));
+    border-radius: 999px;
+}
+
+*::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--color-accent) 68%, var(--color-border));
+    border-radius: 999px;
+    border: 2px solid color-mix(in srgb, var(--color-bg) 85%, var(--color-surface));
+}
+
+*::-webkit-scrollbar-thumb:hover {
+    background: color-mix(in srgb, var(--color-accent) 85%, var(--color-border));
+}
+
+*::-webkit-scrollbar-corner {
+    background: transparent;
 }

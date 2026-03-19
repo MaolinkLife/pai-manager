@@ -1,5 +1,6 @@
 import { Injectable } from '@angular/core';
 import { Subject } from 'rxjs';
+import { AuthService } from './auth.service';
 
 @Injectable({
     providedIn: 'root'
@@ -7,15 +8,31 @@ import { Subject } from 'rxjs';
 export class WebsocketService {
     private socket: WebSocket | null = null;
     private messageQueue: string[] = [];
+    private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    private reconnectAttempts = 0;
+    private manualDisconnect = false;
+    private connecting = false;
+    private readonly reconnectBaseDelayMs = 1000;
+    private readonly reconnectMaxDelayMs = 10000;
 
     messages$ = new Subject<string>();
+    constructor(private authService: AuthService) { }
 
     connect(): void {
-        if (this.socket) return; // чтобы второй раз не коннектился
+        if (this.socket || this.connecting) return; // чтобы второй раз не коннектился
 
-        this.socket = new WebSocket(`ws://${window.location.host}/api/ws`);
+        this.manualDisconnect = false;
+        this.clearReconnectTimer();
+        this.connecting = true;
+
+        const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+        const token = this.authService.getAccessToken();
+        const query = token ? `?access_token=${encodeURIComponent(token)}` : '';
+        this.socket = new WebSocket(`${protocol}://${window.location.host}/api/ws${query}`);
 
         this.socket.onopen = () => {
+            this.connecting = false;
+            this.reconnectAttempts = 0;
             console.log('[WS] ✅ Connected');
             const sock = this.socket;  // сохранили ссылку
             while (this.messageQueue.length > 0) {
@@ -34,24 +51,72 @@ export class WebsocketService {
         };
 
         this.socket.onclose = () => {
+            this.connecting = false;
             console.log('[WS] ⚠️ Disconnected');
             this.socket = null;
+            if (!this.manualDisconnect && this.shouldAutoReconnect()) {
+                this.scheduleReconnect();
+            }
         };
     }
 
+    isConnected(): boolean {
+        return !!this.socket && this.socket.readyState === WebSocket.OPEN;
+    }
+
     send(message: string): void {
-        if (this.socket && this.socket.readyState === WebSocket.OPEN) {
-            this.socket.send(message);
+        const socket = this.socket;
+        if (socket && socket.readyState === WebSocket.OPEN) {
+            socket.send(message);
         } else {
             console.warn('[WS] ⛔ Not connected yet, queueing message');
             this.messageQueue.push(message);
+            if (this.shouldAutoReconnect()) {
+                this.connect();
+            }
         }
     }
 
     disconnect(): void {
+        this.manualDisconnect = true;
+        this.clearReconnectTimer();
+        this.connecting = false;
         if (this.socket) {
             this.socket.close();
             this.socket = null;
+        }
+    }
+
+    reconnect(): void {
+        this.disconnect();
+        this.connect();
+    }
+
+    private shouldAutoReconnect(): boolean {
+        return this.authService.isAuthenticated() || this.authService.isAnonymousMode();
+    }
+
+    private scheduleReconnect(): void {
+        if (this.reconnectTimer) {
+            return;
+        }
+        const delay = Math.min(
+            this.reconnectBaseDelayMs * Math.max(1, 2 ** this.reconnectAttempts),
+            this.reconnectMaxDelayMs
+        );
+        this.reconnectAttempts += 1;
+        this.reconnectTimer = setTimeout(() => {
+            this.reconnectTimer = null;
+            if (!this.socket && this.shouldAutoReconnect()) {
+                this.connect();
+            }
+        }, delay);
+    }
+
+    private clearReconnectTimer(): void {
+        if (this.reconnectTimer) {
+            clearTimeout(this.reconnectTimer);
+            this.reconnectTimer = null;
         }
     }
 }

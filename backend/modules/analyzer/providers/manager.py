@@ -1,10 +1,10 @@
-"""Provider manager for analyzer module."""
+﻿"""Provider manager for analyzer module."""
 
 from __future__ import annotations
 
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-from services.config_service import get_config_value
+from services import config_service
 from services.logger_service import AuditStatus, log_audit_entry
 from services.localization_service import get_text
 
@@ -57,8 +57,8 @@ class AnalyzerProviderManager:
         self._registry = {provider.name: provider for provider in providers}
 
     def _resolve_providers(self) -> List[AnalyzerProvider]:
-        active = get_config_value("analyzer.active_provider", "openrouter")
-        fallback = get_config_value("analyzer.fallback_order", [])
+        active = config_service.get_config_value("analyzer.active_provider", "openrouter")
+        fallback = config_service.get_config_value("analyzer.fallback_order", [])
 
         order: List[str] = []
         if isinstance(active, str) and active:
@@ -80,3 +80,4 @@ class AnalyzerProviderManager:
                 resolved.append(provider)
 
         return resolved
+

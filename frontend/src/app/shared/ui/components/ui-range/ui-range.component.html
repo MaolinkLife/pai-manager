@@ -1,0 +1,20 @@
+<div class="ui-range-wrap">
+    <input
+        #rangeInput
+        class="ui-range"
+        type="range"
+        [attr.id]="id || null"
+        [min]="min"
+        [max]="max"
+        [step]="step"
+        [disabled]="disabled"
+        [value]="displayValue"
+        (input)="onInput($event)"
+        (blur)="markTouched()"
+    />
+
+    <div class="ui-range-labels" *ngIf="showEdgeLabels">
+        <span>{{ minLabel }}</span>
+        <span>{{ maxLabel }}</span>
+    </div>
+</div>

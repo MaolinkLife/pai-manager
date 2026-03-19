@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, ElementRef, NgZone, OnInit, ViewChild } from '@angular/core';
-import { FormBuilder, FormGroup } from '@angular/forms';
+import { UntypedFormBuilder, UntypedFormGroup } from '@angular/forms';
 import { ConfigService } from '../../core/services/config.service';
 import { ProjectConfig } from '../../core/models/project-config.model';
 import { ApiService } from '../../core/services/api.service';
@@ -20,8 +20,8 @@ export class SettingsComponent implements OnInit {
     @ViewChild('tokenSlider') tokenSliderRef!: ElementRef<HTMLInputElement>;
     @ViewChild('tokenInput') tokenInputRef!: ElementRef<HTMLInputElement>;
 
-    settingsForm: FormGroup = new FormGroup({});
-    generationSettingsForm: FormGroup = new FormGroup({});;
+    settingsForm: UntypedFormGroup = new UntypedFormGroup({});
+    generationSettingsForm: UntypedFormGroup = new UntypedFormGroup({});;
     presets: GenerationPreset[] = [];
     selectedPresetName: string = 'default';
 
@@ -45,7 +45,7 @@ export class SettingsComponent implements OnInit {
     selectedModel = '';
 
     constructor(
-        private fb: FormBuilder,
+        private fb: UntypedFormBuilder,
         private configService: ConfigService,
         private apiService: ApiService,
         private resourcesService: ResourcesService,
@@ -78,6 +78,16 @@ export class SettingsComponent implements OnInit {
                 discord: [false],
                 rag: [false],
                 visual: [false]
+            }),
+            connector: this.fb.group({
+                tunneling: this.fb.group({
+                    enabled: [false],
+                    provider: ['cloudflared'],
+                    localUrl: ['http://127.0.0.1:4200'],
+                    localPort: [4200],
+                    commandPath: [''],
+                    publicUrl: [''],
+                })
             }),
             api: this.fb.group({
                 type: [''],
@@ -144,8 +154,8 @@ export class SettingsComponent implements OnInit {
         ]).pipe(
             map(([config, presets, models]: [ProjectConfig | null, GenerationPreset[], string[]]) => {
                 if (config) {
-                    this.originalConfig = JSON.parse(JSON.stringify(config)); // глубокая копия
                     this.settingsForm.patchValue(config);
+                    this.originalConfig = JSON.parse(JSON.stringify(this.settingsForm.getRawValue())); // глубокая копия
                 }
 
                 console.log({

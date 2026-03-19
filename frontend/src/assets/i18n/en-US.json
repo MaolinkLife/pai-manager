@@ -1,4 +1,4 @@
-{
+﻿{
     "settings": {
         "general": "General",
         "charName": "Character Name",
@@ -127,6 +127,7 @@
         "minAudioLength": "Minimum Audio Length (seconds)",
         "maxAudioLength": "Maximum Audio Length (seconds)",
         "voiceSettings": "Voice Settings",
+        "ttsSettings": "TTS Settings",
         "generalSettings": "General Settings",
         "enableVoiceResponses": "Enable Voice Responses",
         "activeVoiceModule": "Active Voice Module",
@@ -152,7 +153,19 @@
         "audioDevices": "Audio Devices",
         "refreshing": "Refreshing...",
         "refresh": "Refresh",
-        "resetToDefaults": "Reset to Defaults"
+        "resetToDefaults": "Reset to Defaults",
+        "connector": "Connector",
+        "tunnelEnabled": "Enable tunneling on startup",
+        "tunnelProvider": "Tunneling provider",
+        "tunnelLocalUrl": "Local URL",
+        "tunnelLocalPort": "Local Port",
+        "tunnelCommandPath": "Command path (optional)",
+        "tunnelPublicUrl": "Public URL",
+        "tunnelRunning": "Running",
+        "tunnelStopped": "Stopped",
+        "tunnelStart": "Start tunnel",
+        "tunnelStop": "Stop tunnel",
+        "tunnelRefreshStatus": "Refresh status"
     },
     "general": {
         "save": "Save",
@@ -208,5 +221,114 @@
         "analysisTimeout": "Analysis Timeout (seconds)",
         "fallbackToLocal": "Fallback to Local Model if API fails",
         "saveCaSettings": "Save CA Settings"
+    },
+    "matrix": {
+        "title": "Moral Matrix",
+        "subtitle": "Spectral analysis and current PAI state",
+        "current": "Current",
+        "intensity": "Intensity",
+        "updated": "Updated",
+        "spectral": "Spectral Analysis",
+        "coherence": "Coherence",
+        "metrics": {
+            "trust": "Trust",
+            "stability": "Stability",
+            "sociability": "Sociability",
+            "resentment": "Resentment"
+        },
+        "emotions": {
+            "neutral": "Neutral",
+            "excited": "Excited",
+            "joy": "Joy",
+            "sadness": "Sadness",
+            "anger": "Anger",
+            "irritation": "Irritation",
+            "happiness": "Happiness",
+            "sorrow": "Sorrow",
+            "grief": "Grief",
+            "jealousy": "Jealousy"
+        }
+    },
+    "memory": {
+        "title": "Memory Vault",
+        "subtitle": "Search memory traces by phrase and exact message UUID",
+        "tabs": {
+            "ai": "AI Search (full pipeline)",
+            "short": "Short-term memory search",
+            "all": "Load all messages"
+        },
+        "all": {
+            "loaded": "Loaded messages",
+            "batch": "Batch size",
+            "loading": "Loading older messages...",
+            "end": "Reached the beginning of history"
+        },
+        "params": {
+            "recentPairs": "Recent pairs",
+            "windowPairs": "Window size (pairs)",
+            "lookbackDays": "Summary days",
+            "topK": "Top K"
+        },
+        "query": "Search phrase",
+        "queryPlaceholder": "Example: we discussed tomorrow's plan",
+        "messageId": "Message UUID",
+        "messageIdPlaceholder": "Example: 2a86...-...-...",
+        "days": "Depth (days)",
+        "search": "Search",
+        "reset": "Reset",
+        "refresh": "Refresh memory",
+        "found": "Found",
+        "generatedAt": "Generated at",
+        "score": "Relevance",
+        "updated": "Updated",
+        "messages": "Messages",
+        "traceTitle": "Stage Trace",
+        "traceScanned": "Scanned",
+        "traceHits": "Hits",
+        "hitsTitle": "Matched Messages",
+        "fromDay": "From day",
+        "emptyTitle": "No memories found",
+        "emptyText": "Try another phrase or an exact message UUID."
+    },
+    "synthesis": {
+        "title": "Synthesis Hub",
+        "subtitle": "UI preview for media generation (without backend binding)",
+        "tabs": {
+            "image": "Image",
+            "video": "Video",
+            "audio": "Audio"
+        },
+        "prompt": "Prompt directive",
+        "promptPlaceholder": "Describe what should be generated...",
+        "provider": "Provider",
+        "aspect": "Aspect ratio",
+        "generate": "Generate",
+        "generating": "Generating...",
+        "idle": "Result area is ready",
+        "mockReady": "Mock render ready",
+        "videoReady": "Video preview placeholder",
+        "audioReady": "Audio preview placeholder"
+    },
+    "diary": {
+        "title": "Diary",
+        "subtitle": "Personal AI notes and session reflections",
+        "create": "Create entry",
+        "mood": "Mood",
+        "empty": "Diary is empty"
+    },
+    "audit": {
+        "title": "Audit Journal",
+        "subtitle": "Diagnostic view of pipeline behavior and quality signals",
+        "run": "Run audit",
+        "analyzing": "Analyzing...",
+        "report": "Report",
+        "score": "Score",
+        "empty": "No audit records yet"
+    },
+    "feature": {
+        "wipTitle": "Module In Progress",
+        "wipText": "This module is temporarily disabled until backend and logic are ready.",
+        "wipDevHint": "Dev override: localStorage.setItem('ui.features', '{\"audit\":true,\"diary\":true,\"tasks\":true}')"
     }
 }
+

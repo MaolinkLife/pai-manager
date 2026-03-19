@@ -1,0 +1,19 @@
+<div class="ui-textarea-wrap">
+    <textarea
+        #textareaElement
+        class="ui-textarea"
+        [attr.id]="id || null"
+        [attr.rows]="rows"
+        [attr.placeholder]="placeholder || null"
+        [attr.maxLength]="maxLength"
+        [disabled]="disabled"
+        [readonly]="isReadonly"
+        [value]="value"
+        (input)="onInputEvent($event)"
+        (blur)="markTouched()"
+    ></textarea>
+
+    <div class="ui-textarea__counter" *ngIf="showCounter && maxLength !== null">
+        {{ currentLength }}/{{ maxLength }}
+    </div>
+</div>

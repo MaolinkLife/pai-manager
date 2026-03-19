@@ -22,13 +22,6 @@
     .text-block {
         line-height: 1.5;
         color: var(--color-text);
-
-        &.streaming::after {
-            content: "▋";
-            animation: blink 1s infinite;
-            margin-left: 2px;
-            color: #64b5f6;
-        }
     }
 
     .code-block {
@@ -103,13 +96,7 @@
             }
         }
 
-        &.streaming {
-            .code-content::after {
-                content: "▋";
-                animation: blink 1s infinite;
-                color: #64b5f6;
-            }
-        }
+        &.streaming {}
     }
 
     .header-block {
@@ -204,9 +191,9 @@
 
             .label {
                 flex: 1;
-                font-size: 0.75rem;
-                letter-spacing: 0.1em;
-                text-transform: uppercase;
+                font-size: 0.78rem;
+                letter-spacing: 0.01em;
+                text-transform: none;
                 color: fade(@color-text, 85%);
             }
 

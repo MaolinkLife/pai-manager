@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import json
 import os
@@ -6,8 +6,7 @@ import queue
 import threading
 import tempfile
 import time
-
-from modules.tts import audio
+import modules.tts.audio as audio_module
 
 from collections import deque
 from typing import Deque, Dict, List, Optional, Set, Tuple
@@ -15,13 +14,14 @@ from typing import Deque, Dict, List, Optional, Set, Tuple
 from utils.sentence_splitter import split_into_sentences
 from modules.tts.audio import AudioPlayback
 from modules.tts.providers.base import TTSProvider, TTSProviderError
+from modules.tts.providers.coqui import CoquiTTSProvider
 from modules.tts.providers.edge import EdgeTTSProvider
 from modules.tts.providers.elevenlabs import ElevenLabsProvider
 from modules.tts.providers.gtts import GTTSProvider
 from modules.tts.providers.offline import OfflineTTSProvider
 from modules.tts.state import voice_state
 from modules.tts.types import TTSRequest, TTSResult
-from services.config_service import get_config_value
+from services import config_service
 from services.logger_service import AuditStatus, log_audit_entry
 
 
@@ -126,7 +126,7 @@ class TTSManager:
         self._failed_providers: Dict[str, float] = {}
         self._failed_provider_errors: Dict[str, str] = {}
 
-        retry_cfg = get_config_value("voice.provider_retry_seconds", 0) or 0
+        retry_cfg = config_service.get_config_value("voice.provider_retry_seconds", 0) or 0
         try:
             self._provider_retry_seconds = max(0.0, float(retry_cfg))
         except (TypeError, ValueError):
@@ -167,8 +167,15 @@ class TTSManager:
             "tts_build_providers", "[TTS] Building TTS providers", AuditStatus.INFO
         )
 
-        voice_cfg = get_config_value("voice.voice_modules", {}) or {}
+        voice_cfg = config_service.get_config_value("voice.voice_modules", {}) or {}
         providers: Dict[str, TTSProvider] = {}
+
+        providers["coqui"] = CoquiTTSProvider(voice_cfg.get("coqui", {}))
+        log_audit_entry(
+            "tts_provider_created",
+            "[TTS] Coqui TTS provider created",
+            AuditStatus.INFO,
+        )
 
         edge_cfg = voice_cfg.get("edge", {}) or {}
         providers["edge"] = EdgeTTSProvider(
@@ -423,8 +430,8 @@ class TTSManager:
         )
 
         providers = self._get_providers()
-        active = get_config_value("voice.active_module", "edge")
-        remote_fallback_flag = get_config_value("voice.enable_remote_fallback", False)
+        active = config_service.get_config_value("voice.active_module", "edge")
+        remote_fallback_flag = config_service.get_config_value("voice.enable_remote_fallback", False)
         remote_fallback_enabled = _as_bool(remote_fallback_flag)
 
         order: List[str] = []
@@ -571,7 +578,7 @@ class TTSManager:
             output_path=output_path,
         )
 
-        if not get_config_value("voice.enabled", False):
+        if not config_service.get_config_value("voice.enabled", False):
             log_audit_entry(
                 "tts_synthesize_disabled",
                 "[TTS] Voice synthesis is disabled",
@@ -1172,7 +1179,7 @@ class TTSManager:
         )
 
         self._interrupt.set()
-        audio.cut_voice = True
+        audio_module.cut_voice = True
         self._audio.stop_all()
 
         cleared = self._clear_pending_requests()
@@ -1300,3 +1307,4 @@ class TTSManager:
         log_audit_entry(
             "tts_shutdown_completed", "[TTS] Shutdown completed", AuditStatus.INFO
         )
+

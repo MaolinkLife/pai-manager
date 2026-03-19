@@ -7,9 +7,10 @@
             [class.active]="activeSources.includes(source)"
             (click)="toggleSource(source)"
         >
-            {{ source }}
+            <span class="chip-label">{{ source }}</span>
             <span
-                *ngIf="activeSources.includes(source)"
+                class="chip-remove"
+                [class.visible]="activeSources.includes(source)"
                 (click)="removeSource($event, source)"
                 >✕</span
             >
@@ -72,24 +73,23 @@
 
             <div
                 class="log-toggle"
+                [class.open]="expandedLogs.has(i)"
                 *ngIf="hasDetails(log)"
                 (click)="toggleDetails(i)"
             >
-                <span>
-                    {{
-                        expandedLogs.has(i)
-                            ? "▼ Hide details"
-                            : "▶ Show details"
-                    }}
+                <span class="caret" aria-hidden="true"></span>
+                <span class="toggle-label">
+                    {{ expandedLogs.has(i) ? "Hide details" : "Show details" }}
                 </span>
             </div>
 
             <div
                 class="log-details"
                 [class.open]="expandedLogs.has(i)"
-                [@expandCollapse]="expandedLogs.has(i) ? 'open' : 'closed'"
             >
-                <pre *ngIf="expandedLogs.has(i)">{{ log.details | json }}</pre>
+                <div class="log-details-inner">
+                    <pre>{{ log.details | json }}</pre>
+                </div>
             </div>
 
             <div class="log-context" *ngIf="log.details?.context">

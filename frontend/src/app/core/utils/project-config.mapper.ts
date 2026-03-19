@@ -40,11 +40,13 @@ import {
 } from './moral-config-mapper';
 import { mapSystemDtoToModel, mapSystemModelToDto } from './system-config-mapper';
 import { mapMemoryDtoToModel, mapMemoryModelToDto } from './memory-config-mapper';
+import { mapConnectorDtoToModel, mapConnectorModelToDto } from './connector-config-mapper';
 
 
 export const mapProjectConfigDtoToModel = (dto: ProjectConfigDto): ProjectConfig => ({
     voice: mapVoiceDtoToModel(dto.voice),
     modules: mapModulesDtoToModel(dto.modules),
+    connector: mapConnectorDtoToModel(dto.connector),
     vision: mapVisionDtoToModel(dto.vision),
     audio: mapAudioDtoToModel(dto.audio),
     rag: mapRagDtoToModel(dto.rag),
@@ -59,6 +61,7 @@ export const mapProjectConfigDtoToModel = (dto: ProjectConfigDto): ProjectConfig
 export const mapProjectConfigModelToDto = (model: ProjectConfig): ProjectConfigDto => ({
     voice: mapVoiceModelToDto(model.voice),
     modules: mapModulesModelToDto(model.modules),
+    connector: mapConnectorModelToDto(model.connector),
     vision: mapVisionModelToDto(model.vision),
     audio: mapAudioModelToDto(model.audio),
     rag: mapRagModelToDto(model.rag),
@@ -104,6 +107,9 @@ export const mapPartialModelToDto = (
                 break;
             case 'modules':
                 dto.modules = mapModulesModelToDto(model.modules!);
+                break;
+            case 'connector':
+                dto.connector = mapConnectorModelToDto(model.connector!);
                 break;
             case 'vision':
                 dto.vision = mapVisionModelToDto(model.vision!);

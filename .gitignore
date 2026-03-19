@@ -41,6 +41,7 @@ frontend/.vscode/
 !.vscode/launch.json
 !.vscode/extensions.json
 frontend/.history/
+frontend/.angular/
 
 # =======================
 # BACKEND (Python)
@@ -92,19 +93,18 @@ backend/config/generation_presets.json
 
 backend/storage/history/*
 backend/storage/files/*
-backend/storage/database/core.db
+backend/storage/database/*
 backend/storage/vector_store
+backend/storage/models/*
 
 backend/temp/audio/*
 backend/temp/logs/*
+backend/temp/output/*
 backend/temp/vision/*
 backend/temp/voice/*
 
 backend/logs/
 
-# Временно, потом удалится вместо с игнором.
-open-webui
+# Временно
 old-project
 docs
-
-

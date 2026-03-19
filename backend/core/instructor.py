@@ -1,9 +1,9 @@
-# core/instructor.py
+﻿# core/instructor.py
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 
 from core.prompt_loader import load_system_prompt
-from services.config_service import get_config_value
+from services import config_service
 from services.logger_service import log_audit_entry, AuditStatus
 from services.localization_service import get_text
 from constants.rules import SYSTEM_RULES
@@ -351,10 +351,10 @@ class Instructor:
         date_str = now.strftime("%d %B %Y")
         time_str = now.strftime("%H:%M:%S")
 
-        from services.config_service import get_config_value
+        from services import config_service
 
-        location = get_config_value("location", "unknown")
-        coordinates = get_config_value("coordinates", None)
+        location = config_service.get_config_value("location", "unknown")
+        coordinates = config_service.get_config_value("coordinates", None)
 
         parts = [
             f"Date: {date_str}",
@@ -412,13 +412,13 @@ class Instructor:
                 "message_id": user_message.get("id"),
                 "history_length": len(user_message.get("history", [])),
                 "system_prompt_preview": system_prompt[:500],
-                "history_limit_raw": get_config_value("rag.history_limit", 10),
+                "history_limit_raw": config_service.get_config_value("rag.history_limit", 10),
             },
             message_key="instructor.format_start",
         )
 
         history = user_message.get("history", [])
-        history_limit_raw = get_config_value("rag.history_limit", 10)
+        history_limit_raw = config_service.get_config_value("rag.history_limit", 10)
         try:
             history_limit = int(history_limit_raw)
         except (TypeError, ValueError):
@@ -473,3 +473,4 @@ class Instructor:
         )
 
         return messages
+

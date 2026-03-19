@@ -39,7 +39,7 @@ def split_into_sentences(text: str) -> list[str]:
     )
     if "Ph.D" in text:
         text = text.replace("Ph.D.", "Ph<prd>D<prd>")
-    text = re.sub("\s" + alphabets + "[.] ", " \\1<prd> ", text)
+    text = re.sub(r"\s" + alphabets + r"[.] ", r" \1<prd> ", text)
     text = re.sub(acronyms + " " + starters, "\\1<stop> \\2", text)
     text = re.sub(
         alphabets + "[.]" + alphabets + "[.]" + alphabets + "[.]",

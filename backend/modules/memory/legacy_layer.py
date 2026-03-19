@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-from modules.memory import MemoryModule
 from services.logger_service import AuditStatus, log_audit_entry
+
+from .service import MemoryModule
 
 
 class MemoryLayer:
@@ -27,3 +28,4 @@ class MemoryLayer:
 
     async def get_lore_context(self, text: str, *_args, **_kwargs) -> Dict[str, Any]:
         return await self._module.collect_lore_context(text)
+

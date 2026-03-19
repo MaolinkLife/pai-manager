@@ -1,4 +1,4 @@
-"""
+﻿"""
 Vision Service: Main service for vision analysis.
 """
 
@@ -10,7 +10,8 @@ from datetime import datetime
 
 from .worker import VisionBuffer, ScreenCapturer
 from .analyzer import VisionAnalyzer
-from services.config_service import get_config_value
+from constants.paths import TEMP_DIR
+from services import config_service
 from services.logger_service import log_audit_entry, AuditStatus
 
 
@@ -95,16 +96,16 @@ class VisionService:
                     details={"window": win, "capture": capture_bounds},
                 )
 
-        ocr_lang = get_config_value("vision.ocr_lang", "rus+eng")
-        min_conf = int(get_config_value("vision.ocr_min_conf", 70))
-        max_lines = int(get_config_value("vision.ocr_max_lines", 5))
+        ocr_lang = config_service.get_config_value("vision.ocr_lang", "rus+eng")
+        min_conf = int(config_service.get_config_value("vision.ocr_min_conf", 70))
+        max_lines = int(config_service.get_config_value("vision.ocr_max_lines", 5))
         text_blocks = _extract_top_text_blocks(
             last_frame, lang=ocr_lang, min_conf=min_conf, max_lines=max_lines
         )
 
         yolo_list = []
         yolo_summary = None
-        if get_config_value("vision.yolo_enabled", True):
+        if config_service.get_config_value("vision.yolo_enabled", True):
             try:
                 yolo_list = self.analyzer.detect_objects_yolo(last_frame) or []
                 yolo_summary = self.analyzer.summarize_yolo_detections(yolo_list)
@@ -188,7 +189,7 @@ class VisionService:
 
         result = {
             "timestamp": datetime.utcnow().isoformat() + "Z",
-            "monitor": get_config_value("vision.monitor_index", 1),
+            "monitor": config_service.get_config_value("vision.monitor_index", 1),
             "event": "screen_snapshot",
             "cause": "none",
             "confidence": confidence,
@@ -244,12 +245,22 @@ _debug_last_saved = 0.0
 
 
 def _maybe_save_debug_frame(frame):
-    if not get_config_value("vision.debug_save", False):
+    if not config_service.get_config_value("vision.debug_save", False):
         return
 
-    path_cfg = get_config_value("vision.debug_path", None)
-    base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "temp", "vision"))
-    save_dir = os.path.abspath(path_cfg) if path_cfg else base_dir
+    path_cfg = config_service.get_config_value("vision.debug_path", None)
+    base_dir = os.path.join(TEMP_DIR, "vision")
+    if path_cfg:
+        if os.path.isabs(path_cfg):
+            save_dir = path_cfg
+        else:
+            normalized = path_cfg.replace("\\", "/").lstrip("./")
+            if normalized.startswith("temp/"):
+                normalized = normalized[len("temp/") :]
+            save_dir = os.path.join(TEMP_DIR, normalized)
+        save_dir = os.path.abspath(save_dir)
+    else:
+        save_dir = os.path.abspath(base_dir)
 
     try:
         os.makedirs(save_dir, exist_ok=True)
@@ -332,17 +343,17 @@ def _get_active_window_info_safe():
 
 
 def _get_capture_bounds():
-    region_cfg = get_config_value("vision.region", None)
+    region_cfg = config_service.get_config_value("vision.region", None)
     rect = _normalize_rect_dict(region_cfg) if region_cfg else None
     if rect:
         return rect
 
-    capture_mode = str(get_config_value("vision.capture_mode", "monitor") or "monitor").lower()
+    capture_mode = str(config_service.get_config_value("vision.capture_mode", "monitor") or "monitor").lower()
     if capture_mode != "monitor":
         return None
 
     try:
-        monitor_idx_cfg = int(get_config_value("vision.monitor_index", 0) or 0)
+        monitor_idx_cfg = int(config_service.get_config_value("vision.monitor_index", 0) or 0)
     except Exception:
         monitor_idx_cfg = 0
 
@@ -505,3 +516,4 @@ def _extract_top_text_blocks(frame, lang="rus+eng", min_conf=70, max_lines=5):
         return rows[:max_lines]
     except Exception:
         return []
+

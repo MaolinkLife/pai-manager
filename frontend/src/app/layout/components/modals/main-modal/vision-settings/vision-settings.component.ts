@@ -1,5 +1,5 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
-import { FormBuilder, FormControl, FormGroup } from '@angular/forms';
+import { UntypedFormBuilder, UntypedFormControl, UntypedFormGroup } from '@angular/forms';
 import { BehaviorSubject, Subject } from 'rxjs';
 import { finalize, take, takeUntil } from 'rxjs/operators';
 import { ConfigService } from '../../../../../core/services/config.service';
@@ -8,6 +8,7 @@ import { ModalService } from '../../../../../shared/components/modal/modal.servi
 import { MonitorSelectionModalComponent } from '../../monitor-selection-modal/monitor-selection-modal.component';
 import { NotificationService } from '../../../../../shared/components/notification/notification.service';
 import { LocalizationService } from '../../../../../shared/pipes/translation/localization.service';
+import { UiSelectOption } from '../../../../../shared/ui/components/ui-select/ui-select.component';
 
 type ProviderFieldType = 'text' | 'number' | 'boolean';
 
@@ -23,7 +24,7 @@ interface ProviderFieldMeta {
     styleUrls: ['./vision-settings.component.less']
 })
 export class VisionSettingsComponent implements OnInit, OnDestroy {
-    visionForm: FormGroup;
+    visionForm: UntypedFormGroup;
     originalConfig: any = {};
 
     visionProviders: { value: string; label: string }[] = [];
@@ -36,7 +37,7 @@ export class VisionSettingsComponent implements OnInit, OnDestroy {
     private isInitializing = true;
 
     constructor(
-        private fb: FormBuilder,
+        private fb: UntypedFormBuilder,
         private configService: ConfigService,
         private resourcesService: ResourcesService,
         private modalService: ModalService,
@@ -57,7 +58,7 @@ export class VisionSettingsComponent implements OnInit, OnDestroy {
         this.destroy$.complete();
     }
 
-    private createForm(): FormGroup {
+    private createForm(): UntypedFormGroup {
         return this.fb.group({
             enabled: [false],
             activeProvider: [''],
@@ -232,16 +233,40 @@ export class VisionSettingsComponent implements OnInit, OnDestroy {
         return !!this.pendingChanges && Object.keys(this.pendingChanges).length > 0;
     }
 
+    get visionProviderOptions(): UiSelectOption<string>[] {
+        return this.visionProviders.map((provider) => ({
+            value: provider.value,
+            label: provider.label,
+        }));
+    }
+
+    get captureModeOptions(): UiSelectOption<string>[] {
+        return [
+            {
+                value: 'monitor',
+                label: this.localizationService.t('settings.monitor'),
+            },
+            {
+                value: 'window',
+                label: this.localizationService.t('settings.window'),
+            },
+            {
+                value: 'region',
+                label: this.localizationService.t('settings.region'),
+            },
+        ];
+    }
+
     get activeProvider(): string {
         return this.visionForm.get('activeProvider')?.value;
     }
 
-    get currentProviderGroup(): FormGroup | null {
+    get currentProviderGroup(): UntypedFormGroup | null {
         const provider = this.activeProvider;
         if (!provider) {
             return null;
         }
-        return (this.visionForm.get('visionModules') as FormGroup)?.get(provider) as FormGroup;
+        return (this.visionForm.get('visionModules') as UntypedFormGroup)?.get(provider) as UntypedFormGroup;
     }
 
     getProviderFields(providerName: string): ProviderFieldMeta[] {
@@ -276,7 +301,7 @@ export class VisionSettingsComponent implements OnInit, OnDestroy {
     }
 
     private ensureProviderGroup(providerName: string): void {
-        const modulesGroup = this.visionForm.get('visionModules') as FormGroup;
+        const modulesGroup = this.visionForm.get('visionModules') as UntypedFormGroup;
         if (!modulesGroup) {
             return;
         }
@@ -286,10 +311,10 @@ export class VisionSettingsComponent implements OnInit, OnDestroy {
         }
     }
 
-    private createProviderGroup(providerName: string, providerConfig: Record<string, any>): FormGroup {
+    private createProviderGroup(providerName: string, providerConfig: Record<string, any>): UntypedFormGroup {
         const group = this.fb.group({});
         Object.keys(providerConfig || {}).forEach((fieldName) => {
-            group.addControl(fieldName, new FormControl(providerConfig[fieldName]));
+            group.addControl(fieldName, new UntypedFormControl(providerConfig[fieldName]));
         });
 
         this.setProviderMetadata(providerName, providerConfig || {});

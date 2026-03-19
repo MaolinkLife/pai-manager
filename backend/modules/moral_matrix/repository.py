@@ -269,4 +269,9 @@ class MoralMatrixRepository:
                 if hasattr(row.created_at, "isoformat")
                 else None
             ),
+            "updated_at": (
+                row.updated_at.isoformat()
+                if hasattr(row.updated_at, "isoformat")
+                else None
+            ),
         }

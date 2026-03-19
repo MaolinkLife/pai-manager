@@ -39,15 +39,11 @@ export class ModalContainerComponent implements AfterViewInit {
                 if (this.data?.data && typeof this.data.data === 'object') {
                     Object.assign(compRef.instance as object, this.data.data as object);
                 }
-
-                // 🧠 Критично для запуска жизненного цикла и рендера
                 compRef.changeDetectorRef.detectChanges();
             }
 
             if (this.data?.title) {
                 this.title = this.data.title;
-
-                // 🧠 Обновляем текущую вьюшку, чтобы отрисовался title
                 this.cdr.detectChanges();
             }
         });

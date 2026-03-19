@@ -1,8 +1,7 @@
-import asyncio
+﻿import asyncio
 import re
 import numpy as np
 import sounddevice as sd
-import webrtcvad
 from collections import deque
 import uuid
 from datetime import datetime
@@ -11,7 +10,7 @@ import os
 import wave
 import json
 
-from services.config_service import get_config_value
+from services import config_service
 from core.decision_layer import decision_layer
 from core.instructor import Instructor
 from core.websocket_manager import manager
@@ -26,13 +25,18 @@ from services import stt_service
 from modules.generative.conversation import generate_stream
 from services.logger_service import log_audit_entry, AuditStatus
 from services.localization_service import get_text
+from modules.system.service import get_active_character_name
 
+try:
+    import webrtcvad  # type: ignore
+except Exception:
+    webrtcvad = None  # optional dependency
 
 class VADListener:
     def __init__(self):
         self.is_listening = False
         self.audio_buffer = deque()
-        self.vad = webrtcvad.Vad(2)  # aggressiveness level 2
+        self.vad = webrtcvad.Vad(2) if webrtcvad is not None else None  # aggressiveness level 2
         self.speech_detected = False
         self.silence_counter = 0
         self.silence_threshold = 10
@@ -48,7 +52,7 @@ class VADListener:
 
     async def start_voice_vad_loop(self):
         """Entry point for the main listening loop."""
-        if not get_config_value("voice.enabled", False):
+        if not config_service.get_config_value("voice.enabled", False):
             message_disabled = get_text(
                 "logger.vad_info",
                 default="[VAD] Voice detection disabled in config",
@@ -73,13 +77,24 @@ class VADListener:
             status=AuditStatus.INFO,
             message_key="logger.vad_start",
         )
+        if self.vad is None:
+            warning_message = get_text(
+                "logger.vad_webrtc_missing",
+                default="[VAD] webrtcvad is not available, using energy-based fallback.",
+            )
+            log_audit_entry(
+                event_type="vad_webrtc_missing",
+                msg=warning_message,
+                status=AuditStatus.WARNING,
+                message_key="logger.vad_webrtc_missing",
+            )
 
         try:
-            device_id = get_config_value("audio.input_device_id", 0)
-            self.sample_rate = get_config_value("audio.sample_rate", 16000)
-            chunk_size = get_config_value("audio.chunk_size", 1024)
-            self.vad_threshold = get_config_value("audio.vad_threshold", 0.5)
-            silence_timeout = get_config_value("audio.silence_timeout", 3.0)
+            device_id = config_service.get_config_value("audio.input_device_id", 0)
+            self.sample_rate = config_service.get_config_value("audio.sample_rate", 16000)
+            chunk_size = config_service.get_config_value("audio.chunk_size", 1024)
+            self.vad_threshold = config_service.get_config_value("audio.vad_threshold", 0.5)
+            silence_timeout = config_service.get_config_value("audio.silence_timeout", 3.0)
 
             if self.sample_rate not in [8000, 16000, 32000, 48000]:
                 self.sample_rate = 16000
@@ -192,6 +207,8 @@ class VADListener:
                     pass
 
     def is_speech_detected(self, audio_data):
+        if self.vad is None:
+            return self.energy_based_vad(audio_data)
         try:
             frame_duration = 20
             frame_samples = int(self.sample_rate * frame_duration / 1000)
@@ -558,9 +575,9 @@ class VADListener:
                 self.last_processed_at = datetime.utcnow()
 
     def _should_bypass_triggers(self) -> bool:
-        if get_config_value("audio.ignore_trigger_words", False):
+        if config_service.get_config_value("audio.ignore_trigger_words", False):
             return True
-        trigger_words = get_config_value("audio.trigger_words", []) or []
+        trigger_words = config_service.get_config_value("audio.trigger_words", []) or []
         return len(trigger_words) == 0
 
     def contains_trigger_word(self, text):
@@ -568,9 +585,9 @@ class VADListener:
         if not normalized_text:
             return False
 
-        trigger_words = get_config_value("audio.trigger_words", []) or []
+        trigger_words = config_service.get_config_value("audio.trigger_words", []) or []
         if not trigger_words:
-            fallback_name = get_config_value("system.char_name", "") or ""
+            fallback_name = get_active_character_name(default="") or ""
             if fallback_name:
                 trigger_words = [fallback_name]
 
@@ -622,7 +639,7 @@ async def start_vad_background():
     """Start VAD loop once in background. Returns (started: bool, message)."""
     global _vad_task
     # Respect config flags before spawning
-    if not get_config_value("voice.enabled", False) or not get_config_value(
+    if not config_service.get_config_value("voice.enabled", False) or not config_service.get_config_value(
         "audio.enable_vad", False
     ):
         return (
@@ -657,3 +674,4 @@ async def stop_vad(wait: bool = True, timeout: float = 2.0):
 
 def is_vad_running() -> bool:
     return vad_listener.is_listening
+

@@ -1,0 +1,104 @@
+<div class="synthesis-page custom-scrollbar">
+    <div class="synthesis-shell">
+        <header class="page-header">
+            <div>
+                <h2>{{ 'synthesis.title' | translate }}</h2>
+                <p>{{ 'synthesis.subtitle' | translate }}</p>
+            </div>
+        </header>
+
+        <div class="tabbar">
+            <button
+                *ngFor="let tab of tabs"
+                type="button"
+                class="tab-btn"
+                [class.active]="activeTab === tab.key"
+                (click)="setTab(tab.key)"
+            >
+                {{ tab.label | translate }}
+            </button>
+        </div>
+
+        <div class="synthesis-grid">
+            <section class="panel panel-input">
+                <div class="field-block">
+                    <label>{{ 'synthesis.prompt' | translate }}</label>
+                    <app-ui-textarea
+                        [(ngModel)]="prompt"
+                        [placeholder]="'synthesis.promptPlaceholder' | translate"
+                        [rows]="8"
+                    ></app-ui-textarea>
+                </div>
+
+                <div class="inline-grid">
+                    <div class="field-block">
+                        <label>{{ 'synthesis.provider' | translate }}</label>
+                        <app-ui-select
+                            [options]="providerOptions[activeTab]"
+                            [(ngModel)]="provider"
+                        ></app-ui-select>
+                    </div>
+
+                    <div class="field-block">
+                        <label>{{ 'synthesis.aspect' | translate }}</label>
+                        <app-ui-select
+                            [options]="aspectRatioOptions"
+                            [(ngModel)]="aspectRatio"
+                        ></app-ui-select>
+                    </div>
+                </div>
+
+                <app-ui-button
+                    [disabled]="generating || !prompt.trim()"
+                    [loading]="generating"
+                    [fullWidth]="true"
+                    (pressed)="generate()"
+                >
+                    {{ generating ? ('synthesis.generating' | translate) : ('synthesis.generate' | translate) }}
+                </app-ui-button>
+            </section>
+
+            <section class="panel panel-output">
+                <ng-container *ngIf="!generating && !generatedAt">
+                    <div class="placeholder">
+                        <app-custom-svg name="mic-bars" [size]="44"></app-custom-svg>
+                        <p>{{ 'synthesis.idle' | translate }}</p>
+                    </div>
+                </ng-container>
+
+                <ng-container *ngIf="generating">
+                    <div class="placeholder loading">
+                        <app-skeleton width="120px" height="120px" borderRadius="50%"></app-skeleton>
+                        <p>{{ 'synthesis.generating' | translate }}</p>
+                    </div>
+                </ng-container>
+
+                <ng-container *ngIf="generatedAt && !generating">
+                    <div class="result-card" *ngIf="activeTab === 'image'">
+                        <img *ngIf="generatedImageDataUrl; else noImageResult" class="result-image" [src]="generatedImageDataUrl" alt="Generated image" />
+                        <ng-template #noImageResult>
+                            <div class="mock-art"></div>
+                        </ng-template>
+                        <div class="result-meta" *ngIf="generatedProviderLabel">
+                            {{ generatedProviderLabel }}
+                        </div>
+                        <div class="result-meta">{{ 'synthesis.mockReady' | translate }}: {{ generatedAt | date:'HH:mm:ss' }}</div>
+                    </div>
+
+                    <div class="result-card" *ngIf="activeTab === 'video'">
+                        <div class="mock-video">{{ 'synthesis.videoReady' | translate }}</div>
+                        <div class="result-meta">{{ 'synthesis.mockReady' | translate }}: {{ generatedAt | date:'HH:mm:ss' }}</div>
+                    </div>
+
+                    <div class="result-card" *ngIf="activeTab === 'audio'">
+                        <div class="mock-audio">
+                            <app-custom-svg name="volume-2" [size]="20"></app-custom-svg>
+                            <span>{{ 'synthesis.audioReady' | translate }}</span>
+                        </div>
+                        <div class="result-meta">{{ 'synthesis.mockReady' | translate }}: {{ generatedAt | date:'HH:mm:ss' }}</div>
+                    </div>
+                </ng-container>
+            </section>
+        </div>
+    </div>
+</div>

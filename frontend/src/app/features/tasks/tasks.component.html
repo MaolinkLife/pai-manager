@@ -1,1 +1,16 @@
-<p>tasks works!</p>
+<div class="tasks-page custom-scrollbar">
+    <div class="tasks-shell">
+        <ng-container *ngIf="featureEnabled; else tasksWip">
+            <h2>Tasks</h2>
+            <p>tasks works!</p>
+        </ng-container>
+
+        <ng-template #tasksWip>
+            <section class="wip-card">
+                <h2>{{ 'feature.wipTitle' | translate }}</h2>
+                <p>{{ 'feature.wipText' | translate }}</p>
+                <p class="wip-hint">{{ 'feature.wipDevHint' | translate }}</p>
+            </section>
+        </ng-template>
+    </div>
+</div>

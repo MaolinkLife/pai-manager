@@ -92,13 +92,11 @@
 
                 <div class="form-group">
                     <label for="activeProvider">Active Provider</label>
-                    <select
+                    <app-ui-select
                         id="activeProvider"
                         formControlName="activeProvider"
-                    >
-                        <option value="openrouter">OpenRouter</option>
-                        <option value="ollama">Ollama</option>
-                    </select>
+                        [options]="activeProviderOptions"
+                    ></app-ui-select>
                 </div>
 
                 <div class="form-group checkbox-group">
@@ -133,39 +131,39 @@
                 <div formGroupName="openrouter">
                     <div class="form-group">
                         <label for="apiKey">API Key</label>
-                        <input
+                        <app-ui-input
                             id="apiKey"
                             type="password"
                             formControlName="apiKey"
-                        />
+                        ></app-ui-input>
                     </div>
 
                     <div class="form-group">
                         <label for="model">Model</label>
-                        <input id="model" type="text" formControlName="model" />
+                        <app-ui-input id="model" type="text" formControlName="model" ></app-ui-input>
                     </div>
 
                     <div class="form-group">
                         <label for="temperature">Temperature</label>
-                        <input
+                        <app-ui-input
                             id="temperature"
                             type="number"
                             step="0.1"
                             min="0"
                             max="2"
                             formControlName="temperature"
-                        />
+                        ></app-ui-input>
                     </div>
 
                     <div class="form-group">
                         <label for="maxTokens">Max Tokens</label>
-                        <input
+                        <app-ui-input
                             id="maxTokens"
                             type="number"
                             min="1"
                             max="4096"
                             formControlName="maxTokens"
-                        />
+                        ></app-ui-input>
                     </div>
                 </div>
             </div>
@@ -181,34 +179,34 @@
                 <div formGroupName="ollama">
                     <div class="form-group">
                         <label for="ollamaModel">Model</label>
-                        <input
+                        <app-ui-input
                             id="ollamaModel"
                             type="text"
                             formControlName="model"
-                        />
+                        ></app-ui-input>
                     </div>
 
                     <div class="form-group">
                         <label for="ollamaTemperature">Temperature</label>
-                        <input
+                        <app-ui-input
                             id="ollamaTemperature"
                             type="number"
                             step="0.1"
                             min="0"
                             max="2"
                             formControlName="temperature"
-                        />
+                        ></app-ui-input>
                     </div>
 
                     <div class="form-group">
                         <label for="ollamaMaxTokens">Max Tokens</label>
-                        <input
+                        <app-ui-input
                             id="ollamaMaxTokens"
                             type="number"
                             min="1"
                             max="4096"
                             formControlName="maxTokens"
-                        />
+                        ></app-ui-input>
                     </div>
                 </div>
             </div>
@@ -221,3 +219,5 @@
         </form>
     </div>
 </ng-template>
+
+

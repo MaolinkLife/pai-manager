@@ -1,29 +1,49 @@
 import { ProjectConfig } from '../models/project-config.model';
 
+const snakeToCamel = (str: string): string =>
+    str.replace(/_([a-z])/g, (match, letter: string) => letter.toUpperCase());
+
+const camelToSnake = (str: string): string =>
+    str.replace(/([A-Z])/g, '_$1').toLowerCase();
+
+const deepMapKeys = (value: any, mapper: (key: string) => string): any => {
+    if (Array.isArray(value)) {
+        return value.map((item) => deepMapKeys(item, mapper));
+    }
+
+    if (value && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype) {
+        const result: any = {};
+        Object.keys(value).forEach((key) => {
+            result[mapper(key)] = deepMapKeys(value[key], mapper);
+        });
+        return result;
+    }
+
+    return value;
+};
+
 export const mapVoiceDtoToModel = (dto: any) => {
+    const modulesDto = dto?.voice_modules ?? dto?.voiceModules;
+    const rvcDto = dto?.rvc;
     const model: any = {
         enabled: dto.enabled,
-        outputId: dto.output_id,
-        windowsOutputId: dto.windows_output_id,
+        outputId: dto.output_id ?? dto.outputId,
+        windowsOutputId: dto.windows_output_id ?? dto.windowsOutputId,
         language: dto.language,
-        useRvc: dto.use_rvc,
-        voiceLanguage: dto.voice_language,
-        useWindowsOutput: dto.use_windows_output,
-        streamingTts: dto.streaming_tts,
-        enableFallback: dto.enable_fallback,
-        activeModule: dto.active_module,
+        useRvc: dto.use_rvc ?? dto.useRvc,
+        voiceLanguage: dto.voice_language ?? dto.voiceLanguage,
+        useWindowsOutput: dto.use_windows_output ?? dto.useWindowsOutput,
+        streamingTts: dto.streaming_tts ?? dto.streamingTts,
+        enableFallback: dto.enable_fallback ?? dto.enableFallback,
+        activeModule: dto.active_module ?? dto.activeModule,
     };
 
-    if (dto.voice_modules) {
-        model.voiceModules = {};
+    if (rvcDto) {
+        model.rvc = deepMapKeys(rvcDto, snakeToCamel);
+    }
 
-        Object.keys(dto.voice_modules).forEach(moduleName => {
-            model.voiceModules[moduleName] = {};
-            Object.keys(dto.voice_modules[moduleName] || {}).forEach(fieldName => {
-                const camelFieldName = fieldName.replace(/_([a-z])/g, (m) => m[1].toUpperCase());
-                model.voiceModules[moduleName][camelFieldName] = dto.voice_modules[moduleName][fieldName];
-            });
-        });
+    if (modulesDto) {
+        model.voiceModules = deepMapKeys(modulesDto, snakeToCamel);
     }
 
     return model;
@@ -44,15 +64,11 @@ export const mapVoiceModelToDto = (voice: ProjectConfig['voice']) => {
     };
 
     if (voice.voiceModules) {
-        dto.voice_modules = {};
+        dto.voice_modules = deepMapKeys(voice.voiceModules, camelToSnake);
+    }
 
-        Object.keys(voice.voiceModules).forEach(moduleName => {
-            dto.voice_modules[moduleName] = {};
-            Object.keys(voice.voiceModules[moduleName] || {}).forEach(fieldName => {
-                const snakeFieldName = fieldName.replace(/([A-Z])/g, '_$1').toLowerCase();
-                dto.voice_modules[moduleName][snakeFieldName] = voice.voiceModules[moduleName][fieldName];
-            });
-        });
+    if ((voice as any).rvc) {
+        dto.rvc = deepMapKeys((voice as any).rvc, camelToSnake);
     }
 
     return dto;

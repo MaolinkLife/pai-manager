@@ -1,4 +1,4 @@
-"""High-level orchestration for the Moral Matrix module."""
+﻿"""High-level orchestration for the Moral Matrix module."""
 
 from __future__ import annotations
 
@@ -27,8 +27,9 @@ from modules.moral_matrix.providers import (
 )
 from modules.moral_matrix.providers.base import MoralMatrixProvider
 from services import character_service
-from services.config_service import get_config_value
+from services import config_service
 from services.logger_service import AuditStatus, log_audit_entry
+from modules.system.service import get_active_character_name
 
 
 @dataclass
@@ -77,8 +78,8 @@ class MoralMatrixProviderManager:
         return ProviderRunResult(payload=None, provider=None)
 
     def _resolve_providers(self) -> List[MoralMatrixProvider]:
-        active = get_config_value("moral.active_provider", "heuristic")
-        fallback = get_config_value("moral.fallback_order", []) or []
+        active = config_service.get_config_value("moral.active_provider", "heuristic")
+        fallback = config_service.get_config_value("moral.fallback_order", []) or []
 
         order: List[str] = []
         if isinstance(active, str) and active:
@@ -130,6 +131,7 @@ class MoralMatrixModule:
         *,
         message_meta: Optional[Dict[str, Any]] = None,
         user_message: Optional[Dict[str, Any]] = None,
+        persist_state: bool = True,
     ) -> Dict[str, Any]:
         """Evaluate current moral state and return structured guidance."""
         log_audit_entry(
@@ -142,7 +144,7 @@ class MoralMatrixModule:
             },
         )
 
-        if not bool(get_config_value("moral.enabled", True)):
+        if not bool(config_service.get_config_value("moral.enabled", True)):
             log_audit_entry(
                 "moral_matrix_disabled",
                 "[MoralMatrix] Module disabled in configuration.",
@@ -272,13 +274,24 @@ class MoralMatrixModule:
             meta=meta,
         )
 
-        self._persist_state(
-            character_id,
-            result,
-            message_meta=message_meta,
-            analyzer_snapshot=analyzer_snapshot,
-            user_message=user_message,
-        )
+        if persist_state:
+            self._persist_state(
+                character_id,
+                result,
+                message_meta=message_meta,
+                analyzer_snapshot=analyzer_snapshot,
+                user_message=user_message,
+            )
+        else:
+            log_audit_entry(
+                "moral_matrix_persist_skipped",
+                "[MoralMatrix] Persist skipped by interaction policy.",
+                AuditStatus.INFO,
+                details={
+                    "reason": "interaction_policy",
+                    "message_id": (message_meta or {}).get("message_id"),
+                },
+            )
 
         payload = result.to_payload()
         log_audit_entry(
@@ -602,6 +615,7 @@ class MoralMatrixModule:
 
     @staticmethod
     def _resolve_character_id() -> str:
-        char_name = get_config_value("system.char_name", "default_waifu")
+        char_name = get_active_character_name(default="default_waifu")
         character = character_service.get_or_create_character(char_name)
         return character.id
+

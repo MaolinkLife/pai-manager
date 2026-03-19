@@ -31,6 +31,19 @@ class CoreConfig(BaseModel):
     debug: bool = False
 
 
+class ConnectorTunnelingConfig(BaseModel):
+    enabled: bool = False
+    provider: str = "cloudflared"
+    local_url: str = "http://127.0.0.1:4200"
+    local_port: int = 4200
+    command_path: str = ""
+    public_url: str = ""
+
+
+class ConnectorConfig(BaseModel):
+    tunneling: ConnectorTunnelingConfig = ConnectorTunnelingConfig()
+
+
 class VoiceModulesElevenLabsConfig(BaseModel):
     api_key: str = ""
     voice_id: str = ""
@@ -122,7 +135,7 @@ class VisionConfig(BaseModel):
     window_title: str = ""
     window_process: str = ""
     debug_save: bool = False
-    debug_path: str = "./temp/vision"
+    debug_path: str = "temp/vision"
     vision_modules: Dict[str, Any] = {
         "apple_vision": {"model_id": "apple/FastVLM-1.5B", "max_tokens": 128},
         "llava": {"model_id": "llava-hf/llava-1.5-7b-hf", "max_tokens": 128},
@@ -135,7 +148,7 @@ class RAGSearchStrategySessionContext(BaseModel):
     look_back_to_today: bool = Field(True, alias="lookBackToToday")
 
     class Config:
-        allow_population_by_field_name = True
+        validate_by_name = True
 
 
 class RAGSearchStrategyDailySummary(BaseModel):
@@ -144,7 +157,7 @@ class RAGSearchStrategyDailySummary(BaseModel):
     use_tags: bool = Field(True, alias="useTags")
 
     class Config:
-        allow_population_by_field_name = True
+        validate_by_name = True
 
 
 class RAGSearchStrategyLongTermMemory(BaseModel):
@@ -154,7 +167,7 @@ class RAGSearchStrategyLongTermMemory(BaseModel):
     priority_rules: bool = Field(True, alias="priorityRules")
 
     class Config:
-        allow_population_by_field_name = True
+        validate_by_name = True
 
 
 class RAGSearchStrategyFallback(BaseModel):
@@ -162,7 +175,7 @@ class RAGSearchStrategyFallback(BaseModel):
     auto_learn: bool = Field(True, alias="autoLearn")
 
     class Config:
-        allow_population_by_field_name = True
+        validate_by_name = True
 
 
 class RAGSearchStrategy(BaseModel):
@@ -178,7 +191,7 @@ class RAGSearchStrategy(BaseModel):
     fallback: RAGSearchStrategyFallback = RAGSearchStrategyFallback()
 
     class Config:
-        allow_population_by_field_name = True
+        validate_by_name = True
 
 
 class RAGMemoryFacts(BaseModel):
@@ -189,7 +202,7 @@ class RAGMemoryFacts(BaseModel):
     auto_update: bool = Field(True, alias="autoUpdate")
 
     class Config:
-        allow_population_by_field_name = True
+        validate_by_name = True
 
 
 class RAGMemoryGraph(BaseModel):
@@ -221,7 +234,7 @@ class RAGConfig(BaseModel):
     lore: Dict[str, Any] = Field(default_factory=dict)
 
     class Config:
-        allow_population_by_field_name = True
+        validate_by_name = True
 
 
 class AnalyzerProviderOpenRouterConfig(BaseModel):
@@ -335,6 +348,7 @@ class GenerateSettingsConfig(BaseModel):
 class AppConfig(BaseModel):
     system: SystemConfig = SystemConfig()
     core: CoreConfig = CoreConfig()
+    connector: ConnectorConfig = ConnectorConfig()
     voice: "VoiceConfig" = None
     stt: "STTConfig" = None
     modules: "ModulesConfig" = None

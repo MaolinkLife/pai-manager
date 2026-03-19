@@ -1,4 +1,4 @@
-from typing import Dict, Any
+﻿from typing import Dict, Any
 from PIL import Image
 import torch
 import cv2
@@ -6,7 +6,7 @@ import traceback
 from datetime import datetime
 
 from services.logger_service import log_audit_entry, AuditStatus
-from services.config_service import get_config_value
+from services import config_service
 from services.localization_service import get_text
 from constants.visual import (
     DEFAULT_VISUAL_MODEL,
@@ -22,7 +22,7 @@ class AppleVisionProvider:
     """
 
     def __init__(self, model_id: str = None):
-        self.model_id = model_id or get_config_value(
+        self.model_id = model_id or config_service.get_config_value(
             "api.visual_model", DEFAULT_VISUAL_MODEL
         )
 
@@ -241,3 +241,4 @@ class AppleVisionProvider:
                 "model": self.model_id,
                 "status": "error",
             }
+

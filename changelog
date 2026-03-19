@@ -1,3 +1,43 @@
+version: 0.6
+- Platform & Architecture
+  - Introduced module-oriented boundaries: moved legacy core domain logic into dedicated modules (`memory`, `moral_matrix`, `vision`, `system`) and kept `core` focused on orchestration/startup.
+  - Added `SystemModule` facade (`backend/modules/system/service.py`) for config/runtime access and cross-module safe calls.
+  - Added interaction policy layer (`backend/services/interaction_policy.py`) to enforce role-based capabilities for history/memory/edit/reroll actions.
+- Auth, Session & Bootstrap
+  - Added full auth flow (register/login/refresh/logout, guards/interceptor on frontend, auth routes/services on backend).
+  - First registration now provisions `owner`; subsequent registrations default to `user`.
+  - Startup pipeline stabilized: backend readiness-first launch flow (`run.py`), safer startup checks, schema bootstrap ordering, and DB-first config compatibility.
+- DB-first Config & Character Management
+  - Migrated to DB-first config access with split settings tables (`user_configs`, `user_tts_settings`, `user_vision_settings`) and runtime-safe wrappers.
+  - Added character catalog endpoints and YAML import flow in system config routes.
+  - Introduced active character model in `user_settings.active_character_id` and switched runtime routing/history loading to active-character resolution.
+  - Added fallback/backfill logic: if active character is missing, resolve from latest history and persist to `user_settings`.
+- Chat & Realtime Reliability
+  - WebSocket pipeline hardened: run IDs, stop semantics, runtime trace streaming, better send safety, and richer error signaling.
+  - Fixed reconnect/empty-state behavior in frontend chat and improved WS client robustness against transient disconnects.
+  - Added per-run metadata persistence into history runtime fields (provider/model/usage/traces/timing).
+- Memory & Moral Matrix
+  - Added memory emulator route/workflow for staged retrieval inspection and debugging.
+  - Expanded memory knowledge layer (`anchors`, `associations`) and owner-scoped access controls.
+  - Moral Matrix route/provider path stabilized with safer character resolution and degraded-response fallback in failure scenarios.
+- Voice/TTS/RVC
+  - Voice settings UI was expanded with provider-aware controls and integrated RVC/XTTS related backend hooks.
+  - Added RVC runtime assets/pipeline files and bootstrap services for model status/download/import flows.
+  - Refactored TTS manager/service contracts to centralize provider selection, preview generation, and safer playback lifecycle.
+- Synthesis (Image Generation)
+  - Added synthesis module and routes with pluggable providers.
+  - Introduced `Z-Image-Turbo` provider and a generic Diffusers provider path for local model-driven generation.
+- Frontend Platform Upgrade
+  - Added new feature modules/pages (`auth`, `memory`, `matrix`, `synthesis`, `audit`, `diary`) and expanded routing guards.
+  - Introduced shared UI-kit components (`ui-button`, `ui-input`, `ui-select`, `ui-range`, `ui-checkbox`, `ui-textarea`, etc.) and unified icon registry/assets.
+  - Updated config mappers/services for new backend schema and module settings.
+- Storage & Paths
+  - Consolidated model storage layout under `backend/storage/models/*` domains (vision, rvc, etc.) and aligned path constants.
+  - Added/updated helper services for XTTS/RVC resources and model path resolution.
+- Dependency & Runtime Notes
+  - Updated `backend/requirements.txt` and frontend package set to support new auth/synthesis/TTS/UI capabilities.
+  - Added/kept warnings/telemetry handling improvements (including optional runtime hardening for noisy libs on clean builds).
+
 version: 0.5
 - Localization & Logging
   - Added a `.env`-driven localization service with EN/RU dictionaries, automatic fallbacks, and cached lookups for backend modules.

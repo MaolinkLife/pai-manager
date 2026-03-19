@@ -1,5 +1,5 @@
 <div class="message-renderer">
-    <ng-container *ngFor="let block of blocks$ | async; trackBy: trackByBlock">
+    <ng-container *ngFor="let block of blocks(); trackBy: trackByBlock">
         <ng-container [ngSwitch]="block.type">
             <div
                 *ngSwitchCase="'text'"
@@ -57,7 +57,7 @@
                     [disabled]="isStreaming"
                 >
                     <span class="icon">✦</span>
-                    <span class="label">Размышляет</span>
+                    <span class="label">{{ getThinkingLabel() }}</span>
                     <span
                         class="chevron"
                         [class.rotated]="block.isExpanded || isStreaming"

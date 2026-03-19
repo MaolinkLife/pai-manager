@@ -2,8 +2,9 @@ import os
 import json
 from datetime import datetime, timezone
 from services import database_service
+from constants.paths import STORAGE_DIR
 
-HISTORY_DIR = os.path.join("storage", "history")  # путь к папке с .json
+HISTORY_DIR = os.path.join(STORAGE_DIR, "history")  # путь к папке с .json
 
 REQUIRED_KEYS = {"role", "content", "timestamp"}
 

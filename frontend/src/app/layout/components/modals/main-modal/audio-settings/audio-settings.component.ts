@@ -1,10 +1,11 @@
 import { Component, OnInit } from '@angular/core';
-import { FormBuilder, FormGroup } from '@angular/forms';
+import { UntypedFormBuilder, UntypedFormGroup } from '@angular/forms';
 import { ConfigService } from '../../../../../core/services/config.service';
 import { ResourcesService } from '../../../../../core/services/resources.service';
 import { Observable, BehaviorSubject, combineLatest } from 'rxjs';
 import { map, startWith, tap, finalize } from 'rxjs/operators';
 import { LocalizationService } from '../../../../../shared/pipes/translation/localization.service';
+import { UiSelectOption } from '../../../../../shared/ui/components/ui-select/ui-select.component';
 
 interface AudioDevice {
     id: number;
@@ -21,14 +22,19 @@ interface AudioDevicesData {
     styleUrls: ['./audio-settings.component.less']
 })
 export class AudioSettingsComponent implements OnInit {
-    audioForm: FormGroup;
+    audioForm: UntypedFormGroup;
     originalConfig: any = {};
     isLoading$ = new BehaviorSubject<boolean>(true);
 
     devices$: Observable<AudioDevicesData> = new Observable<AudioDevicesData>();
+    inputDeviceOptions: UiSelectOption<number>[] = [];
+    channelsOptions: UiSelectOption<number>[] = [
+        { value: 1, label: 'Mono (1)' },
+        { value: 2, label: 'Stereo (2)' },
+    ];
 
     constructor(
-        private fb: FormBuilder,
+        private fb: UntypedFormBuilder,
         private configService: ConfigService,
         private resourcesService: ResourcesService,
         private localizationService: LocalizationService,
@@ -41,7 +47,7 @@ export class AudioSettingsComponent implements OnInit {
         this.localizationService.init();
     }
 
-    private createForm(): FormGroup {
+    private createForm(): UntypedFormGroup {
         return this.fb.group({
             inputDeviceId: [0],
             sampleRate: [16000],
@@ -86,6 +92,10 @@ export class AudioSettingsComponent implements OnInit {
                 subscriber.next(devicesData);
                 subscriber.complete();
             });
+            this.inputDeviceOptions = devicesData.inputDevices.map((device) => ({
+                value: device.id,
+                label: `[${device.id}]: ${device.name}`,
+            }));
         });
     }
 

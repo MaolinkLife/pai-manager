@@ -2,11 +2,12 @@
 
 :host {
     position: fixed;
-    z-index: 1000;
+    z-index: 5000;
 }
 
 .emoji-dropdown {
     position: fixed;
+    z-index: 5001;
     background: @color-surface;
     border: 1px solid @color-border;
     border-radius: @radius;
@@ -91,6 +92,8 @@
     padding: 0.25rem 0.5rem;
     border-bottom: 1px solid @color-border;
     overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: thin;
 
     .category-btn {
         background: transparent;
@@ -111,6 +114,19 @@
             background: fade(@color-accent, 30%);
             color: @color-text-active;
         }
+    }
+
+    &::-webkit-scrollbar {
+        height: 6px;
+    }
+
+    &::-webkit-scrollbar-track {
+        background: transparent;
+    }
+
+    &::-webkit-scrollbar-thumb {
+        background: fade(@color-border, 65%);
+        border-radius: 999px;
     }
 }
 

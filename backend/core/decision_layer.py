@@ -1,14 +1,15 @@
-import asyncio
+﻿import asyncio
 import hashlib
+import time
 from typing import Dict, Any, List, Optional, Tuple
 from pprint import pprint
 
 from modules.moral_matrix import MoralMatrixModule
 from core.instructor import Instructor
-from core.visual_module import VisualModule
+from modules.vision import VisualModule
 from modules.analyzer.service import AnalyzerModule
 from modules.tts.service import speak_line
-from modules.memory import MemoryModule
+from modules.memory import MemoryContextResult, MemoryModule
 
 from constants.indicators import (
     VISION_INDICATORS,
@@ -19,8 +20,9 @@ from constants.indicators import (
     CREATIVE_THEMES,
 )
 
-from services.config_service import get_config_value
+from services import config_service
 from services.logger_service import log_audit_entry, AuditStatus
+from services.interaction_policy import resolve_interaction_policy
 
 
 class DecisionLayer:
@@ -34,7 +36,8 @@ class DecisionLayer:
     """
 
     def __init__(self):
-        self.memory_module = MemoryModule()
+        self._memory_module: Optional[MemoryModule] = None
+        self._memory_module_failed: bool = False
         self.moral_matrix = MoralMatrixModule()
         self.instructor = Instructor()
         self.analyzer = AnalyzerModule()
@@ -55,17 +58,82 @@ class DecisionLayer:
             AuditStatus.INFO,
         )
 
+    def _is_deep_memory_enabled(self) -> bool:
+        direct_flag = config_service.get_config_value("memory.deep_memory_enabled", None)
+        if isinstance(direct_flag, bool):
+            return direct_flag
+        rag_module_enabled = bool(config_service.get_config_value("modules.rag", True))
+        rag_enabled = bool(config_service.get_config_value("rag.enabled", True))
+        return rag_module_enabled and rag_enabled
+
+    def _get_memory_module(self) -> Optional[MemoryModule]:
+        if self._memory_module_failed:
+            return None
+        if self._memory_module is None:
+            try:
+                self._memory_module = MemoryModule()
+                log_audit_entry(
+                    "decision_layer_memory_module_init",
+                    "[DecisionLayer] MemoryModule initialized.",
+                    AuditStatus.INFO,
+                )
+            except Exception as exc:
+                log_audit_entry(
+                    "decision_layer_memory_init_error",
+                    "[DecisionLayer] Failed to initialize MemoryModule.",
+                    AuditStatus.ERROR,
+                    details={"error": str(exc)},
+                )
+                self._memory_module_failed = True
+                self._memory_module = None
+        return self._memory_module
+
+    @staticmethod
+    def _empty_memory_context(status: str = "disabled") -> Dict[str, Any]:
+        return {
+            "key_facts": [],
+            "session_length": 0,
+            "memory_status": status,
+            "matches": [],
+            "lore_matches": [],
+            "lore_block": "",
+            "count": 0,
+            "recent_history": [],
+        }
+
     # --------------------------------------------------------------------- #
     #                     PUBLIC API
     # --------------------------------------------------------------------- #
     async def process_message(
-        self, user_message: Dict[str, Any], websocket
+        self, user_message: Dict[str, Any], websocket=None, trace_hook=None
     ) -> Dict[str, Any]:
         """
         Main entry point for message processing pipeline.
         """
+        async def _trace(
+            stage: str,
+            state: str,
+            *,
+            details: Optional[Dict[str, Any]] = None,
+            started_at: Optional[float] = None,
+        ) -> None:
+            if trace_hook is None:
+                return
+            payload: Dict[str, Any] = {
+                "stage": stage,
+                "state": state,
+            }
+            if started_at is not None:
+                payload["elapsed_ms"] = round((time.perf_counter() - started_at) * 1000, 2)
+            if details:
+                payload["details"] = details
+            await trace_hook(payload)
+
         safe_user_message, raw_media_payload = self._prepare_user_payload(
             user_message
+        )
+        interaction_policy = resolve_interaction_policy(
+            safe_user_message.get("actor_user_uuid")
         )
 
         print("[DecisionLayer] Запуск обработки сообщения.")
@@ -78,12 +146,19 @@ class DecisionLayer:
                 "media_count": len(raw_media_payload),
                 "has_media": bool(raw_media_payload),
                 "content_length": len(safe_user_message.get("content") or ""),
+                "actor_role": interaction_policy.actor_role,
             },
         )
 
         # --------------------------------------------------------------- #
         # 1️⃣  Cognitive analysis
         # --------------------------------------------------------------- #
+        analysis_started = time.perf_counter()
+        await _trace(
+            "analysis",
+            "start",
+            details={"message_id": safe_user_message.get("id")},
+        )
         print("[DecisionLayer] Запрос анализа данных анализатором.")
         log_audit_entry(
             "decision_layer_analyzer_request",
@@ -95,6 +170,12 @@ class DecisionLayer:
             },
         )
         analysis_payload = await self.analyzer.analyze(safe_user_message)
+        await _trace(
+            "analysis",
+            "end",
+            started_at=analysis_started,
+            details={"has_metadata": bool(analysis_payload.get("metadata"))},
+        )
         print("[DecisionLayer] Анализ завершен.")
         log_audit_entry(
             "decision_layer_analyzer_response",
@@ -107,6 +188,8 @@ class DecisionLayer:
         # --------------------------------------------------------------- #
         # 2️⃣  Decision‑making
         # --------------------------------------------------------------- #
+        decision_started = time.perf_counter()
+        await _trace("decision", "start")
         print("[DecisionLayer] Принятие решений на основе анализа.")
         log_audit_entry(
             "decision_layer_decision_request",
@@ -115,6 +198,12 @@ class DecisionLayer:
             details={"analysis_result": analysis_result},
         )
         decisions = self._make_decisions(analysis_result)
+        await _trace(
+            "decision",
+            "end",
+            started_at=decision_started,
+            details={"decisions": decisions},
+        )
         print("[DecisionLayer] Решения приняты.")
         log_audit_entry(
             "decision_layer_decisions_made",
@@ -126,6 +215,8 @@ class DecisionLayer:
         # --------------------------------------------------------------- #
         # 3️⃣  Gather context from memory and lore
         # --------------------------------------------------------------- #
+        memory_started = time.perf_counter()
+        await _trace("memory", "start")
         print("[DecisionLayer] Сбор контекста из памяти и легенд.")
         log_audit_entry(
             "decision_layer_memory_context_request",
@@ -133,8 +224,36 @@ class DecisionLayer:
             AuditStatus.INFO,
             details={"user_message": safe_user_message},
         )
-        memory_result = await self.memory_module.collect_context(
-            safe_user_message.get("content", ""), safe_user_message
+        if decisions.get("needs_deep_memory", False):
+            memory_module = self._get_memory_module()
+            if memory_module is not None:
+                memory_result = await memory_module.collect_context(
+                    safe_user_message.get("content", ""), safe_user_message
+                )
+            else:
+                memory_result = MemoryContextResult(
+                    context=self._empty_memory_context(status="module_unavailable"),
+                    meta={"memory_bypassed": True, "reason": "module_unavailable"},
+                )
+        else:
+            memory_result = MemoryContextResult(
+                context=self._empty_memory_context(status="disabled"),
+                meta={"memory_bypassed": True, "reason": "disabled_by_config"},
+            )
+            log_audit_entry(
+                "decision_layer_memory_context_skipped",
+                "[DecisionLayer] MemoryModule skipped by configuration.",
+                AuditStatus.INFO,
+                details={"needs_deep_memory": False},
+            )
+        await _trace(
+            "memory",
+            "end",
+            started_at=memory_started,
+            details={
+                "history_count": len((memory_result.context or {}).get("recent_history") or []),
+                "lore_count": (memory_result.context or {}).get("count", 0),
+            },
         )
         print("[DecisionLayer] Контекст из памяти собран.")
         log_audit_entry(
@@ -175,6 +294,8 @@ class DecisionLayer:
         # --------------------------------------------------------------- #
         # 5️⃣  Evaluate moral state
         # --------------------------------------------------------------- #
+        moral_started = time.perf_counter()
+        await _trace("moral", "start")
         print("[DecisionLayer] Оценка морального состояния.")
         log_audit_entry(
             "decision_layer_moral_state_request",
@@ -188,6 +309,13 @@ class DecisionLayer:
             memory_meta,
             message_meta=message_meta,
             user_message=safe_user_message,
+            persist_state=interaction_policy.can_affect_moral,
+        )
+        await _trace(
+            "moral",
+            "end",
+            started_at=moral_started,
+            details={"intensity": moral_state.get("intensity")},
         )
         print("[DecisionLayer] Моральное состояние оценено.")
         log_audit_entry(
@@ -200,6 +328,8 @@ class DecisionLayer:
         # --------------------------------------------------------------- #
         # 5️⃣  Gather visual context when available
         # --------------------------------------------------------------- #
+        vision_started = time.perf_counter()
+        await _trace("vision", "start")
         print("[DecisionLayer] Сбор визуального контекста.")
         log_audit_entry(
             "decision_layer_visual_context_request",
@@ -215,6 +345,19 @@ class DecisionLayer:
         )
         if raw_media_payload:
             safe_user_message["media"] = self._sanitize_media_list(raw_media_payload)
+        await _trace(
+            "vision",
+            "end",
+            started_at=vision_started,
+            details={
+                "has_screen": bool((visual_context or {}).get("screen")),
+                "attachments": len(
+                    ((visual_context.get("attachments", {}) or {}).get("items", []))
+                    if isinstance(visual_context, dict)
+                    else []
+                ),
+            },
+        )
         print("[DecisionLayer] Визуальный контекст собран.")
         log_audit_entry(
             "decision_layer_visual_context_collected",
@@ -226,6 +369,8 @@ class DecisionLayer:
         # --------------------------------------------------------------- #
         # 6️⃣  Build final system prompt
         # --------------------------------------------------------------- #
+        prompt_started = time.perf_counter()
+        await _trace("prompt", "start")
         print("[DecisionLayer] Формирование финального системного запроса.")
         log_audit_entry(
             "decision_layer_system_prompt_request",
@@ -245,6 +390,12 @@ class DecisionLayer:
             memory_context,
             moral_state,
             visual_context=visual_context,
+        )
+        await _trace(
+            "prompt",
+            "end",
+            started_at=prompt_started,
+            details={"prompt_length": len(system_prompt)},
         )
         prompt_hash = hashlib.sha256(system_prompt.encode()).hexdigest()[:12]
         print("[DecisionLayer] Финальный системный запрос сформирован.")
@@ -277,6 +428,11 @@ class DecisionLayer:
                 "memory_meta": memory_meta,
                 "moral_state": moral_state,
                 "system_prompt_hash": prompt_hash,
+                "interaction_policy": {
+                    "actor_role": interaction_policy.actor_role,
+                    "can_affect_moral": interaction_policy.can_affect_moral,
+                    "can_affect_global_memory": interaction_policy.can_affect_global_memory,
+                },
             },
         )
 
@@ -287,9 +443,15 @@ class DecisionLayer:
             "decisions": decisions,
             "analysis": analysis_result,
             "analysis_details": analysis_payload,
+            "moral_state": moral_state,
             "visual_context": visual_context,
             "memory_context": memory_context,
             "memory_meta": memory_meta,
+            "interaction_policy": {
+                "actor_role": interaction_policy.actor_role,
+                "can_affect_moral": interaction_policy.can_affect_moral,
+                "can_affect_global_memory": interaction_policy.can_affect_global_memory,
+            },
         }
 
     def handle_response(self, text: str) -> None:
@@ -302,7 +464,7 @@ class DecisionLayer:
             AuditStatus.INFO,
             details={"text": text},
         )
-        if not get_config_value("voice.enabled", False):
+        if not config_service.get_config_value("voice.enabled", False):
             print("[DecisionLayer] Озвучка отключена в конфигурации.")
             log_audit_entry(
                 "decision_layer_tts_disabled",
@@ -537,13 +699,19 @@ class DecisionLayer:
 
     def _should_use_deep_memory(self, themes: List[str]) -> bool:
         """Check if deep memory module should be used."""
-        result = any(theme in DEEP_MEMORY_THEMES for theme in themes)
+        allowed = self._is_deep_memory_enabled()
+        thematic_match = any(theme in DEEP_MEMORY_THEMES for theme in themes)
+        result = bool(allowed and thematic_match)
         print(f"[DecisionLayer] Необходимость использования глубокой памяти: {result}")
         log_audit_entry(
             "decision_layer_deep_memory_decision",
             "[DecisionLayer] Решение о необходимости использования глубокой памяти.",
             AuditStatus.INFO,
-            details={"result": result},
+            details={
+                "result": result,
+                "allowed_by_config": allowed,
+                "thematic_match": thematic_match,
+            },
         )
         return result
 
@@ -621,7 +789,7 @@ class DecisionLayer:
         self, media_payload: List[Dict[str, Any]], decisions: Dict[str, bool]
     ) -> Dict[str, Any]:
         """Collect visual description of attachments and/or screen snapshot."""
-        if not get_config_value("vision.enabled", False):
+        if not config_service.get_config_value("vision.enabled", False):
             print("[DecisionLayer] Визуальный модуль отключен в конфигурации.")
             log_audit_entry(
                 "decision_layer_vision_disabled",
@@ -769,3 +937,4 @@ class DecisionLayer:
 # Global singleton instance – can be imported everywhere as `decision_layer`
 # --------------------------------------------------------------------- #
 decision_layer = DecisionLayer()
+

@@ -35,6 +35,12 @@
         flex-direction: column;
         margin-bottom: 15px;
 
+        app-ui-input,
+        app-ui-select {
+            display: block;
+            width: 100%;
+        }
+
         label {
             color: var(--color-text);
             font-weight: 500;
@@ -57,8 +63,7 @@
 
         input[type="text"],
         input[type="number"],
-        textarea,
-        select {
+        textarea {
             padding: 8px 12px;
             background-color: var(--color-surface);
             border: 1px solid var(--color-border);
@@ -83,69 +88,51 @@
             min-height: 100px;
         }
 
-        input[type="range"] {
-            width: 100%;
-            background: var(--color-border);
-            height: 6px;
-            border-radius: 4px;
-            appearance: none;
-
-            &::-webkit-slider-thumb {
-                appearance: none;
-                width: 16px;
-                height: 16px;
-                border-radius: 50%;
-                background: var(--color-accent);
-                border: 2px solid var(--color-surface);
-                cursor: pointer;
-                box-shadow: 0 0 4px var(--color-focus);
-            }
-
-            &::-moz-range-thumb {
-                width: 16px;
-                height: 16px;
-                border-radius: 50%;
-                background: var(--color-accent);
-                border: 2px solid var(--color-surface);
-                cursor: pointer;
-                box-shadow: 0 0 4px var(--color-focus);
-            }
-        }
-
-        select {
-            appearance: none;
-            -webkit-appearance: none;
-            -moz-appearance: none;
-
-            background-color: var(--color-surface);
-            color: var(--color-text-active);
-            border: 1px solid var(--color-border);
-            padding: 8px 40px 8px 12px;
-            border-radius: var(--radius);
-            font-size: 14px;
-            font-family: var(--font-family);
-
-            background-image: url("data:image/svg+xml;utf8,<svg fill='%2300d8ff' height='20' viewBox='0 0 24 24' width='20' xmlns='http://www.w3.org/2000/svg'><path d='M7 10l5 5 5-5z'/></svg>");
-            background-repeat: no-repeat;
-            background-position: right 10px center;
-            background-size: 16px;
-
-            option {
-                background-color: var(--color-surface);
-                color: var(--color-text);
-            }
-
-            &:focus {
-                border-color: var(--color-accent);
-                box-shadow: 0 0 6px var(--color-focus);
-                outline: none;
-            }
-        }
-
         span {
             color: var(--color-text);
             margin-left: 10px;
         }
+
+        .character-import {
+            margin-top: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+
+            input[type="file"] {
+                flex: 1;
+                min-width: 220px;
+                color: var(--color-text);
+            }
+
+            button {
+                background: color-mix(in srgb, var(--color-surface) 75%, black 25%);
+                color: var(--color-text-active);
+                border: 1px solid var(--color-border);
+                padding: 8px 12px;
+                border-radius: var(--radius);
+                cursor: pointer;
+                font-family: var(--font-family);
+                transition: border-color 0.2s ease, background 0.2s ease;
+
+                &:hover:not(:disabled) {
+                    border-color: color-mix(in srgb, var(--color-accent) 60%, transparent);
+                    background: color-mix(in srgb, var(--color-surface) 65%, black 35%);
+                }
+
+                &:disabled {
+                    opacity: 0.5;
+                    cursor: not-allowed;
+                }
+            }
+        }
+    }
+
+    .checkbox-group {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px 16px;
     }
 
     .button-row {
@@ -175,6 +162,81 @@
                 color: color-mix(in srgb, var(--color-text) 50%, transparent);
                 cursor: not-allowed;
                 box-shadow: none;
+            }
+        }
+    }
+
+    .tunneling-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0 12px;
+    }
+
+    .tunnel-status {
+        margin-top: 4px;
+        padding: 10px 12px;
+        border-radius: 10px;
+        border: 1px solid var(--color-border);
+        background: color-mix(in srgb, var(--color-surface) 86%, black 14%);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #9ca3af;
+        }
+
+        .status-text {
+            font-size: 13px;
+            color: var(--color-text);
+        }
+
+        .status-link {
+            margin-left: auto;
+            color: var(--color-accent);
+            text-decoration: none;
+            font-size: 12px;
+            max-width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+    }
+
+    .tunnel-status--running {
+        .status-dot {
+            background: #34d399;
+        }
+    }
+
+    .tunnel-actions {
+        margin-top: 12px;
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+
+        button {
+            background: color-mix(in srgb, var(--color-surface) 75%, black 25%);
+            color: var(--color-text-active);
+            border: 1px solid var(--color-border);
+            padding: 8px 12px;
+            border-radius: var(--radius);
+            cursor: pointer;
+            font-family: var(--font-family);
+            transition: border-color 0.2s ease, background 0.2s ease;
+
+            &:hover:not(:disabled) {
+                border-color: color-mix(in srgb, var(--color-accent) 60%, transparent);
+                background: color-mix(in srgb, var(--color-surface) 65%, black 35%);
+            }
+
+            &:disabled {
+                opacity: 0.5;
+                cursor: not-allowed;
             }
         }
     }

@@ -1,4 +1,4 @@
-"""Short-term memory helpers: schema management, summarization, retrieval."""
+﻿"""Short-term memory helpers: schema management, summarization, retrieval."""
 
 from __future__ import annotations
 
@@ -15,17 +15,21 @@ from models.models import History, ShortTermMemory
 from services.db_core import engine, SessionLocal
 from services.logger_service import AuditStatus, log_audit_entry
 from services.localization_service import get_text
-from services.config_service import get_config_value
+from services import config_service
 
 from modules.generative.manager import generation_manager, NoProviderResolved
 from modules.generative.types import GenerateRequest
 from modules.memory.embeddings import Provider, get_embedding
+from constants.prompts import (
+    SHORT_TERM_DAILY_SUMMARY_SYSTEM_PROMPT,
+    SHORT_TERM_DAILY_SUMMARY_TASK_PROMPT,
+)
 
 DEFAULT_SIMILARITY_THRESHOLD = 0.7
 
 
 def _get_primary_vector_profile() -> dict:
-    retrieval_cfg = get_config_value("rag.retrieval", {}) or {}
+    retrieval_cfg = config_service.get_config_value("rag.retrieval", {}) or {}
     vectors_cfg = (
         retrieval_cfg.get("vectors", {}) if isinstance(retrieval_cfg, dict) else {}
     )
@@ -274,17 +278,11 @@ def _generate_day_summary(
     *,
     summary_prompt: Optional[str] = None,
 ) -> tuple[str, List[str]]:
-    summary_prompt = summary_prompt or (
-        "Составь краткую выжимку за день и перечисли ключевые темы."
-    )
+    summary_prompt = summary_prompt or SHORT_TERM_DAILY_SUMMARY_TASK_PROMPT
 
     system_message = {
         "role": "system",
-        "content": (
-            "You are an assistant that summarizes daily conversations. "
-            "Return JSON with fields: "
-            "summary (string) and themes (list of 3–7 short tags, in Latin or transliterated)."
-        ),
+        "content": SHORT_TERM_DAILY_SUMMARY_SYSTEM_PROMPT,
     }
     user_message = {
         "role": "user",
@@ -305,7 +303,7 @@ def _generate_day_summary(
         summary = data.get("summary") or raw
         themes = data.get("themes") or []
         themes = [str(t).strip() for t in themes if str(t).strip()]
-    except (NoProviderResolved, json.JSONDecodeError, ValueError) as exc:
+    except (NoProviderResolved, json.JSONDecodeError, ValueError, Exception) as exc:
         log_audit_entry(
             "short_memory_summary_fallback",
             get_text(
@@ -317,10 +315,20 @@ def _generate_day_summary(
             message_key="logger.short_memory_summary_fallback",
             message_args={"error": str(exc)},
         )
-        summary = " ".join(transcript.split("\n")[:5])[:600]
+        summary = _build_fallback_summary(transcript)
         themes = []
 
     return summary, themes
+
+
+def _build_fallback_summary(transcript: str) -> str:
+    lines = [line.strip() for line in transcript.split("\n") if line.strip()]
+    if not lines:
+        return get_text(
+            "short_memory.no_context_fallback",
+            default="Нет данных для дневной выжимки.",
+        )
+    return " ".join(lines[:5])[:600]
 
 
 # ---------------------------------------------------------------------------
@@ -375,9 +383,9 @@ def find_matching_record(
 
     profile_cfg = _get_primary_vector_profile()
     provider = profile_cfg.get(
-        "provider", get_config_value("memory.embedding_provider", Provider.AUTO)
+        "provider", config_service.get_config_value("memory.embedding_provider", Provider.AUTO)
     )
-    model = profile_cfg.get("model") or get_config_value(
+    model = profile_cfg.get("model") or config_service.get_config_value(
         "memory.embedding_model", "nomic-embed-text"
     )
 
@@ -442,3 +450,4 @@ __all__ = [
     "load_recent_records",
     "find_matching_record",
 ]
+

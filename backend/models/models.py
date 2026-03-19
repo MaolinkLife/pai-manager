@@ -42,6 +42,7 @@ class History(Base):
     content = Column(Text, nullable=False)
     timestamp = Column(DateTime, default=datetime.now(timezone.utc))
     tags = Column(Text, default='[]')
+    runtime_meta = Column(Text, default='{}')
 
     character = relationship("Character", back_populates="history")
     reasoning = relationship(
@@ -66,7 +67,44 @@ class User(Base):
     uuid = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     name = Column(String, nullable=False)
     trust_level = Column(Integer, default=0)  # 0=anon, 1=friend, 2=owner
+    email = Column(String, unique=True, index=True, nullable=True)
+    login = Column(String, unique=True, index=True, nullable=True)
+    password_hash = Column(String, nullable=True)
+    role = Column(String, nullable=False, default="anonymous")
+    auth_provider = Column(String, nullable=False, default="local")
+    is_active = Column(Boolean, default=True)
+    last_login_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.now(timezone.utc))
+
+    settings = relationship(
+        "UserSettings",
+        back_populates="user",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
+    sessions = relationship(
+        "AuthSession",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+    config = relationship(
+        "UserConfig",
+        back_populates="user",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
+    tts_settings = relationship(
+        "UserTtsSettings",
+        back_populates="user",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
+    vision_settings = relationship(
+        "UserVisionSettings",
+        back_populates="user",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
 
 
 # =======================
@@ -85,6 +123,122 @@ class Message(Base):
     tags = Column(Text, default='[]')
 
     user = relationship("User")
+
+
+class UserSettings(Base):
+    __tablename__ = "user_settings"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_uuid = Column(
+        String,
+        ForeignKey("users.uuid", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+    )
+    active_character_id = Column(
+        String,
+        ForeignKey("characters.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    language = Column(String, default="en-US")
+    timezone_name = Column("timezone", String, default="UTC")
+    ui_prefs = Column(Text, default="{}")
+    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+    updated_at = Column(
+        DateTime,
+        default=datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    user = relationship("User", back_populates="settings")
+    active_character = relationship("Character")
+
+
+class AuthSession(Base):
+    __tablename__ = "auth_sessions"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_uuid = Column(String, ForeignKey("users.uuid", ondelete="CASCADE"), nullable=False)
+    refresh_token_hash = Column(String, nullable=False, index=True)
+    user_agent = Column(String, nullable=True)
+    ip_address = Column(String, nullable=True)
+    expires_at = Column(DateTime, nullable=False)
+    revoked_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+    updated_at = Column(
+        DateTime,
+        default=datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    user = relationship("User", back_populates="sessions")
+
+
+class UserConfig(Base):
+    __tablename__ = "user_configs"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_uuid = Column(
+        String,
+        ForeignKey("users.uuid", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+        index=True,
+    )
+    config_json = Column(Text, default="{}")
+    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+    updated_at = Column(
+        DateTime,
+        default=datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    user = relationship("User", back_populates="config")
+
+
+class UserTtsSettings(Base):
+    __tablename__ = "user_tts_settings"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_uuid = Column(
+        String,
+        ForeignKey("users.uuid", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+        index=True,
+    )
+    settings_json = Column(Text, default="{}")
+    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+    updated_at = Column(
+        DateTime,
+        default=datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    user = relationship("User", back_populates="tts_settings")
+
+
+class UserVisionSettings(Base):
+    __tablename__ = "user_vision_settings"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_uuid = Column(
+        String,
+        ForeignKey("users.uuid", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+        index=True,
+    )
+    settings_json = Column(Text, default="{}")
+    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+    updated_at = Column(
+        DateTime,
+        default=datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    user = relationship("User", back_populates="vision_settings")
 
 
 

@@ -1,0 +1,21 @@
+<button
+    class="ui-btn"
+    [attr.type]="type"
+    [disabled]="disabled || loading"
+    [class.ui-btn--secondary]="variant === 'secondary'"
+    [class.ui-btn--ghost]="variant === 'ghost'"
+    [class.ui-btn--sm]="size === 'sm'"
+    [class.ui-btn--lg]="size === 'lg'"
+    [class.ui-btn--full]="fullWidth"
+    (click)="onClick($event)"
+>
+    <app-custom-svg
+        *ngIf="iconName"
+        class="ui-btn__icon"
+        [name]="iconName"
+        [size]="iconSize"
+    ></app-custom-svg>
+    <span class="ui-btn__label">
+        <ng-content></ng-content>
+    </span>
+</button>

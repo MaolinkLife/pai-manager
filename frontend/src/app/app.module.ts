@@ -8,7 +8,7 @@ import { HeaderComponent } from './layout/components/header/header.component';
 import { LayoutComponent } from './layout/layout.component';
 import { ThemeService } from './core/services/theme.service';
 import { SharedModule } from './shared/shared.module';
-import { HttpClientModule } from '@angular/common/http';
+import { HTTP_INTERCEPTORS, provideHttpClient, withInterceptorsFromDi } from '@angular/common/http';
 import { ConfigService } from './core/services/config.service';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { MemoryModalComponent } from './layout/components/modals/memory-modal/memory-modal.component';
@@ -24,10 +24,11 @@ import { GenerationSettingsComponent } from './layout/components/modals/main-mod
 import { MonitorSelectionModalComponent } from './layout/components/modals/monitor-selection-modal/monitor-selection-modal.component';
 import { CoreSettingsComponent } from './layout/components/modals/main-modal/core-settings/core-settings.component';
 import { SystemSettingsComponent } from './layout/components/modals/main-modal/system-settings/system-settings.component';
+import { AiEntityVisualizerComponent } from './layout/components/ai-entity-visualizer/ai-entity-visualizer.component';
+import { AuthInterceptor } from './core/interceptors/auth.interceptor';
 
 
-@NgModule({
-    declarations: [
+@NgModule({ declarations: [
         AppComponent,
         SidebarComponent,
         HeaderComponent,
@@ -45,19 +46,14 @@ import { SystemSettingsComponent } from './layout/components/modals/main-modal/s
         MonitorSelectionModalComponent,
         CoreSettingsComponent,
         SystemSettingsComponent,
+        AiEntityVisualizerComponent,
     ],
-    imports: [
-        BrowserModule,
+    bootstrap: [AppComponent], imports: [BrowserModule,
         AppRoutingModule,
         SharedModule,
-        HttpClientModule,
-        BrowserAnimationsModule,
-    ],
-    providers: [ThemeService, ConfigService],
-    bootstrap: [AppComponent],
-    entryComponents: [
-        MemoryModalComponent,
-        MainModalComponent,
-    ]
-})
+        BrowserAnimationsModule], providers: [ThemeService, ConfigService, provideHttpClient(withInterceptorsFromDi()), {
+            provide: HTTP_INTERCEPTORS,
+            useClass: AuthInterceptor,
+            multi: true
+        }] })
 export class AppModule { }

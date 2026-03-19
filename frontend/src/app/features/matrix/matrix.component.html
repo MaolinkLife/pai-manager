@@ -1,0 +1,80 @@
+<div class="matrix-page">
+    <div class="matrix-shell">
+        <header class="matrix-header">
+            <div>
+                <h2>{{ "matrix.title" | translate }}</h2>
+                <p>{{ "matrix.subtitle" | translate }}</p>
+            </div>
+            <button type="button" class="refresh-btn" (click)="loadState()">{{ "settings.refresh" | translate }}</button>
+        </header>
+
+        <ng-container *ngIf="isLoading; else stateContent">
+            <div class="state-grid">
+                <app-skeleton height="68px" width="100%"></app-skeleton>
+                <app-skeleton height="68px" width="100%"></app-skeleton>
+                <app-skeleton height="68px" width="100%"></app-skeleton>
+                <app-skeleton height="68px" width="100%"></app-skeleton>
+            </div>
+            <div class="state-details">
+                <app-skeleton height="280px" width="100%"></app-skeleton>
+                <app-skeleton height="280px" width="100%"></app-skeleton>
+            </div>
+        </ng-container>
+
+        <ng-template #stateContent>
+            <div class="status-line">
+                <span class="emotion">
+                    {{ "matrix.current" | translate }}: {{ ('matrix.emotions.' + (state?.current_emotion || 'neutral')) | translate }}
+                </span>
+                <span>{{ "matrix.intensity" | translate }}: {{ ((state?.emotion_intensity || 0) * 100) | number:'1.0-0' }}%</span>
+                <span *ngIf="state?.updated_at">{{ "matrix.updated" | translate }}: {{ formatUpdatedAt(state?.updated_at) }}</span>
+            </div>
+
+            <div class="state-grid">
+                <div class="metric-card" *ngFor="let metric of stateMetrics">
+                    <div class="metric-row">
+                        <span class="metric-label">{{ ('matrix.metrics.' + metric.key) | translate }}</span>
+                        <span class="metric-value">{{ (getMetricValue(metric.key) * 100) | number:'1.0-0' }}%</span>
+                    </div>
+                    <div class="metric-line">
+                        <span
+                            class="metric-fill"
+                            [ngClass]="metric.color"
+                            [style.width.%]="getMetricValue(metric.key) * 100"
+                        ></span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="state-details">
+                <div class="emotion-panel">
+                    <h4>{{ "matrix.spectral" | translate }}</h4>
+                    <div class="emotion-list">
+                        <div class="emotion-item" *ngFor="let emotion of emotionBars">
+                            <div class="emotion-row">
+                                <span>{{ ('matrix.emotions.' + emotion.key) | translate }}</span>
+                                <span>{{ (getEmotionValue(emotion.key) * 100) | number:'1.0-0' }}%</span>
+                            </div>
+                            <div class="emotion-line">
+                                <span
+                                    class="emotion-fill"
+                                    [ngClass]="emotion.color"
+                                    [style.width.%]="getEmotionValue(emotion.key) * 100"
+                                ></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="coherence-panel">
+                    <div class="coherence-ring" [style.--coherence]="coherencePercent + '%'">
+                        <span class="coherence-orbit"></span>
+                        <span class="coherence-glow"></span>
+                        <span class="coherence-value">{{ coherencePercent }}</span>
+                    </div>
+                    <div class="coherence-label">{{ "matrix.coherence" | translate }}</div>
+                </div>
+            </div>
+        </ng-template>
+    </div>
+</div>

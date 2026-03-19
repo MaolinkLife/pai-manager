@@ -1,4 +1,9 @@
 export const environment = {
     production: true,
-    apiBaseUrl: '/api'
+    apiBaseUrl: '/api',
+    uiFeatures: {
+        audit: false,
+        diary: false,
+        tasks: false,
+    },
 };

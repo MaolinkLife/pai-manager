@@ -13,6 +13,16 @@ DEFAULT_CONFIG = {
         "env": "dev",
         "debug": False,
     },
+    "connector": {
+        "tunneling": {
+            "enabled": False,
+            "provider": "cloudflared",
+            "local_url": "http://127.0.0.1:4200",
+            "local_port": 4200,
+            "command_path": "",
+            "public_url": "",
+        }
+    },
     "voice": {
         "enabled": True,
         "output_id": 0,
@@ -75,7 +85,7 @@ DEFAULT_CONFIG = {
         "window_title": "",
         "window_process": "",
         "debug_save": False,
-        "debug_path": "./temp/vision",
+        "debug_path": "temp/vision",
         "vision_modules": {
             "apple_vision": {"model_id": "apple/FastVLM-1.5B", "max_tokens": 128},
             "llava": {"model_id": "llava-hf/llava-1.5-7b-hf", "max_tokens": 128},
@@ -216,6 +226,7 @@ DEFAULT_CONFIG = {
         },
     },
     "memory": {
+        "deep_memory_enabled": True,
         "recent_limit": 32,
         "similarity_threshold": 0.7,
         "session_window": "day",

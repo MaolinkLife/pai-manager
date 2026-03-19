@@ -135,15 +135,31 @@
                 <h3>{{ "settings.basicConfiguration" | translate }}</h3>
 
                 <div class="form-group">
-                    <label for="char_name">{{
+                    <label for="active_character_id">{{
                         "settings.charName" | translate
                     }}</label>
-                    <input
-                        id="char_name"
-                        type="text"
-                        formControlName="char_name"
+                    <app-ui-select
+                        id="active_character_id"
+                        formControlName="active_character_id"
+                        [options]="characterOptions"
                         [placeholder]="'settings.charName' | translate"
-                    />
+                        (change)="onCharacterChange($event)"
+                    ></app-ui-select>
+                    <div class="character-import">
+                        <input
+                            id="character-import-file"
+                            type="file"
+                            accept=".yaml,.yml"
+                            (change)="onCharacterFileSelected($event)"
+                        />
+                        <button
+                            type="button"
+                            [disabled]="isCharacterImportBusy || !selectedCharacterFile"
+                            (click)="importCharacterYaml()"
+                        >
+                            {{ isCharacterImportBusy ? ('general.loading' | translate) : 'Import YAML' }}
+                        </button>
+                    </div>
                 </div>
 
                 <div class="form-group">
@@ -164,42 +180,35 @@
                     <label for="user_name">{{
                         "settings.userName" | translate
                     }}</label>
-                    <input
+                    <app-ui-input
                         id="user_name"
                         type="text"
                         formControlName="user_name"
                         [placeholder]="'settings.howToAddressUser' | translate"
-                    />
+                    ></app-ui-input>
                 </div>
 
                 <div class="form-group">
                     <label for="language">{{
                         "settings.systemLanguage" | translate
                     }}</label>
-                    <select id="language" formControlName="language">
-                        <option value="en-US">English (US)</option>
-                        <option value="ru-RU">Russian</option>
-                    </select>
+                    <app-ui-select
+                        id="language"
+                        formControlName="language"
+                        [options]="languageOptions"
+                    ></app-ui-select>
                 </div>
 
                 <div class="form-group">
                     <label for="theme">{{
                         "settings.theme" | translate
                     }}</label>
-                    <select
+                    <app-ui-select
                         id="theme"
                         formControlName="theme"
+                        [options]="themeOptions"
                         (change)="onThemeChange($event)"
-                    >
-                        <option value="dark">
-                            {{ "settings.theme" | translate }} -
-                            {{ "general.dark" | translate }}
-                        </option>
-                        <option value="light">
-                            {{ "settings.theme" | translate }} -
-                            {{ "general.light" | translate }}
-                        </option>
-                    </select>
+                    ></app-ui-select>
                 </div>
             </div>
 
@@ -207,38 +216,130 @@
                 <h3>{{ "settings.modules" | translate }}</h3>
 
                 <div class="form-group checkbox-group" formGroupName="modules">
-                    <label>
+                    <label class="checkbox">
                         <input type="checkbox" formControlName="vtube_studio" />
                         {{ "settings.vtube_studio" | translate }}
                     </label>
-                    <label>
+                    <label class="checkbox">
                         <input type="checkbox" formControlName="whisper" />
                         {{ "settings.whisper" | translate }}
                     </label>
-                    <label>
+                    <label class="checkbox">
                         <input type="checkbox" formControlName="minecraft" />
                         {{ "settings.minecraft" | translate }}
                     </label>
-                    <label>
+                    <label class="checkbox">
                         <input type="checkbox" formControlName="gaming" />
                         {{ "settings.gaming" | translate }}
                     </label>
-                    <label>
+                    <label class="checkbox">
                         <input type="checkbox" formControlName="alarm" />
                         {{ "settings.alarm" | translate }}
                     </label>
-                    <label>
+                    <label class="checkbox">
                         <input type="checkbox" formControlName="discord" />
                         {{ "settings.discord" | translate }}
                     </label>
-                    <label>
+                    <label class="checkbox">
                         <input type="checkbox" formControlName="rag" />
                         {{ "settings.rag" | translate }}
                     </label>
-                    <label>
+                    <label class="checkbox">
                         <input type="checkbox" formControlName="visual" />
                         {{ "settings.visual" | translate }}
                     </label>
+                </div>
+            </div>
+
+            <div class="section" formGroupName="connector">
+                <h3>{{ "settings.connector" | translate }}</h3>
+
+                <div class="tunneling-grid" formGroupName="tunneling">
+                    <div class="form-group">
+                        <label class="checkbox">
+                            <input type="checkbox" formControlName="enabled" />
+                            {{ "settings.tunnelEnabled" | translate }}
+                        </label>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="tunnel-provider">{{ "settings.tunnelProvider" | translate }}</label>
+                        <app-ui-select
+                            id="tunnel-provider"
+                            formControlName="provider"
+                            [options]="tunnelingProviderOptions"
+                        ></app-ui-select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="tunnel-local-url">{{ "settings.tunnelLocalUrl" | translate }}</label>
+                        <app-ui-input
+                            id="tunnel-local-url"
+                            type="text"
+                            formControlName="localUrl"
+                            [placeholder]="'http://127.0.0.1:4200'"
+                        ></app-ui-input>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="tunnel-local-port">{{ "settings.tunnelLocalPort" | translate }}</label>
+                        <app-ui-input
+                            id="tunnel-local-port"
+                            type="number"
+                            formControlName="localPort"
+                            [min]="1"
+                            [max]="65535"
+                            [step]="1"
+                        ></app-ui-input>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="tunnel-cmd">{{ "settings.tunnelCommandPath" | translate }}</label>
+                        <app-ui-input
+                            id="tunnel-cmd"
+                            type="text"
+                            formControlName="commandPath"
+                            [placeholder]="'cloudflared или lt'"
+                        ></app-ui-input>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="tunnel-public-url">{{ "settings.tunnelPublicUrl" | translate }}</label>
+                        <app-ui-input
+                            id="tunnel-public-url"
+                            type="text"
+                            formControlName="publicUrl"
+                            [readonly]="true"
+                        ></app-ui-input>
+                    </div>
+                </div>
+
+                <div class="tunnel-status" [class.tunnel-status--running]="tunnelStatus?.running">
+                    <span class="status-dot"></span>
+                    <span class="status-text">
+                        {{ tunnelStatus?.running ? ("settings.tunnelRunning" | translate) : ("settings.tunnelStopped" | translate) }}
+                    </span>
+                    <a
+                        *ngIf="tunnelStatus?.public_url"
+                        class="status-link"
+                        [href]="tunnelStatus?.public_url"
+                        target="_blank"
+                        rel="noreferrer"
+                    >
+                        {{ tunnelStatus?.public_url }}
+                    </a>
+                </div>
+
+                <div class="tunnel-actions">
+                    <button type="button" [disabled]="isTunnelBusy" (click)="startTunnel()">
+                        {{ "settings.tunnelStart" | translate }}
+                    </button>
+                    <button type="button" [disabled]="isTunnelBusy" (click)="stopTunnel()">
+                        {{ "settings.tunnelStop" | translate }}
+                    </button>
+                    <button type="button" [disabled]="isTunnelBusy" (click)="refreshTunnelStatus()">
+                        {{ "settings.tunnelRefreshStatus" | translate }}
+                    </button>
                 </div>
             </div>
 
@@ -250,3 +351,5 @@
         </form>
     </ng-template>
 </div>
+
+

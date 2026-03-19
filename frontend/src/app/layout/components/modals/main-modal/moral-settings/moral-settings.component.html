@@ -89,11 +89,11 @@
 
                 <div class="form-group">
                     <label for="moralActiveProvider">Active Provider</label>
-                    <select id="moralActiveProvider" formControlName="activeProvider">
-                        <option value="ollama">Ollama</option>
-                        <option value="openrouter">OpenRouter</option>
-                        <option value="heuristic">Heuristic (fallback only)</option>
-                    </select>
+                    <app-ui-select
+                        id="moralActiveProvider"
+                        formControlName="activeProvider"
+                        [options]="activeProviderOptions"
+                    ></app-ui-select>
                 </div>
 
                 <div class="form-group checkbox-group">
@@ -121,30 +121,30 @@
                 <div formGroupName="ollama">
                     <div class="form-group">
                         <label for="moralOllamaModel">Model</label>
-                        <input id="moralOllamaModel" type="text" formControlName="model" />
+                        <app-ui-input id="moralOllamaModel" type="text" formControlName="model" ></app-ui-input>
                     </div>
 
                     <div class="form-group">
                         <label for="moralOllamaTemperature">Temperature</label>
-                        <input
+                        <app-ui-input
                             id="moralOllamaTemperature"
                             type="number"
                             step="0.1"
                             min="0"
                             max="2"
                             formControlName="temperature"
-                        />
+                        ></app-ui-input>
                     </div>
 
                     <div class="form-group">
                         <label for="moralOllamaMaxTokens">Max Tokens</label>
-                        <input
+                        <app-ui-input
                             id="moralOllamaMaxTokens"
                             type="number"
                             min="1"
                             max="2048"
                             formControlName="maxTokens"
-                        />
+                        ></app-ui-input>
                     </div>
                 </div>
             </div>
@@ -154,35 +154,35 @@
                 <div formGroupName="openrouter">
                     <div class="form-group">
                         <label for="moralOpenrouterKey">API Key</label>
-                        <input id="moralOpenrouterKey" type="password" formControlName="apiKey" />
+                        <app-ui-input id="moralOpenrouterKey" type="password" formControlName="apiKey" ></app-ui-input>
                     </div>
 
                     <div class="form-group">
                         <label for="moralOpenrouterModel">Model</label>
-                        <input id="moralOpenrouterModel" type="text" formControlName="model" />
+                        <app-ui-input id="moralOpenrouterModel" type="text" formControlName="model" ></app-ui-input>
                     </div>
 
                     <div class="form-group">
                         <label for="moralOpenrouterTemp">Temperature</label>
-                        <input
+                        <app-ui-input
                             id="moralOpenrouterTemp"
                             type="number"
                             step="0.1"
                             min="0"
                             max="2"
                             formControlName="temperature"
-                        />
+                        ></app-ui-input>
                     </div>
 
                     <div class="form-group">
                         <label for="moralOpenrouterTokens">Max Tokens</label>
-                        <input
+                        <app-ui-input
                             id="moralOpenrouterTokens"
                             type="number"
                             min="1"
                             max="2048"
                             formControlName="maxTokens"
-                        />
+                        ></app-ui-input>
                     </div>
                 </div>
             </div>
@@ -193,3 +193,5 @@
         </form>
     </div>
 </ng-template>
+
+

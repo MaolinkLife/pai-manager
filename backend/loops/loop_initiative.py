@@ -1,10 +1,10 @@
-import time
+﻿import time
 from datetime import datetime, timedelta, timezone
 from dateutil.parser import isoparse
 
 from services.database_service import get_last_messages
-from services.config_service import get_config_value
 from services.logger_service import log_error, log_audit_entry, AuditStatus
+from modules.system.service import get_active_character_name
 
 CHECK_EVERY = 60  # We check every minute
 
@@ -63,7 +63,7 @@ def initiative_monitor():
 
     while True:
         try:
-            char_name = get_config_value("system.char_name", default="default")
+            char_name = get_active_character_name(default="default")
             messages = get_last_messages(char_name, limit=10)
 
             if not messages:
@@ -151,7 +151,7 @@ def initiative_monitor():
 
 #     full_prompt = emotion_note + base_prompt
 #     messages = [{"role": "system", "content": full_prompt}]
-#     char_name = get_config_value("system.char_name", "default")
+#     char_name = config_service.get_config_value("system.char_name", "default")
 #     options = get_generation_options_from_config()
 
 #     response = ollama_service.api_standard(messages, options)
@@ -167,7 +167,7 @@ def initiative_monitor():
 #         timestamp=datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
 #     )
 
-#     if get_config_value("voice.enabled", False):
+#     if config_service.get_config_value("voice.enabled", False):
 #         set_speaking(True)
 #         threading.Thread(target=speak_line, args=(assistant_content, False)).start()
 
@@ -180,3 +180,4 @@ def initiative_monitor():
 #     )
 
 #     return assistant_content
+

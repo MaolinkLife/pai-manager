@@ -1,0 +1,61 @@
+<div class="entity-wrap">
+    <div class="panel-title">Neural State</div>
+    <div class="ambient" [style.background]="entityGlow()"></div>
+
+    <div class="ring ring-one"></div>
+    <div class="ring ring-two"></div>
+
+    <div class="entity-core">
+        <svg viewBox="0 0 200 200" class="entity-svg">
+            <circle
+                cx="100"
+                cy="100"
+                [attr.r]="80 + breath()"
+                fill="none"
+                [attr.stroke]="entityColor()"
+                stroke-width="0.5"
+                stroke-dasharray="10 5"
+                class="outer-orb"
+            ></circle>
+
+            <circle
+                cx="100"
+                cy="100"
+                [attr.r]="40 + (breath() * 2)"
+                [attr.fill]="entityColor()"
+                class="center-orb"
+            ></circle>
+
+            <path [attr.d]="entityPath()" [attr.fill]="entityColor()" class="entity-shape"></path>
+
+            <g class="entity-eyes">
+                <circle [attr.cx]="90 + eyeOffset()" cy="90" r="3" fill="white"></circle>
+                <circle [attr.cx]="110 + eyeOffset()" cy="90" r="3" fill="white"></circle>
+            </g>
+        </svg>
+
+        <div class="particles-layer">
+            <span
+                *ngFor="let p of particles"
+                class="particle"
+                [style.background]="entityColor()"
+                [style.left.%]="p.x"
+                [style.top.%]="p.y"
+                [style.animation-delay.s]="p.delay"
+            ></span>
+        </div>
+    </div>
+
+    <div class="hud-line">
+        <div class="hud-item">
+            <p class="hud-label">Cognitive State</p>
+            <p class="hud-value">{{ moodLabel() }}</p>
+        </div>
+        <div class="hud-item align-right">
+            <p class="hud-label">Stability</p>
+            <p class="hud-value stable">{{ stabilityPercent() }}%</p>
+        </div>
+    </div>
+
+    <div class="scan-line"></div>
+</div>

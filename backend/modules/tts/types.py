@@ -19,5 +19,6 @@ class TTSResult:
     file_path: Optional[str] = None
     duration_ms: Optional[int] = None
     error: Optional[str] = None
+    details: Dict[str, Any] = field(default_factory=dict)
     fallback_used: bool = False
     attempted_engines: Optional[list[str]] = None

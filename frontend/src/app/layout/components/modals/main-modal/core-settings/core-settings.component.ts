@@ -1,5 +1,5 @@
 import { Component } from '@angular/core';
-import { FormBuilder, FormGroup } from '@angular/forms';
+import { UntypedFormBuilder, UntypedFormGroup } from '@angular/forms';
 import { LocalizationService } from '../../../../../shared/pipes/translation/localization.service';
 
 @Component({
@@ -9,10 +9,10 @@ import { LocalizationService } from '../../../../../shared/pipes/translation/loc
 })
 export class CoreSettingsComponent {
     showDlModal = false;
-    dlForm: FormGroup;
+    dlForm: UntypedFormGroup;
 
     constructor(
-        private fb: FormBuilder,
+        private fb: UntypedFormBuilder,
         private localizationService: LocalizationService
     ) {
         this.dlForm = this.fb.group({});

@@ -1,6 +1,7 @@
 export interface ProjectConfig {
     voice: VoiceConfig;
     modules: ModuleConfig;
+    connector: ConnectorConfig;
     vision: VisionConfig;
     audio: AudioConfig;
     rag: RagConfig;
@@ -10,6 +11,19 @@ export interface ProjectConfig {
     memory: MemoryConfig;
     generateSettings: GenerationConfig;
     system: SystemConfig;
+}
+
+export interface TunnelingConfig {
+    enabled: boolean;
+    provider: string;
+    localUrl: string;
+    localPort: number;
+    commandPath: string;
+    publicUrl: string;
+}
+
+export interface ConnectorConfig {
+    tunneling: TunnelingConfig;
 }
 
 export interface VoiceConfig {
@@ -23,6 +37,18 @@ export interface VoiceConfig {
     streamingTts: boolean;
     enableFallback: boolean;
     activeModule: string;
+    rvc?: {
+        enabled?: boolean;
+        modelFile?: string;
+        pitch?: number;
+        filterRadius?: number;
+        rmsMixRate?: number;
+        protect?: number;
+        f0Method?: string;
+        splitAudio?: boolean;
+        autotune?: boolean;
+        embedderModel?: string;
+    };
     voiceModules: Record<string, any>
 }
 
@@ -104,6 +130,7 @@ export interface MoralConfig {
 }
 
 export interface MemoryConfig {
+    deepMemoryEnabled?: boolean;
     recentLimit: number;
     similarityThreshold: number;
     sessionWindow: string;

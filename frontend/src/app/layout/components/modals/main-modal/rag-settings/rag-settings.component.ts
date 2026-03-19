@@ -1,8 +1,9 @@
 import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
-import { FormBuilder, FormGroup, FormArray } from '@angular/forms';
+import { UntypedFormBuilder, UntypedFormGroup, UntypedFormArray } from '@angular/forms';
 import { ConfigService } from '../../../../../core/services/config.service';
 import { LocalizationService } from '../../../../../shared/pipes/translation/localization.service';
 import { RagConfig, RagVectorProfile } from '../../../../../core/models/project-config.model';
+import { UiSelectOption } from '../../../../../shared/ui/components/ui-select/ui-select.component';
 
 @Component({
     selector: 'app-rag-settings',
@@ -10,7 +11,7 @@ import { RagConfig, RagVectorProfile } from '../../../../../core/models/project-
     styleUrls: ['./rag-settings.component.less']
 })
 export class RagSettingsComponent implements OnInit {
-    ragForm: FormGroup;
+    ragForm: UntypedFormGroup;
     originalConfig: any = {};
     private readonly defaultVectorProfiles: Record<string, RagVectorProfile> = {
         embed768: {
@@ -37,7 +38,7 @@ export class RagSettingsComponent implements OnInit {
     };
 
     constructor(
-        private fb: FormBuilder,
+        private fb: UntypedFormBuilder,
         private configService: ConfigService,
         private localizationService: LocalizationService,
         private cdr: ChangeDetectorRef
@@ -45,12 +46,20 @@ export class RagSettingsComponent implements OnInit {
         this.ragForm = this.createForm();
     }
 
-    get vectorProfiles(): FormArray {
-        return this.ragForm.get('vectorProfiles') as FormArray;
+    get vectorProfiles(): UntypedFormArray {
+        return this.ragForm.get('vectorProfiles') as UntypedFormArray;
     }
 
     get vectorProfilesControls() {
         return this.vectorProfiles.controls;
+    }
+
+    get primaryVectorOptions(): UiSelectOption<string>[] {
+        return this.vectorProfilesControls.map((profileCtrl: any) => {
+            const key = profileCtrl?.value?.key || '';
+            const label = profileCtrl?.value?.label || key;
+            return { value: key, label };
+        }).filter((item) => !!item.value);
     }
 
     ngOnInit(): void {
@@ -58,7 +67,7 @@ export class RagSettingsComponent implements OnInit {
         this.localizationService.init();
     }
 
-    private createForm(): FormGroup {
+    private createForm(): UntypedFormGroup {
         return this.fb.group({
             // Basic settings
             enabled: [true],

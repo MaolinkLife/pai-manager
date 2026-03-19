@@ -1,4 +1,4 @@
-"""
+﻿"""
 Vision Worker: Captures screen frames and stores them in a buffer.
 """
 
@@ -10,7 +10,7 @@ import threading
 from collections import deque
 from typing import Optional, List, Tuple
 
-from services.config_service import get_config_value
+from services import config_service
 from services.logger_service import log_audit_entry, AuditStatus
 from services.localization_service import get_text
 
@@ -19,8 +19,8 @@ class VisionBuffer:
     """Circular buffer for storing frames."""
 
     def __init__(self):
-        buffer_sec = get_config_value("vision.buffer_sec", 4)
-        fps = get_config_value("vision.fps", 5)
+        buffer_sec = config_service.get_config_value("vision.buffer_sec", 4)
+        fps = config_service.get_config_value("vision.fps", 5)
         self.max_frames = int(buffer_sec * fps)
         self.frames = deque(maxlen=self.max_frames)
         self.lock = threading.Lock()
@@ -71,7 +71,7 @@ class ScreenCapturer:
 
     def start(self):
         """Start screen capture."""
-        if not get_config_value("vision.enabled", False):
+        if not config_service.get_config_value("vision.enabled", False):
             message_disabled = get_text(
                 "logger.vision_disabled",
                 default="[Vision] Vision module disabled",
@@ -121,13 +121,13 @@ class ScreenCapturer:
     def _capture_loop(self):
         """Main capture loop."""
         try:
-            fps = get_config_value("vision.fps", 5)
-            monitor_idx_cfg = int(get_config_value("vision.monitor_index", 0) or 0)
-            downscale_width = get_config_value("vision.downscale_width", 1280)
-            region = get_config_value("vision.region", None)
-            capture_mode = str(get_config_value("vision.capture_mode", "monitor") or "monitor").lower()
-            window_title = get_config_value("vision.window_title", "") or ""
-            window_process = get_config_value("vision.window_process", "") or ""
+            fps = config_service.get_config_value("vision.fps", 5)
+            monitor_idx_cfg = int(config_service.get_config_value("vision.monitor_index", 0) or 0)
+            downscale_width = config_service.get_config_value("vision.downscale_width", 1280)
+            region = config_service.get_config_value("vision.region", None)
+            capture_mode = str(config_service.get_config_value("vision.capture_mode", "monitor") or "monitor").lower()
+            window_title = config_service.get_config_value("vision.window_title", "") or ""
+            window_process = config_service.get_config_value("vision.window_process", "") or ""
 
             with mss.mss() as sct:
                 monitors = sct.monitors
@@ -405,3 +405,4 @@ def _resolve_window_rect(window_title: str, window_process: str):
     non_iconic = [m for m in matches if not m.get("iconic")]
     chosen = non_iconic[0] if non_iconic else matches[0]
     return chosen
+

@@ -1,9 +1,10 @@
 import { Component, OnInit } from '@angular/core';
-import { FormBuilder, FormGroup, Validators } from '@angular/forms';
+import { UntypedFormBuilder, UntypedFormGroup, Validators } from '@angular/forms';
 import { ConfigService } from '../../../../../core/services/config.service';
 import { BehaviorSubject } from 'rxjs';
 import { finalize, take } from 'rxjs/operators';
 import { NotificationService } from '../../../../../shared/components/notification/notification.service';
+import { UiSelectOption } from '../../../../../shared/ui/components/ui-select/ui-select.component';
 
 @Component({
     selector: 'app-analyzer-settings',
@@ -11,12 +12,12 @@ import { NotificationService } from '../../../../../shared/components/notificati
     styleUrls: ['./analyzer-settings.component.less']
 })
 export class AnalyzerSettingsComponent implements OnInit {
-    analyzerForm: FormGroup;
+    analyzerForm: UntypedFormGroup;
     isLoading$ = new BehaviorSubject<boolean>(true);
     originalConfig: any = {};
 
     constructor(
-        private fb: FormBuilder,
+        private fb: UntypedFormBuilder,
         private configService: ConfigService,
         private notificationService: NotificationService
     ) {
@@ -32,7 +33,7 @@ export class AnalyzerSettingsComponent implements OnInit {
         });
     }
 
-    private createForm(): FormGroup {
+    private createForm(): UntypedFormGroup {
         return this.fb.group({
             activeProvider: ['openrouter', Validators.required],
             fallbackOpenrouter: [false],
@@ -60,7 +61,7 @@ export class AnalyzerSettingsComponent implements OnInit {
                 });
 
                 // Загружаем провайдеров в динамическую форму
-                const providersGroup = this.analyzerForm.get('providers') as FormGroup;
+                const providersGroup = this.analyzerForm.get('providers') as UntypedFormGroup;
                 Object.keys(providers).forEach(providerName => {
                     const providerConfig = providers[providerName];
 
@@ -205,10 +206,17 @@ export class AnalyzerSettingsComponent implements OnInit {
 
     // Геттеры для удобства доступа к контролам
     get providersForm() {
-        return this.analyzerForm.get('providers') as FormGroup;
+        return this.analyzerForm.get('providers') as UntypedFormGroup;
     }
 
     get activeProvider() {
         return this.analyzerForm.get('activeProvider')?.value;
+    }
+
+    get activeProviderOptions(): UiSelectOption[] {
+        return [
+            { value: 'openrouter', label: 'OpenRouter' },
+            { value: 'ollama', label: 'Ollama' },
+        ];
     }
 }

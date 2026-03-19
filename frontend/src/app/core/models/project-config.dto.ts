@@ -20,6 +20,18 @@ export interface VoiceConfigDto {
     streaming_tts: boolean;
     enable_fallback: boolean;
     active_module: string;
+    rvc?: {
+        enabled?: boolean;
+        model_file?: string;
+        pitch?: number;
+        filter_radius?: number;
+        rms_mix_rate?: number;
+        protect?: number;
+        f0_method?: string;
+        split_audio?: boolean;
+        autotune?: boolean;
+        embedder_model?: string;
+    };
     voice_modules: VoiceModuleConfigDto;
 }
 
@@ -32,6 +44,19 @@ export interface ModuleConfigDto {
     discord: boolean;
     rag: boolean;
     visual: boolean;
+}
+
+export interface TunnelingConfigDto {
+    enabled: boolean;
+    provider: string;
+    local_url: string;
+    local_port: number;
+    command_path: string;
+    public_url: string;
+}
+
+export interface ConnectorConfigDto {
+    tunneling: TunnelingConfigDto;
 }
 
 export interface AudioConfigDto {
@@ -171,6 +196,7 @@ export interface MoralConfigDto {
 }
 
 export interface MemoryConfigDto {
+    deep_memory_enabled?: boolean;
     recent_limit: number;
     similarity_threshold: number;
     session_window: string;
@@ -226,6 +252,7 @@ export interface SystemConfigDto {
 export interface ProjectConfigDto extends BaseConfigDto {
     voice: VoiceConfigDto;
     modules: ModuleConfigDto;
+    connector: ConnectorConfigDto;
     audio: AudioConfigDto;
     vision: VisionConfigDto;
     rag: RagConfigDto;

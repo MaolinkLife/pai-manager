@@ -3,13 +3,52 @@
 # Purpose: Manage vector DB (Chroma) for semantic memory
 # ==========================================================
 
+import os
 import uuid
 import chromadb
+from chromadb.config import Settings
+from constants.paths import STORAGE_DIR
+
+os.environ.setdefault("ANONYMIZED_TELEMETRY", "FALSE")
 
 
-CHROMA_DIR = "./storage/vector_store"
+CHROMA_DIR = os.path.join(STORAGE_DIR, "vector_store")
+LEGACY_CHROMA_DIR = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "..", "storage", "vector_store")
+)
 
-_client = chromadb.PersistentClient(path=CHROMA_DIR)
+
+def _ensure_vector_dir() -> None:
+    os.makedirs(CHROMA_DIR, exist_ok=True)
+
+
+def _migrate_legacy_root_store() -> None:
+    """
+    Move legacy root-level storage/vector_store/chroma.sqlite3 to backend/storage/vector_store
+    if backend target file is missing.
+    """
+    legacy_file = os.path.join(LEGACY_CHROMA_DIR, "chroma.sqlite3")
+    target_file = os.path.join(CHROMA_DIR, "chroma.sqlite3")
+    if not os.path.isfile(legacy_file):
+        return
+    if os.path.isfile(target_file):
+        return
+    try:
+        os.replace(legacy_file, target_file)
+    except Exception:
+        # Non-critical migration path; runtime can continue with existing target.
+        pass
+
+
+_ensure_vector_dir()
+_migrate_legacy_root_store()
+
+_client = chromadb.PersistentClient(
+    path=CHROMA_DIR,
+    settings=Settings(
+        anonymized_telemetry=False,
+    ),
+)
 
 
 def _get_collection(name: str = "pai_memory"):

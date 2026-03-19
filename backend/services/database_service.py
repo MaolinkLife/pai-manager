@@ -1,4 +1,4 @@
-# ==========================================================
+﻿# ==========================================================
 # Module: database_service.py
 # Purpose: Central entry point for working with the database.
 # Acts as a facade: routes calls to user_service, message_service,
@@ -11,7 +11,8 @@ import json
 from services import user_service, message_service, history_service, character_service
 from services.storage_service import serialize_media_entries
 from services.logger_service import log_error
-from services.config_service import get_config_value
+from modules.system.service import get_active_character_name
+from utils.time_utils import to_user_tz_iso
 from fastapi import HTTPException
 
 db_type = "sqlite"  # later: postgres, etc.
@@ -69,6 +70,7 @@ def add_message_to_history(
     timestamp: datetime = None,
     media: list | None = None,
     tags: list | None = None,
+    runtime_meta: dict | None = None,
 ):
     if isinstance(timestamp, str):
         try:
@@ -82,7 +84,13 @@ def add_message_to_history(
         raise ValueError(f"Персонаж '{character_name}' не найден")
 
     return history_service.add_history(
-        char.id, role, content, timestamp, media_items=media, tags=tags
+        char.id,
+        role,
+        content,
+        timestamp,
+        media_items=media,
+        tags=tags,
+        runtime_meta=runtime_meta,
     )
 
 
@@ -117,6 +125,14 @@ async def reroll_message(message_id: str):
     return await history_service.reroll_assistant_message(message_id)
 
 
+def prepare_reroll_payload(message_id: str) -> dict:
+    return history_service.prepare_reroll_payload(message_id)
+
+
+def prepare_edit_payload(message_id: str, new_content: str) -> dict:
+    return history_service.prepare_edit_payload(message_id, new_content)
+
+
 def get_last_user_message_time(character_name: str):
     return history_service.get_last_user_message_time(character_name)
 
@@ -138,7 +154,7 @@ def get_full_history(character_name: str):
 
 
 def get_lorebook_entries():
-    character_name = get_config_value("system.char_name")
+    character_name = get_active_character_name(default="default_waifu")
     return history_service.get_lorebook_entries(character_name)
 
 
@@ -150,6 +166,10 @@ def get_reasoning_by_message_id(message_id: str):
     return history_service.get_reasoning_by_message_id(message_id)
 
 
+def update_history_runtime_meta(message_id: str, runtime_meta: dict) -> bool:
+    return history_service.update_history_runtime_meta(message_id, runtime_meta)
+
+
 def _serialize_history_rows(rows):
     serialized = []
     for r in rows:
@@ -159,12 +179,13 @@ def _serialize_history_rows(rows):
                 "role": r.role,
                 "content": _merge_reasoning(r),
                 "timestamp": (
-                    r.timestamp.isoformat()
-                    if hasattr(r.timestamp, "isoformat")
-                    else str(r.timestamp)
+                    to_user_tz_iso(r.timestamp)
+                    if hasattr(r, "timestamp")
+                    else to_user_tz_iso(None)
                 ),
                 "media": serialize_media_entries(getattr(r, "media", [])),
                 "tags": json.loads(getattr(r, "tags", "[]") or "[]"),
+                "runtime_meta": json.loads(getattr(r, "runtime_meta", "{}") or "{}"),
             }
         )
     return serialized
@@ -180,3 +201,4 @@ def _merge_reasoning(history_row) -> str:
             return f"<think>\n{reasoning_text}\n</think>\n\n{content}"
 
     return content
+

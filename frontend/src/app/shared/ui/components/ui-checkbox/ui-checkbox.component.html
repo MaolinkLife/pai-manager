@@ -1,0 +1,19 @@
+<button
+    type="button"
+    class="ui-checkbox"
+    [class.ui-checkbox--checked]="checked"
+    [class.ui-checkbox--disabled]="disabled"
+    [class.ui-checkbox--readonly]="isReadonly"
+    [disabled]="disabled"
+    [attr.id]="id || null"
+    [attr.aria-checked]="checked"
+    [attr.aria-disabled]="disabled || isReadonly"
+    (click)="toggle()"
+    (blur)="markTouched()"
+>
+    <span class="ui-checkbox__box" aria-hidden="true"></span>
+    <span class="ui-checkbox__label">
+        <ng-content></ng-content>
+        <ng-container *ngIf="label">{{ label }}</ng-container>
+    </span>
+</button>

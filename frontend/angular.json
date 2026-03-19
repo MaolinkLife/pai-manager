@@ -54,8 +54,8 @@
                                 },
                                 {
                                     "type": "anyComponentStyle",
-                                    "maximumWarning": "2kb",
-                                    "maximumError": "4kb"
+                                    "maximumWarning": "8kb",
+                                    "maximumError": "16kb"
                                 }
                             ],
                             "fileReplacements": [
@@ -84,10 +84,10 @@
                     },
                     "configurations": {
                         "production": {
-                            "browserTarget": "z-waif-project:build:production"
+                          "buildTarget": "z-waif-project:build:production"
                         },
                         "development": {
-                            "browserTarget": "z-waif-project:build:development"
+                          "buildTarget": "z-waif-project:build:development"
                         }
                     },
                     "defaultConfiguration": "development"
@@ -95,7 +95,7 @@
                 "extract-i18n": {
                     "builder": "@angular-devkit/build-angular:extract-i18n",
                     "options": {
-                        "browserTarget": "z-waif-project:build"
+                      "buildTarget": "z-waif-project:build"
                     }
                 },
                 "test": {
@@ -118,6 +118,5 @@
                 }
             }
         }
-    },
-    "defaultProject": "z-waif-project"
+    }
 }

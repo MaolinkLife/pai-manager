@@ -4,8 +4,8 @@ import { NotificationContainerComponent } from './notification-container.compone
 import { NOTIFICATION_DATA } from './notification.tokens';
 
 export interface NotificationOptions {
-    message?: string;
-    title?: string;
+    message?: any;
+    title?: any;
     type: 'success' | 'error' | 'warning' | 'info';
     duration?: number;
     template?: TemplateRef<any>;
@@ -25,11 +25,12 @@ export class NotificationService {
     }
 
     open(options: NotificationOptions) {
+        const normalized = this.normalizeOptions(options);
         const notificationRef = new NotificationRef(() => this.destroy(componentRef));
 
         const injector = Injector.create({
             providers: [
-                { provide: NOTIFICATION_DATA, useValue: options },
+                { provide: NOTIFICATION_DATA, useValue: normalized },
                 { provide: NotificationRef, useValue: notificationRef }
             ],
             parent: this.injector
@@ -60,5 +61,73 @@ export class NotificationService {
         container.style.zIndex = '9999';
         document.body.appendChild(container);
         return container;
+    }
+
+    private normalizeOptions(options: NotificationOptions): NotificationOptions {
+        const type = options?.type || 'info';
+        const title = this.extractText(options?.title) || this.defaultTitle(type);
+        const message = this.extractText(options?.message);
+
+        return {
+            ...options,
+            type,
+            title,
+            message,
+        };
+    }
+
+    private defaultTitle(type: NotificationOptions['type']): string {
+        if (type === 'success') {
+            return 'Success';
+        }
+        if (type === 'error') {
+            return 'Error';
+        }
+        if (type === 'warning') {
+            return 'Warning';
+        }
+        return 'Info';
+    }
+
+    private extractText(value: any): string {
+        if (value === null || value === undefined) {
+            return '';
+        }
+
+        if (typeof value === 'string') {
+            const trimmed = value.trim();
+            return trimmed && trimmed !== '[object Object]' ? trimmed : '';
+        }
+
+        if (typeof value === 'number' || typeof value === 'boolean') {
+            return String(value);
+        }
+
+        if (Array.isArray(value)) {
+            return value
+                .map((item) => this.extractText(item))
+                .filter(Boolean)
+                .join('; ');
+        }
+
+        if (typeof value === 'object') {
+            const candidates = [
+                value?.detail,
+                value?.message,
+                value?.msg,
+                value?.error,
+                value?.description,
+                value?.title,
+                value?.statusText,
+            ];
+            for (const candidate of candidates) {
+                const parsed = this.extractText(candidate);
+                if (parsed) {
+                    return parsed;
+                }
+            }
+        }
+
+        return '';
     }
 }

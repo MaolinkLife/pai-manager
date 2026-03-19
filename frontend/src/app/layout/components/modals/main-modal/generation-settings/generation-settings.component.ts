@@ -1,5 +1,5 @@
-import { Component, ElementRef, OnDestroy, OnInit, ViewChild } from '@angular/core';
-import { FormBuilder, FormGroup } from '@angular/forms';
+import { Component, OnDestroy, OnInit } from '@angular/core';
+import { UntypedFormBuilder, UntypedFormGroup } from '@angular/forms';
 import { ConfigService } from '../../../../../core/services/config.service';
 import { ApiService } from '../../../../../core/services/api.service';
 import { GenerationPreset } from '../../../../../core/models/generation-preset.model';
@@ -7,6 +7,7 @@ import { combineLatest, BehaviorSubject, Subject } from 'rxjs';
 import { LocalizationService } from '../../../../../shared/pipes/translation/localization.service';
 import { tap, finalize, takeUntil, distinctUntilChanged } from 'rxjs/operators';
 import { NotificationService } from '../../../../../shared/components/notification/notification.service';
+import { UiSelectOption } from '../../../../../shared/ui/components/ui-select/ui-select.component';
 
 @Component({
     selector: 'app-generation-settings',
@@ -14,11 +15,8 @@ import { NotificationService } from '../../../../../shared/components/notificati
     styleUrls: ['./generation-settings.component.less']
 })
 export class GenerationSettingsComponent implements OnInit, OnDestroy {
-    @ViewChild('tokenSlider') tokenSliderRef!: ElementRef<HTMLInputElement>;
-    @ViewChild('tokenInput') tokenInputRef!: ElementRef<HTMLInputElement>;
-
-    generationForm: FormGroup;
-    generationSettingsForm: FormGroup;
+    generationForm: UntypedFormGroup;
+    generationSettingsForm: UntypedFormGroup;
     originalConfig: any;
     presets: GenerationPreset[] = [];
     selectedPresetName: string = 'default';
@@ -32,7 +30,7 @@ export class GenerationSettingsComponent implements OnInit, OnDestroy {
     private destroy$ = new Subject<void>();
 
     constructor(
-        private fb: FormBuilder,
+        private fb: UntypedFormBuilder,
         private configService: ConfigService,
         private apiService: ApiService,
         private localizationService: LocalizationService,
@@ -45,11 +43,10 @@ export class GenerationSettingsComponent implements OnInit, OnDestroy {
     ngOnInit(): void {
         this.setupActiveProviderListener();
         this.loadConfigAndPresets();
-        this.setupTokenLimitSync();
         this.localizationService.init();
     }
 
-    private createMainForm(): FormGroup {
+    private createMainForm(): UntypedFormGroup {
         return this.fb.group({
             apiType: ['Ollama'],
             activeProvider: ['ollama'],
@@ -62,7 +59,7 @@ export class GenerationSettingsComponent implements OnInit, OnDestroy {
         });
     }
 
-    private createGenerationSettingsForm(): FormGroup {
+    private createGenerationSettingsForm(): UntypedFormGroup {
         return this.fb.group({
             name: [''],
             description: [''],
@@ -134,7 +131,7 @@ export class GenerationSettingsComponent implements OnInit, OnDestroy {
     }
 
     private initializeProviders(providers: Record<string, any>): void {
-        const providersGroup = this.generationForm.get('providers') as FormGroup;
+        const providersGroup = this.generationForm.get('providers') as UntypedFormGroup;
         if (!providersGroup) {
             return;
         }
@@ -157,7 +154,7 @@ export class GenerationSettingsComponent implements OnInit, OnDestroy {
         });
     }
 
-    private buildProviderGroup(config: Record<string, any>): FormGroup {
+    private buildProviderGroup(config: Record<string, any>): UntypedFormGroup {
         const controls: Record<string, any> = {};
         Object.keys(config || {}).forEach(field => {
             controls[field] = [config[field]];
@@ -192,28 +189,16 @@ export class GenerationSettingsComponent implements OnInit, OnDestroy {
         return (providerGroup?.get('model')?.value as string) || '';
     }
 
-    private getProviderForm(provider: string): FormGroup | null {
-        const providersGroup = this.generationForm.get('providers') as FormGroup;
+    private getProviderForm(provider: string): UntypedFormGroup | null {
+        const providersGroup = this.generationForm.get('providers') as UntypedFormGroup;
         if (!providersGroup || !provider) {
             return null;
         }
-        return providersGroup.get(provider) as FormGroup;
+        return providersGroup.get(provider) as UntypedFormGroup;
     }
 
-    private setupTokenLimitSync(): void {
-        const tokenLimitControl = this.generationForm.get('tokenLimit');
-
-        tokenLimitControl?.valueChanges.subscribe(value => {
-            if (!value) return;
-
-            if (this.tokenSliderRef?.nativeElement) {
-                this.tokenSliderRef.nativeElement.value = value.toString();
-            }
-
-            if (this.tokenInputRef?.nativeElement) {
-                this.tokenInputRef.nativeElement.value = value.toString();
-            }
-        });
+    onTokenLimitRangeChange(value: number): void {
+        this.generationForm.get('tokenLimit')?.setValue(value);
     }
 
     toggleDropdown() {
@@ -290,9 +275,11 @@ export class GenerationSettingsComponent implements OnInit, OnDestroy {
         }
     }
 
-    onPresetChange(event: Event): void {
-        const target = event.target as HTMLSelectElement;
-        this.applyPreset(target.value);
+    onPresetChange(event: any): void {
+        const value = event?.target?.value;
+        if (typeof value === 'string') {
+            this.applyPreset(value);
+        }
     }
     hasChanges(): boolean {
         if (!this.originalConfig) {
@@ -308,7 +295,7 @@ export class GenerationSettingsComponent implements OnInit, OnDestroy {
 
     private buildCurrentApiConfig(): any {
         const values = this.generationForm.value;
-        const providersGroup = this.generationForm.get('providers') as FormGroup;
+        const providersGroup = this.generationForm.get('providers') as UntypedFormGroup;
         const providerValues: Record<string, any> = {};
 
         Object.keys(providersGroup?.controls || {}).forEach(key => {
@@ -350,7 +337,7 @@ export class GenerationSettingsComponent implements OnInit, OnDestroy {
         return JSON.stringify(a) === JSON.stringify(b);
     }
 
-    get currentProviderForm(): FormGroup | null {
+    get currentProviderForm(): UntypedFormGroup | null {
         const activeProvider = this.generationForm.get('activeProvider')?.value;
         return this.getProviderForm(activeProvider);
     }
@@ -383,6 +370,31 @@ export class GenerationSettingsComponent implements OnInit, OnDestroy {
             return value;
         }
         return value.charAt(0).toUpperCase() + value.slice(1);
+    }
+
+    get apiTypeSelectOptions(): UiSelectOption[] {
+        return (this.apiTypeOptions || []).map(option => ({
+            value: option,
+            label: option,
+        }));
+    }
+
+    get activeProviderOptions(): UiSelectOption[] {
+        return (this.providerKeys || []).map(provider => ({
+            value: provider,
+            label: this.capitalize(provider),
+        }));
+    }
+
+    get presetOptions(): UiSelectOption[] {
+        return (this.presets || []).map((preset) => ({
+            value: preset.name,
+            label: preset.name,
+        }));
+    }
+
+    trackByProviderField(_index: number, field: { key: string }): string {
+        return field.key;
     }
 
     ngOnDestroy(): void {

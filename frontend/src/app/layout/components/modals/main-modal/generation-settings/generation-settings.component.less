@@ -105,49 +105,6 @@
         }
     }
 
-    input[type="range"] {
-        appearance: none;
-        width: 100%;
-        height: 6px;
-        background: color-mix(
-            in srgb,
-            var(--color-border) 90%,
-            white
-        ); // заменяет lighten(@color-border, 10%)
-        border-radius: 4px;
-        cursor: pointer;
-        outline: none;
-        transition: background 0.2s ease;
-
-        &::-webkit-slider-thumb {
-            appearance: none;
-            width: 16px;
-            height: 16px;
-            border-radius: 50%;
-            background: var(--color-accent);
-            border: 2px solid var(--color-surface);
-            box-shadow: 0 0 6px var(--color-focus);
-            transition: box-shadow 0.2s ease;
-
-            &:hover {
-                box-shadow: 0 0 10px var(--color-accent);
-            }
-        }
-
-        &::-moz-range-thumb {
-            width: 16px;
-            height: 16px;
-            border-radius: 50%;
-            background: var(--color-accent);
-            border: 2px solid var(--color-surface);
-            box-shadow: 0 0 6px var(--color-focus);
-
-            &:hover {
-                box-shadow: 0 0 10px var(--color-accent);
-            }
-        }
-    }
-
     select {
         appearance: none;
         background-color: var(--color-bg);
@@ -206,6 +163,12 @@
         color: var(--color-text-active);
     }
 
+    app-ui-input {
+        display: block;
+        width: 100%;
+        margin-bottom: 10px;
+    }
+
     input[type="number"] {
         width: 120px;
         margin-bottom: 10px;
@@ -222,39 +185,28 @@
         }
     }
 
-    input[type="range"] {
-        width: 100%;
-        height: 6px;
-        background-color: var(--color-border);
-        border-radius: 4px;
-        appearance: none;
-
-        &::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            width: 16px;
-            height: 16px;
-            border-radius: 50%;
-            background: var(--color-accent);
-            cursor: pointer;
-            border: 2px solid var(--color-surface);
-        }
-
-        &::-moz-range-thumb {
-            width: 16px;
-            height: 16px;
-            border-radius: 50%;
-            background: var(--color-accent);
-            border: 2px solid var(--color-surface);
-            cursor: pointer;
-        }
+    app-ui-range {
+        display: block;
+        margin-top: 2px;
     }
+}
 
-    .token-range-labels {
-        display: flex;
-        justify-content: space-between;
-        font-size: 12px;
-        color: var(--color-text);
-        margin-top: 4px;
+.settings-form {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+.section {
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    padding: 18px;
+
+    h3 {
+        margin: 0 0 14px;
+        font-size: 16px;
+        color: var(--color-text-active);
     }
 }
 

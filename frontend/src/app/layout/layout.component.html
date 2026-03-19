@@ -3,132 +3,222 @@
     <aside class="sidebar">
         <div class="top-buttons">
             <!-- Chat Icon -->
-            <button class="icon-button" [routerLink]="['chat']">
-                <svg
-                    width="20"
-                    height="20"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                >
-                    <path
-                        d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"
-                    ></path>
-                </svg>
+            <button class="icon-button" [routerLink]="['chat']" routerLinkActive="active" data-tooltip="Чат" aria-label="Чат">
+                <app-custom-svg name="chat-bubble" [size]="20"></app-custom-svg>
             </button>
 
-            <!-- Settings Icon -->
-            <button class="icon-button" (click)="openSettingsModal()">
-                <svg
-                    width="20"
-                    height="20"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                >
-                    <circle cx="12" cy="12" r="3"></circle>
-                    <path
-                        d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"
-                    ></path>
-                </svg>
+            <button *ngIf="!anonymousMode" class="icon-button" [routerLink]="['memory']" routerLinkActive="active" data-tooltip="Память" aria-label="Память">
+                <app-custom-svg name="file" [size]="20"></app-custom-svg>
             </button>
 
-            <!-- Tasks Icon -->
-            <button class="icon-button" [routerLink]="['tasks']">
-                <svg
-                    width="20"
-                    height="20"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                >
-                    <rect
-                        x="3"
-                        y="3"
-                        width="18"
-                        height="18"
-                        rx="2"
-                        ry="2"
-                    ></rect>
-                    <line x1="9" y1="9" x2="15" y2="9"></line>
-                    <line x1="9" y1="13" x2="15" y2="13"></line>
-                    <line x1="9" y1="17" x2="13" y2="17"></line>
-                </svg>
+            <button *ngIf="!anonymousMode" class="icon-button" [routerLink]="['matrix']" routerLinkActive="active" data-tooltip="Матрица" aria-label="Матрица">
+                <app-custom-svg name="history" [size]="20"></app-custom-svg>
+            </button>
+
+            <button *ngIf="!anonymousMode" class="icon-button" [routerLink]="['synthesis']" routerLinkActive="active" data-tooltip="Синтез" aria-label="Синтез">
+                <app-custom-svg name="synthesis" [size]="20"></app-custom-svg>
+            </button>
+
+            <button *ngIf="!anonymousMode && uiFlags.diary" class="icon-button" [routerLink]="['diary']" routerLinkActive="active" data-tooltip="Дневник" aria-label="Дневник">
+                <app-custom-svg name="diary" [size]="20"></app-custom-svg>
+            </button>
+
+            <button *ngIf="!anonymousMode && uiFlags.audit" class="icon-button" [routerLink]="['audit']" routerLinkActive="active" data-tooltip="Аудит" aria-label="Аудит">
+                <app-custom-svg name="audit" [size]="20"></app-custom-svg>
             </button>
 
             <!-- Debug/Bug Icon -->
-            <button class="icon-button" [routerLink]="['debug']">
-                <svg
-                    width="20"
-                    height="20"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                >
-                    <rect
-                        x="3"
-                        y="3"
-                        width="18"
-                        height="18"
-                        rx="2"
-                        ry="2"
-                    ></rect>
-                    <line x1="9" y1="9" x2="15" y2="15"></line>
-                    <line x1="15" y1="9" x2="9" y2="15"></line>
-                </svg>
+            <button *ngIf="!anonymousMode" class="icon-button" [routerLink]="['debug']" routerLinkActive="active" data-tooltip="Дебаг" aria-label="Дебаг">
+                <app-custom-svg name="bug" [size]="20"></app-custom-svg>
             </button>
         </div>
 
         <div class="bottom-button">
-            <!-- Profile/User Icon -->
-            <button class="icon-button">
-                <svg
-                    width="20"
-                    height="20"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                >
-                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-                    <circle cx="12" cy="7" r="4"></circle>
-                </svg>
+            <button
+                *ngIf="!anonymousMode"
+                class="icon-button secondary"
+                [class.active]="entityPanelOpen"
+                (click)="toggleEntityPanel()"
+                data-tooltip="Состояние"
+                aria-label="Состояние"
+            >
+                <app-custom-svg name="neuralink" [size]="20"></app-custom-svg>
             </button>
+
+            <div class="profile-wrap">
+                <button
+                    class="icon-button"
+                    data-tooltip="Профиль"
+                    aria-label="Профиль"
+                    (click)="toggleProfileMenu()"
+                >
+                    <span class="profile-initials">{{ getProfileInitials() }}</span>
+                </button>
+
+                <div class="profile-menu" *ngIf="profileMenuOpen">
+                    <ng-container *ngIf="!anonymousMode; else anonymousProfile">
+                        <div class="profile-line profile-name">{{ currentUser?.name || currentUser?.login || currentUser?.email }}</div>
+                        <div class="profile-line profile-meta">{{ currentUser?.role }} · {{ currentUser?.email }}</div>
+                        <app-ui-button variant="secondary" size="sm" [fullWidth]="true" (pressed)="logout()">
+                            Выйти
+                        </app-ui-button>
+                    </ng-container>
+                    <ng-template #anonymousProfile>
+                        <div class="profile-line profile-name">Анонимный режим</div>
+                        <div class="profile-line profile-meta">Без персональных настроек и API ключей</div>
+                        <app-ui-button variant="secondary" size="sm" [fullWidth]="true" (pressed)="goToAuth()">
+                            Авторизоваться
+                        </app-ui-button>
+                    </ng-template>
+                </div>
+            </div>
         </div>
     </aside>
 
     <!-- Content -->
-    <div class="content">
+    <div class="content" [class.with-entity-panel]="entityPanelOpen">
         <header class="header">
-            <div class="title"></div>
-            <div class="subtitle" (click)="memoryClick()">
-                <div class="icon">
-                    <svg
-                        width="20"
-                        height="20"
-                        viewBox="0 0 20 20"
-                        fill="currentColor"
-                    >
-                        <path
-                            d="M15.498 8.50159C16.3254 8.50159 16.9959 9.17228 16.9961 9.99963C16.9961 10.8271 16.3256 11.4987 15.498 11.4987C14.6705 11.4987 14 10.8271 14 9.99963C14.0002 9.17228 14.6706 8.50159 15.498 8.50159Z"
-                        ></path>
-                        <path
-                            d="M4.49805 8.50159C5.32544 8.50159 5.99689 9.17228 5.99707 9.99963C5.99707 10.8271 5.32555 11.4987 4.49805 11.4987C3.67069 11.4985 3 10.827 3 9.99963C3.00018 9.17239 3.6708 8.50176 4.49805 8.50159Z"
-                        ></path>
-                        <path
-                            d="M10.0003 8.50159C10.8276 8.50176 11.4982 9.17239 11.4984 9.99963C11.4984 10.827 10.8277 11.4985 10.0003 11.4987C9.17283 11.4987 8.50131 10.8271 8.50131 9.99963C8.50149 9.17228 9.17294 8.50159 10.0003 8.50159Z"
-                        ></path>
-                    </svg>
+            <div class="title">{{ isChatRoute ? 'Chat' : 'PAI' }}</div>
+            <div class="header-actions">
+                <button
+                    *ngIf="isChatRoute && canManageSettings()"
+                    type="button"
+                    class="header-icon-btn"
+                    [class.active]="generationPanelOpen"
+                    (click)="toggleGenerationPanel()"
+                    title="Generation settings"
+                >
+                    <app-custom-svg name="settings" [size]="20"></app-custom-svg>
+                </button>
+                <div class="subtitle" *ngIf="canManageSettings()" (click)="memoryClick()">
+                    <div class="icon">
+                        <app-custom-svg name="dots-horizontal" [size]="20"></app-custom-svg>
+                    </div>
                 </div>
             </div>
         </header>
 
-        <main class="main-area">
+        <aside
+            class="chat-settings-panel"
+            [class.open]="generationPanelOpen"
+            [attr.aria-hidden]="!generationPanelOpen"
+        >
+            <div class="chat-settings-header">
+                <div>
+                    <div class="chat-settings-title">Generation</div>
+                    <div class="chat-settings-subtitle">
+                        Provider: {{ generationProvider | titlecase }}
+                    </div>
+                </div>
+                <button
+                    type="button"
+                    class="chat-settings-close"
+                    (click)="closeGenerationPanel()"
+                    title="Close"
+                >
+                    <app-custom-svg name="close" [size]="18"></app-custom-svg>
+                </button>
+            </div>
+
+            <div class="chat-settings-body">
+                <div class="setting-block">
+                    <label for="quick-model">Model</label>
+                    <ng-container *ngIf="generationProvider === 'ollama'; else textModelInput">
+                        <app-ui-select
+                            id="quick-model"
+                            [disabled]="generationPanelLoading || generationPanelSaving"
+                            [options]="generationModels"
+                            [(ngModel)]="generationModel"
+                            placeholder="Select model"
+                        ></app-ui-select>
+                    </ng-container>
+                    <ng-template #textModelInput>
+                        <app-ui-input
+                            id="quick-model"
+                            type="text"
+                            [disabled]="generationPanelLoading || generationPanelSaving"
+                            [(ngModel)]="generationModel"
+                        ></app-ui-input>
+                    </ng-template>
+                </div>
+
+                <div class="setting-block">
+                    <label for="quick-temperature">
+                        Temperature: {{ generationTemperature | number: '1.2-2' }}
+                    </label>
+                    <app-ui-range
+                        id="quick-temperature"
+                        [min]="0"
+                        [max]="2"
+                        [step]="0.01"
+                        [disabled]="generationPanelLoading || generationPanelSaving"
+                        [(ngModel)]="generationTemperature"
+                    ></app-ui-range>
+                </div>
+
+                <div class="setting-block">
+                    <label for="quick-top-p">Top P: {{ generationTopP | number: '1.2-2' }}</label>
+                    <app-ui-range
+                        id="quick-top-p"
+                        [min]="0.1"
+                        [max]="1"
+                        [step]="0.01"
+                        [disabled]="generationPanelLoading || generationPanelSaving"
+                        [(ngModel)]="generationTopP"
+                    ></app-ui-range>
+                </div>
+
+                <div class="setting-block">
+                    <label for="quick-top-k">Top K: {{ generationTopK }}</label>
+                    <app-ui-range
+                        id="quick-top-k"
+                        [min]="1"
+                        [max]="100"
+                        [step]="1"
+                        [disabled]="generationPanelLoading || generationPanelSaving"
+                        [(ngModel)]="generationTopK"
+                    ></app-ui-range>
+                </div>
+
+                <div class="setting-block">
+                    <label for="quick-max-tokens">Max tokens</label>
+                    <app-ui-input
+                        id="quick-max-tokens"
+                        type="number"
+                        [min]="64"
+                        [max]="32768"
+                        [step]="64"
+                        [disabled]="generationPanelLoading || generationPanelSaving"
+                        [(ngModel)]="generationMaxTokens"
+                    ></app-ui-input>
+                </div>
+
+                <app-ui-button
+                    [disabled]="generationPanelLoading || generationPanelSaving"
+                    [loading]="generationPanelSaving"
+                    [fullWidth]="true"
+                    (pressed)="saveQuickGenerationSettings()"
+                >
+                    {{ generationPanelSaving ? 'Saving...' : 'Save' }}
+                </app-ui-button>
+            </div>
+        </aside>
+
+        <div
+            class="chat-settings-overlay"
+            *ngIf="generationPanelOpen"
+            (click)="closeGenerationPanel()"
+        ></div>
+
+        <main
+            class="main-area"
+            [class.chat-route]="isChatRoute"
+        >
             <router-outlet></router-outlet>
         </main>
+
+        <aside class="entity-panel" [class.open]="entityPanelOpen" [attr.aria-hidden]="!entityPanelOpen">
+            <app-ai-entity-visualizer></app-ai-entity-visualizer>
+        </aside>
     </div>
 </div>

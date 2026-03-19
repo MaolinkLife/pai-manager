@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session, joinedload
 from models.models import History, Reasoning
 from services.db_core import SessionLocal
 from services.logger_service import log_audit_entry, AuditStatus
-from utils.time_utils import format_user_datetime
+from utils.time_utils import format_user_datetime, to_user_tz_iso
 import json
 import asyncio
 from typing import Optional, Sequence
@@ -25,6 +25,7 @@ def add_history(
     session: Optional[Session] = None,
     media_items: Optional[list] = None,
     tags: Optional[Sequence[str]] = None,
+    runtime_meta: Optional[dict] = None,
 ):
     """Добавление сообщения в историю"""
     own_session = False
@@ -43,6 +44,7 @@ def add_history(
             content=content,
             timestamp=timestamp,
             tags=json.dumps(list(tags or []), ensure_ascii=False),
+            runtime_meta=json.dumps(runtime_meta or {}, ensure_ascii=False),
         )
         session.add(entry)
         session.commit()
@@ -78,6 +80,29 @@ def add_history(
 
         entry.media_payload = media_payload
         return entry
+    finally:
+        if own_session:
+            session.close()
+
+
+def update_history_runtime_meta(
+    message_id: str, runtime_meta: dict, session: Optional[Session] = None
+) -> bool:
+    own_session = False
+    if session is None:
+        session = SessionLocal()
+        own_session = True
+
+    try:
+        message = session.query(History).filter_by(id=message_id).first()
+        if not message:
+            return False
+        message.runtime_meta = json.dumps(runtime_meta or {}, ensure_ascii=False)
+        session.commit()
+        return True
+    except Exception:
+        session.rollback()
+        return False
     finally:
         if own_session:
             session.close()
@@ -347,6 +372,85 @@ def get_messages_by_ids(message_ids: Sequence[str]):
             .order_by(History.timestamp.asc())
             .all()
         )
+    finally:
+        session.close()
+
+
+def prepare_reroll_payload(message_id: str) -> dict:
+    """
+    Prepare user payload for reroll in streaming pipeline.
+    Deletes old assistant+paired user messages from DB and returns user message
+    fields so websocket reroll can be processed exactly like send_message.
+    """
+    session: Session = SessionLocal()
+    try:
+        assistant_msg = get_message_from_database(
+            session, filters={"id": message_id}, expected_role="assistant"
+        )
+
+        user_msg = get_last_user_message_before(
+            session,
+            character_id=assistant_msg.character_id,
+            before_timestamp=assistant_msg.timestamp,
+        )
+
+        payload = {
+            "id": user_msg.id,
+            "role": "user",
+            "content": user_msg.content,
+            "timestamp": to_user_tz_iso(
+                user_msg.timestamp if hasattr(user_msg, "timestamp") else None
+            ),
+            "media": serialize_media_entries(getattr(user_msg, "media", []) or []),
+        }
+
+        delete_messages_from_database(session, [assistant_msg, user_msg])
+        return payload
+    finally:
+        session.close()
+
+
+def prepare_edit_payload(message_id: str, new_content: str) -> dict:
+    """
+    Prepare edited user payload for streaming pipeline.
+    Replaces selected user message content, removes paired assistant response,
+    and returns user payload so websocket edit can be processed as send_message.
+    """
+    session: Session = SessionLocal()
+    try:
+        user_msg = get_message_from_database(
+            session, filters={"id": message_id}, expected_role="user"
+        )
+        updated_text = (new_content or "").strip()
+        if not updated_text:
+            raise ValueError("new_content is empty")
+
+        assistant_msg = (
+            session.query(History)
+            .filter(
+                History.character_id == user_msg.character_id,
+                History.timestamp > user_msg.timestamp,
+                History.role == "assistant",
+            )
+            .order_by(History.timestamp.asc())
+            .first()
+        )
+
+        payload = {
+            "id": user_msg.id,
+            "role": "user",
+            "content": updated_text,
+            "timestamp": to_user_tz_iso(
+                user_msg.timestamp if hasattr(user_msg, "timestamp") else None
+            ),
+            "media": serialize_media_entries(getattr(user_msg, "media", []) or []),
+        }
+
+        to_delete = [user_msg]
+        if assistant_msg:
+            to_delete.append(assistant_msg)
+        delete_messages_from_database(session, to_delete)
+        return payload
     finally:
         session.close()
 

@@ -1,131 +1,13 @@
 <div class="settings-wrapper">
-    <!-- Скелетон, пока данные не загружены -->
     <ng-container *ngIf="isLoading$ | async; else formContent">
         <div class="settings-form">
             <h2><app-skeleton height="2rem" width="150px"></app-skeleton></h2>
-
-            <!-- General Settings -->
             <div class="section">
-                <h3>
-                    <app-skeleton height="1.5rem" width="120px"></app-skeleton>
-                </h3>
-
-                <div class="form-group">
-                    <app-skeleton height="1.5rem" width="100%"></app-skeleton>
-                </div>
-
-                <div class="form-group">
-                    <label
-                        ><app-skeleton
-                            height="1rem"
-                            width="120px"
-                        ></app-skeleton
-                    ></label>
-                    <app-skeleton height="2.5rem" width="100%"></app-skeleton>
-                </div>
-
-                <div class="form-group">
-                    <app-skeleton height="1.5rem" width="100%"></app-skeleton>
-                </div>
-
-                <div class="form-group">
-                    <app-skeleton height="1.5rem" width="100%"></app-skeleton>
-                </div>
+                <h3><app-skeleton height="1.5rem" width="120px"></app-skeleton></h3>
+                <div class="form-group"><app-skeleton height="1.5rem" width="100%"></app-skeleton></div>
+                <div class="form-group"><app-skeleton height="2.5rem" width="100%"></app-skeleton></div>
+                <div class="form-group"><app-skeleton height="2.5rem" width="100%"></app-skeleton></div>
             </div>
-
-            <!-- Audio Output -->
-            <div class="section">
-                <h3>
-                    <app-skeleton height="1.5rem" width="120px"></app-skeleton>
-                </h3>
-
-                <div class="form-group">
-                    <app-skeleton height="1.5rem" width="100%"></app-skeleton>
-                </div>
-
-                <div class="form-group">
-                    <label
-                        ><app-skeleton
-                            height="1rem"
-                            width="120px"
-                        ></app-skeleton
-                    ></label>
-                    <app-skeleton height="2.5rem" width="100%"></app-skeleton>
-                </div>
-
-                <div class="form-group">
-                    <label
-                        ><app-skeleton
-                            height="1rem"
-                            width="120px"
-                        ></app-skeleton
-                    ></label>
-                    <app-skeleton height="2.5rem" width="100%"></app-skeleton>
-                </div>
-            </div>
-
-            <!-- Voice Configuration -->
-            <div class="section">
-                <h3>
-                    <app-skeleton height="1.5rem" width="120px"></app-skeleton>
-                </h3>
-
-                <div class="form-group">
-                    <label
-                        ><app-skeleton height="1rem" width="80px"></app-skeleton
-                    ></label>
-                    <app-skeleton height="2.5rem" width="100%"></app-skeleton>
-                </div>
-
-                <div class="form-group">
-                    <label
-                        ><app-skeleton height="1rem" width="80px"></app-skeleton
-                    ></label>
-                    <app-skeleton height="2.5rem" width="100%"></app-skeleton>
-                </div>
-
-                <div class="form-group">
-                    <label
-                        ><app-skeleton height="1rem" width="80px"></app-skeleton
-                    ></label>
-                    <app-skeleton height="2.5rem" width="100%"></app-skeleton>
-                </div>
-
-                <div class="form-group">
-                    <label
-                        ><app-skeleton height="1rem" width="80px"></app-skeleton
-                    ></label>
-                    <app-skeleton height="2.5rem" width="100%"></app-skeleton>
-                </div>
-
-                <div class="form-group">
-                    <label
-                        ><app-skeleton height="1rem" width="80px"></app-skeleton
-                    ></label>
-                    <app-skeleton height="2.5rem" width="100%"></app-skeleton>
-                </div>
-            </div>
-
-            <!-- Processing -->
-            <div class="section">
-                <h3>
-                    <app-skeleton height="1.5rem" width="120px"></app-skeleton>
-                </h3>
-
-                <div class="form-group">
-                    <app-skeleton height="1.5rem" width="100%"></app-skeleton>
-                </div>
-            </div>
-
-            <!-- Devices Refresh -->
-            <div class="devices-toolbar">
-                <span
-                    ><app-skeleton height="1.2rem" width="100px"></app-skeleton
-                ></span>
-                <app-skeleton height="2.5rem" width="100px"></app-skeleton>
-            </div>
-
-            <!-- Action Buttons -->
             <div class="button-row">
                 <app-skeleton height="2.5rem" width="150px"></app-skeleton>
                 <app-skeleton height="2.5rem" width="150px"></app-skeleton>
@@ -134,339 +16,736 @@
     </ng-container>
 
     <ng-template #formContent>
-        <form
-            [formGroup]="voiceForm"
-            (ngSubmit)="saveChanges()"
-            class="settings-form"
-        >
-            <h2>🎤 {{ "settings.voiceSettings" | translate }}</h2>
+        <form [formGroup]="voiceForm" (ngSubmit)="saveChanges()" class="settings-form">
+            <h2>{{ "settings.voiceSettings" | translate }}</h2>
 
-            <!-- General Settings -->
             <div class="section">
-                <h3>🎛️ {{ "settings.generalSettings" | translate }}</h3>
+                <h3>{{ "settings.generalSettings" | translate }}</h3>
 
                 <div class="form-group">
-                    <label class="checkbox">
-                        <input type="checkbox" formControlName="enabled" />
+                    <app-ui-checkbox formControlName="enabled">
                         {{ "settings.enableVoiceResponses" | translate }}
-                    </label>
+                    </app-ui-checkbox>
                 </div>
 
                 <div class="form-group">
-                    <label for="activeModule">{{
-                        "settings.activeVoiceModule" | translate
-                    }}</label>
-                    <select id="activeModule" formControlName="activeModule">
-                        <option
-                            *ngFor="let module of voiceModules"
-                            [value]="module.value"
-                            [disabled]="module.disabled"
-                            [title]="getModuleTooltip(module)"
-                        >
-                            {{ getModuleLabel(module) }}
-                        </option>
-                    </select>
+                    <label for="activeModule">{{ "settings.activeVoiceModule" | translate }}</label>
+                    <app-ui-select
+                        id="activeModule"
+                        formControlName="activeModule"
+                        [options]="voiceModuleOptions"
+                    ></app-ui-select>
                 </div>
 
                 <div class="form-group">
-                    <label class="checkbox">
-                        <input type="checkbox" formControlName="streamingTts" />
+                    <app-ui-checkbox formControlName="streamingTts">
                         {{ "settings.streamingTts" | translate }}
-                    </label>
+                    </app-ui-checkbox>
                 </div>
 
                 <div class="form-group">
-                    <label class="checkbox">
-                        <input
-                            type="checkbox"
-                            formControlName="enableFallback"
-                        />
+                    <app-ui-checkbox formControlName="enableFallback">
                         {{ "settings.enableFallback" | translate }}
-                    </label>
+                    </app-ui-checkbox>
+                </div>
+
+                <div class="form-group">
+                    <app-ui-checkbox formControlName="useRvc">
+                        {{ "settings.useRvcProcessing" | translate }}
+                    </app-ui-checkbox>
                 </div>
             </div>
 
-            <!-- Audio Output -->
             <div class="section">
-                <h3>🔊 {{ "settings.audioOutput" | translate }}</h3>
+                <h3>{{ "settings.audioOutput" | translate }}</h3>
 
                 <div class="form-group">
-                    <label class="checkbox">
-                        <input
-                            type="checkbox"
-                            formControlName="useWindowsOutput"
-                        />
+                    <app-ui-checkbox formControlName="useWindowsOutput">
                         {{ "settings.useWindowsAudioOutput" | translate }}
-                    </label>
+                    </app-ui-checkbox>
                 </div>
 
                 <div class="form-group">
-                    <label for="outputId">{{
-                        "settings.audioOutputDevice" | translate
-                    }}</label>
-                    <select id="outputId" formControlName="outputId">
-                        <ng-container *ngIf="devices$ | async as devices">
-                            <option
-                                *ngFor="let device of devices.audioOutputs"
-                                [value]="device.id"
-                            >
-                                [{{ device.id }}]: {{ device.name }}
-                            </option>
-                        </ng-container>
-                    </select>
+                    <label for="outputId">{{ "settings.audioOutputDevice" | translate }}</label>
+                    <app-ui-select id="outputId" formControlName="outputId" [options]="audioOutputOptions"></app-ui-select>
                 </div>
 
                 <div class="form-group" *ngIf="showWindowsOutput()">
-                    <label for="windowsOutputId">{{
-                        "settings.windowsOutputDevice" | translate
-                    }}</label>
-                    <select
-                        id="windowsOutputId"
-                        formControlName="windowsOutputId"
-                    >
-                        <ng-container *ngIf="devices$ | async as devices">
-                            <option
-                                *ngFor="let device of devices.windowsOutputs"
-                                [value]="device.id"
-                            >
-                                [{{ device.id }}]: {{ device.name }}
-                            </option>
-                        </ng-container>
-                    </select>
+                    <label for="windowsOutputId">{{ "settings.windowsOutputDevice" | translate }}</label>
+                    <app-ui-select id="windowsOutputId" formControlName="windowsOutputId" [options]="windowsOutputOptions"></app-ui-select>
                 </div>
             </div>
 
-            <!-- Voice Configuration -->
             <div class="section">
-                <h3>🎤 {{ "settings.voiceConfiguration" | translate }}</h3>
+                <h3>{{ "settings.voiceConfiguration" | translate }}</h3>
 
-                <!-- ElevenLabs Fields -->
-                <div
-                    *ngIf="showElevenLabsFields()"
-                    formGroupName="voiceModules"
-                >
-                    <div formGroupName="elevenlabs">
-                        <div class="form-group">
-                            <label for="apiKey">{{
-                                "settings.apiKey" | translate
-                            }}</label>
-                            <input
-                                id="apiKey"
-                                type="password"
-                                formControlName="apiKey"
-                                [placeholder]="
-                                    'settings.enterApiKey' | translate
-                                "
-                            />
+                <div formGroupName="voiceModules">
+                    <ng-container *ngIf="showLegacyConnectors(); else xttsProviderSettings">
+                        <div *ngIf="showElevenLabsFields()" formGroupName="elevenlabs">
+                            <div class="form-grid">
+                                <div class="form-group">
+                                    <label for="elevenlabs-apiKey">{{ "settings.apiKey" | translate }}</label>
+                                    <app-ui-input
+                                        id="elevenlabs-apiKey"
+                                        type="password"
+                                        formControlName="apiKey"
+                                    ></app-ui-input>
+                                </div>
+                                <div class="form-group">
+                                    <label for="elevenlabs-voiceId">{{ "settings.voiceId" | translate }}</label>
+                                    <app-ui-input
+                                        id="elevenlabs-voiceId"
+                                        type="text"
+                                        formControlName="voiceId"
+                                    ></app-ui-input>
+                                </div>
+                                <div class="form-group">
+                                    <label for="elevenlabs-modelId">{{ "settings.modelId" | translate }}</label>
+                                    <app-ui-input
+                                        id="elevenlabs-modelId"
+                                        type="text"
+                                        formControlName="modelId"
+                                    ></app-ui-input>
+                                </div>
+                                <div class="form-group speed-slider-group">
+                                    <label for="elevenlabs-stability">
+                                        <span>{{ "settings.stability" | translate }}</span>
+                                        <span class="slider-value">{{ getElevenLabsField('stability')?.value ?? 0.5 }}</span>
+                                    </label>
+                                    <app-ui-range
+                                        id="elevenlabs-stability"
+                                        formControlName="stability"
+                                        min="0"
+                                        max="1"
+                                        step="0.01"
+                                    ></app-ui-range>
+                                </div>
+                                <div class="form-group speed-slider-group">
+                                    <label for="elevenlabs-similarity">
+                                        <span>{{ "settings.similarity" | translate }}</span>
+                                        <span class="slider-value">{{ getElevenLabsField('similarity')?.value ?? 0.75 }}</span>
+                                    </label>
+                                    <app-ui-range
+                                        id="elevenlabs-similarity"
+                                        formControlName="similarity"
+                                        min="0"
+                                        max="1"
+                                        step="0.01"
+                                    ></app-ui-range>
+                                </div>
+                            </div>
                         </div>
 
-                        <div class="form-group">
-                            <label for="voiceId">{{
-                                "settings.voiceId" | translate
-                            }}</label>
-                            <input
-                                id="voiceId"
-                                type="text"
-                                formControlName="voiceId"
-                                [placeholder]="
-                                    'settings.enterVoiceId' | translate
-                                "
-                            />
+                        <div *ngIf="showVoiceLanguage()" formGroupName="edge">
+                            <div class="form-grid">
+                                <div class="form-group">
+                                    <label for="edge-voiceLanguage">{{ "settings.voiceLanguage" | translate }}</label>
+                                    <app-ui-select
+                                        id="edge-voiceLanguage"
+                                        formControlName="voiceLanguage"
+                                        [options]="edgeVoiceOptions"
+                                    ></app-ui-select>
+                                </div>
+                            </div>
                         </div>
 
-                        <div class="form-group">
-                            <label for="modelId">{{
-                                "settings.modelId" | translate
-                            }}</label>
-                            <input
-                                id="modelId"
-                                type="text"
-                                formControlName="modelId"
-                                [placeholder]="
-                                    'settings.enterModelId' | translate
-                                "
-                            />
+                        <div *ngIf="showGttsFields()" formGroupName="gtts">
+                            <div class="form-grid">
+                                <div class="form-group">
+                                    <label for="gtts-language">{{ "settings.language" | translate }}</label>
+                                    <app-ui-input id="gtts-language" type="text" formControlName="language"></app-ui-input>
+                                </div>
+                                <div class="form-group">
+                                    <label for="gtts-tld">TLD</label>
+                                    <app-ui-input id="gtts-tld" type="text" formControlName="tld"></app-ui-input>
+                                </div>
+                                <div class="form-group">
+                                    <app-ui-checkbox formControlName="slow">
+                                        Slow mode (gTTS)
+                                    </app-ui-checkbox>
+                                </div>
+                                <div class="form-group">
+                                    <label for="gtts-fallback">Fallback voice (pyttsx3)</label>
+                                    <app-ui-input id="gtts-fallback" type="text" formControlName="fallbackVoice"></app-ui-input>
+                                </div>
+                            </div>
                         </div>
 
-                        <div class="form-group">
-                            <label for="stability">{{
-                                "settings.stability" | translate
-                            }}</label>
-                            <input
-                                id="stability"
-                                type="number"
-                                formControlName="stability"
-                                min="0"
-                                max="1"
-                                step="0.01"
-                                placeholder="0.5"
-                            />
+                        <div *ngIf="showOfflineFields()" formGroupName="offline">
+                            <div class="form-grid">
+                                <div class="form-group">
+                                    <label for="offline-voice">Voice</label>
+                                    <app-ui-input id="offline-voice" type="text" formControlName="voice"></app-ui-input>
+                                </div>
+                            </div>
+                        </div>
+                    </ng-container>
+
+                    <ng-template #xttsProviderSettings>
+                    <div formGroupName="coqui">
+                        <div class="section-subtitle">XTTS v2</div>
+
+                        <div class="form-grid">
+                            <div class="form-group xtts-model-group">
+                                <label for="coqui-model-revision">XTTS model folder</label>
+                                <div class="xtts-model-row">
+                                    <app-ui-select
+                                        id="coqui-model-revision"
+                                        formControlName="modelRevision"
+                                        [options]="localXttsModelOptions"
+                                    ></app-ui-select>
+                                    <div class="button-row xtts-actions-row">
+                                        <app-ui-button
+                                            type="button"
+                                            variant="secondary"
+                                            (pressed)="downloadSelectedXttsModel()"
+                                            [disabled]="!canDownloadSelectedXttsModel()"
+                                        >
+                                            Download
+                                        </app-ui-button>
+                                        <app-ui-button
+                                            type="button"
+                                            variant="secondary"
+                                            (pressed)="applySelectedXttsModel()"
+                                            [disabled]="!canApplySelectedXttsModel()"
+                                        >
+                                            Apply
+                                        </app-ui-button>
+                                    </div>
+                                </div>
+                                <div class="xtts-status" *ngIf="getSelectedXttsModelProgress() as xttsStatus">
+                                    <div class="xtts-status-row">
+                                        <span class="xtts-status-label">Status</span>
+                                        <span class="xtts-status-value">{{ xttsStatus }}</span>
+                                    </div>
+                                    <div class="xtts-progress" *ngIf="isSelectedXttsModelDownloading()">
+                                        <div class="xtts-progress-bar" [style.width.%]="getSelectedXttsModelProgressValue()"></div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="form-group voice-file-group">
+                                <label for="coqui-speaker-wav">Voice file</label>
+                                <div class="voice-file-row">
+                                    <app-ui-select
+                                        id="coqui-speaker-wav"
+                                        formControlName="speakerWav"
+                                        [options]="localVoiceFileOptions"
+                                    ></app-ui-select>
+                                    <div class="voice-file-actions">
+                                        <app-ui-button
+                                            type="button"
+                                            variant="secondary"
+                                            (pressed)="toggleVoiceSample()"
+                                            [disabled]="!canPlaySelectedVoiceSample()"
+                                        >
+                                            {{ isSelectedVoiceSamplePlaying() ? 'Stop' : 'Play sample' }}
+                                        </app-ui-button>
+                                        <app-ui-button
+                                            type="button"
+                                            variant="secondary"
+                                            (pressed)="openVoiceImportDialog()"
+                                            [disabled]="isImportingVoice"
+                                        >
+                                            {{ getVoiceImportButtonLabel() }}
+                                        </app-ui-button>
+                                        <input
+                                            #voiceImportInput
+                                            type="file"
+                                            class="hidden-file-input"
+                                            accept=".wav,.mp3,.flac,.ogg,.m4a,audio/*"
+                                            (change)="onVoiceImportSelected($event)"
+                                        />
+                                    </div>
+                                </div>
+                                <div class="field-hint">Source: storage/models/tts/voices</div>
+                                <div class="field-hint" *ngIf="localVoiceFiles.length === 0">
+                                    Folder is empty. Import a sample to populate storage/models/tts/voices.
+                                </div>
+                                <div class="voice-file-summary" *ngIf="getSelectedVoiceFile() as selectedVoice">
+                                    <div class="voice-file-summary__header">
+                                        <div class="voice-file-summary__title">{{ selectedVoice.name }}</div>
+                                        <span class="feature-state" [ngClass]="getSelectedVoiceHealthClass()">
+                                            {{ getSelectedVoiceHealthLabel() }}
+                                        </span>
+                                    </div>
+                                    <div class="voice-file-summary__grid" *ngIf="getSelectedVoiceSummaryRows().length">
+                                        <div class="voice-file-summary__row" *ngFor="let row of getSelectedVoiceSummaryRows()">
+                                            <span class="voice-file-summary__label">{{ row.label }}</span>
+                                            <span class="voice-file-summary__value">{{ row.value }}</span>
+                                        </div>
+                                    </div>
+                                    <div class="field-hint" *ngIf="getSelectedVoiceHint()">
+                                        {{ getSelectedVoiceHint() }}
+                                    </div>
+                                </div>
+                                <div class="voice-import-result" *ngIf="hasLastImportedVoice()">
+                                    <div class="voice-import-result__header">
+                                        <span class="voice-import-result__title">Last import</span>
+                                        <span class="feature-state is-active">Prepared</span>
+                                    </div>
+                                    <div class="voice-file-summary__grid">
+                                        <div class="voice-file-summary__row" *ngFor="let row of getLastImportedVoiceRows()">
+                                            <span class="voice-file-summary__label">{{ row.label }}</span>
+                                            <span class="voice-file-summary__value">{{ row.value }}</span>
+                                        </div>
+                                    </div>
+                                    <div class="field-hint">
+                                        {{ getLastImportedVoiceHint() }}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="coqui-device">Device</label>
+                                <app-ui-select id="coqui-device" formControlName="device" [options]="coquiDeviceOptions"></app-ui-select>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="coqui-language">Language</label>
+                                <app-ui-select id="coqui-language" formControlName="language" [options]="coquiLanguageOptions"></app-ui-select>
+                            </div>
+
+                            <div class="form-group speed-slider-group">
+                                <label for="coqui-speed">
+                                    <span>Speech speed</span>
+                                    <span class="slider-value">{{ getCoquiSpeedLabel() }}</span>
+                                </label>
+                                <app-ui-range
+                                    id="coqui-speed"
+                                    formControlName="speed"
+                                    min="0.5"
+                                    max="2"
+                                    step="0.05"
+                                ></app-ui-range>
+                            </div>
+
+                            <div class="form-group speed-slider-group">
+                                <label for="coqui-volume">
+                                    <span>TTS volume</span>
+                                    <span class="slider-value">{{ getCoquiVolumeLabel() }}</span>
+                                </label>
+                                <app-ui-range
+                                    id="coqui-volume"
+                                    formControlName="volume"
+                                    min="0"
+                                    max="1"
+                                    step="0.05"
+                                ></app-ui-range>
+                                <div class="field-hint">{{ volumeHint }}</div>
+                            </div>
                         </div>
 
-                        <div class="form-group">
-                            <label for="similarity">{{
-                                "settings.similarity" | translate
-                            }}</label>
-                            <input
-                                id="similarity"
-                                type="number"
-                                formControlName="similarity"
-                                min="0"
-                                max="1"
-                                step="0.01"
-                                placeholder="0.75"
-                            />
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Edge Fields -->
-                <div *ngIf="showVoiceLanguage()" formGroupName="voiceModules">
-                    <div formGroupName="edge">
-                        <div class="form-group">
-                            <label for="voiceLanguage">{{
-                                "settings.voiceLanguage" | translate
-                            }}</label>
-                            <ng-container
-                                *ngIf="
-                                    edgeVoices.length > 0;
-                                    else voiceSkeleton
-                                "
+                        <div class="section-subtitle">XTTS Presets</div>
+                        <div class="xtts-preset-list">
+                            <button
+                                *ngFor="let preset of xttsVoicePresets"
+                                type="button"
+                                class="xtts-preset-card"
+                                [class.is-active]="isXttsVoicePresetActive(preset.key)"
+                                (click)="applyXttsVoicePreset(preset.key)"
                             >
-                                <select
-                                    id="voiceLanguage"
-                                    formControlName="voiceLanguage"
-                                    class="voice-select"
-                                >
-                                    <option
-                                        *ngFor="let voice of edgeVoices"
-                                        [value]="voice.name"
+                                <span class="xtts-preset-card__header">
+                                    <span class="xtts-preset-card__title">{{ preset.label }}</span>
+                                    <span
+                                        class="feature-state"
+                                        [ngClass]="isXttsVoicePresetActive(preset.key) ? 'is-active' : 'is-muted'"
                                     >
-                                        {{ voice.name }}
-                                    </option>
-                                </select>
-                            </ng-container>
-                            <ng-template #voiceSkeleton>
-                                <app-skeleton
-                                    height="2.5rem"
-                                    width="100%"
-                                ></app-skeleton>
-                            </ng-template>
+                                        {{ isXttsVoicePresetActive(preset.key) ? 'Active' : 'Preset' }}
+                                    </span>
+                                </span>
+                                <span class="xtts-preset-card__description">{{ preset.description }}</span>
+                            </button>
+                        </div>
+
+                        <div class="section-subtitle">Voice Matching</div>
+                        <div class="form-grid">
+                            <div class="form-group speed-slider-group">
+                                <label for="coqui-voice-similarity">
+                                    <span>Voice Similarity</span>
+                                    <span class="slider-value">{{ getVoiceSimilarityLabel() }}</span>
+                                </label>
+                                <app-ui-range
+                                    id="coqui-voice-similarity"
+                                    formControlName="voiceSimilarity"
+                                    min="0"
+                                    max="1"
+                                    step="0.01"
+                                ></app-ui-range>
+                                <div class="field-hint">{{ voiceSimilarityHint }}</div>
+                            </div>
+
+                            <div class="form-group speed-slider-group">
+                                <label for="coqui-reference-weight">
+                                    <span>Reference Weight</span>
+                                    <span class="slider-value">{{ getReferenceWeightLabel() }}</span>
+                                </label>
+                                <app-ui-range
+                                    id="coqui-reference-weight"
+                                    formControlName="referenceWeight"
+                                    min="0"
+                                    max="1"
+                                    step="0.01"
+                                ></app-ui-range>
+                                <div class="field-hint">{{ referenceWeightHint }}</div>
+                            </div>
+                        </div>
+
+                        <div class="section-subtitle">Sampling</div>
+                        <div class="form-grid">
+                            <div class="form-group speed-slider-group">
+                                <label for="coqui-temperature">
+                                    <span>Temperature</span>
+                                    <span class="slider-value">{{ getCoquiTemperatureLabel() }}</span>
+                                </label>
+                                <app-ui-range
+                                    id="coqui-temperature"
+                                    formControlName="temperature"
+                                    min="0.1"
+                                    max="1.5"
+                                    step="0.05"
+                                ></app-ui-range>
+                            </div>
+
+                            <div class="form-group speed-slider-group">
+                                <label for="coqui-repetition-penalty">
+                                    <span>Repetition penalty</span>
+                                    <span class="slider-value">{{ getCoquiRepetitionPenaltyLabel() }}</span>
+                                </label>
+                                <app-ui-range
+                                    id="coqui-repetition-penalty"
+                                    formControlName="repetitionPenalty"
+                                    min="1"
+                                    max="12"
+                                    step="0.25"
+                                ></app-ui-range>
+                            </div>
+
+                            <div class="form-group speed-slider-group">
+                                <label for="coqui-top-k">
+                                    <span>Top K</span>
+                                    <span class="slider-value">{{ getCoquiTopKLabel() }}</span>
+                                </label>
+                                <app-ui-range
+                                    id="coqui-top-k"
+                                    formControlName="topK"
+                                    min="1"
+                                    max="100"
+                                    step="1"
+                                ></app-ui-range>
+                            </div>
+
+                            <div class="form-group speed-slider-group">
+                                <label for="coqui-top-p">
+                                    <span>Top P</span>
+                                    <span class="slider-value">{{ getCoquiTopPLabel() }}</span>
+                                </label>
+                                <app-ui-range
+                                    id="coqui-top-p"
+                                    formControlName="topP"
+                                    min="0.1"
+                                    max="1"
+                                    step="0.01"
+                                ></app-ui-range>
+                            </div>
+
+                            <div class="form-group speed-slider-group">
+                                <label for="coqui-length-penalty">
+                                    <span>Length penalty</span>
+                                    <span class="slider-value">{{ getCoquiLengthPenaltyLabel() }}</span>
+                                </label>
+                                <app-ui-range
+                                    id="coqui-length-penalty"
+                                    formControlName="lengthPenalty"
+                                    min="0.8"
+                                    max="1.2"
+                                    step="0.01"
+                                ></app-ui-range>
+                            </div>
+                        </div>
+
+                        <div class="section-subtitle">Advanced Voice Matching</div>
+                        <div class="form-grid">
+                            <div class="form-group speed-slider-group">
+                                <label for="coqui-gpt-cond-len">
+                                    <span>GPT condition length</span>
+                                    <span class="slider-value">{{ getCoquiGptCondLenLabel() }} s</span>
+                                </label>
+                                <app-ui-range
+                                    id="coqui-gpt-cond-len"
+                                    formControlName="gptCondLen"
+                                    min="3"
+                                    max="30"
+                                    step="1"
+                                ></app-ui-range>
+                            </div>
+
+                            <div class="form-group speed-slider-group">
+                                <label for="coqui-gpt-cond-chunk-len">
+                                    <span>Condition chunk length</span>
+                                    <span class="slider-value">{{ getCoquiGptCondChunkLenLabel() }} s</span>
+                                </label>
+                                <app-ui-range
+                                    id="coqui-gpt-cond-chunk-len"
+                                    formControlName="gptCondChunkLen"
+                                    min="4"
+                                    max="10"
+                                    step="1"
+                                ></app-ui-range>
+                            </div>
+
+                            <div class="form-group speed-slider-group">
+                                <label for="coqui-max-ref-len">
+                                    <span>Max reference length</span>
+                                    <span class="slider-value">{{ getCoquiMaxRefLenLabel() }} s</span>
+                                </label>
+                                <app-ui-range
+                                    id="coqui-max-ref-len"
+                                    formControlName="maxRefLen"
+                                    min="5"
+                                    max="30"
+                                    step="1"
+                                ></app-ui-range>
+                            </div>
+
+                            <div class="form-group">
+                                <app-ui-checkbox formControlName="soundNormRefs">
+                                    Normalize reference audio
+                                </app-ui-checkbox>
+                                <div class="field-hint">
+                                    Usually keep this off for the most faithful voice clone.
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="section-subtitle">Performance</div>
+                        <div class="form-grid compact-grid">
+                            <div class="form-group">
+                                <app-ui-checkbox formControlName="enableSentenceSplitting">
+                                    Enable sentence splitting
+                                </app-ui-checkbox>
+                            </div>
+
+                            <div class="form-group">
+                                <app-ui-checkbox formControlName="lowRamMode">
+                                    Low RAM mode
+                                    <span class="feature-state" [ngClass]="getLowRamModeStateClass()">
+                                        {{ getLowRamModeStateLabel() }}
+                                    </span>
+                                </app-ui-checkbox>
+                                <div class="field-hint">{{ getLowRamModeHint() }}</div>
+                            </div>
+
+                            <div class="form-group">
+                                <app-ui-checkbox formControlName="useDeepSpeed">
+                                    Use DeepSpeed
+                                </app-ui-checkbox>
+                            </div>
+
+                            <div class="form-group">
+                                <app-ui-checkbox formControlName="preloadModel">
+                                    Preload model on startup
+                                    <span class="feature-state" [ngClass]="getPreloadStatusClass()">
+                                        {{ getPreloadStatusLabel() }}
+                                    </span>
+                                </app-ui-checkbox>
+                                <div class="field-hint">{{ getPreloadHint() }}</div>
+                            </div>
+
+                            <div class="form-group">
+                                <app-ui-checkbox formControlName="keepModelLoaded">
+                                    Keep model loaded
+                                </app-ui-checkbox>
+                            </div>
+                        </div>
+
+                        <div class="section-subtitle">Text filters</div>
+                        <div class="form-grid compact-grid">
+                            <div class="form-group">
+                                <app-ui-checkbox formControlName="skipCodeBlocks">
+                                    Skip code blocks
+                                </app-ui-checkbox>
+                            </div>
+                            <div class="form-group">
+                                <app-ui-checkbox formControlName="skipTaggedBlocks">
+                                    Skip tagged blocks
+                                </app-ui-checkbox>
+                            </div>
+                            <div class="form-group">
+                                <app-ui-checkbox formControlName="onlyQuotedSpeech">
+                                    Only quoted speech
+                                </app-ui-checkbox>
+                            </div>
+                            <div class="form-group">
+                                <app-ui-checkbox formControlName="skipAsteriskText">
+                                    Skip *asterisk* text
+                                </app-ui-checkbox>
+                            </div>
+                            <div class="form-group">
+                                <app-ui-checkbox formControlName="regexFilterEnabled">
+                                    Apply regex filter
+                                </app-ui-checkbox>
+                                <div class="field-hint">
+                                    Optional cleanup rule for generated text before voice playback.
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="coqui-regex-pattern">Regex pattern</label>
+                                <app-ui-input id="coqui-regex-pattern" type="text" formControlName="regexFilterPattern"></app-ui-input>
+                                <div class="field-hint">
+                                    Example: `/[^\\w\\s.,!?;:()'"-]+/g`
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="section-subtitle">RVC Conversion</div>
+                        <div formGroupName="rvc">
+                            <div class="form-grid">
+                                <div class="form-group rvc-status-card">
+                                    <div class="rvc-toggle-row">
+                                        <label class="checkbox-inline" for="coqui-rvc-enabled">
+                                            <input id="coqui-rvc-enabled" type="checkbox" formControlName="enabled" />
+                                            <span>Enable RVC</span>
+                                        </label>
+                                        <span class="feature-state" [ngClass]="getRvcStatusClass()">
+                                            {{ getRvcStatusLabel() }}
+                                        </span>
+                                    </div>
+                                    <div class="field-hint">{{ getRvcHint() }}</div>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="coqui-rvc-model">RVC voice (.pth)</label>
+                                    <app-ui-select
+                                        id="coqui-rvc-model"
+                                        formControlName="modelFile"
+                                        [options]="localRvcModelOptions"
+                                    ></app-ui-select>
+                                    <div class="field-hint" *ngIf="getSelectedRvcModelName()">
+                                        Selected: {{ getSelectedRvcModelName() }}
+                                    </div>
+                                </div>
+
+                                <div class="form-group speed-slider-group">
+                                    <label for="coqui-rvc-pitch">
+                                        <span>Pitch</span>
+                                        <span class="slider-value">{{ getRvcNumberValue('pitch', 0) }}</span>
+                                    </label>
+                                    <app-ui-range
+                                        id="coqui-rvc-pitch"
+                                        formControlName="pitch"
+                                        min="-24"
+                                        max="24"
+                                        step="1"
+                                    ></app-ui-range>
+                                </div>
+
+                                <div class="form-group speed-slider-group">
+                                    <label for="coqui-rvc-filter-radius">
+                                        <span>Filter Radius</span>
+                                        <span class="slider-value">{{ getRvcNumberValue('filterRadius', 3) }}</span>
+                                    </label>
+                                    <app-ui-range
+                                        id="coqui-rvc-filter-radius"
+                                        formControlName="filterRadius"
+                                        min="0"
+                                        max="7"
+                                        step="1"
+                                    ></app-ui-range>
+                                </div>
+
+                                <div class="form-group speed-slider-group">
+                                    <label for="coqui-rvc-rms-mix">
+                                        <span>RMS Mix Rate</span>
+                                        <span class="slider-value">{{ getRvcNumberValue('rmsMixRate', 1) }}</span>
+                                    </label>
+                                    <app-ui-range
+                                        id="coqui-rvc-rms-mix"
+                                        formControlName="rmsMixRate"
+                                        min="0"
+                                        max="1"
+                                        step="0.05"
+                                    ></app-ui-range>
+                                </div>
+
+                                <div class="form-group speed-slider-group">
+                                    <label for="coqui-rvc-protect">
+                                        <span>Protect</span>
+                                        <span class="slider-value">{{ getRvcNumberValue('protect', 0.5) }}</span>
+                                    </label>
+                                    <app-ui-range
+                                        id="coqui-rvc-protect"
+                                        formControlName="protect"
+                                        min="0"
+                                        max="0.5"
+                                        step="0.01"
+                                    ></app-ui-range>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="coqui-rvc-f0-method">F0 Method</label>
+                                    <app-ui-select id="coqui-rvc-f0-method" formControlName="f0Method" [options]="rvcF0MethodOptions"></app-ui-select>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="coqui-rvc-embedder-model">Embedder model</label>
+                                    <app-ui-select id="coqui-rvc-embedder-model" formControlName="embedderModel" [options]="rvcEmbedderOptions"></app-ui-select>
+                                </div>
+
+                                <div class="form-group">
+                                    <app-ui-checkbox formControlName="splitAudio">
+                                        Split Audio
+                                    </app-ui-checkbox>
+                                </div>
+
+                                <div class="form-group">
+                                    <app-ui-checkbox formControlName="autotune">
+                                        Autotune
+                                    </app-ui-checkbox>
+                                </div>
+                            </div>
                         </div>
                     </div>
-                </div>
-
-                <!-- gTTS Fields -->
-                <div *ngIf="showGttsFields()" formGroupName="voiceModules">
-                    <div formGroupName="gtts">
-                        <div class="form-group">
-                            <label for="gtts-language">{{
-                                "settings.language" | translate
-                            }}</label>
-                            <input
-                                id="gtts-language"
-                                type="text"
-                                formControlName="language"
-                                placeholder="ru"
-                            />
-                        </div>
-
-                        <div class="form-group">
-                            <label for="gtts-tld">TLD</label>
-                            <input
-                                id="gtts-tld"
-                                type="text"
-                                formControlName="tld"
-                                placeholder="com"
-                            />
-                        </div>
-
-                        <div class="form-group">
-                            <label class="checkbox">
-                                <input type="checkbox" formControlName="slow" />
-                                Slow mode (gTTS)
-                            </label>
-                        </div>
-
-                        <div class="form-group">
-                            <label for="gtts-fallback"
-                                >Fallback voice (pyttsx3)</label
-                            >
-                            <input
-                                id="gtts-fallback"
-                                type="text"
-                                formControlName="fallbackVoice"
-                                placeholder="pyttsx3 voice id"
-                            />
-                        </div>
-                    </div>
-                </div>
-
-                <!-- OpenAI Fields -->
-                <div *ngIf="showOpenAIFields()">
-                    <div class="form-group">
-                        <label for="openai-apiKey">{{
-                            "settings.apiKey" | translate
-                        }}</label>
-                        <input
-                            id="openai-apiKey"
-                            type="password"
-                            [placeholder]="
-                                'settings.enterOpenaiApiKey' | translate
-                            "
-                        />
-                    </div>
+                    </ng-template>
                 </div>
             </div>
 
-            <!-- Processing -->
             <div class="section">
-                <h3>🎛️ {{ "settings.processing" | translate }}</h3>
-
+                <h3>Voice preview</h3>
                 <div class="form-group">
-                    <label class="checkbox">
-                        <input type="checkbox" formControlName="useRvc" />
-                        {{ "settings.useRvcProcessing" | translate }}
-                    </label>
+                    <label for="previewText">Preview text</label>
+                    <app-ui-textarea
+                        id="previewText"
+                        [ngModel]="previewText"
+                        (ngModelChange)="setPreviewText($event)"
+                        [ngModelOptions]="{ standalone: true }"
+                        [rows]="3"
+                    ></app-ui-textarea>
+                    <div class="field-hint">
+                        Quick test phrase for selected voice and current XTTS settings.
+                    </div>
+                </div>
+                <div class="quick-preview-row">
+                    <app-ui-button
+                        type="button"
+                        variant="secondary"
+                        *ngFor="let line of currentPreviewQuickLines"
+                        (pressed)="setPreviewText(line)"
+                    >
+                        {{ line }}
+                    </app-ui-button>
+                </div>
+                <div class="button-row">
+                    <app-ui-button type="button" variant="secondary" (pressed)="generatePreview()" [disabled]="isGeneratingPreview">
+                        {{ isGeneratingPreview ? "Generating..." : "Generate preview" }}
+                    </app-ui-button>
+                    <app-ui-button type="button" variant="secondary" (pressed)="stopPreview()">Stop</app-ui-button>
                 </div>
             </div>
 
-            <!-- Devices Refresh -->
-            <div class="devices-toolbar">
-                <span class="devices-title">{{
-                    "settings.audioDevices" | translate
-                }}</span>
-                <button
-                    type="button"
-                    class="refresh-button"
-                    (click)="refreshDevices()"
-                    [disabled]="devicesRefreshing"
-                >
-                    🔄
-                    {{
-                        devicesRefreshing
-                            ? ("settings.refreshing" | translate)
-                            : ("settings.refresh" | translate)
-                    }}
-                </button>
-            </div>
-
-            <!-- Action Buttons -->
             <div class="button-row">
-                <button
-                    type="button"
-                    (click)="resetToDefaults()"
-                    class="secondary-button"
-                >
-                    🔄 {{ "settings.resetToDefaults" | translate }}
-                </button>
-                <button
-                    type="submit"
-                    [disabled]="!hasChanges()"
-                    class="primary-button"
-                >
-                    💾 {{ "general.saveVoiceSettings" | translate }}
-                </button>
+                <app-ui-button type="button" variant="secondary" (pressed)="resetToDefaults()">Reset</app-ui-button>
+                <app-ui-button type="submit" [disabled]="!hasChanges()">Save</app-ui-button>
             </div>
         </form>
     </ng-template>

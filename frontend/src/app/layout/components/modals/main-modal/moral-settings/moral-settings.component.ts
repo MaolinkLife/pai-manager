@@ -1,9 +1,10 @@
 import { Component, OnInit } from '@angular/core';
-import { FormBuilder, FormGroup, Validators } from '@angular/forms';
+import { UntypedFormBuilder, UntypedFormGroup, Validators } from '@angular/forms';
 import { BehaviorSubject } from 'rxjs';
 import { finalize, take } from 'rxjs/operators';
 import { ConfigService } from '../../../../../core/services/config.service';
 import { NotificationService } from '../../../../../shared/components/notification/notification.service';
+import { UiSelectOption } from '../../../../../shared/ui/components/ui-select/ui-select.component';
 
 @Component({
     selector: 'app-moral-settings',
@@ -11,12 +12,12 @@ import { NotificationService } from '../../../../../shared/components/notificati
     styleUrls: ['./moral-settings.component.less']
 })
 export class MoralSettingsComponent implements OnInit {
-    moralForm: FormGroup;
+    moralForm: UntypedFormGroup;
     isLoading$ = new BehaviorSubject<boolean>(true);
     originalConfig: any = {};
 
     constructor(
-        private fb: FormBuilder,
+        private fb: UntypedFormBuilder,
         private configService: ConfigService,
         private notificationService: NotificationService
     ) {
@@ -30,7 +31,7 @@ export class MoralSettingsComponent implements OnInit {
         });
     }
 
-    private createForm(): FormGroup {
+    private createForm(): UntypedFormGroup {
         return this.fb.group({
             enabled: [true],
             activeProvider: ['ollama', Validators.required],
@@ -75,9 +76,9 @@ export class MoralSettingsComponent implements OnInit {
                         fallbackOpenrouter: (moral.fallbackOrder || []).includes('openrouter'),
                     });
 
-                    const providersGroup = this.moralForm.get('providers') as FormGroup;
-                    const ollamaGroup = providersGroup.get('ollama') as FormGroup;
-                    const openrouterGroup = providersGroup.get('openrouter') as FormGroup;
+                    const providersGroup = this.moralForm.get('providers') as UntypedFormGroup;
+                    const ollamaGroup = providersGroup.get('ollama') as UntypedFormGroup;
+                    const openrouterGroup = providersGroup.get('openrouter') as UntypedFormGroup;
 
                     if (providers.ollama) {
                         ollamaGroup.patchValue({
@@ -243,7 +244,15 @@ export class MoralSettingsComponent implements OnInit {
         return Object.keys(this.getChanges()).length > 0;
     }
 
-    get providersForm(): FormGroup {
-        return this.moralForm.get('providers') as FormGroup;
+    get providersForm(): UntypedFormGroup {
+        return this.moralForm.get('providers') as UntypedFormGroup;
+    }
+
+    get activeProviderOptions(): UiSelectOption[] {
+        return [
+            { value: 'ollama', label: 'Ollama' },
+            { value: 'openrouter', label: 'OpenRouter' },
+            { value: 'heuristic', label: 'Heuristic (fallback only)' },
+        ];
     }
 }

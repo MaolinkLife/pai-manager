@@ -1,33 +1,33 @@
-import { Injectable } from '@angular/core';
+import { Injectable, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { BehaviorSubject } from 'rxjs';
 
 @Injectable({
     providedIn: 'root'
 })
 export class LocalizationService {
-    private translations = new BehaviorSubject<Record<string, string>>({});
-    currentLang = new BehaviorSubject<string>('ru-RU');
+    private readonly translations = signal<Record<string, unknown>>({});
+    readonly translationsState = this.translations.asReadonly();
+    readonly currentLang = signal<string>('ru-RU');
 
     constructor(private http: HttpClient) { }
 
     setLanguage(lang: string) {
-        this.currentLang.next(lang);
-        localStorage.setItem('language', lang);
-        this.loadTranslations(lang);
-    }
-
-    getTranslationUpdates() {
-        return this.translations.asObservable();
+        const normalizedLang = this.normalizeLanguage(lang);
+        if (this.currentLang() === normalizedLang && Object.keys(this.translations()).length > 0) {
+            return;
+        }
+        this.currentLang.set(normalizedLang);
+        localStorage.setItem('language', normalizedLang);
+        this.loadTranslations(normalizedLang);
     }
 
     t(key: string): string {
         const keys = key.split('.');
-        let value: any = this.translations.getValue();
+        let value: unknown = this.translations();
 
         for (const k of keys) {
-            if (value && k in value) {
-                value = value[k];
+            if (value && typeof value === 'object' && k in value) {
+                value = (value as Record<string, unknown>)[k];
             } else {
                 return key;
             }
@@ -37,14 +37,44 @@ export class LocalizationService {
     }
 
     private loadTranslations(lang: string) {
-        this.http.get<Record<string, string>>(`/assets/i18n/${lang}.json`).subscribe(
-            data => this.translations.next(data),
-            err => console.error(`Failed to load translations for ${lang}`, err)
-        );
+        const candidates = this.translationCandidates(lang);
+        const tryLoad = (index: number) => {
+            if (index >= candidates.length) {
+                console.error(`Failed to load translations for ${lang}`);
+                return;
+            }
+
+            const candidate = candidates[index];
+            this.http.get<Record<string, unknown>>(`/assets/i18n/${candidate}.json`).subscribe(
+                (data) => this.translations.set(data),
+                () => tryLoad(index + 1)
+            );
+        };
+
+        tryLoad(0);
     }
 
     init() {
         const saved = localStorage.getItem('language') || 'ru-RU';
         this.setLanguage(saved);
+    }
+
+    private normalizeLanguage(lang: string): string {
+        const value = (lang || '').trim();
+        const lower = value.toLowerCase();
+        if (lower === 'ru' || lower === 'ru-ru') {
+            return 'ru-RU';
+        }
+        if (lower === 'en' || lower === 'en-us' || lower === 'en-gb') {
+            return 'en-US';
+        }
+        return value || 'ru-RU';
+    }
+
+    private translationCandidates(lang: string): string[] {
+        const normalized = this.normalizeLanguage(lang);
+        const short = normalized.split('-')[0];
+        const fallback = normalized.startsWith('ru') ? 'ru-RU' : 'en-US';
+        return Array.from(new Set([normalized, short, fallback]));
     }
 }

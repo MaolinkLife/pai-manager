@@ -1,4 +1,4 @@
-{
+﻿{
     "settings": {
         "general": "Основные",
         "charName": "Имя персонажа",
@@ -127,6 +127,7 @@
         "minAudioLength": "Мин. длина аудио (сек)",
         "maxAudioLength": "Макс. длина аудио (сек)",
         "voiceSettings": "Настройки голоса",
+        "ttsSettings": "Настройки TTS",
         "generalSettings": "Основные настройки",
         "enableVoiceResponses": "Включить голосовые ответы",
         "activeVoiceModule": "Активный голосовой модуль",
@@ -152,7 +153,19 @@
         "audioDevices": "Аудио устройства",
         "refreshing": "Обновление...",
         "refresh": "Обновить",
-        "resetToDefaults": "Сброс к умолчаниям"
+        "resetToDefaults": "Сброс к умолчаниям",
+        "connector": "Коннектор",
+        "tunnelEnabled": "Включить тунелирование при запуске",
+        "tunnelProvider": "Провайдер тунеля",
+        "tunnelLocalUrl": "Локальный URL",
+        "tunnelLocalPort": "Локальный порт",
+        "tunnelCommandPath": "Путь к команде (опционально)",
+        "tunnelPublicUrl": "Публичный URL",
+        "tunnelRunning": "Запущен",
+        "tunnelStopped": "Остановлен",
+        "tunnelStart": "Запустить тунель",
+        "tunnelStop": "Остановить тунель",
+        "tunnelRefreshStatus": "Обновить статус"
     },
     "general": {
         "save": "Сохранить",
@@ -210,5 +223,114 @@
         "analysisTimeout": "Таймаут анализа (секунды)",
         "fallbackToLocal": "Возвращаться к локальной модели при ошибке API",
         "saveCaSettings": "Сохранить настройки CA"
+    },
+    "matrix": {
+        "title": "Матрица морали",
+        "subtitle": "Спектральный анализ и текущее состояние PAI",
+        "current": "Текущее",
+        "intensity": "Интенсивность",
+        "updated": "Обновлено",
+        "spectral": "Спектральный анализ",
+        "coherence": "Когерентность",
+        "metrics": {
+            "trust": "Доверие",
+            "stability": "Стабильность",
+            "sociability": "Социальность",
+            "resentment": "Обида"
+        },
+        "emotions": {
+            "neutral": "Нейтрально",
+            "excited": "Воодушевление",
+            "joy": "Радость",
+            "sadness": "Печаль",
+            "anger": "Гнев",
+            "irritation": "Раздражение",
+            "happiness": "Счастье",
+            "sorrow": "Скорбь",
+            "grief": "Горе",
+            "jealousy": "Ревность"
+        }
+    },
+    "memory": {
+        "title": "Хранилище памяти",
+        "subtitle": "Поиск синтетических следов по смыслу и ID сообщения",
+        "tabs": {
+            "ai": "AI поиск (весь пайплайн)",
+            "short": "Поиск по краткосрочной памяти",
+            "all": "Загрузить все сообщения"
+        },
+        "all": {
+            "loaded": "Загружено сообщений",
+            "batch": "Размер пачки",
+            "loading": "Загрузка следующих сообщений...",
+            "end": "Достигнуто начало истории"
+        },
+        "params": {
+            "recentPairs": "Последние пары",
+            "windowPairs": "Размер окна (пары)",
+            "lookbackDays": "Дней для summary",
+            "topK": "Top K"
+        },
+        "query": "Фраза для поиска",
+        "queryPlaceholder": "Например: обсуждали план на завтра",
+        "messageId": "UUID сообщения",
+        "messageIdPlaceholder": "Например: 2a86...-...-...",
+        "days": "Глубина (дней)",
+        "search": "Искать",
+        "reset": "Сбросить",
+        "refresh": "Обновить память",
+        "found": "Найдено",
+        "generatedAt": "Сформировано",
+        "score": "Релевантность",
+        "updated": "Обновлено",
+        "messages": "Сообщений",
+        "traceTitle": "Трассировка этапов",
+        "traceScanned": "Проверено",
+        "traceHits": "Совпадений",
+        "hitsTitle": "Найденные совпадения",
+        "fromDay": "Из дня",
+        "emptyTitle": "Ничего не найдено",
+        "emptyText": "Попробуйте другую фразу или точный UUID сообщения."
+    },
+    "synthesis": {
+        "title": "Хаб синтеза",
+        "subtitle": "UI-превью генерации медиа (без подключения к бэку)",
+        "tabs": {
+            "image": "Изображение",
+            "video": "Видео",
+            "audio": "Аудио"
+        },
+        "prompt": "Промпт",
+        "promptPlaceholder": "Опишите, что нужно сгенерировать...",
+        "provider": "Провайдер",
+        "aspect": "Соотношение сторон",
+        "generate": "Сгенерировать",
+        "generating": "Генерация...",
+        "idle": "Область результата готова",
+        "mockReady": "Мок-результат готов",
+        "videoReady": "Плейсхолдер предпросмотра видео",
+        "audioReady": "Плейсхолдер предпросмотра аудио"
+    },
+    "diary": {
+        "title": "Дневник",
+        "subtitle": "Личные заметки ИИ и рефлексия по сессиям",
+        "create": "Создать запись",
+        "mood": "Настроение",
+        "empty": "Дневник пуст"
+    },
+    "audit": {
+        "title": "Журнал аудита",
+        "subtitle": "Диагностика пайплайна и сигналы качества ответов",
+        "run": "Запустить аудит",
+        "analyzing": "Анализ...",
+        "report": "Отчёт",
+        "score": "Оценка",
+        "empty": "Записей аудита пока нет"
+    },
+    "feature": {
+        "wipTitle": "Модуль в разработке",
+        "wipText": "Модуль временно отключен до готовности логики и backend-части.",
+        "wipDevHint": "Dev override: localStorage.setItem('ui.features', '{\"audit\":true,\"diary\":true,\"tasks\":true}')"
     }
 }
+

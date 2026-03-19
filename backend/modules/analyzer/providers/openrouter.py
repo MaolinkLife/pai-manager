@@ -1,4 +1,4 @@
-"""OpenRouter-based analyzer provider."""
+﻿"""OpenRouter-based analyzer provider."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ from constants.settings import (
     OPENROUTER_BASE_URL,
     PROJECT_NAME,
 )
-from services.config_service import get_config_value
+from services import config_service
 from services.logger_service import AuditStatus, log_audit_entry
 
 from .base import AnalyzerProvider
@@ -27,7 +27,7 @@ class OpenRouterAnalyzerProvider(AnalyzerProvider):
     name = "openrouter"
 
     def _get_settings(self) -> Dict[str, Any]:
-        cfg = get_config_value("analyzer.providers.openrouter", {}) or {}
+        cfg = config_service.get_config_value("analyzer.providers.openrouter", {}) or {}
         return {
             "api_key": cfg.get("api_key", ""),
             "model": cfg.get("model") or DEFAULT_MODEL,
@@ -122,3 +122,4 @@ class OpenRouterAnalyzerProvider(AnalyzerProvider):
             {"role": "system", "content": COGNITIVE_ANALYSIS_PROMPT},
             {"role": "user", "content": user_prompt_content},
         ]
+

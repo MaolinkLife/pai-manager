@@ -1,0 +1,47 @@
+<div class="diary-page custom-scrollbar">
+    <div class="diary-shell" *ngIf="featureEnabled; else diaryWip">
+        <header class="page-header">
+            <div>
+                <h2>{{ 'diary.title' | translate }}</h2>
+                <p>{{ 'diary.subtitle' | translate }}</p>
+            </div>
+            <app-ui-button (pressed)="addMockEntry()">
+                {{ 'diary.create' | translate }}
+            </app-ui-button>
+        </header>
+
+        <section class="diary-list" *ngIf="entries.length; else emptyState">
+            <article class="diary-item" *ngFor="let entry of entries">
+                <div class="timeline-dot"></div>
+
+                <header>
+                    <time>{{ entry.date | date: 'dd.MM.yyyy, HH:mm:ss' }}</time>
+                    <div class="mood">{{ 'diary.mood' | translate }}: {{ entry.mood }}</div>
+                </header>
+
+                <div class="content">{{ entry.content }}</div>
+
+                <footer>
+                    <span *ngFor="let tag of entry.tags">#{{ tag }}</span>
+                </footer>
+            </article>
+        </section>
+
+        <ng-template #emptyState>
+            <section class="empty-state">
+                <app-skeleton width="100%" height="120px"></app-skeleton>
+                <p>{{ 'diary.empty' | translate }}</p>
+            </section>
+        </ng-template>
+    </div>
+
+    <ng-template #diaryWip>
+        <div class="diary-shell">
+            <section class="wip-card">
+                <h2>{{ 'feature.wipTitle' | translate }}</h2>
+                <p>{{ 'feature.wipText' | translate }}</p>
+                <p class="wip-hint">{{ 'feature.wipDevHint' | translate }}</p>
+            </section>
+        </div>
+    </ng-template>
+</div>

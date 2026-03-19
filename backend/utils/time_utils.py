@@ -34,3 +34,16 @@ def format_user_datetime(dt: datetime, fmt="%Y-%m-%d %H:%M:%S", tz_offset=USER_T
 
 def get_utc_now():
     return datetime.now(timezone.utc)
+
+
+def to_user_tz_iso(dt: datetime | None, tz_offset=USER_TZ_OFFSET) -> str:
+    """
+    Serialize datetime in user timezone as ISO8601 with explicit offset.
+    Naive datetime is treated as UTC source.
+    """
+    if dt is None:
+        dt = datetime.now(timezone.utc)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    user_tz = timezone(timedelta(hours=tz_offset))
+    return dt.astimezone(user_tz).isoformat(timespec="seconds")

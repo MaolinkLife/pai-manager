@@ -1,0 +1,113 @@
+<section class="auth-page">
+    <div class="auth-card">
+        <div class="auth-title">Авторизация</div>
+        <div class="auth-subtitle">Вход в персональный профиль ассистента</div>
+        <div class="auth-setup-note" *ngIf="setupRequired">
+            Первый запуск: создайте первый аккаунт. Он автоматически получит роль owner.
+        </div>
+
+        <div class="auth-tabs">
+            <button
+                type="button"
+                class="auth-tab"
+                [class.active]="mode === 'login'"
+                (click)="switchMode('login')"
+                [disabled]="setupRequired"
+            >
+                Вход
+            </button>
+            <button
+                type="button"
+                class="auth-tab"
+                [class.active]="mode === 'register'"
+                (click)="switchMode('register')"
+            >
+                Регистрация
+            </button>
+        </div>
+
+        <form *ngIf="mode === 'login'" [formGroup]="loginForm" (ngSubmit)="submitLogin()" class="auth-form">
+            <div class="field">
+                <label>Email или login</label>
+                <app-ui-input
+                    formControlName="identity"
+                    type="text"
+                    placeholder="mail@example.com"
+                ></app-ui-input>
+            </div>
+            <div class="field">
+                <label>Пароль</label>
+                <app-ui-input
+                    formControlName="password"
+                    type="password"
+                    placeholder="Минимум 8 символов"
+                ></app-ui-input>
+            </div>
+            <app-ui-button
+                [loading]="loading"
+                [disabled]="loading"
+                [fullWidth]="true"
+                type="submit"
+            >
+                Войти
+            </app-ui-button>
+        </form>
+
+        <form *ngIf="mode === 'register'" [formGroup]="registerForm" (ngSubmit)="submitRegister()" class="auth-form">
+            <div class="field">
+                <label>Email</label>
+                <app-ui-input
+                    formControlName="email"
+                    type="email"
+                    placeholder="mail@example.com"
+                ></app-ui-input>
+            </div>
+            <div class="field">
+                <label>Login (опционально)</label>
+                <app-ui-input
+                    formControlName="login"
+                    type="text"
+                    placeholder="your_login"
+                ></app-ui-input>
+            </div>
+            <div class="field">
+                <label>Имя (опционально)</label>
+                <app-ui-input
+                    formControlName="name"
+                    type="text"
+                    placeholder="Как вас отображать"
+                ></app-ui-input>
+            </div>
+            <div class="field">
+                <label>Пароль</label>
+                <app-ui-input
+                    formControlName="password"
+                    type="password"
+                    placeholder="Минимум 8 символов"
+                ></app-ui-input>
+            </div>
+            <div class="field">
+                <label>Повторите пароль</label>
+                <app-ui-input
+                    formControlName="confirmPassword"
+                    type="password"
+                    placeholder="Повторите пароль"
+                ></app-ui-input>
+            </div>
+            <app-ui-button
+                [loading]="loading"
+                [disabled]="loading"
+                [fullWidth]="true"
+                type="submit"
+            >
+                Создать аккаунт
+            </app-ui-button>
+        </form>
+
+        <div class="auth-anon" *ngIf="!setupRequired">
+            <button type="button" class="anon-link" (click)="continueAsAnonymous()">
+                Войти без авторизации (аноним)
+            </button>
+        </div>
+    </div>
+</section>

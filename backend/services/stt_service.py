@@ -1,10 +1,27 @@
-import sounddevice as sd
+﻿import sounddevice as sd
 import numpy as np
 import tempfile
 import os
 import wave
-from faster_whisper import WhisperModel
-from services.config_service import get_config_value
+import warnings
+from typing import Any
+
+warnings.filterwarnings(
+    "ignore",
+    message=r"pkg_resources is deprecated as an API\.",
+    category=UserWarning,
+    module=r"ctranslate2(\..*)?$",
+)
+
+try:
+    from faster_whisper import WhisperModel as _WhisperModel
+except Exception as _stt_import_error:  # pragma: no cover - startup resiliency
+    _WhisperModel = None
+    _WHISPER_IMPORT_ERROR = _stt_import_error
+else:
+    _WHISPER_IMPORT_ERROR = None
+from services import config_service
+from constants.paths import STT_MODELS_DIR
 
 # =================================
 # STATUS VARIABLES
@@ -18,7 +35,34 @@ _is_recording = False
 # ================================
 SAMPLE_RATE = 16000
 CHANNELS = 1
-MODEL = WhisperModel("base", device="cpu", compute_type="int8")
+os.makedirs(STT_MODELS_DIR, exist_ok=True)
+_MODEL: Any = None
+
+
+def _get_model() -> Any:
+    global _MODEL
+    if _MODEL is not None:
+        return _MODEL
+
+    if _WhisperModel is None:
+        details = f"{_WHISPER_IMPORT_ERROR}" if _WHISPER_IMPORT_ERROR else "unknown import error"
+        raise RuntimeError(
+            "faster-whisper is unavailable in current environment. "
+            "Check Python dependencies (setuptools<81 is required for current ctranslate2 builds). "
+            f"Details: {details}"
+        )
+
+    model_name = config_service.get_config_value("stt.model", "base") or "base"
+    device = config_service.get_config_value("stt.device", "cpu") or "cpu"
+    compute_type = config_service.get_config_value("stt.compute_type", "int8") or "int8"
+
+    _MODEL = _WhisperModel(
+        model_name,
+        device=device,
+        compute_type=compute_type,
+        download_root=STT_MODELS_DIR,
+    )
+    return _MODEL
 
 
 # =================================
@@ -42,14 +86,15 @@ def record_audio(filename: str, duration: int = 5):
 # TRANSCRIPTION
 # ==============================================
 def transcribe_audio(filename: str) -> str:
-    stt_lang = get_config_value("stt.language", None)
-    auto_detect = get_config_value("stt.auto_detect", True)
+    model = _get_model()
+    stt_lang = config_service.get_config_value("stt.language", None)
+    auto_detect = config_service.get_config_value("stt.auto_detect", True)
 
     if auto_detect or not stt_lang:
-        segments, _ = MODEL.transcribe(filename)
+        segments, _ = model.transcribe(filename)
     else:
         lang_code = stt_lang.split("-")[0]  # "ru-RU" → "ru"
-        segments, _ = MODEL.transcribe(filename, language=lang_code)
+        segments, _ = model.transcribe(filename, language=lang_code)
 
     result = " ".join(segment.text for segment in segments)
     return result
@@ -148,3 +193,4 @@ def get_recording_state():
         "stream": _stream is not None,
         "buffer_size": len(_buffer),
     }
+

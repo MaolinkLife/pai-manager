@@ -1,0 +1,29 @@
+<app-ui-dropdown
+    [open]="open"
+    (openChange)="open = $event"
+    [disabled]="disabled"
+    [closeOnMenuClick]="false"
+>
+    <div uiDropdownTrigger class="ui-multiselect-trigger" [class.disabled]="disabled">
+        <span class="ui-multiselect-trigger__value">{{ valueLabel }}</span>
+        <app-custom-svg
+            class="ui-multiselect-trigger__arrow"
+            name="arrowDown"
+            [size]="16"
+        ></app-custom-svg>
+    </div>
+
+    <div uiDropdownMenu class="ui-multiselect-menu">
+        <label
+            class="ui-multiselect-option"
+            *ngFor="let option of normalizedOptions; trackBy: trackByValue"
+        >
+            <input
+                type="checkbox"
+                [checked]="isSelected(option.value)"
+                (change)="toggleOption(option.value)"
+            />
+            <span>{{ option.label }}</span>
+        </label>
+    </div>
+</app-ui-dropdown>

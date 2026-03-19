@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 import os
 import threading
 import time
@@ -8,7 +8,7 @@ import numpy as np
 import sounddevice as sd
 from pydub import AudioSegment
 
-from services.config_service import get_config_value
+from services import config_service
 from services.logger_service import AuditStatus, log_audit_entry
 from services.localization_service import get_text
 
@@ -58,7 +58,7 @@ class AudioPlayback:
         samples /= np.iinfo(sound.array_type).max
 
         def _resolve_device_id(path: str, short_key: str, default: int) -> int:
-            raw_value = get_config_value(path, default)
+            raw_value = config_service.get_config_value(path, default)
             try:
                 return int(raw_value)
             except (TypeError, ValueError):
@@ -78,8 +78,8 @@ class AudioPlayback:
                 return default
 
         devices: List[int] = []
-        use_windows_output = get_config_value("voice.use_windows_output", True)
-        use_rvc = get_config_value("voice.use_rvc", False)
+        use_windows_output = config_service.get_config_value("voice.use_windows_output", True)
+        use_rvc = config_service.get_config_value("voice.use_rvc", False)
         windows_id = _resolve_device_id(
             "voice.windows_output_id", "windows_output_id", 0
         )
@@ -271,3 +271,4 @@ class AudioPlayback:
                 AuditStatus.INFO,
                 message_key="logger.voice_all_streams_stopped",
             )
+

@@ -7,7 +7,7 @@ from PIL import Image, UnidentifiedImageError
 
 from constants.visual import DEFAULT_VISUAL_MODEL
 from modules.vision.providers.apple_vision import AppleVisionProvider
-from services.config_service import get_config_value
+from services import config_service
 from services.logger_service import AuditStatus, log_audit_entry
 
 
@@ -15,7 +15,7 @@ class VisualModule:
     """Wrapper around the configured visual provider."""
 
     def __init__(self, provider_name: Optional[str] = None):
-        self.provider_name = provider_name or get_config_value(
+        self.provider_name = provider_name or config_service.get_config_value(
             "vision.active_provider", "apple_vision"
         )
         self.provider = self._load_provider()
@@ -43,7 +43,7 @@ class VisualModule:
     ) -> Dict[str, Any]:
         if not media_payload:
             return {}
-        if not get_config_value("vision.enabled", False):
+        if not config_service.get_config_value("vision.enabled", False):
             log_audit_entry(
                 "visual_module_disabled",
                 "[VisualModule] Attachment analysis skipped: vision disabled.",
@@ -58,7 +58,7 @@ class VisualModule:
             )
             return {}
 
-        prompt = get_config_value(
+        prompt = config_service.get_config_value(
             "vision.attachment_prompt",
             "Describe the user-provided image in detail in English.",
         )
@@ -127,7 +127,7 @@ class VisualModule:
     # Screen capture processing
     # ------------------------------------------------------------------
     def describe_screen_snapshot(self) -> Optional[Dict[str, Any]]:
-        if not get_config_value("vision.enabled", False):
+        if not config_service.get_config_value("vision.enabled", False):
             log_audit_entry(
                 "visual_module_disabled_screen",
                 "[VisualModule] Screen analysis skipped: vision disabled.",
@@ -174,7 +174,7 @@ class VisualModule:
             )
             return None
 
-        prompt = get_config_value(
+        prompt = config_service.get_config_value(
             "vision.screen_prompt",
             "Describe the current user screen in detail in English.",
         )
@@ -218,3 +218,4 @@ class VisualModule:
         raw = base64.b64decode(data, validate=False)
         with Image.open(BytesIO(raw)) as image:
             return image.convert("RGB")
+

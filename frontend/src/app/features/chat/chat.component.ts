@@ -1,10 +1,12 @@
-import { Component, ElementRef, HostListener, OnDestroy, OnInit, ViewChild } from '@angular/core';
-import { FormControl } from '@angular/forms';
+import { Component, DestroyRef, ElementRef, HostListener, OnDestroy, OnInit, ViewChild, inject } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { UntypedFormControl } from '@angular/forms';
 import { Observable } from 'rxjs';
 import { finalize, map } from 'rxjs/operators';
 import { Message, MessageMedia, MessageMediaCategory } from '../../core/models/message.model';
-import { ProjectConfig } from './../../core/models/project-config.model';
+import { ProjectConfig } from '../../core/models/project-config.model';
 import { ApiService } from '../../core/services/api.service';
+import { AuthService } from '../../core/services/auth.service';
 import { ConfigService } from '../../core/services/config.service';
 import { VoiceModeResponse, VoiceService } from '../../core/services/voice.service';
 import { WebsocketService } from '../../core/services/websocket.service';
@@ -20,12 +22,53 @@ function generateTempId(): string {
 const DEFAULT_MIME_TYPE = 'application/octet-stream';
 const DOCUMENT_EXTENSIONS = new Set(['pdf', 'doc', 'docx', 'txt', 'rtf', 'xls', 'xlsx', 'csv', 'ppt', 'pptx']);
 
+type RuntimeStatus = 'started' | 'running' | 'stopping' | 'stopped' | 'completed' | 'error' | 'no_active_run';
+
+interface RuntimeTraceEntry {
+    stage: string;
+    state: string;
+    timestamp?: string;
+    elapsedMs?: number;
+    details?: Record<string, any>;
+}
+
+interface RuntimeState {
+    runId: string;
+    status: RuntimeStatus;
+    startedAt?: string;
+    finishedAt?: string;
+    elapsedMs?: number;
+    model?: string;
+    usage?: Record<string, any> | null;
+    meta?: Record<string, any> | null;
+    reasoningElapsedMs?: number;
+    detailsOpen?: boolean;
+    traces: RuntimeTraceEntry[];
+}
+
+interface RuntimeStageView {
+    id: string;
+    label: string;
+    state: 'pending' | 'active' | 'done';
+    elapsedMs?: number;
+}
+
+const RUNTIME_STAGE_GROUPS: Array<{ id: string; label: string; keys: string[]; optional?: boolean }> = [
+    { id: 'analysis', label: 'Провожу анализ', keys: ['analysis'] },
+    { id: 'memory', label: 'Ищу в памяти', keys: ['memory'] },
+    { id: 'instructions', label: 'Собираю инструкции', keys: ['decision', 'moral', 'prompt'] },
+    { id: 'vision', label: 'Обрабатываю медиа', keys: ['vision'], optional: true },
+    { id: 'generation', label: 'Генерирую ответ', keys: ['generation'] },
+];
+
 @Component({
     selector: 'app-chat',
     templateUrl: './chat.component.html',
     styleUrls: ['./chat.component.less']
 })
 export class ChatComponent implements OnInit, OnDestroy {
+    private readonly destroyRef = inject(DestroyRef);
+
     @HostListener('document:click', ['$event'])
     onClickOutside(): void {
         this.activeDropdown = null;
@@ -44,7 +87,7 @@ export class ChatComponent implements OnInit, OnDestroy {
     emojiPickerSide: 'left' | 'right' | 'top' | 'bottom' = 'right';
     readonly emojiPanelWidth = 360;
     readonly emojiPanelHeight = 360;
-    chatInput = new FormControl('');
+    chatInput = new UntypedFormControl('');
     chatHistory: Message[] = [];
     loading = false;
     chatInputValue: string = '';
@@ -61,11 +104,19 @@ export class ChatComponent implements OnInit, OnDestroy {
     voiceModeLoading = false;
     activeDropdown: string | null = null;
     currentPlayingMessage: string | null = null;
+    activeGenerationRunId: string | null = null;
+    ttsEnabled = false;
+    editingMessageId: string | null = null;
+    editMessageControl = new UntypedFormControl('');
     private currentStreamingMessage: Message | null = null;
+    private runtimeByRunId = new Map<string, RuntimeState>();
+    private playbackResetTimer: ReturnType<typeof setTimeout> | null = null;
     @ViewChild('fileInput') private fileInputRef?: ElementRef<HTMLInputElement>;
+    @ViewChild('chatTextarea') private chatTextareaRef?: ElementRef<HTMLTextAreaElement>;
 
     constructor(
         private apiService: ApiService,
+        private authService: AuthService,
         private configService: ConfigService,
         private voiceService: VoiceService,
         private websocketService: WebsocketService,
@@ -77,7 +128,7 @@ export class ChatComponent implements OnInit, OnDestroy {
         this.loadHistory();
         this.fetchVoiceModeStatus();
 
-        this.websocketService.messages$.subscribe((rawMsg: string) => {
+        this.websocketService.messages$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((rawMsg: string) => {
             let event: any;
             try {
                 event = JSON.parse(rawMsg);
@@ -89,9 +140,13 @@ export class ChatComponent implements OnInit, OnDestroy {
 
             switch (event.type) {
                 case 'message_chunk':
+                    if (event.run_id) {
+                        this.activeGenerationRunId = event.run_id;
+                    }
                     if (!this.currentStreamingMessage) {
                         this.loading = false;
                         const tempId = generateTempId();
+                        const runtime = this.ensureRuntime(event.run_id);
                         this.currentStreamingMessage = {
                             id: tempId,
                             role: event.role,
@@ -99,10 +154,16 @@ export class ChatComponent implements OnInit, OnDestroy {
                             timestamp: new Date().toISOString(),
                             isPending: true,
                             media: this.normalizeMediaList(event.media),
+                            runId: event.run_id || undefined,
+                            runtime,
                         };
                         this.chatHistory.push(this.currentStreamingMessage);
                     } else {
                         this.currentStreamingMessage.content += event.content;
+                        if (event.run_id) {
+                            this.currentStreamingMessage.runId = event.run_id;
+                            this.currentStreamingMessage.runtime = this.ensureRuntime(event.run_id);
+                        }
                         if (event.media !== undefined && this.currentStreamingMessage) {
                             this.currentStreamingMessage.media = this.normalizeMediaList(event.media);
                         }
@@ -115,6 +176,11 @@ export class ChatComponent implements OnInit, OnDestroy {
                         this.currentStreamingMessage.id = event.id || this.currentStreamingMessage.id;
                         this.currentStreamingMessage.isPending = false;
                         this.currentStreamingMessage.content = event.content;
+                        this.currentStreamingMessage.provider = event.provider;
+                        this.currentStreamingMessage.runId = event.run_id || this.currentStreamingMessage.runId;
+                        if (this.currentStreamingMessage.runId) {
+                            this.currentStreamingMessage.runtime = this.ensureRuntime(this.currentStreamingMessage.runId);
+                        }
                         if (event.timestamp) {
                             this.currentStreamingMessage.timestamp = event.timestamp;
                         }
@@ -139,6 +205,8 @@ export class ChatComponent implements OnInit, OnDestroy {
                                 timestamp: event.timestamp || new Date().toISOString(),
                                 isPending: false,
                                 media: normalizedMedia,
+                                runId: event.run_id || undefined,
+                                runtime: this.ensureRuntime(event.run_id),
                             });
                         }
                     } else {
@@ -149,6 +217,9 @@ export class ChatComponent implements OnInit, OnDestroy {
                             timestamp: event.timestamp || new Date().toISOString(),
                             isPending: false,
                             media: normalizedMedia,
+                            provider: event.provider,
+                            runId: event.run_id || undefined,
+                            runtime: this.ensureRuntime(event.run_id),
                         });
                     }
                     this.loading = false;
@@ -156,11 +227,21 @@ export class ChatComponent implements OnInit, OnDestroy {
                 }
 
                 case 'history':
-                    const newMessages = event.items.map((m: any) => ({
-                        ...m,
-                        isPending: false,
-                        media: this.normalizeMediaList(m.media),
-                    })).sort(
+                    const newMessages = event.items.map((m: any) => {
+                        const runtime = this.hydrateRuntimeFromHistory(m.runtime_meta);
+                        const runId = runtime?.runId;
+                        if (runtime && runId) {
+                            this.runtimeByRunId.set(runId, runtime);
+                        }
+                        return {
+                            ...m,
+                            isPending: false,
+                            media: this.normalizeMediaList(m.media),
+                            runId: runId || undefined,
+                            runtime: runtime || undefined,
+                            provider: m.provider || runtime?.model || undefined,
+                        };
+                    }).sort(
                         (a: any, b: any) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
                     );
 
@@ -199,29 +280,36 @@ export class ChatComponent implements OnInit, OnDestroy {
                     }
                     break;
 
-                case 'reroll':
-                    this.chatHistory.push({
-                        id: event.new_message.id,
-                        role: event.new_message.role,
-                        content: event.new_message.content,
-                        timestamp: event.new_message.timestamp,
-                        isPending: false,
-                        media: this.normalizeMediaList(event.new_message?.media),
-                    });
-                    this.loading = false;
-                    setTimeout(() => this.scrollToBottom(), 0);
-                    break;
-
                 case 'system':
                     if (event.event === 'typing_start') {
                         this.loading = true;
+                        if (event.run_id) {
+                            this.activeGenerationRunId = event.run_id;
+                        }
                     } else if (event.event === 'typing_end') {
                         this.loading = false;
                         this.currentStreamingMessage = null;
+                        if (event.run_id && this.activeGenerationRunId === event.run_id) {
+                            this.activeGenerationRunId = null;
+                        }
                     }
                     break;
 
                 case 'message_end': {
+                    if (event.run_id) {
+                        const runtime = this.ensureRuntime(event.run_id);
+                        if (runtime) {
+                            runtime.status = event.stopped ? 'stopped' : 'completed';
+                            runtime.finishedAt = event.timestamp || new Date().toISOString();
+                            runtime.model = event.model || runtime.model;
+                            runtime.usage = event.usage || runtime.usage;
+                            runtime.meta = event.meta || runtime.meta;
+                            runtime.reasoningElapsedMs = typeof event.reasoning_elapsed_ms === 'number'
+                                ? event.reasoning_elapsed_ms
+                                : runtime.reasoningElapsedMs;
+                            runtime.detailsOpen = false;
+                        }
+                    }
                     const targetId = event.id || this.currentStreamingMessage?.id;
                     if (targetId) {
                         const messageIndex = this.chatHistory.findIndex(m => m.id === targetId);
@@ -229,21 +317,48 @@ export class ChatComponent implements OnInit, OnDestroy {
                             const message = this.chatHistory[messageIndex];
                             message.isPending = false;
                             if (event.provider) {
-                                (message as any).provider = event.provider;
+                                message.provider = event.provider;
                             }
                             if (typeof event.reasoning === 'string') {
-                                (message as any).reasoning = event.reasoning;
+                                message.reasoning = event.reasoning;
+                            }
+                            if (event.run_id) {
+                                message.runId = event.run_id;
+                                message.runtime = this.ensureRuntime(event.run_id);
+                            }
+                            message.stopped = !!event.stopped;
+                            if (!event.stopped && this.ttsEnabled && message.role === 'assistant' && message.id) {
+                                this.startPlaybackTracking(message.id, message.content);
                             }
                         }
                     }
                     this.currentStreamingMessage = null;
                     this.loading = false;
+                    if (event.run_id && this.activeGenerationRunId === event.run_id) {
+                        this.activeGenerationRunId = null;
+                    }
                     break;
                 }
 
                 case 'error':
                     console.error('[WS] ❌ Error from server:', event.message);
+                    this.notificationService.open({
+                        type: 'error',
+                        message: this.formatWsErrorMessage(event),
+                        autoClose: true,
+                    });
                     this.loading = false;
+                    if (event.run_id) {
+                        const runtime = this.ensureRuntime(event.run_id);
+                        if (runtime) {
+                            runtime.status = 'error';
+                            runtime.finishedAt = new Date().toISOString();
+                            runtime.detailsOpen = true;
+                        }
+                    }
+                    if (event.run_id && this.activeGenerationRunId === event.run_id) {
+                        this.activeGenerationRunId = null;
+                    }
                     break;
 
                 case 'ack_message':
@@ -257,6 +372,30 @@ export class ChatComponent implements OnInit, OnDestroy {
                     }
                     break;
 
+                case 'runtime_trace':
+                    if (event.run_id) {
+                        this.pushRuntimeTrace(event.run_id, {
+                            stage: event.stage || 'unknown',
+                            state: event.state || 'info',
+                            timestamp: event.timestamp,
+                            elapsedMs: typeof event.elapsed_ms === 'number' ? event.elapsed_ms : undefined,
+                            details: event.details || undefined,
+                        });
+                    }
+                    break;
+
+                case 'run_status':
+                    if (event.run_id) {
+                        this.applyRunStatus(event.run_id, event.status as RuntimeStatus);
+                    }
+                    if (event.status === 'completed' || event.status === 'stopped' || event.status === 'error' || event.status === 'no_active_run') {
+                        this.loading = false;
+                        if (event.run_id && this.activeGenerationRunId === event.run_id) {
+                            this.activeGenerationRunId = null;
+                        }
+                    }
+                    break;
+
                 default:
                     console.warn('[WS] ⚠️ Unknown event:', event);
             }
@@ -266,11 +405,25 @@ export class ChatComponent implements OnInit, OnDestroy {
     }
 
     ngOnDestroy(): void {
+        this.stopPlaybackTracking();
         this.resetAttachments();
     }
 
     isMessageStreaming(msg: Message): boolean {
         return msg.isPending === true && msg.role === 'assistant';
+    }
+
+    shouldShowActions(msg: Message): boolean {
+        if (!msg || msg.isPending) {
+            return false;
+        }
+        if (msg.role === 'assistant') {
+            const status = msg.runtime?.status;
+            if (status === 'started' || status === 'running' || status === 'stopping') {
+                return false;
+            }
+        }
+        return true;
     }
 
     toggleEmojiDropdown(event: Event): void {
@@ -338,7 +491,6 @@ export class ChatComponent implements OnInit, OnDestroy {
         const currentValue = this.chatInput.value || '';
         const newValue = currentValue + emoji;
         this.chatInput.setValue(newValue);
-        this.closeEmojiPicker();
 
         setTimeout(() => {
             const textarea = document.querySelector('.chat-input') as HTMLTextAreaElement;
@@ -347,25 +499,6 @@ export class ChatComponent implements OnInit, OnDestroy {
                 this.onKeyUp();
             }
         });
-    }
-
-    get sidePanelOffsetStyle(): { [key: string]: string } {
-        if (!this.showEmojiPicker || this.emojiPickerMode !== 'side-panel') {
-            return {};
-        }
-
-        switch (this.emojiPickerSide) {
-            case 'right':
-                return { 'padding-right': `${this.emojiPanelWidth}px` };
-            case 'left':
-                return { 'padding-left': `${this.emojiPanelWidth}px` };
-            case 'top':
-                return { 'padding-top': `${this.emojiPanelHeight}px` };
-            case 'bottom':
-                return { 'padding-bottom': `${this.emojiPanelHeight}px` };
-            default:
-                return {};
-        }
     }
 
     loadHistory(): void {
@@ -378,6 +511,7 @@ export class ChatComponent implements OnInit, OnDestroy {
             payload: { limit: this.MESSAGES_PER_PAGE }
         }));
     }
+
     private fetchVoiceModeStatus(): void {
         this.voiceModeLoading = true;
         this.voiceService.voiceModeStatus$()
@@ -432,6 +566,7 @@ export class ChatComponent implements OnInit, OnDestroy {
                 const system = config.system || {} as ProjectConfig['system'];
                 const userName = system.userName || '';
                 const charName = system.charName || '';
+                this.ttsEnabled = !!config.voice?.enabled;
                 this.userName = userName;
                 this.charName = charName;
 
@@ -445,6 +580,20 @@ export class ChatComponent implements OnInit, OnDestroy {
 
     // Message handling methods
     sendMessage(): void {
+        if (this.loading && this.activeGenerationRunId) {
+            return;
+        }
+
+        if (!this.websocketService.isConnected()) {
+            this.websocketService.reconnect();
+            this.notificationService.open({
+                type: 'warning',
+                message: 'Соединение с сервером восстанавливается. Повторите отправку через секунду.',
+                autoClose: true,
+            });
+            return;
+        }
+
         const trimmed = this.chatInput.value?.trim();
         const mediaPayload = this.attachments.map((attachment) => ({ ...attachment }));
         const hasContent = !!(trimmed && trimmed.length > 0);
@@ -463,6 +612,7 @@ export class ChatComponent implements OnInit, OnDestroy {
         }
 
         const tempId = generateTempId();
+        const runId = generateTempId();
         const timestamp = new Date().toISOString();
 
         const userMessage: Message = {
@@ -472,16 +622,22 @@ export class ChatComponent implements OnInit, OnDestroy {
             timestamp,
             isPending: true,
             media: mediaPayload,
+            runId,
         };
 
         this.chatHistory.push(userMessage);
         this.chatInputValue = '';
         this.chatInput.setValue('');
+        this.resetTextareaHeight();
         this.loading = true;
+        this.activeGenerationRunId = runId;
+        this.ensureRuntime(runId);
         setTimeout(() => this.scrollToBottom(), 0);
 
         const transportPayload = {
             ...userMessage,
+            run_id: runId,
+            actor_user_uuid: this.getActorUserUuid(),
             media: mediaPayload.map((media) => this.serializeMediaForTransport(media)),
         };
 
@@ -499,6 +655,20 @@ export class ChatComponent implements OnInit, OnDestroy {
         });
     }
 
+    stopGeneration(): void {
+        if (!this.activeGenerationRunId) {
+            return;
+        }
+        this.websocketService.send(JSON.stringify({
+            action: 'stop_generation',
+            payload: { run_id: this.activeGenerationRunId },
+        }));
+        const runtime = this.ensureRuntime(this.activeGenerationRunId);
+        if (runtime) {
+            runtime.status = 'stopping';
+        }
+    }
+
     deleteMessage(msg: Message, chain: boolean): void {
         if (!msg || !msg.id) return;
         this.websocketService.send(JSON.stringify({
@@ -508,6 +678,15 @@ export class ChatComponent implements OnInit, OnDestroy {
     }
 
     rerollMessage(messageId: string | null): void {
+        if (this.loading && this.activeGenerationRunId) {
+            this.notificationService.open({
+                type: 'warning',
+                message: 'Сначала дождитесь завершения текущей генерации или остановите ее.',
+                autoClose: true,
+            });
+            return;
+        }
+
         if (!messageId) {
             for (let i = this.chatHistory.length - 1; i >= 0; i--) {
                 if (this.chatHistory[i].role === 'assistant') {
@@ -523,20 +702,37 @@ export class ChatComponent implements OnInit, OnDestroy {
         }
 
         this.loading = true;
+        const runId = generateTempId();
+        this.activeGenerationRunId = runId;
+        this.ensureRuntime(runId);
 
-        const lastAssistantIndex = this.chatHistory.map((msg, i) => ({ msg, i }))
-            .reverse()
-            .find(item => item.msg.role === 'assistant')?.i;
+        const assistantIndex = this.chatHistory.findIndex((msg) => msg.id === messageId);
+        let clientUserId: string | null = null;
 
-        if (lastAssistantIndex !== undefined) {
-            this.chatHistory.splice(lastAssistantIndex, 1);
+        if (assistantIndex > 0) {
+            for (let i = assistantIndex - 1; i >= 0; i--) {
+                const candidate = this.chatHistory[i];
+                if (candidate.role === 'user' && candidate.id) {
+                    clientUserId = candidate.id;
+                    break;
+                }
+            }
+        }
+
+        if (assistantIndex !== -1) {
+            this.chatHistory.splice(assistantIndex, 1);
         }
 
         setTimeout(() => this.scrollToBottom(), 0);
 
         this.websocketService.send(JSON.stringify({
             action: 'reroll_message',
-            payload: { message_id: messageId }
+            payload: {
+                message_id: messageId,
+                run_id: runId,
+                client_user_id: clientUserId,
+                actor_user_uuid: this.getActorUserUuid(),
+            }
         }));
     }
 
@@ -561,17 +757,36 @@ export class ChatComponent implements OnInit, OnDestroy {
         if (!msgId) return;
 
         if (this.currentPlayingMessage === msgId) {
-            this.voiceService.stopPlay$().subscribe();
-            this.currentPlayingMessage = null;
+            this.voiceService.stopPlay$().subscribe({
+                next: () => {
+                    this.stopPlaybackTracking();
+                },
+                error: () => {
+                    this.stopPlaybackTracking();
+                },
+            });
         } else {
-            this.voiceService.playMessage(msgId).subscribe();
-            this.currentPlayingMessage = msgId;
-        }
-    }
+            const playRequest = () => {
+                this.voiceService.playMessage(msgId).subscribe({
+                    next: () => {
+                        const msg = this.chatHistory.find((m) => m.id === msgId);
+                        this.startPlaybackTracking(msgId, msg?.content);
+                    },
+                    error: () => {
+                        this.stopPlaybackTracking();
+                    },
+                });
+            };
 
-    stopVoice() {
-        this.voiceService.stopPlay$().subscribe();
-        this.currentPlayingMessage = null;
+            if (this.currentPlayingMessage) {
+                this.voiceService.stopPlay$().subscribe({
+                    next: () => playRequest(),
+                    error: () => playRequest(),
+                });
+            } else {
+                playRequest();
+            }
+        }
     }
 
     playMessage(msg: Message) {
@@ -589,11 +804,19 @@ export class ChatComponent implements OnInit, OnDestroy {
     }
 
     onKeyUp(): void {
-        const textarea = document.querySelector('.chat-input') as HTMLTextAreaElement;
-        if (textarea) {
-            textarea.style.height = 'auto';
-            textarea.style.height = `${textarea.scrollHeight}px`;
+        this.onTextareaInput();
+    }
+
+    onTextareaInput(): void {
+        const textarea = this.chatTextareaRef?.nativeElement;
+        if (!textarea) {
+            return;
         }
+        const maxHeight = 220;
+        textarea.style.height = '0px';
+        const nextHeight = Math.min(textarea.scrollHeight, maxHeight);
+        textarea.style.height = `${nextHeight}px`;
+        textarea.style.overflowY = textarea.scrollHeight > maxHeight ? 'auto' : 'hidden';
     }
 
     scrollToBottom(): void {
@@ -611,7 +834,10 @@ export class ChatComponent implements OnInit, OnDestroy {
     formatTimestamp(isoDate?: string): string {
         if (!isoDate) return '';
 
-        const date = new Date(isoDate);
+        const date = this.parseTimestampSafe(isoDate);
+        if (!date) {
+            return '';
+        }
         const now = new Date();
 
         const isToday =
@@ -635,6 +861,26 @@ export class ChatComponent implements OnInit, OnDestroy {
         return `${dateStr} ${time}`;
     }
 
+    private parseTimestampSafe(raw: string): Date | null {
+        const value = String(raw || '').trim();
+        if (!value) {
+            return null;
+        }
+
+        let normalized = value.replace(' ', 'T');
+        const hasTimezone = /([zZ]|[+\-]\d{2}:\d{2})$/.test(normalized);
+        if (!hasTimezone) {
+            // Legacy rows may arrive as naive UTC; force explicit UTC to avoid random offset drift.
+            normalized = `${normalized}Z`;
+        }
+
+        const parsed = new Date(normalized);
+        if (Number.isNaN(parsed.getTime())) {
+            return null;
+        }
+        return parsed;
+    }
+
     // Unused methods - can be removed if not needed
     toggleMessageMenu(msgId: string | null, event: Event): void {
         event.stopPropagation();
@@ -642,7 +888,90 @@ export class ChatComponent implements OnInit, OnDestroy {
     }
 
     editMessage(msg: Message): void {
-        console.log('Editing:', msg);
+        if (!msg?.id || msg.role !== 'user') {
+            return;
+        }
+        this.editingMessageId = msg.id;
+        this.editMessageControl.setValue(msg.content || '');
+        setTimeout(() => this.onTextareaInput(), 0);
+    }
+
+    isEditingMessage(msg: Message): boolean {
+        return !!msg?.id && this.editingMessageId === msg.id;
+    }
+
+    isLatestUserMessage(index: number): boolean {
+        for (let i = this.chatHistory.length - 1; i >= 0; i--) {
+            if (this.chatHistory[i]?.role === 'user') {
+                return i === index;
+            }
+        }
+        return false;
+    }
+
+    cancelEditMessage(): void {
+        this.editingMessageId = null;
+        this.editMessageControl.setValue('');
+    }
+
+    saveEditMessage(msg: Message): void {
+        if (!msg?.id || msg.role !== 'user') {
+            return;
+        }
+        if (this.loading && this.activeGenerationRunId) {
+            this.notificationService.open({
+                type: 'warning',
+                message: 'Сначала дождитесь завершения текущей генерации или остановите ее.',
+                autoClose: true,
+            });
+            return;
+        }
+
+        const edited = (this.editMessageControl.value || '').trim();
+        if (!edited) {
+            this.notificationService.open({
+                type: 'warning',
+                message: 'Текст сообщения не может быть пустым.',
+                autoClose: true,
+            });
+            return;
+        }
+
+        if (edited === (msg.content || '').trim()) {
+            this.cancelEditMessage();
+            return;
+        }
+
+        const runId = generateTempId();
+        this.loading = true;
+        this.activeGenerationRunId = runId;
+        this.ensureRuntime(runId);
+
+        const userIndex = this.chatHistory.findIndex((item) => item.id === msg.id);
+        if (userIndex !== -1) {
+            this.chatHistory[userIndex].content = edited;
+            this.chatHistory[userIndex].isPending = true;
+            for (let i = userIndex + 1; i < this.chatHistory.length; i++) {
+                if (this.chatHistory[i].role === 'assistant') {
+                    this.chatHistory.splice(i, 1);
+                    break;
+                }
+            }
+        }
+
+        this.cancelEditMessage();
+        setTimeout(() => this.scrollToBottom(), 0);
+
+        this.websocketService.send(JSON.stringify({
+            action: 'edit_message',
+            payload: {
+                message_id: msg.id,
+                new_content: edited,
+                run_id: runId,
+                client_user_id: msg.id,
+                actor_user_uuid: this.getActorUserUuid(),
+            },
+        }));
     }
 
     toggleAttachDropdown(): void {
@@ -700,9 +1029,19 @@ export class ChatComponent implements OnInit, OnDestroy {
         this.attachments = [];
         this.isProcessingAttachments = false;
         this.selectedMedia = null;
+        this.resetTextareaHeight();
         if (this.fileInputRef?.nativeElement) {
             this.fileInputRef.nativeElement.value = '';
         }
+    }
+
+    private resetTextareaHeight(): void {
+        const textarea = this.chatTextareaRef?.nativeElement;
+        if (!textarea) {
+            return;
+        }
+        textarea.style.height = '56px';
+        textarea.style.overflowY = 'hidden';
     }
 
     private serializeMediaForTransport(media: MessageMedia): Omit<MessageMedia, 'dataUrl'> {
@@ -789,6 +1128,10 @@ export class ChatComponent implements OnInit, OnDestroy {
         });
     }
 
+    private getActorUserUuid(): string | undefined {
+        return this.authService.getCurrentUser()?.uuid;
+    }
+
     getMediaSource(media: MessageMedia | null | undefined): string {
         if (!media) {
             return '';
@@ -840,5 +1183,329 @@ export class ChatComponent implements OnInit, OnDestroy {
 
     shouldShowReroll(msg: Message, index: number): boolean {
         return msg.role === 'assistant' && index === this.chatHistory.length - 1;
+    }
+
+    hasRuntime(msg: Message): boolean {
+        return !!msg.runtime && (msg.runtime.traces.length > 0 || !!msg.runtime.usage || !!msg.provider);
+    }
+
+    hasUsageMeta(msg: Message): boolean {
+        const hasUsage = !!msg.runtime?.usage && Object.keys(msg.runtime.usage || {}).length > 0;
+        const hasMeta = !!msg.runtime?.meta && Object.keys(msg.runtime.meta || {}).length > 0;
+        return hasUsage || hasMeta;
+    }
+
+    toggleRuntimeDetails(msg: Message): void {
+        if (!msg.runtime) {
+            return;
+        }
+        msg.runtime.detailsOpen = !msg.runtime.detailsOpen;
+    }
+
+    getRuntimeSummary(msg: Message): string {
+        const runtime = msg.runtime;
+        if (!runtime) {
+            return '';
+        }
+        const status = runtime.status === 'completed'
+            ? 'готово'
+            : runtime.status === 'stopped'
+                ? 'остановлено'
+                : runtime.status === 'error'
+                    ? 'ошибка'
+                    : runtime.status === 'stopping'
+                        ? 'останавливаю...'
+                        : 'в процессе';
+        const model = runtime.model || msg.provider || 'provider';
+        if (typeof runtime.elapsedMs === 'number') {
+            const seconds = Math.max(0, Math.round(runtime.elapsedMs / 10) / 100);
+            return `${model} • ${status} • ${seconds}s`;
+        }
+        return `${model} • ${status}`;
+    }
+
+    getRuntimeStages(msg: Message): RuntimeStageView[] {
+        const runtime = msg.runtime;
+        if (!runtime) {
+            return [];
+        }
+        return this.getRuntimeStagesFromRuntime(runtime);
+    }
+
+    private getRuntimeStagesFromRuntime(runtime: RuntimeState): RuntimeStageView[] {
+        const traces = runtime.traces || [];
+
+        return RUNTIME_STAGE_GROUPS
+            .map((group) => {
+                const related = traces.filter((trace) => group.keys.includes(trace.stage));
+                const hasStart = related.some((trace) => trace.state === 'start');
+                const hasEnd = related.some((trace) => trace.state === 'end');
+                const endTrace = related.find((trace) => trace.state === 'end' && typeof trace.elapsedMs === 'number');
+                const state: RuntimeStageView['state'] = hasEnd ? 'done' : (hasStart ? 'active' : 'pending');
+                const elapsedMs = endTrace?.elapsedMs;
+                return {
+                    id: group.id,
+                    label: group.label,
+                    state,
+                    elapsedMs,
+                };
+            })
+            .filter((stage) => {
+                const meta = RUNTIME_STAGE_GROUPS.find((group) => group.id === stage.id);
+                if (!meta?.optional) {
+                    return true;
+                }
+                return stage.state !== 'pending';
+            });
+    }
+
+    getRuntimeActiveLabel(msg: Message): string {
+        const runtime = msg.runtime;
+        if (!runtime) {
+            return 'Обрабатываю запрос';
+        }
+        return this.getRuntimeActiveLabelFromRuntime(runtime);
+    }
+
+    getActiveRuntime(): RuntimeState | undefined {
+        if (!this.activeGenerationRunId) {
+            return undefined;
+        }
+        return this.runtimeByRunId.get(this.activeGenerationRunId);
+    }
+
+    getActiveRuntimeLabel(): string {
+        const runtime = this.getActiveRuntime();
+        if (!runtime) {
+            return 'Обрабатываю запрос';
+        }
+        return this.getRuntimeActiveLabelFromRuntime(runtime);
+    }
+
+    private getRuntimeActiveLabelFromRuntime(runtime: RuntimeState): string {
+        const stages = this.getRuntimeStagesFromRuntime(runtime);
+        const active = stages.find((stage) => stage.state === 'active');
+        if (active) {
+            return active.label;
+        }
+        if (runtime.status === 'completed') {
+            return 'Ответ готов';
+        }
+        if (runtime.status === 'stopped') {
+            return 'Генерация остановлена';
+        }
+        if (runtime.status === 'error') {
+            return 'Ошибка генерации';
+        }
+        return 'Обрабатываю запрос';
+    }
+
+    trackByMessage(_index: number, msg: Message): string {
+        return msg.id;
+    }
+
+    trackByMedia(_index: number, media: MessageMedia): string {
+        return media.id;
+    }
+
+    trackByAttachment(_index: number, attachment: MessageMedia): string {
+        return attachment.id;
+    }
+
+    getUsageTooltip(msg: Message): string {
+        const usage = msg.runtime?.usage || {};
+        const meta = msg.runtime?.meta || {};
+        const reasoningElapsedMs = msg.runtime?.reasoningElapsedMs;
+        if (!Object.keys(usage).length && !Object.keys(meta).length && typeof reasoningElapsedMs !== 'number') {
+            return '';
+        }
+        const keys = [
+            'prompt_eval_count',
+            'eval_count',
+            'total_duration',
+            'eval_duration',
+            'prompt_eval_duration',
+        ];
+        const lines: string[] = [];
+        for (const key of keys) {
+            if (usage[key] !== undefined && usage[key] !== null) {
+                lines.push(`${key}: ${usage[key]}`);
+            }
+        }
+        for (const [key, value] of Object.entries(usage)) {
+            if (!keys.includes(key) && value !== undefined && value !== null) {
+                lines.push(`${key}: ${typeof value === 'object' ? JSON.stringify(value) : value}`);
+            }
+        }
+        if (typeof reasoningElapsedMs === 'number') {
+            const secs = Math.max(0, Math.round(reasoningElapsedMs / 10) / 100);
+            lines.push(`reasoning_elapsed: ${secs}s`);
+        }
+        for (const [key, value] of Object.entries(meta)) {
+            if (value !== undefined && value !== null) {
+                lines.push(`meta.${key}: ${typeof value === 'object' ? JSON.stringify(value) : value}`);
+            }
+        }
+        return lines.join('\n');
+    }
+
+    private formatWsErrorMessage(event: any): string {
+        const fallback = event?.message || 'Ошибка во время генерации.';
+        const details = event?.details;
+        if (!Array.isArray(details) || details.length === 0) {
+            return fallback;
+        }
+
+        const normalized = details
+            .map((item: any) => {
+                const provider = item?.provider ? String(item.provider) : 'provider';
+                const reason = item?.reason ? String(item.reason) : '';
+                return reason ? `${provider}: ${reason}` : provider;
+            })
+            .filter(Boolean);
+
+        if (!normalized.length) {
+            return fallback;
+        }
+
+        return `Провайдер отказал: ${normalized.join(' | ')}`;
+    }
+
+    getThinkingDurationMs(msg: Message): number | undefined {
+        return msg.runtime?.reasoningElapsedMs;
+    }
+
+    private ensureRuntime(runId?: string | null): RuntimeState | undefined {
+        if (!runId) {
+            return undefined;
+        }
+        const existing = this.runtimeByRunId.get(runId);
+        if (existing) {
+            return existing;
+        }
+        const runtime: RuntimeState = {
+            runId,
+            status: 'running',
+            startedAt: new Date().toISOString(),
+            detailsOpen: false,
+            traces: [],
+            usage: null,
+            meta: null,
+        };
+        this.runtimeByRunId.set(runId, runtime);
+        return runtime;
+    }
+
+    private pushRuntimeTrace(runId: string, trace: RuntimeTraceEntry): void {
+        const runtime = this.ensureRuntime(runId);
+        if (!runtime) {
+            return;
+        }
+        runtime.traces = [...runtime.traces, trace];
+        if (trace.state === 'end' && typeof trace.elapsedMs === 'number' && trace.stage === 'pipeline') {
+            runtime.elapsedMs = trace.elapsedMs;
+        }
+        if (trace.state === 'start' && trace.stage === 'pipeline' && !runtime.startedAt) {
+            runtime.startedAt = trace.timestamp || new Date().toISOString();
+        }
+        const linkedMessage = this.chatHistory.find((msg) => msg.runId === runId && msg.role === 'assistant');
+        if (linkedMessage) {
+            linkedMessage.runtime = runtime;
+        }
+    }
+
+    private applyRunStatus(runId: string, status: RuntimeStatus): void {
+        const runtime = this.ensureRuntime(runId);
+        if (!runtime) {
+            return;
+        }
+        runtime.status = status;
+        if (status === 'completed' || status === 'stopped' || status === 'error') {
+            runtime.finishedAt = new Date().toISOString();
+            if (typeof runtime.elapsedMs !== 'number') {
+                runtime.elapsedMs = this.estimateElapsedMs(runtime);
+            }
+        }
+        const linkedMessage = this.chatHistory.find((msg) => msg.runId === runId && msg.role === 'assistant');
+        if (linkedMessage) {
+            linkedMessage.runtime = runtime;
+        }
+    }
+
+    private estimateElapsedMs(runtime: RuntimeState): number {
+        const started = runtime.startedAt ? new Date(runtime.startedAt).getTime() : Date.now();
+        const finished = runtime.finishedAt ? new Date(runtime.finishedAt).getTime() : Date.now();
+        return Math.max(0, finished - started);
+    }
+
+    private startPlaybackTracking(messageId: string, text?: string): void {
+        this.currentPlayingMessage = messageId;
+
+        if (this.playbackResetTimer) {
+            clearTimeout(this.playbackResetTimer);
+            this.playbackResetTimer = null;
+        }
+
+        const timeoutMs = this.estimatePlaybackDurationMs(text);
+        this.playbackResetTimer = setTimeout(() => {
+            if (this.currentPlayingMessage === messageId) {
+                this.currentPlayingMessage = null;
+            }
+            this.playbackResetTimer = null;
+        }, timeoutMs);
+    }
+
+    private stopPlaybackTracking(): void {
+        this.currentPlayingMessage = null;
+        if (this.playbackResetTimer) {
+            clearTimeout(this.playbackResetTimer);
+            this.playbackResetTimer = null;
+        }
+    }
+
+    private estimatePlaybackDurationMs(text?: string): number {
+        const chars = (text || '').length;
+        if (chars <= 0) {
+            return 5000;
+        }
+        const charsPerSecond = 14; // conservative RU/EN TTS pace
+        const estimatedMs = Math.round((chars / charsPerSecond) * 1000) + 1200;
+        return Math.min(Math.max(estimatedMs, 3000), 120000);
+    }
+
+    private hydrateRuntimeFromHistory(raw: any): RuntimeState | undefined {
+        if (!raw || typeof raw !== 'object') {
+            return undefined;
+        }
+        const tracesRaw = Array.isArray(raw.traces) ? raw.traces : [];
+        const traces: RuntimeTraceEntry[] = tracesRaw.map((trace: any) => ({
+            stage: trace?.stage || 'unknown',
+            state: trace?.state || 'info',
+            timestamp: trace?.timestamp,
+            elapsedMs: typeof trace?.elapsed_ms === 'number'
+                ? trace.elapsed_ms
+                : (typeof trace?.elapsedMs === 'number' ? trace.elapsedMs : undefined),
+            details: trace?.details,
+        }));
+        const runId = raw.run_id || raw.runId;
+        if (!runId) {
+            return undefined;
+        }
+        const status: RuntimeStatus = raw.stopped ? 'stopped' : 'completed';
+        return {
+            runId,
+            status,
+            startedAt: raw.started_at || raw.startedAt || undefined,
+            finishedAt: raw.timestamp || raw.finishedAt || undefined,
+            elapsedMs: typeof raw.elapsed_ms === 'number' ? raw.elapsed_ms : (typeof raw.elapsedMs === 'number' ? raw.elapsedMs : undefined),
+            model: raw.model || undefined,
+            usage: raw.usage || null,
+            meta: raw.meta || null,
+            reasoningElapsedMs: typeof raw.reasoning_elapsed_ms === 'number'
+                ? raw.reasoning_elapsed_ms
+                : (typeof raw.reasoningElapsedMs === 'number' ? raw.reasoningElapsedMs : undefined),
+            detailsOpen: false,
+            traces,
+        };
     }
 }

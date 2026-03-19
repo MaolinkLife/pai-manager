@@ -8,7 +8,7 @@ from typing import Any, AsyncIterator, Dict, Iterable, Optional
 import aiohttp
 import requests
 
-from services.config_service import get_config_value
+from services import config_service
 from services.logger_service import AuditStatus, log_audit_entry, log_error
 from services.localization_service import get_text
 
@@ -20,11 +20,11 @@ OLLAMA_API_URL = "http://localhost:11434/api"
 # ---------------------------------------------------------------------------
 
 def _resolve_text_model(model: Optional[str]) -> str:
-    return model or get_config_value("api.model")
+    return model or config_service.get_config_value("api.model")
 
 
 def get_visual_model() -> str:
-    return get_config_value("api.visual_model")
+    return config_service.get_config_value("api.visual_model")
 
 
 # ---------------------------------------------------------------------------

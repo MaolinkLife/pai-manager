@@ -1,0 +1,41 @@
+"""System module facade."""
+
+from .service import (
+    activate_user_context,
+    apply_preset_by_name,
+    ensure_config_exists,
+    get_config,
+    get_active_character_name,
+    get_config_value,
+    get_active_user_uuid,
+    get_machine_runtime_info,
+    get_runtime_timezone_name,
+    migrate_owner_config_if_needed,
+    migrate_split_settings_if_needed,
+    redact_sensitive_config,
+    require_config_method,
+    reset_user_context,
+    save_config,
+    set_config_value,
+    update_config_bulk,
+)
+
+__all__ = [
+    "activate_user_context",
+    "apply_preset_by_name",
+    "ensure_config_exists",
+    "get_config",
+    "get_active_character_name",
+    "get_config_value",
+    "get_active_user_uuid",
+    "get_machine_runtime_info",
+    "get_runtime_timezone_name",
+    "migrate_owner_config_if_needed",
+    "migrate_split_settings_if_needed",
+    "redact_sensitive_config",
+    "require_config_method",
+    "reset_user_context",
+    "save_config",
+    "set_config_value",
+    "update_config_bulk",
+]
