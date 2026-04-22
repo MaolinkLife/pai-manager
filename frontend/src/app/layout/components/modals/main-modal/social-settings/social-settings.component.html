@@ -1,0 +1,749 @@
+<div class="settings-wrapper">
+    <form [formGroup]="socialForm" (ngSubmit)="saveChanges()" class="settings-form">
+        <h2>🌐 {{ "socialSettings.title" | translate }}</h2>
+
+        <div class="section" formGroupName="communication">
+            <h3>{{ "socialSettings.communication.channelPriority" | translate }}</h3>
+            <p class="hint">{{ "socialSettings.communication.channelPriorityHint" | translate }}</p>
+
+            <div class="form-group">
+                <label for="comm-primary-channel">{{ "socialSettings.communication.primaryChannel" | translate }}</label>
+                <app-ui-select
+                    id="comm-primary-channel"
+                    formControlName="primary_channel"
+                    [options]="communicationPrimaryOptions"
+                ></app-ui-select>
+            </div>
+
+            <div class="form-group checkbox-group" formGroupName="channels">
+                <div class="communication-channel" formGroupName="main_chat">
+                    <app-ui-checkbox formControlName="enabled">
+                        {{ "socialSettings.communication.mainChatEnabled" | translate }}
+                    </app-ui-checkbox>
+                </div>
+                <div class="communication-channel" formGroupName="telegram">
+                    <app-ui-checkbox formControlName="enabled">
+                        {{ "socialSettings.communication.telegramEnabled" | translate }}
+                    </app-ui-checkbox>
+                    <app-ui-checkbox
+                        formControlName="allow_fallback"
+                        [disabled]="socialForm.get('communication.primary_channel')?.value === 'main_chat'"
+                    >
+                        {{ "socialSettings.communication.telegramFallback" | translate }}
+                    </app-ui-checkbox>
+                </div>
+            </div>
+        </div>
+
+        <div class="section" formGroupName="modules">
+            <h3>{{ "socialSettings.modules.title" | translate }}</h3>
+            <p class="hint">{{ "socialSettings.modules.hint" | translate }}</p>
+            <div class="form-group checkbox-group">
+                <app-ui-checkbox formControlName="telegram">
+                    {{ "socialSettings.modules.telegram" | translate }}
+                </app-ui-checkbox>
+                <app-ui-checkbox formControlName="discord">
+                    {{ "socialSettings.modules.discord" | translate }}
+                </app-ui-checkbox>
+            </div>
+            <p class="hint">{{ "socialSettings.modules.twitchReserved" | translate }}</p>
+        </div>
+
+        <div class="section" formGroupName="telegram">
+            <h3>{{ "socialSettings.telegram.bridge" | translate }}</h3>
+            <p class="hint">{{ "socialSettings.telegram.bridgeHint" | translate }}</p>
+
+            <div class="telegram-grid">
+                <div class="form-group">
+                    <app-ui-checkbox formControlName="enabled">
+                        {{ "socialSettings.telegram.enableBridge" | translate }}
+                    </app-ui-checkbox>
+                </div>
+                <div class="form-group">
+                    <label for="telegram-mode">{{ "socialSettings.telegram.mode" | translate }}</label>
+                    <app-ui-select
+                        id="telegram-mode"
+                        formControlName="mode"
+                        [options]="telegramModeOptions"
+                    ></app-ui-select>
+                </div>
+                <div class="form-group">
+                    <label for="telegram-api-id">{{ "socialSettings.telegram.apiId" | translate }}</label>
+                    <app-ui-input id="telegram-api-id" type="number" formControlName="api_id"></app-ui-input>
+                    <p class="hint">{{ "socialSettings.telegram.apiIdHint" | translate }}</p>
+                </div>
+                <div class="form-group">
+                    <label for="telegram-api-hash">{{ "socialSettings.telegram.apiHash" | translate }}</label>
+                    <app-ui-input id="telegram-api-hash" type="text" formControlName="api_hash"></app-ui-input>
+                </div>
+                <div class="form-group">
+                    <label for="telegram-phone">{{ "socialSettings.telegram.phoneNumber" | translate }}</label>
+                    <app-ui-input id="telegram-phone" type="text" formControlName="phone_number"></app-ui-input>
+                    <p class="hint">{{ "socialSettings.telegram.phoneHint" | translate }}</p>
+                </div>
+                <div class="form-group">
+                    <label for="telegram-bot-token">{{ "socialSettings.telegram.botToken" | translate }}</label>
+                    <app-ui-input id="telegram-bot-token" type="text" formControlName="bot_token"></app-ui-input>
+                    <p class="hint">{{ "socialSettings.telegram.botTokenHint" | translate }}</p>
+                </div>
+                <div class="form-group">
+                    <label for="telegram-session-name">{{ "socialSettings.telegram.sessionName" | translate }}</label>
+                    <app-ui-input id="telegram-session-name" type="text" formControlName="session_name"></app-ui-input>
+                </div>
+                <div class="form-group">
+                    <label for="telegram-session-dir">{{ "socialSettings.telegram.sessionDir" | translate }}</label>
+                    <app-ui-input id="telegram-session-dir" type="text" formControlName="session_dir"></app-ui-input>
+                </div>
+                <div class="form-group">
+                    <label for="telegram-queue-size">{{ "socialSettings.telegram.queueSize" | translate }}</label>
+                    <app-ui-input id="telegram-queue-size" type="number" formControlName="queue_size"></app-ui-input>
+                    <p class="hint">{{ "socialSettings.telegram.queueSizeHint" | translate }}</p>
+                </div>
+                <div class="form-group">
+                    <label for="telegram-history-max">{{ "socialSettings.telegram.historyMaxMessages" | translate }}</label>
+                    <app-ui-input id="telegram-history-max" type="number" formControlName="history_max_messages"></app-ui-input>
+                    <p class="hint">{{ "socialSettings.telegram.historyMaxMessagesHint" | translate }}</p>
+                </div>
+            </div>
+
+            <div class="section section--nested">
+                <h3>{{ "socialSettings.catalog.title" | translate }}</h3>
+                <p class="hint">{{ "socialSettings.catalog.hint" | translate }}</p>
+                <div class="telegram-actions">
+                    <button type="button" [disabled]="isPeersLoading || isTelegramBusy" (click)="loadTelegramPeers()">
+                        {{ "socialSettings.catalog.refresh" | translate }}
+                    </button>
+                </div>
+                <p class="hint" *ngIf="isPeersLoading">{{ "socialSettings.catalog.loading" | translate }}</p>
+                <p class="hint" *ngIf="!isPeersLoading && telegramPeers.length === 0">
+                    {{ "socialSettings.catalog.empty" | translate }}
+                </p>
+            </div>
+
+            <div class="section section--nested">
+                <h3>{{ "socialSettings.allowlist.title" | translate }}</h3>
+                <p class="hint">{{ "socialSettings.allowlist.hint" | translate }}</p>
+                <div class="form-group" *ngIf="telegramPeers.length === 0">
+                    <label for="telegram-allowed-chat-ids">{{ "socialSettings.allowlist.manualLabel" | translate }}</label>
+                    <app-ui-input
+                        id="telegram-allowed-chat-ids"
+                        type="text"
+                        [(ngModel)]="allowedChatIdsInput"
+                        [ngModelOptions]="{ standalone: true }"
+                        [placeholder]="'123, 456, 789'"
+                    ></app-ui-input>
+                </div>
+                <div class="peer-list" *ngIf="telegramPeers.length > 0">
+                    <app-ui-checkbox
+                        class="peer-item-checkbox"
+                        *ngFor="let peer of telegramPeers"
+                        [ngModel]="isAllowedChatSelected(peer.chat_id)"
+                        [ngModelOptions]="{ standalone: true }"
+                        (ngModelChange)="toggleAllowedChat(peer.chat_id, $event)"
+                    >
+                        <span class="peer-item__label">
+                            {{ peer.title }} <span *ngIf="peer.username">&#64;{{ peer.username }}</span>
+                            [{{ peer.chat_kind }}]
+                            <span *ngIf="peer.unread_count > 0">{{ "socialSettings.catalog.unread" | translate }}={{ peer.unread_count }}</span>
+                        </span>
+                    </app-ui-checkbox>
+                </div>
+            </div>
+
+            <div class="section" formGroupName="write_policy">
+                <h3>{{ "socialSettings.writePolicy.title" | translate }}</h3>
+                <p class="hint">{{ "socialSettings.writePolicy.hint" | translate }}</p>
+                <div class="form-group checkbox-group">
+                    <app-ui-checkbox formControlName="allow_private">
+                        {{ "socialSettings.writePolicy.allowPrivate" | translate }}
+                    </app-ui-checkbox>
+                    <app-ui-checkbox formControlName="allow_groups">
+                        {{ "socialSettings.writePolicy.allowGroups" | translate }}
+                    </app-ui-checkbox>
+                    <app-ui-checkbox formControlName="allow_channels">
+                        {{ "socialSettings.writePolicy.allowChannels" | translate }}
+                    </app-ui-checkbox>
+                </div>
+
+                <div class="form-group" *ngIf="privateTelegramPeers.length === 0">
+                    <label for="telegram-allowed-private-chat-ids">{{ "socialSettings.writePolicy.allowedPrivateManual" | translate }}</label>
+                    <app-ui-input
+                        id="telegram-allowed-private-chat-ids"
+                        type="text"
+                        [(ngModel)]="allowedPrivateChatIdsInput"
+                        [ngModelOptions]="{ standalone: true }"
+                        [placeholder]="'123, 456'"
+                    ></app-ui-input>
+                </div>
+                <div class="peer-list" *ngIf="privateTelegramPeers.length > 0">
+                    <app-ui-checkbox
+                        class="peer-item-checkbox"
+                        *ngFor="let peer of privateTelegramPeers"
+                        [ngModel]="isAllowedPrivateChatSelected(peer.chat_id)"
+                        [ngModelOptions]="{ standalone: true }"
+                        (ngModelChange)="toggleAllowedPrivateChat(peer.chat_id, $event)"
+                    >
+                        <span class="peer-item__label">{{ formatPeerLabel(peer) }}</span>
+                    </app-ui-checkbox>
+                </div>
+
+                <div class="form-group" *ngIf="privateTelegramPeers.length === 0">
+                    <label for="telegram-sandbox-chat-ids">{{ "socialSettings.writePolicy.sandboxManual" | translate }}</label>
+                    <app-ui-input
+                        id="telegram-sandbox-chat-ids"
+                        type="text"
+                        [(ngModel)]="sandboxChatIdsInput"
+                        [ngModelOptions]="{ standalone: true }"
+                        [placeholder]="'123, 456'"
+                    ></app-ui-input>
+                </div>
+                <div class="peer-list" *ngIf="privateTelegramPeers.length > 0">
+                    <h4>{{ "socialSettings.writePolicy.sandboxTitle" | translate }}</h4>
+                    <p class="hint">{{ "socialSettings.writePolicy.sandboxHint" | translate }}</p>
+                    <app-ui-checkbox
+                        class="peer-item-checkbox"
+                        *ngFor="let peer of privateTelegramPeers"
+                        [ngModel]="isSandboxChatSelected(peer.chat_id)"
+                        [ngModelOptions]="{ standalone: true }"
+                        (ngModelChange)="toggleSandboxChat(peer.chat_id, $event)"
+                    >
+                        <span class="peer-item__label">{{ formatPeerLabel(peer) }}</span>
+                    </app-ui-checkbox>
+                </div>
+            </div>
+
+            <div class="section" formGroupName="routing">
+                <h3>{{ "socialSettings.routing.title" | translate }}</h3>
+                <p class="hint">{{ "socialSettings.routing.hint" | translate }}</p>
+                <div class="form-group checkbox-group">
+                    <app-ui-checkbox formControlName="read_only_non_private">
+                        {{ "socialSettings.routing.readOnlyNonPrivate" | translate }}
+                    </app-ui-checkbox>
+                    <app-ui-checkbox formControlName="groups_require_mention">
+                        {{ "socialSettings.routing.groupsRequireMention" | translate }}
+                    </app-ui-checkbox>
+                </div>
+            </div>
+
+            <div class="section" formGroupName="channels">
+                <h3>{{ "socialSettings.channels.title" | translate }}</h3>
+                <p class="hint">{{ "socialSettings.channels.hint" | translate }}</p>
+                <div class="form-group checkbox-group">
+                    <app-ui-checkbox formControlName="read_enabled">
+                        {{ "socialSettings.channels.readEnabled" | translate }}
+                    </app-ui-checkbox>
+                    <app-ui-checkbox formControlName="mark_read_enabled">
+                        {{ "socialSettings.channels.markReadEnabled" | translate }}
+                    </app-ui-checkbox>
+                    <app-ui-checkbox formControlName="reflect_enabled">
+                        {{ "socialSettings.channels.reflectEnabled" | translate }}
+                    </app-ui-checkbox>
+                </div>
+                <div class="form-group">
+                    <label for="telegram-reflection-instruction">{{ "socialSettings.channels.reflectionInstruction" | translate }}</label>
+                    <app-ui-textarea
+                        id="telegram-reflection-instruction"
+                        [rows]="3"
+                        formControlName="reflection_instruction"
+                    ></app-ui-textarea>
+                    <p class="hint">{{ "socialSettings.channels.reflectionInstructionHint" | translate }}</p>
+                </div>
+            </div>
+
+            <div class="section" formGroupName="reflection">
+                <h3>{{ "socialSettings.reflection.title" | translate }}</h3>
+                <p class="hint">{{ "socialSettings.reflection.hint" | translate }}</p>
+                <div class="form-group checkbox-group">
+                    <app-ui-checkbox formControlName="enabled">
+                        {{ "socialSettings.reflection.enabled" | translate }}
+                    </app-ui-checkbox>
+                    <app-ui-checkbox formControlName="include_source_excerpt">
+                        {{ "socialSettings.reflection.includeSourceExcerpt" | translate }}
+                    </app-ui-checkbox>
+                    <app-ui-checkbox formControlName="include_source_link">
+                        {{ "socialSettings.reflection.includeSourceLink" | translate }}
+                    </app-ui-checkbox>
+                </div>
+
+                <div class="form-group">
+                    <label for="telegram-reflection-target">{{ "socialSettings.reflection.targetChat" | translate }}</label>
+                    <app-ui-select
+                        id="telegram-reflection-target"
+                        formControlName="target_chat_id"
+                        [options]="reflectionTargetOptions"
+                    ></app-ui-select>
+                    <p class="hint">{{ "socialSettings.reflection.targetChatHint" | translate }}</p>
+                </div>
+
+                <div class="form-group checkbox-group">
+                    <app-ui-checkbox
+                        class="peer-item-checkbox"
+                        [ngModel]="isReflectionSourceKindSelected('channel')"
+                        [ngModelOptions]="{ standalone: true }"
+                        (ngModelChange)="toggleReflectionSourceKind('channel', $event)"
+                    >
+                        <span class="peer-item__label">{{ "socialSettings.reflection.readChannels" | translate }}</span>
+                    </app-ui-checkbox>
+                    <app-ui-checkbox
+                        class="peer-item-checkbox"
+                        [ngModel]="isReflectionSourceKindSelected('group')"
+                        [ngModelOptions]="{ standalone: true }"
+                        (ngModelChange)="toggleReflectionSourceKind('group', $event)"
+                    >
+                        <span class="peer-item__label">{{ "socialSettings.reflection.readGroups" | translate }}</span>
+                    </app-ui-checkbox>
+                </div>
+
+                <div class="source-selection-summary">
+                    <p class="hint">{{ "socialSettings.reflection.sourceSelectionHint" | translate }}</p>
+                    <p class="hint source-selection-summary__mode" *ngIf="isUsingAutomaticReflectionSources">
+                        {{ "socialSettings.reflection.sourceSelectionAutomatic" | translate }}
+                    </p>
+                    <p class="hint source-selection-summary__mode" *ngIf="!isUsingAutomaticReflectionSources">
+                        {{ "socialSettings.reflection.sourceSelectionManual" | translate }}
+                        {{ reflectionSourceSelectionCount }}
+                    </p>
+                </div>
+
+                <div class="empty-peer-state" *ngIf="publicTelegramPeers.length === 0">
+                    <p class="hint">{{ "socialSettings.reflection.noSourcesLoaded" | translate }}</p>
+                    <p class="hint">{{ "socialSettings.reflection.noSourcesLoadedHint" | translate }}</p>
+                </div>
+                <div class="peer-list peer-list--sources" *ngIf="publicTelegramPeers.length > 0">
+                    <app-ui-checkbox
+                        class="peer-item-checkbox"
+                        *ngFor="let peer of publicTelegramPeers"
+                        [ngModel]="isReflectionSourceChatSelected(peer.chat_id)"
+                        [ngModelOptions]="{ standalone: true }"
+                        (ngModelChange)="toggleReflectionSourceChat(peer.chat_id, $event)"
+                    >
+                        <span class="peer-item__label">{{ formatPeerLabel(peer) }}</span>
+                    </app-ui-checkbox>
+                </div>
+
+                <div class="telegram-actions">
+                    <button type="button" [disabled]="isTelegramBusy" (click)="runPublicReflectionTest()">
+                        {{ "socialSettings.tests.runPublicReflection" | translate }}
+                    </button>
+                    <button type="button" [disabled]="isTelegramBusy" (click)="runImageSendTest()">
+                        {{ "socialSettings.tests.runImageSend" | translate }}
+                    </button>
+                </div>
+                <p class="hint">{{ "socialSettings.tests.hint" | translate }}</p>
+
+                <div class="telegram-grid">
+                    <div class="form-group">
+                        <label for="reflection-max-source-chars">{{ "socialSettings.reflection.maxSourceChars" | translate }}</label>
+                        <app-ui-input
+                            id="reflection-max-source-chars"
+                            type="number"
+                            formControlName="max_source_excerpt_chars"
+                        ></app-ui-input>
+                    </div>
+                    <div class="form-group">
+                        <label for="reflection-max-length">{{ "socialSettings.reflection.maxReflectionChars" | translate }}</label>
+                        <app-ui-input
+                            id="reflection-max-length"
+                            type="number"
+                            formControlName="max_reflection_length"
+                        ></app-ui-input>
+                    </div>
+                    <div class="form-group">
+                        <label for="reflection-min-source-chars">{{ "socialSettings.reflection.minSourceChars" | translate }}</label>
+                        <app-ui-input
+                            id="reflection-min-source-chars"
+                            type="number"
+                            formControlName="min_source_text_chars"
+                        ></app-ui-input>
+                    </div>
+                    <div class="form-group">
+                        <label for="reflection-cooldown">{{ "socialSettings.reflection.cooldownPerSource" | translate }}</label>
+                        <app-ui-input
+                            id="reflection-cooldown"
+                            type="number"
+                            formControlName="cooldown_per_source_chat_seconds"
+                        ></app-ui-input>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="telegram-reflection-prompt">{{ "socialSettings.reflection.prompt" | translate }}</label>
+                    <app-ui-textarea
+                        id="telegram-reflection-prompt"
+                        [rows]="5"
+                        formControlName="prompt"
+                    ></app-ui-textarea>
+                    <p class="hint">{{ "socialSettings.reflection.promptHint" | translate }}</p>
+                </div>
+            </div>
+
+            <div class="section" formGroupName="quiet_hours">
+                <h3>{{ "socialSettings.quietHours.title" | translate }}</h3>
+                <p class="hint">{{ "socialSettings.quietHours.hint" | translate }}</p>
+                <div class="form-group checkbox-group">
+                    <app-ui-checkbox formControlName="enabled">
+                        {{ "socialSettings.quietHours.enabled" | translate }}
+                    </app-ui-checkbox>
+                </div>
+                <div class="telegram-grid">
+                    <div class="form-group">
+                        <label for="telegram-quiet-start">{{ "socialSettings.quietHours.start" | translate }}</label>
+                        <app-ui-input
+                            id="telegram-quiet-start"
+                            type="text"
+                            formControlName="start"
+                            placeholder="00:00"
+                        ></app-ui-input>
+                    </div>
+                    <div class="form-group">
+                        <label for="telegram-quiet-end">{{ "socialSettings.quietHours.end" | translate }}</label>
+                        <app-ui-input
+                            id="telegram-quiet-end"
+                            type="text"
+                            formControlName="end"
+                            placeholder="09:00"
+                        ></app-ui-input>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section" formGroupName="anti_repeat">
+                <h3>{{ "socialSettings.antiRepeat.title" | translate }}</h3>
+                <p class="hint">{{ "socialSettings.antiRepeat.hint" | translate }}</p>
+                <div class="form-group checkbox-group">
+                    <app-ui-checkbox formControlName="enforce_for_incoming_dialogs">
+                        {{ "socialSettings.antiRepeat.enforceIncomingDialogs" | translate }}
+                    </app-ui-checkbox>
+                    <app-ui-checkbox formControlName="retry_on_block">
+                        {{ "socialSettings.antiRepeat.retryOnBlock" | translate }}
+                    </app-ui-checkbox>
+                </div>
+                <div class="telegram-grid">
+                    <div class="form-group">
+                        <label for="anti-repeat-retry-attempts">{{ "socialSettings.antiRepeat.retryAttempts" | translate }}</label>
+                        <app-ui-input
+                            id="anti-repeat-retry-attempts"
+                            type="number"
+                            formControlName="retry_attempts"
+                        ></app-ui-input>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section" formGroupName="initiative">
+                <h3>{{ "socialSettings.initiative.title" | translate }}</h3>
+                <p class="hint">{{ "socialSettings.initiative.hint" | translate }}</p>
+                <div class="form-group checkbox-group">
+                    <app-ui-checkbox formControlName="enabled">
+                        {{ "socialSettings.initiative.enabled" | translate }}
+                    </app-ui-checkbox>
+                    <app-ui-checkbox formControlName="owner_chat_only">
+                        {{ "socialSettings.initiative.ownerOnly" | translate }}
+                    </app-ui-checkbox>
+                    <app-ui-checkbox formControlName="allow_private">
+                        {{ "socialSettings.initiative.allowPrivate" | translate }}
+                    </app-ui-checkbox>
+                    <app-ui-checkbox formControlName="allow_groups">
+                        {{ "socialSettings.initiative.allowGroups" | translate }}
+                    </app-ui-checkbox>
+                    <app-ui-checkbox formControlName="morning_checkin_enabled">
+                        {{ "socialSettings.initiative.morningCheckin" | translate }}
+                    </app-ui-checkbox>
+                    <app-ui-checkbox formControlName="evening_checkin_enabled">
+                        {{ "socialSettings.initiative.eveningCheckin" | translate }}
+                    </app-ui-checkbox>
+                    <app-ui-checkbox formControlName="daily_digest_enabled">
+                        {{ "socialSettings.initiative.dailyDigest" | translate }}
+                    </app-ui-checkbox>
+                </div>
+                <div class="telegram-grid">
+                    <div class="form-group">
+                        <label for="initiative-check-seconds">{{ "socialSettings.initiative.checkPeriodSeconds" | translate }}</label>
+                        <app-ui-input
+                            id="initiative-check-seconds"
+                            type="number"
+                            formControlName="check_every_seconds"
+                        ></app-ui-input>
+                    </div>
+                    <div class="form-group">
+                        <label for="initiative-idle-minutes">{{ "socialSettings.initiative.idleThresholdMinutes" | translate }}</label>
+                        <app-ui-input
+                            id="initiative-idle-minutes"
+                            type="number"
+                            formControlName="idle_minutes"
+                        ></app-ui-input>
+                    </div>
+                    <div class="form-group">
+                        <label for="initiative-gap-minutes">{{ "socialSettings.initiative.minimumGapMinutes" | translate }}</label>
+                        <app-ui-input
+                            id="initiative-gap-minutes"
+                            type="number"
+                            formControlName="min_gap_minutes"
+                        ></app-ui-input>
+                    </div>
+                    <div class="form-group">
+                        <label for="initiative-bootstrap-max">{{ "socialSettings.initiative.bootstrapMaxChats" | translate }}</label>
+                        <app-ui-input
+                            id="initiative-bootstrap-max"
+                            type="number"
+                            formControlName="bootstrap_max_chats"
+                        ></app-ui-input>
+                    </div>
+                    <div class="form-group">
+                        <label for="initiative-soft-daily-target">{{ "socialSettings.initiative.softDailyTarget" | translate }}</label>
+                        <app-ui-input
+                            id="initiative-soft-daily-target"
+                            type="number"
+                            formControlName="max_proactive_per_day"
+                        ></app-ui-input>
+                        <p class="hint">{{ "socialSettings.initiative.softDailyTargetHint" | translate }}</p>
+                    </div>
+                    <div class="form-group">
+                        <label for="initiative-digest-start">{{ "socialSettings.initiative.digestWindowStart" | translate }}</label>
+                        <app-ui-input
+                            id="initiative-digest-start"
+                            type="text"
+                            formControlName="daily_digest_window_start"
+                            placeholder="20:00"
+                        ></app-ui-input>
+                    </div>
+                    <div class="form-group">
+                        <label for="initiative-digest-end">{{ "socialSettings.initiative.digestWindowEnd" | translate }}</label>
+                        <app-ui-input
+                            id="initiative-digest-end"
+                            type="text"
+                            formControlName="daily_digest_window_end"
+                            placeholder="22:00"
+                        ></app-ui-input>
+                    </div>
+                </div>
+                <div class="form-group checkbox-group">
+                    <app-ui-checkbox formControlName="bootstrap_from_catalog">
+                        {{ "socialSettings.initiative.bootstrapFromCatalog" | translate }}
+                    </app-ui-checkbox>
+                </div>
+                <div class="form-group">
+                    <label for="initiative-prompt-template">{{ "socialSettings.initiative.promptTemplate" | translate }}</label>
+                    <app-ui-textarea
+                        id="initiative-prompt-template"
+                        [rows]="3"
+                        formControlName="prompt_template"
+                    ></app-ui-textarea>
+                    <p class="hint">{{ "socialSettings.initiative.promptTemplateHint" | translate }}</p>
+                </div>
+            </div>
+
+            <div class="section" formGroupName="autonomous_inbox">
+                <h3>{{ "socialSettings.autonomousInbox.title" | translate }}</h3>
+                <p class="hint">{{ "socialSettings.autonomousInbox.hint" | translate }}</p>
+                <div class="form-group checkbox-group">
+                    <app-ui-checkbox formControlName="enabled">
+                        {{ "socialSettings.autonomousInbox.enabled" | translate }}
+                    </app-ui-checkbox>
+                    <app-ui-checkbox formControlName="include_private">
+                        {{ "socialSettings.autonomousInbox.includePrivate" | translate }}
+                    </app-ui-checkbox>
+                    <app-ui-checkbox formControlName="include_groups">
+                        {{ "socialSettings.autonomousInbox.includeGroups" | translate }}
+                    </app-ui-checkbox>
+                    <app-ui-checkbox formControlName="include_channels">
+                        {{ "socialSettings.autonomousInbox.includeChannels" | translate }}
+                    </app-ui-checkbox>
+                </div>
+                <div class="telegram-grid">
+                    <div class="form-group">
+                        <label for="autonomous-check-seconds">{{ "socialSettings.autonomousInbox.checkPeriodSeconds" | translate }}</label>
+                        <app-ui-input
+                            id="autonomous-check-seconds"
+                            type="number"
+                            formControlName="check_every_seconds"
+                        ></app-ui-input>
+                    </div>
+                    <div class="form-group">
+                        <label for="autonomous-max-candidates">{{ "socialSettings.autonomousInbox.maxCandidates" | translate }}</label>
+                        <app-ui-input
+                            id="autonomous-max-candidates"
+                            type="number"
+                            formControlName="max_candidates"
+                        ></app-ui-input>
+                    </div>
+                    <div class="form-group">
+                        <label for="autonomous-max-actions">{{ "socialSettings.autonomousInbox.maxActionsPerCycle" | translate }}</label>
+                        <app-ui-input
+                            id="autonomous-max-actions"
+                            type="number"
+                            formControlName="max_actions_per_cycle"
+                        ></app-ui-input>
+                    </div>
+                    <div class="form-group">
+                        <label for="autonomous-private-pause-probability">{{ "socialSettings.autonomousInbox.privatePauseProbability" | translate }}</label>
+                        <app-ui-input
+                            id="autonomous-private-pause-probability"
+                            type="number"
+                            formControlName="private_pause_probability"
+                        ></app-ui-input>
+                        <p class="hint">{{ "socialSettings.autonomousInbox.privatePauseProbabilityHint" | translate }}</p>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="autonomous-prompt-template">{{ "socialSettings.autonomousInbox.promptTemplate" | translate }}</label>
+                    <app-ui-textarea
+                        id="autonomous-prompt-template"
+                        [rows]="3"
+                        formControlName="prompt_template"
+                    ></app-ui-textarea>
+                </div>
+            </div>
+
+            <div class="section" formGroupName="lockdown">
+                <h3>{{ "socialSettings.lockdown.title" | translate }}</h3>
+                <p class="hint">{{ "socialSettings.lockdown.hint" | translate }}</p>
+                <div class="form-group checkbox-group">
+                    <app-ui-checkbox formControlName="enabled">
+                        {{ "socialSettings.lockdown.enabled" | translate }}
+                    </app-ui-checkbox>
+                </div>
+                <div class="form-group">
+                    <label for="lockdown-owner-chat-id">{{ "socialSettings.lockdown.ownerChat" | translate }}</label>
+                    <app-ui-select
+                        id="lockdown-owner-chat-id"
+                        formControlName="owner_chat_id"
+                        [options]="ownerChatOptions"
+                    ></app-ui-select>
+                </div>
+            </div>
+
+            <div class="section" formGroupName="orchestration">
+                <h3>{{ "socialSettings.orchestration.title" | translate }}</h3>
+                <p class="hint">{{ "socialSettings.orchestration.hint" | translate }}</p>
+                <div class="form-group checkbox-group">
+                    <app-ui-checkbox formControlName="allow_llm_tool_actions">
+                        {{ "socialSettings.orchestration.allowLlmActions" | translate }}
+                    </app-ui-checkbox>
+                    <app-ui-checkbox formControlName="require_tool_call">
+                        {{ "socialSettings.orchestration.requireToolCall" | translate }}
+                    </app-ui-checkbox>
+                </div>
+                <div class="telegram-grid">
+                    <div class="form-group">
+                        <label for="tool-retry-count">{{ "socialSettings.orchestration.noToolRetries" | translate }}</label>
+                        <app-ui-input
+                            id="tool-retry-count"
+                            type="number"
+                            formControlName="max_no_tool_retries"
+                        ></app-ui-input>
+                    </div>
+                </div>
+                <div class="section section--nested" formGroupName="tools">
+                    <h3>{{ "socialSettings.orchestration.enabledTools" | translate }}</h3>
+                    <div class="form-group checkbox-group">
+                        <app-ui-checkbox formControlName="ask_google">
+                            ask_google
+                        </app-ui-checkbox>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section" formGroupName="image">
+                <h3>{{ "socialSettings.imageSelector.title" | translate }}</h3>
+                <p class="hint">{{ "socialSettings.imageSelector.hint" | translate }}</p>
+                <div class="form-group checkbox-group">
+                    <app-ui-checkbox formControlName="autonomous_random_enabled">
+                        {{ "socialSettings.imageSelector.autonomousRandomEnabled" | translate }}
+                    </app-ui-checkbox>
+                </div>
+                <div class="telegram-grid">
+                    <div class="form-group">
+                        <label for="autonomous-random-image-probability">{{ "socialSettings.imageSelector.randomProbability" | translate }}</label>
+                        <app-ui-input
+                            id="autonomous-random-image-probability"
+                            type="number"
+                            formControlName="autonomous_random_probability"
+                        ></app-ui-input>
+                        <p class="hint">{{ "socialSettings.imageSelector.randomProbabilityHint" | translate }}</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section" formGroupName="presence">
+                <h3>{{ "socialSettings.presence.title" | translate }}</h3>
+                <p class="hint">{{ "socialSettings.presence.hint" | translate }}</p>
+                <div class="form-group checkbox-group">
+                    <app-ui-checkbox formControlName="enabled">
+                        {{ "socialSettings.presence.enabled" | translate }}
+                    </app-ui-checkbox>
+                    <app-ui-checkbox formControlName="auto_offline_after_send">
+                        {{ "socialSettings.presence.autoOfflineAfterSend" | translate }}
+                    </app-ui-checkbox>
+                </div>
+            </div>
+
+            <div class="telegram-status" [class.telegram-status--running]="telegramStatus?.running">
+                <span class="status-dot"></span>
+                <span class="status-text">
+                    {{ telegramStatus?.running ? ('socialSettings.status.running' | translate) : ('socialSettings.status.stopped' | translate) }} |
+                    {{ "socialSettings.status.auth" | translate }}={{ telegramStatus?.auth_state || ('socialSettings.status.unknown' | translate) }} |
+                    {{ "socialSettings.status.connected" | translate }}={{ telegramStatus?.connected ? ('socialSettings.status.yes' | translate) : ('socialSettings.status.no' | translate) }} |
+                    {{ "socialSettings.status.authorized" | translate }}={{ telegramStatus?.authorized ? ('socialSettings.status.yes' | translate) : ('socialSettings.status.no' | translate) }}
+                </span>
+            </div>
+
+            <div class="telegram-actions">
+                <button type="button" [disabled]="isTelegramBusy" (click)="startTelegram()">{{ "socialSettings.telegram.start" | translate }}</button>
+                <button type="button" [disabled]="isTelegramBusy" (click)="stopTelegram()">{{ "socialSettings.telegram.stop" | translate }}</button>
+                <button type="button" [disabled]="isTelegramBusy" (click)="pingTelegram()">{{ "socialSettings.telegram.ping" | translate }}</button>
+                <button type="button" [disabled]="isTelegramBusy" (click)="refreshTelegramStatus()">{{ "socialSettings.telegram.refreshStatus" | translate }}</button>
+            </div>
+
+            <div class="telegram-auth">
+                <div class="form-group">
+                    <label for="telegram-auth-phone">{{ "socialSettings.telegram.authPhoneOverride" | translate }}</label>
+                    <app-ui-input
+                        id="telegram-auth-phone"
+                        type="text"
+                        [(ngModel)]="authPhoneInput"
+                        [ngModelOptions]="{ standalone: true }"
+                        placeholder="+79991234567"
+                    ></app-ui-input>
+                </div>
+                <div class="telegram-actions">
+                    <button type="button" [disabled]="isTelegramBusy" (click)="requestTelegramCode()">
+                        {{ "socialSettings.telegram.requestCode" | translate }}
+                    </button>
+                </div>
+                <div class="form-group">
+                    <label for="telegram-auth-code">{{ "socialSettings.telegram.authCode" | translate }}</label>
+                    <app-ui-input
+                        id="telegram-auth-code"
+                        type="text"
+                        [(ngModel)]="authCodeInput"
+                        [ngModelOptions]="{ standalone: true }"
+                    ></app-ui-input>
+                </div>
+                <div class="telegram-actions">
+                    <button type="button" [disabled]="isTelegramBusy" (click)="submitTelegramCode()">
+                        {{ "socialSettings.telegram.submitCode" | translate }}
+                    </button>
+                </div>
+                <div class="form-group">
+                    <label for="telegram-auth-password">{{ "socialSettings.telegram.authPassword" | translate }}</label>
+                    <app-ui-input
+                        id="telegram-auth-password"
+                        type="password"
+                        [(ngModel)]="authPasswordInput"
+                        [ngModelOptions]="{ standalone: true }"
+                    ></app-ui-input>
+                </div>
+                <div class="telegram-actions">
+                    <button type="button" [disabled]="isTelegramBusy" (click)="submitTelegramPassword()">
+                        {{ "socialSettings.telegram.submitPassword" | translate }}
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="button-row">
+            <button type="submit" [disabled]="!hasChanges()">💾 {{ "socialSettings.save" | translate }}</button>
+        </div>
+    </form>
+</div>

@@ -1,12 +1,13 @@
-﻿"""Provider manager for analyzer module."""
+"""Provider manager for analyzer module."""
 
 from __future__ import annotations
 
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-from services import config_service
-from services.logger_service import AuditStatus, log_audit_entry
-from services.localization_service import get_text
+from modules.system import config as config_service
+from modules.system.logger import AuditStatus, log_audit_entry
+from modules.system.localization import get_text
+from modules.system.runtime_profile import should_release_resources
 
 from .base import AnalyzerProvider
 from .openrouter import OpenRouterAnalyzerProvider
@@ -42,11 +43,22 @@ class AnalyzerProviderManager:
                 errors.append(f"{provider.name}_unavailable")
                 continue
 
-            result = await provider.analyze(content, context)
-            if result:
-                return result, provider.name, errors
-
-            errors.append(f"{provider.name}_failed")
+            try:
+                result = await provider.analyze(content, context)
+                if result:
+                    return result, provider.name, errors
+                errors.append(f"{provider.name}_failed")
+            finally:
+                if should_release_resources("analyzer"):
+                    try:
+                        provider.release_resources()
+                    except Exception as exc:
+                        log_audit_entry(
+                            "analyzer_provider_release_error",
+                            f"[Analyzer] Provider '{provider.name}' release failed.",
+                            AuditStatus.WARNING,
+                            details={"provider": provider.name, "error": str(exc)},
+                        )
 
         return None, None, errors
 

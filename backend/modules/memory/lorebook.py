@@ -7,8 +7,8 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy.orm import Session
 
 from models.models import LorebookEntry
-from services.db_core import SessionLocal
-from services.logger_service import AuditStatus, log_audit_entry
+from modules.database.core import SessionLocal
+from modules.system.logger import AuditStatus, log_audit_entry
 from services import vector_service
 
 from . import embeddings

@@ -15,9 +15,9 @@ from core.decision_layer import decision_layer
 from modules.ollama import client as ollama_client
 
 # from services.history_service import get_history
-from services import database_service
-from services.logger_service import log_audit_entry, AuditStatus
-from services.interaction_policy import (
+from modules.database import service as database_service
+from modules.system.logger import log_audit_entry, AuditStatus
+from core.interaction import (
     resolve_actor_uuid_from_auth_header,
     resolve_interaction_policy,
 )

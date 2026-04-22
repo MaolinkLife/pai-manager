@@ -12,7 +12,7 @@ from typing import Any, Callable, Optional
 
 from constants.default_config import DEFAULT_CONFIG
 
-_CONFIG_MODULE = "services.config_service"
+_CONFIG_MODULE = "modules.system.config"
 
 
 def _load_config_module(force_reload: bool = False):
@@ -157,11 +157,22 @@ def get_active_user_uuid() -> str | None:
     return None
 
 
+def get_owner_default_config() -> dict | None:
+    fn = _resolve_config_callable("get_owner_default_config")
+    if not callable(fn):
+        return None
+    try:
+        value = fn()
+    except Exception:
+        return None
+    return value if isinstance(value, dict) else None
+
+
 def get_active_character_name(
     user_uuid: str | None = None,
     default: str = "default_waifu",
 ) -> str:
-    from services import character_service
+    from modules.system import character as character_service
 
     resolved_user_uuid = user_uuid or get_active_user_uuid()
     character_name = character_service.resolve_active_character_name_for_user(

@@ -18,3 +18,5 @@ class MoralMatrixProvider(ABC):
     async def run(self, payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Evaluate payload and return directive metadata."""
 
+    def release_resources(self) -> None:
+        return None

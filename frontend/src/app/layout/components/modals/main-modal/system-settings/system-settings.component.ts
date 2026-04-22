@@ -8,6 +8,7 @@ import { LocalizationService } from '../../../../../shared/pipes/translation/loc
 import { UiSelectOption } from '../../../../../shared/ui/components/ui-select/ui-select.component';
 import { TunnelService, TunnelStatus } from '../../../../../core/services/tunnel.service';
 import { UiNotificationService } from '../../../../../shared/ui/services/ui-notification.service';
+import { TelegramBridgeStatus, TelegramService } from '../../../../../core/services/telegram.service';
 
 @Component({
     selector: 'app-system-settings',
@@ -21,6 +22,11 @@ export class SystemSettingsComponent implements OnInit {
     isCharacterImportBusy = false;
     tunnelStatus: TunnelStatus | null = null;
     isTunnelBusy = false;
+    telegramStatus: TelegramBridgeStatus | null = null;
+    isTelegramBusy = false;
+    authPhoneInput = '';
+    authCodeInput = '';
+    authPasswordInput = '';
     selectedCharacterFile: File | null = null;
     characterOptions: UiSelectOption[] = [];
     private characterPromptMap = new Map<string, string>();
@@ -34,6 +40,19 @@ export class SystemSettingsComponent implements OnInit {
         { value: 'cloudflared', label: 'Cloudflared' },
         { value: 'localtunnel', label: 'LocalTunnel (lt)' },
     ];
+    readonly telegramModeOptions: UiSelectOption[] = [
+        { value: 'mtproto', label: 'MTProto (Account)' },
+        { value: 'bot', label: 'Bot Token' },
+    ];
+    readonly communicationPrimaryOptions: UiSelectOption[] = [
+        { value: 'main_chat', label: 'Main Chat (core)' },
+        { value: 'telegram', label: 'Telegram' },
+    ];
+    readonly modelMemoryProfileOptions: UiSelectOption[] = [
+        { value: 'low_memory_strict', label: 'Low Memory (strict unload)' },
+        { value: 'balanced', label: 'Balanced' },
+        { value: 'max_speed', label: 'Max Speed (keep loaded)' },
+    ];
 
     constructor(
         private fb: UntypedFormBuilder,
@@ -41,6 +60,7 @@ export class SystemSettingsComponent implements OnInit {
         private themeService: ThemeService,
         private localizationService: LocalizationService,
         private tunnelService: TunnelService,
+        private telegramService: TelegramService,
         private uiNotificationService: UiNotificationService,
     ) {
         this.systemForm = this.createForm();
@@ -50,7 +70,9 @@ export class SystemSettingsComponent implements OnInit {
         this.initialize();
         this.localizationService.init();
         this.initLanguageChangeListener();
+        this.initCommunicationFormRules();
         this.refreshTunnelStatus();
+        this.refreshTelegramStatus();
     }
 
     initLanguageChangeListener() {
@@ -106,7 +128,34 @@ export class SystemSettingsComponent implements OnInit {
                     user_name: config?.system?.userName || 'You',
                     language: config?.system?.language || 'en-US',
                     theme: currentTheme,
+                    model_memory_profile:
+                        config?.system?.runtime?.modelMemoryProfile || 'low_memory_strict',
                     modules: config?.modules || {},
+                    telegram: config?.telegram || {
+                        enabled: false,
+                        mode: 'mtproto',
+                        api_id: 0,
+                        api_hash: '',
+                        session_name: 'z_waif',
+                        session_dir: 'data/telegram',
+                        phone_number: '',
+                        bot_token: '',
+                    },
+                    synthesis: config?.synthesis || {
+                        sd_webui: {
+                            enabled: false,
+                            base_url: 'http://127.0.0.1:7860',
+                            bearer_token: '',
+                            timeout_sec: 180,
+                            checkpoint: '',
+                            sampler_name: 'DPM++ 2M',
+                            scheduler: 'Automatic',
+                            cfg_scale_default: 2.0,
+                        },
+                    },
+                    communication: this.mapCommunicationFromForm(
+                        this.mapCommunicationToForm(config?.communication)
+                    ),
                     connector: config?.connector || {
                         tunneling: {
                             enabled: false,
@@ -136,6 +185,7 @@ export class SystemSettingsComponent implements OnInit {
             user_name: ['You'],
             language: ['en-US'],
             theme: ['dark'],
+            model_memory_profile: ['low_memory_strict'],
             modules: this.fb.group({
                 vtube_studio: [false],
                 whisper: [false],
@@ -143,8 +193,44 @@ export class SystemSettingsComponent implements OnInit {
                 gaming: [false],
                 alarm: [false],
                 discord: [false],
+                telegram: [false],
                 rag: [false],
                 visual: [false]
+            }),
+            telegram: this.fb.group({
+                enabled: [false],
+                mode: ['mtproto'],
+                api_id: [0],
+                api_hash: [''],
+                session_name: ['z_waif'],
+                session_dir: ['data/telegram'],
+                phone_number: [''],
+                bot_token: [''],
+            }),
+            synthesis: this.fb.group({
+                sd_webui: this.fb.group({
+                    enabled: [false],
+                    base_url: ['http://127.0.0.1:7860'],
+                    bearer_token: [''],
+                    timeout_sec: [180],
+                    checkpoint: [''],
+                    sampler_name: ['DPM++ 2M'],
+                    scheduler: ['Automatic'],
+                    cfg_scale_default: [2.0],
+                }),
+            }),
+            communication: this.fb.group({
+                primary_channel: ['main_chat'],
+                channels: this.fb.group({
+                    main_chat: this.fb.group({
+                        enabled: [true],
+                        allow_fallback: [false],
+                    }),
+                    telegram: this.fb.group({
+                        enabled: [true],
+                        allow_fallback: [true],
+                    }),
+                }),
             }),
             connector: this.fb.group({
                 tunneling: this.fb.group({
@@ -166,9 +252,14 @@ export class SystemSettingsComponent implements OnInit {
             user_name: config.user_name ?? 'You',
             language: config.language ?? 'en-US',
             theme: config.theme ?? 'dark',
+            model_memory_profile: config.model_memory_profile ?? 'low_memory_strict',
             modules: config.modules ?? {},
+            telegram: config.telegram ?? {},
+            synthesis: config.synthesis ?? {},
+            communication: this.mapCommunicationToForm(config.communication),
             connector: config.connector ?? {},
         });
+        this.enforceCommunicationRules(false);
     }
 
     private buildConfigFromForm(): any {
@@ -180,12 +271,17 @@ export class SystemSettingsComponent implements OnInit {
             user_name: formValue.user_name,
             language: formValue.language,
             theme: formValue.theme,
+            model_memory_profile: formValue.model_memory_profile,
             modules: formValue.modules,
+            telegram: formValue.telegram,
+            synthesis: formValue.synthesis,
+            communication: this.mapCommunicationFromForm(formValue.communication),
             connector: formValue.connector,
         };
     }
 
     saveChanges(): void {
+        this.enforceCommunicationRules(false);
         const changes = this.getChanges();
         if (Object.keys(changes).length > 0) {
             const updateData: any = {};
@@ -215,8 +311,22 @@ export class SystemSettingsComponent implements OnInit {
                 updateData.system = updateData.system || {};
                 updateData.system.theme = changes.theme;
             }
+            if (changes.model_memory_profile !== undefined) {
+                updateData.system = updateData.system || {};
+                updateData.system.runtime = updateData.system.runtime || {};
+                updateData.system.runtime.modelMemoryProfile = changes.model_memory_profile;
+            }
             if (changes.modules !== undefined) {
                 updateData.modules = changes.modules;
+            }
+            if (changes.telegram !== undefined) {
+                updateData.telegram = changes.telegram;
+            }
+            if (changes.synthesis !== undefined) {
+                updateData.synthesis = changes.synthesis;
+            }
+            if (changes.communication !== undefined) {
+                updateData.communication = changes.communication;
             }
             if (changes.connector !== undefined) {
                 updateData.connector = changes.connector;
@@ -467,6 +577,263 @@ export class SystemSettingsComponent implements OnInit {
         if (this.originalConfig?.connector?.tunneling) {
             this.originalConfig.connector.tunneling.publicUrl = url;
         }
+    }
+
+    refreshTelegramStatus(): void {
+        this.isTelegramBusy = true;
+        this.telegramService.getStatus$().subscribe({
+            next: (response) => {
+                this.telegramStatus = response?.telegram || null;
+                this.isTelegramBusy = false;
+            },
+            error: (error) => {
+                console.error('Telegram status error:', error);
+                this.isTelegramBusy = false;
+            },
+        });
+    }
+
+    startTelegram(): void {
+        this.isTelegramBusy = true;
+        this.telegramService.start$().subscribe({
+            next: (response) => {
+                this.telegramStatus = response?.telegram || null;
+                this.isTelegramBusy = false;
+                this.uiNotificationService.success('Bridge start requested', 'Telegram');
+            },
+            error: (error) => {
+                console.error('Telegram start error:', error);
+                this.isTelegramBusy = false;
+                this.uiNotificationService.error('Failed to start Telegram bridge', 'Telegram');
+            },
+        });
+    }
+
+    stopTelegram(): void {
+        this.isTelegramBusy = true;
+        this.telegramService.stop$().subscribe({
+            next: (response) => {
+                this.telegramStatus = response?.telegram || null;
+                this.isTelegramBusy = false;
+                this.uiNotificationService.success('Bridge stopped', 'Telegram');
+            },
+            error: (error) => {
+                console.error('Telegram stop error:', error);
+                this.isTelegramBusy = false;
+                this.uiNotificationService.error('Failed to stop Telegram bridge', 'Telegram');
+            },
+        });
+    }
+
+    pingTelegram(): void {
+        this.isTelegramBusy = true;
+        this.telegramService.ping$().subscribe({
+            next: (response) => {
+                this.isTelegramBusy = false;
+                if (response?.ping?.ok) {
+                    const latency = response?.ping?.latency_ms;
+                    this.uiNotificationService.success(
+                        typeof latency === 'number' ? `${latency} ms` : 'OK',
+                        'Telegram ping'
+                    );
+                } else {
+                    this.uiNotificationService.error(
+                        response?.ping?.error || 'Ping failed',
+                        'Telegram ping'
+                    );
+                }
+                this.refreshTelegramStatus();
+            },
+            error: (error) => {
+                console.error('Telegram ping error:', error);
+                this.isTelegramBusy = false;
+                this.uiNotificationService.error('Failed to ping Telegram bridge', 'Telegram');
+            },
+        });
+    }
+
+    requestTelegramCode(): void {
+        this.isTelegramBusy = true;
+        const phone = String(this.authPhoneInput || '').trim() || undefined;
+        this.telegramService.requestCode$(phone).subscribe({
+            next: (response) => {
+                this.isTelegramBusy = false;
+                const auth = response?.auth;
+                if (auth?.ok) {
+                    this.uiNotificationService.success(auth.state || 'Code requested', 'Telegram auth');
+                } else {
+                    this.uiNotificationService.error(auth?.error || 'Failed to request code', 'Telegram auth');
+                }
+                this.refreshTelegramStatus();
+            },
+            error: (error) => {
+                console.error('Telegram request code error:', error);
+                this.isTelegramBusy = false;
+                this.uiNotificationService.error('Failed to request Telegram code', 'Telegram auth');
+            },
+        });
+    }
+
+    submitTelegramCode(): void {
+        const code = String(this.authCodeInput || '').trim();
+        if (!code) {
+            this.uiNotificationService.error('Code is required', 'Telegram auth');
+            return;
+        }
+        this.isTelegramBusy = true;
+        this.telegramService.submitCode$(code).subscribe({
+            next: (response) => {
+                this.isTelegramBusy = false;
+                const auth = response?.auth;
+                if (auth?.ok) {
+                    this.uiNotificationService.success(auth.state || 'Authorized', 'Telegram auth');
+                } else {
+                    this.uiNotificationService.error(auth?.error || 'Invalid code', 'Telegram auth');
+                }
+                this.refreshTelegramStatus();
+            },
+            error: (error) => {
+                console.error('Telegram submit code error:', error);
+                this.isTelegramBusy = false;
+                this.uiNotificationService.error('Failed to submit Telegram code', 'Telegram auth');
+            },
+        });
+    }
+
+    submitTelegramPassword(): void {
+        const password = String(this.authPasswordInput || '');
+        if (!password.trim()) {
+            this.uiNotificationService.error('Password is required', 'Telegram auth');
+            return;
+        }
+        this.isTelegramBusy = true;
+        this.telegramService.submitPassword$(password).subscribe({
+            next: (response) => {
+                this.isTelegramBusy = false;
+                const auth = response?.auth;
+                if (auth?.ok) {
+                    this.uiNotificationService.success(auth.state || 'Authorized', 'Telegram auth');
+                } else {
+                    this.uiNotificationService.error(auth?.error || 'Password rejected', 'Telegram auth');
+                }
+                this.refreshTelegramStatus();
+            },
+            error: (error) => {
+                console.error('Telegram submit password error:', error);
+                this.isTelegramBusy = false;
+                this.uiNotificationService.error('Failed to submit Telegram password', 'Telegram auth');
+            },
+        });
+    }
+
+    private initCommunicationFormRules(): void {
+        const primaryControl = this.systemForm.get('communication.primary_channel');
+        const mainEnabledControl = this.systemForm.get('communication.channels.main_chat.enabled');
+        const telegramEnabledControl = this.systemForm.get('communication.channels.telegram.enabled');
+
+        primaryControl?.valueChanges.subscribe(() => this.enforceCommunicationRules(true));
+        mainEnabledControl?.valueChanges.subscribe(() => this.enforceCommunicationRules(true));
+        telegramEnabledControl?.valueChanges.subscribe(() => this.enforceCommunicationRules(true));
+    }
+
+    private enforceCommunicationRules(notify: boolean): void {
+        const primary = String(this.systemForm.get('communication.primary_channel')?.value || 'main_chat');
+        const mainPath = 'communication.channels.main_chat.enabled';
+        const telegramPath = 'communication.channels.telegram.enabled';
+        const telegramFallbackPath = 'communication.channels.telegram.allow_fallback';
+
+        const mainEnabled = !!this.systemForm.get(mainPath)?.value;
+        const telegramEnabled = !!this.systemForm.get(telegramPath)?.value;
+
+        if (!mainEnabled && !telegramEnabled) {
+            const fallbackChannel = primary === 'telegram' ? telegramPath : mainPath;
+            this.systemForm.get(fallbackChannel)?.setValue(true, { emitEvent: false });
+            if (notify) {
+                this.uiNotificationService.error('At least one channel must stay enabled', 'Communication policy');
+            }
+        }
+
+        if (primary === 'main_chat') {
+            this.systemForm.get(telegramFallbackPath)?.setValue(false, { emitEvent: false });
+        }
+
+        if (primary === 'telegram' && !this.systemForm.get(telegramPath)?.value) {
+            this.systemForm.get(telegramPath)?.setValue(true, { emitEvent: false });
+        }
+        if (primary === 'main_chat' && !this.systemForm.get(mainPath)?.value) {
+            this.systemForm.get(mainPath)?.setValue(true, { emitEvent: false });
+        }
+    }
+
+    private mapCommunicationToForm(communication: any): any {
+        const source = communication && typeof communication === 'object' ? communication : {};
+        const priorityRaw = Array.isArray(source.priority) ? source.priority : [];
+        const primary =
+            String(priorityRaw[0] || 'main_chat') === 'telegram' ? 'telegram' : 'main_chat';
+        const channels = source.channels && typeof source.channels === 'object' ? source.channels : {};
+        const mainCfg = channels.main_chat && typeof channels.main_chat === 'object' ? channels.main_chat : {};
+        const telegramCfg = channels.telegram && typeof channels.telegram === 'object' ? channels.telegram : {};
+        return {
+            primary_channel: primary,
+            channels: {
+                main_chat: {
+                    enabled: mainCfg.enabled !== undefined ? !!mainCfg.enabled : true,
+                    allow_fallback: false,
+                },
+                telegram: {
+                    enabled: telegramCfg.enabled !== undefined ? !!telegramCfg.enabled : true,
+                    allow_fallback:
+                        primary === 'main_chat'
+                            ? false
+                            : telegramCfg.allow_fallback !== undefined
+                              ? !!telegramCfg.allow_fallback
+                              : true,
+                },
+            },
+        };
+    }
+
+    private mapCommunicationFromForm(formValue: any): any {
+        const data = formValue && typeof formValue === 'object' ? formValue : {};
+        const primary = String(data.primary_channel || 'main_chat') === 'telegram' ? 'telegram' : 'main_chat';
+        const channels = data.channels && typeof data.channels === 'object' ? data.channels : {};
+        const mainCfg = channels.main_chat && typeof channels.main_chat === 'object' ? channels.main_chat : {};
+        const telegramCfg = channels.telegram && typeof channels.telegram === 'object' ? channels.telegram : {};
+
+        const mainEnabled = mainCfg.enabled !== undefined ? !!mainCfg.enabled : true;
+        const telegramEnabled = telegramCfg.enabled !== undefined ? !!telegramCfg.enabled : true;
+        if (!mainEnabled && !telegramEnabled) {
+            if (primary === 'telegram') {
+                return {
+                    priority: ['telegram', 'main_chat'],
+                    channels: {
+                        main_chat: { enabled: false, allow_fallback: false },
+                        telegram: { enabled: true, allow_fallback: true },
+                    },
+                };
+            }
+            return {
+                priority: ['main_chat', 'telegram'],
+                channels: {
+                    main_chat: { enabled: true, allow_fallback: false },
+                    telegram: { enabled: false, allow_fallback: false },
+                },
+            };
+        }
+
+        return {
+            priority: primary === 'telegram' ? ['telegram', 'main_chat'] : ['main_chat', 'telegram'],
+            channels: {
+                main_chat: {
+                    enabled: mainEnabled,
+                    allow_fallback: false,
+                },
+                telegram: {
+                    enabled: telegramEnabled,
+                    allow_fallback: primary === 'main_chat' ? false : !!telegramCfg.allow_fallback,
+                },
+            },
+        };
     }
 
     get themeOptions(): UiSelectOption[] {

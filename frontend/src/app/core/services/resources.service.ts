@@ -96,4 +96,25 @@ export class ResourcesService {
             })
         );
     }
+
+    getVisionProviderStatus$(
+        provider?: string | null,
+        model?: string | null,
+        probe = false,
+    ): Observable<any> {
+        const params = new URLSearchParams();
+        if (provider) {
+            params.set('provider', provider);
+        }
+        if (model) {
+            params.set('model', model);
+        }
+        params.set('probe', String(!!probe));
+        return this.http.get(`${this.apiUrl}/resources/vision/provider-status?${params.toString()}`).pipe(
+            catchError((error) => {
+                console.error('Error getting vision provider status:', error);
+                return of({ status: 'error', provider: { ready: false, message: 'request failed' } });
+            })
+        );
+    }
 }

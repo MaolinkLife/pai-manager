@@ -1,4 +1,4 @@
-﻿"""Manual memory search emulator using the same layered retrieval idea as runtime memory."""
+"""Manual memory search emulator using the same layered retrieval idea as runtime memory."""
 
 from __future__ import annotations
 
@@ -17,9 +17,10 @@ from modules.memory.knowledge import (
     search_anchors,
 )
 from modules.memory.short_term import ShortTermRecord, load_recent_records
-from services import character_service, database_service
-from services import config_service
-from services.db_core import SessionLocal
+from modules.system import character as character_service
+from modules.database import service as database_service
+from modules.system import config as config_service
+from modules.database.core import SessionLocal
 from modules.system.service import get_active_character_name
 
 DEFAULT_RECENT_PAIRS = 32

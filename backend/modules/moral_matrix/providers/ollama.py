@@ -1,4 +1,4 @@
-﻿"""Ollama-backed MoralMatrix provider."""
+"""Ollama-backed MoralMatrix provider."""
 
 from __future__ import annotations
 
@@ -9,8 +9,8 @@ from typing import Any, Dict, Optional
 from constants.prompts import MORAL_MATRIX_PROVIDER_PROMPT
 from constants.settings import DEFAULT_MAX_TOKENS, DEFAULT_TEMPERATURE
 from modules.ollama import client as ollama_client
-from services import config_service
-from services.logger_service import AuditStatus, log_audit_entry
+from modules.system import config as config_service
+from modules.system.logger import AuditStatus, log_audit_entry
 
 from .base import MoralMatrixProvider
 
@@ -25,6 +25,10 @@ class OllamaMoralProvider(MoralMatrixProvider):
             "temperature": float(cfg.get("temperature", DEFAULT_TEMPERATURE)),
             "max_tokens": int(cfg.get("max_tokens", min(DEFAULT_MAX_TOKENS, 512))),
         }
+
+    def release_resources(self) -> None:
+        settings = self._get_settings()
+        ollama_client.release_model(model=settings.get("model"))
 
     async def run(self, payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         settings = self._get_settings()

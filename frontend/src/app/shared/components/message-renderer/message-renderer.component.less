@@ -242,8 +242,29 @@
             }
 
             &.expanded {
-                max-height: 1000px;
+                max-height: 360px;
                 opacity: 1;
+                overflow-y: auto;
+                padding-right: 8px;
+                scrollbar-width: thin;
+                scrollbar-color: fade(@color-accent, 60%) transparent;
+
+                &::-webkit-scrollbar {
+                    width: 6px;
+                }
+
+                &::-webkit-scrollbar-track {
+                    background: transparent;
+                }
+
+                &::-webkit-scrollbar-thumb {
+                    background: fade(@color-accent, 60%);
+                    border-radius: 999px;
+                }
+
+                &::-webkit-scrollbar-thumb:hover {
+                    background: fade(@color-accent, 78%);
+                }
             }
         }
     }

@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import io
+import gc
 import time
 from typing import Optional
 
 from modules.synthesis.providers.base import ImageProvider, ImageProviderError
 from modules.synthesis.types import ImageGenerationRequest, ImageGenerationResult
-from services.logger_service import AuditStatus, log_audit_entry
+from modules.system.logger import AuditStatus, log_audit_entry
+from modules.system.runtime_profile import should_release_resources
 
 
 class ZImageTurboProvider(ImageProvider):
@@ -69,6 +71,29 @@ class ZImageTurboProvider(ImageProvider):
             self._build_pipeline()
         return self._pipeline
 
+    def release_resources(self) -> None:
+        pipe = self._pipeline
+        self._pipeline = None
+        if pipe is not None:
+            try:
+                if hasattr(pipe, "to"):
+                    pipe.to("cpu")
+            except Exception:
+                pass
+            try:
+                del pipe
+            except Exception:
+                pass
+        gc.collect()
+        try:
+            import torch
+
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                torch.cuda.ipc_collect()
+        except Exception:
+            pass
+
     @staticmethod
     def _make_generator(torch_module, device: str, seed: Optional[int]):
         if seed is None:
@@ -106,6 +131,9 @@ class ZImageTurboProvider(ImageProvider):
             image = out.images[0]
         except Exception as exc:
             raise ImageProviderError(f"Z-Image-Turbo generation failed: {exc}") from exc
+        finally:
+            if should_release_resources("synthesis"):
+                self.release_resources()
 
         buffer = io.BytesIO()
         image.save(buffer, format="PNG")
@@ -135,4 +163,3 @@ class ZImageTurboProvider(ImageProvider):
             height=request.height,
             seed=request.seed,
         )
-

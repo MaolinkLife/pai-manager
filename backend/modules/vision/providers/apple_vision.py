@@ -1,13 +1,15 @@
-﻿from typing import Dict, Any
+from typing import Dict, Any
 from PIL import Image
 import torch
 import cv2
 import traceback
+import gc
 from datetime import datetime
 
-from services.logger_service import log_audit_entry, AuditStatus
-from services import config_service
-from services.localization_service import get_text
+from modules.system.logger import log_audit_entry, AuditStatus
+from modules.system import config as config_service
+from modules.system.runtime_profile import should_release_resources
+from modules.system.localization import get_text
 from constants.visual import (
     DEFAULT_VISUAL_MODEL,
     IMAGE_TOKEN_INDEX,
@@ -33,6 +35,14 @@ class AppleVisionProvider:
             self.device = "cpu"
             torch_dtype = torch.float32
 
+        self._torch_dtype = torch_dtype
+        self.model = None
+        self.tokenizer = None
+        self._load_error = ""
+
+    def _ensure_loaded(self) -> bool:
+        if self.model is not None and self.tokenizer is not None:
+            return True
         try:
             init_message = get_text(
                 "logger.visual_provider_init",
@@ -50,19 +60,17 @@ class AppleVisionProvider:
 
             from transformers import AutoTokenizer, AutoModelForCausalLM
 
-            # Load tokenizer
             self.tokenizer = AutoTokenizer.from_pretrained(
                 self.model_id, trust_remote_code=True
             )
-
-            # Load model
             self.model = AutoModelForCausalLM.from_pretrained(
                 self.model_id,
-                torch_dtype=torch_dtype,
+                torch_dtype=self._torch_dtype,
                 device_map=None,
                 trust_remote_code=True,
                 low_cpu_mem_usage=True,
             ).to(self.device)
+            self._load_error = ""
 
             loaded_message = get_text(
                 "logger.visual_provider_loaded",
@@ -77,8 +85,11 @@ class AppleVisionProvider:
                 message_key="logger.visual_provider_loaded",
                 message_args={"model_id": self.model_id, "device": self.device},
             )
-
+            return True
         except Exception as e:
+            self._load_error = str(e)
+            self.model = None
+            self.tokenizer = None
             error_msg = get_text(
                 "logger.visual_provider_error",
                 params={"error": str(e)},
@@ -94,11 +105,33 @@ class AppleVisionProvider:
             print(
                 f"[ERROR] [{datetime.utcnow().isoformat()}Z] {error_msg}\n{traceback.format_exc()}"
             )
-            self.model = None
-            self.tokenizer = None
+            return False
+
+    def release_resources(self) -> None:
+        model = self.model
+        tokenizer = self.tokenizer
+        self.model = None
+        self.tokenizer = None
+        try:
+            if model is not None and hasattr(model, "to"):
+                model.to("cpu")
+        except Exception:
+            pass
+        try:
+            del model
+            del tokenizer
+        except Exception:
+            pass
+        gc.collect()
+        try:
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                torch.cuda.ipc_collect()
+        except Exception:
+            pass
 
     def is_ready(self) -> bool:
-        ready = self.model is not None and self.tokenizer is not None
+        ready = self._ensure_loaded()
         ready_message = get_text(
             "logger.visual_provider_ready_check",
             params={"ready": ready},
@@ -141,7 +174,11 @@ class AppleVisionProvider:
 
         if not self.is_ready():
             result = {
-                "summary": "Visual module not available",
+                "summary": (
+                    f"Visual module not available: {self._load_error}"
+                    if self._load_error
+                    else "Visual module not available"
+                ),
                 "model": self.model_id,
                 "status": "not_ready",
             }
@@ -241,4 +278,7 @@ class AppleVisionProvider:
                 "model": self.model_id,
                 "status": "error",
             }
+        finally:
+            if should_release_resources("vision"):
+                self.release_resources()
 

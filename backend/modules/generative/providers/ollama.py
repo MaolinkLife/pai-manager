@@ -1,5 +1,6 @@
 from __future__ import annotations
 import re
+import json
 from typing import Any, AsyncIterator, Dict, Iterable, List
 
 from modules.generative.providers.base import GenerateProvider, ProviderError
@@ -9,8 +10,8 @@ from modules.generative.types import (
     GenerateStreamChunk,
 )
 from modules.ollama import client as ollama_client
-from services import config_service
-from services.logger_service import AuditStatus, log_audit_entry
+from modules.system import config as config_service
+from modules.system.logger import AuditStatus, log_audit_entry
 
 
 class OllamaGenerateProvider(GenerateProvider):
@@ -25,6 +26,11 @@ class OllamaGenerateProvider(GenerateProvider):
 
     def supports_streaming(self) -> bool:
         return True
+
+    def release_resources(self) -> None:
+        cfg = self._get_provider_config()
+        model = cfg.get("model")
+        ollama_client.release_model(model=model)
 
     def _get_provider_config(self) -> Dict[str, Any]:
         provider_cfg = config_service.get_config_value("api.providers.ollama", {}) or {}
@@ -95,9 +101,68 @@ class OllamaGenerateProvider(GenerateProvider):
 
     @staticmethod
     def _ensure_list(messages: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        if isinstance(messages, list):
-            return messages
-        return list(messages)
+        if not isinstance(messages, list):
+            messages = list(messages)
+        sanitized: List[Dict[str, Any]] = []
+        for item in messages:
+            if not isinstance(item, dict):
+                continue
+            role = str(item.get("role") or "").strip()
+            if not role:
+                continue
+            payload: Dict[str, Any] = {
+                "role": role,
+                "content": item.get("content") if item.get("content") is not None else "",
+            }
+            if role == "assistant" and isinstance(item.get("tool_calls"), list):
+                payload["tool_calls"] = OllamaGenerateProvider._normalize_tool_calls(
+                    item.get("tool_calls")
+                )
+            if role == "tool":
+                tool_call_id = str(item.get("tool_call_id") or "").strip()
+                if tool_call_id:
+                    payload["tool_call_id"] = tool_call_id
+                name = str(item.get("name") or "").strip()
+                if name:
+                    payload["name"] = name
+            sanitized.append(payload)
+        return sanitized
+
+    @staticmethod
+    def _normalize_tool_calls(raw_tool_calls: Any) -> List[Dict[str, Any]]:
+        if not isinstance(raw_tool_calls, list):
+            return []
+
+        normalized: List[Dict[str, Any]] = []
+        for idx, item in enumerate(raw_tool_calls):
+            if not isinstance(item, dict):
+                continue
+            function = item.get("function") or {}
+            if not isinstance(function, dict):
+                function = {}
+            name = str(function.get("name") or "").strip()
+            if not name:
+                continue
+            arguments = function.get("arguments")
+            if isinstance(arguments, str):
+                args_payload = arguments
+            else:
+                try:
+                    args_payload = json.dumps(arguments or {}, ensure_ascii=False)
+                except Exception:
+                    args_payload = "{}"
+
+            normalized.append(
+                {
+                    "id": str(item.get("id") or f"ollama_tool_{idx + 1}"),
+                    "type": str(item.get("type") or "function"),
+                    "function": {
+                        "name": name,
+                        "arguments": args_payload,
+                    },
+                }
+            )
+        return normalized
 
     def generate(self, request: GenerateRequest) -> GenerateResult:
         cfg = self._get_provider_config()
@@ -125,13 +190,20 @@ class OllamaGenerateProvider(GenerateProvider):
             },
         )
 
-        raw = ollama_client.chat(messages, prepared_options, model=model)
+        raw = ollama_client.chat_with_tools(
+            messages,
+            prepared_options,
+            model=model,
+            tools=request.tools,
+            tool_choice=request.tool_choice,
+        )
         message_payload = raw.get("message", {}) or {}
         content = self._truncate_visible_content(
             message_payload.get("content", ""),
             soft_output_limit,
         )
         reasoning = message_payload.get("thinking") or raw.get("thinking") or ""
+        tool_calls = self._normalize_tool_calls(message_payload.get("tool_calls"))
 
         log_audit_entry(
             event_type="generator_ollama_success",
@@ -151,6 +223,7 @@ class OllamaGenerateProvider(GenerateProvider):
             raw=raw,
             reasoning=reasoning or None,
             metadata={"model": model},
+            tool_calls=tool_calls,
         )
 
     async def stream(
@@ -184,7 +257,11 @@ class OllamaGenerateProvider(GenerateProvider):
 
         chunk_index = 0
         async for chunk in ollama_client.stream_chat(
-            messages, prepared_options, model=model
+            messages,
+            prepared_options,
+            model=model,
+            tools=request.tools,
+            tool_choice=request.tool_choice,
         ):
             if not chunk:
                 continue
@@ -193,6 +270,7 @@ class OllamaGenerateProvider(GenerateProvider):
             message_payload = chunk.get("message", {}) or {}
             content = message_payload.get("content", "")
             reasoning = message_payload.get("thinking") or chunk.get("thinking") or ""
+            tool_calls = self._normalize_tool_calls(message_payload.get("tool_calls"))
             chunk_index += 1
             # log_audit_entry(
             #     event_type="generator_ollama_stream_chunk",
@@ -212,6 +290,7 @@ class OllamaGenerateProvider(GenerateProvider):
                 reasoning=reasoning or None,
                 raw=chunk,
                 done=bool(chunk.get("done")),
+                tool_calls=tool_calls,
                 metadata={
                     "model": model,
                     "output_soft_limit_tokens": soft_output_limit,

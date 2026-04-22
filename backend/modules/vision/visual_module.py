@@ -7,8 +7,9 @@ from PIL import Image, UnidentifiedImageError
 
 from constants.visual import DEFAULT_VISUAL_MODEL
 from modules.vision.providers.apple_vision import AppleVisionProvider
-from services import config_service
-from services.logger_service import AuditStatus, log_audit_entry
+from modules.vision.providers.ollama_vision import OllamaVisionProvider
+from modules.system import config as config_service
+from modules.system.logger import AuditStatus, log_audit_entry
 
 
 class VisualModule:
@@ -21,8 +22,14 @@ class VisualModule:
         self.provider = self._load_provider()
 
     def _load_provider(self):
+        provider_cfg = config_service.get_config_value(
+            f"vision.vision_modules.{self.provider_name}",
+            {},
+        ) or {}
         if self.provider_name == "apple_vision":
             return AppleVisionProvider()
+        if self.provider_name in {"ollama_vision", "llava"}:
+            return OllamaVisionProvider(provider_cfg)
         raise ValueError(f"Unknown vision provider: {self.provider_name}")
 
     def is_ready(self) -> bool:
@@ -218,4 +225,3 @@ class VisualModule:
         raw = base64.b64decode(data, validate=False)
         with Image.open(BytesIO(raw)) as image:
             return image.convert("RGB")
-

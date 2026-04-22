@@ -3,7 +3,7 @@
 import os
 import json
 from datetime import datetime, timezone
-from services import database_service
+from modules.database import service as database_service
 from constants.paths import STORAGE_DIR
 
 # 📁 Directory with exported history files

@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 import os
 import threading
 import time
@@ -8,9 +8,9 @@ import numpy as np
 import sounddevice as sd
 from pydub import AudioSegment
 
-from services import config_service
-from services.logger_service import AuditStatus, log_audit_entry
-from services.localization_service import get_text
+from modules.system import config as config_service
+from modules.system.logger import AuditStatus, log_audit_entry
+from modules.system.localization import get_text
 
 cut_voice = False
 

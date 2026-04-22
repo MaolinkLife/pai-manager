@@ -1,3 +1,30 @@
+version: 0.7
+- Telegram Notification-Driven Runtime
+  - Reworked Telegram bridge to notification-first processing (event → normalized notification → sequential worker) for safer autonomous behavior.
+  - Hardened write safety with sender-level final gate and deny-by-default policy for public chats/channels.
+  - Added private-only public reflection delivery flow (read public source, deliver reflection to configured private target).
+  - Extended Telegram runtime observability with outbound target diagnostics and policy-aware audit events.
+- Social/Telegram UI & Policy Controls
+  - Expanded Social Settings with reflection targeting, source selection, quiet hours, initiative cadence, autonomous inbox, and tool orchestration controls.
+  - Added chat catalog-based selection flows to reduce manual chat_id setup and improve operator safety.
+  - Improved localization coverage and helper text for Telegram/social sections.
+- Generation & Visual Self-Expression
+  - Added UI-first visual profile pipeline (composer + deterministic prompt builder + profile/history helpers) for stateful image expression.
+  - Integrated visual intent into synthesis and Telegram test-image path.
+  - Added stricter image send handling/retries for Telegram delivery path.
+- Vision Provider Layer
+  - Added configurable `ollama_vision` provider support in the vision module.
+  - Added provider capability probe/status endpoint and Vision UI status panel (`configured/supported/unavailable`) with manual support check.
+  - Added Ollama model list integration in Vision UI for provider model selection.
+  - Improved Ollama vision error surfacing (HTTP/body diagnostics) and lightweight probe options.
+- Diary/Memory/Context Quality
+  - Continued separation of runtime action logs vs semantic context for model inputs.
+  - Stabilized diary/memory-facing runtime traces and message flow constraints in Telegram-related paths.
+- Stability & Regression Safety
+  - Added/updated Telegram pipeline regression tests and synthesis/vision-related validations.
+  - Fixed startup regression in vision initialization (`VisionService` bootstrap scope/import ordering).
+  - Fixed UI refresh stalls in settings screens by tightening async update + change-detection behavior.
+
 version: 0.6
 - Platform & Architecture
   - Introduced module-oriented boundaries: moved legacy core domain logic into dedicated modules (`memory`, `moral_matrix`, `vision`, `system`) and kept `core` focused on orchestration/startup.

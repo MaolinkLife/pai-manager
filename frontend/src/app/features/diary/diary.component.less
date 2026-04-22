@@ -35,6 +35,12 @@
     }
 }
 
+.actions {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
 .diary-list {
     display: flex;
     flex-direction: column;
@@ -62,9 +68,81 @@
         }
     }
 
+    .lead {
+        margin-bottom: 10px;
+
+        h3 {
+            margin: 0;
+            font-size: 22px;
+            line-height: 1.25;
+            color: var(--color-text-active);
+        }
+    }
+
     .content {
         color: var(--color-text-active);
         line-height: 1.5;
+        white-space: pre-wrap;
+    }
+
+    .detail-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 8px;
+        margin-top: 14px;
+    }
+
+    .detail-row {
+        display: grid;
+        grid-template-columns: 130px 1fr;
+        border: 1px solid var(--color-border);
+        border-radius: 10px;
+        overflow: hidden;
+
+        .label,
+        .value {
+            padding: 8px 10px;
+            font-size: 12px;
+        }
+
+        .label {
+            color: var(--color-text);
+            background: color-mix(in srgb, var(--color-surface) 84%, #10161d);
+            border-right: 1px solid var(--color-border);
+            font-weight: 600;
+        }
+
+        .value {
+            color: var(--color-text-active);
+        }
+    }
+
+    .diary-block {
+        margin-top: 14px;
+
+        h4 {
+            margin: 0 0 6px;
+            font-size: 13px;
+            color: var(--color-text-active);
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        p,
+        li {
+            color: var(--color-text-active);
+            line-height: 1.55;
+        }
+
+        p {
+            margin: 0;
+            white-space: pre-wrap;
+        }
+
+        ul {
+            margin: 0;
+            padding-left: 20px;
+        }
     }
 
     footer {

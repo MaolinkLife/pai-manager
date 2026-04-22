@@ -3,6 +3,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Body, HTTPException, status
 
+from core import tool_event_bus
 from modules.synthesis.providers.base import ImageProviderError
 from modules.synthesis.service import synthesis_service
 from modules.synthesis.types import ImageGenerationRequest
@@ -26,6 +27,19 @@ def _normalize_size(width: int, height: int) -> tuple[int, int]:
     w = (w // 8) * 8
     h = (h // 8) * 8
     return w, h
+
+
+def _to_bool(value, default: bool) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    raw = str(value).strip().lower()
+    if raw in {"1", "true", "yes", "on"}:
+        return True
+    if raw in {"0", "false", "no", "off"}:
+        return False
+    return default
 
 
 @router.get("/providers")
@@ -81,6 +95,11 @@ def generate_image(payload: dict = Body(...)):
     negative_prompt = payload.get("negative_prompt", payload.get("negativePrompt"))
     if negative_prompt is not None:
         negative_prompt = str(negative_prompt)
+    # Synthesis screen should default to direct provider generation (no LLM prompt engineering).
+    use_prompt_engineering = _to_bool(
+        payload.get("use_prompt_engineering", payload.get("usePromptEngineering")),
+        default=False,
+    )
 
     request = ImageGenerationRequest(
         prompt=prompt,
@@ -92,20 +111,96 @@ def generate_image(payload: dict = Body(...)):
         num_inference_steps=steps,
         guidance_scale=guidance_scale,
         seed=seed_raw,
+        use_prompt_engineering=use_prompt_engineering,
+        use_visual_intent=_to_bool(
+            payload.get("use_visual_intent", payload.get("useVisualIntent")),
+            default=False,
+        ),
+        visual_intent_input=payload.get("visual_intent_input", payload.get("visualIntentInput")),
+        visual_profile=payload.get("visual_profile", payload.get("visualProfile")),
     )
 
     try:
         result = synthesis_service.generate_image(request)
     except ImageProviderError as exc:
+        tool_event_bus.emit_tool_event(
+            tool_name="image.generate",
+            status="error",
+            source="api_synthesis",
+            content=f"[ERROR]: image generation failed: {exc}",
+            runtime_meta={
+                "event": "tool_event",
+                "tool": {"name": "image.generate", "status": "error"},
+                "request": {
+                    "provider": provider,
+                    "model": model or None,
+                    "width": width,
+                    "height": height,
+                    "num_inference_steps": steps,
+                    "guidance_scale": guidance_scale,
+                },
+            },
+            tags=["tool", "image", "error"],
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(exc),
         ) from exc
     except Exception as exc:
+        tool_event_bus.emit_tool_event(
+            tool_name="image.generate",
+            status="error",
+            source="api_synthesis",
+            content=f"[ERROR]: image generation failed: {exc}",
+            runtime_meta={
+                "event": "tool_event",
+                "tool": {"name": "image.generate", "status": "error"},
+                "request": {
+                    "provider": provider,
+                    "model": model or None,
+                    "width": width,
+                    "height": height,
+                    "num_inference_steps": steps,
+                    "guidance_scale": guidance_scale,
+                },
+            },
+            tags=["tool", "image", "error"],
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Image generation failed: {exc}",
         ) from exc
+
+    tool_event_bus.emit_tool_event(
+        tool_name="image.generate",
+        status="ok",
+        source="api_synthesis",
+        content=(
+            "[OK]: image generated successfully. "
+            f"provider={result.provider}; model={result.model_id or '-'}; "
+            f"size={result.width}x{result.height}; seed={result.seed}"
+        ),
+        runtime_meta={
+            "event": "tool_event",
+            "tool": {"name": "image.generate", "status": "ok"},
+            "request": {
+                "provider": provider,
+                "model": model or None,
+                "width": width,
+                "height": height,
+                "num_inference_steps": steps,
+                "guidance_scale": guidance_scale,
+            },
+            "result": {
+                "provider": result.provider,
+                "model_id": result.model_id,
+                "width": result.width,
+                "height": result.height,
+                "seed": result.seed,
+            },
+        },
+        tags=["tool", "image", "ok"],
+    )
 
     b64 = base64.b64encode(result.image_bytes).decode("ascii")
     return {

@@ -36,12 +36,17 @@ export class UiFeatureFlagsService {
     private resolveFlags(): UiFeatureFlags {
         const envFlags = ((environment as any).uiFeatures || {}) as Partial<UiFeatureFlags>;
         const storageFlags = this.readStorageFlags();
+        const forceDiary = typeof envFlags.diary === 'boolean' ? envFlags.diary : undefined;
 
-        return {
+        const merged: UiFeatureFlags = {
             ...DEFAULT_UI_FEATURE_FLAGS,
-            ...envFlags,
             ...storageFlags,
+            ...envFlags,
         };
+        if (typeof forceDiary === 'boolean') {
+            merged.diary = forceDiary;
+        }
+        return merged;
     }
 
     private readStorageFlags(): Partial<UiFeatureFlags> {

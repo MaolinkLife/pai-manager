@@ -1,0 +1,85 @@
+@import "../../../../../../assets/styles/lim-ui/colors.less";
+
+:host {
+    display: block;
+}
+
+.settings-wrapper {
+    background-color: var(--color-surface);
+    padding: 24px;
+    border-radius: var(--radius);
+    color: var(--color-text);
+}
+
+.settings-form {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.section {
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    padding: 16px;
+    background: color-mix(in srgb, var(--color-bg) 86%, transparent);
+}
+
+.grid {
+    display: grid;
+    gap: 10px 12px;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 10px;
+
+    label {
+        margin-bottom: 6px;
+        font-weight: 500;
+    }
+}
+
+.checkbox {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.checkbox-group {
+    display: grid;
+    gap: 8px;
+}
+
+.button-row {
+    display: flex;
+    justify-content: flex-end;
+
+    button {
+        background: var(--color-accent);
+        border: none;
+        padding: 10px 14px;
+        border-radius: var(--radius);
+        color: #071018;
+        cursor: pointer;
+    }
+}
+
+.hint {
+    margin: 0;
+    font-size: 13px;
+    opacity: 0.85;
+}
+
+.subsection {
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px dashed var(--color-border);
+
+    h4 {
+        margin: 0 0 10px 0;
+        font-size: 15px;
+        font-weight: 600;
+    }
+}

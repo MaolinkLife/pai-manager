@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 
-from services.storage_service import get_media_entry, resolve_media_path
+from modules.storage.service import get_media_entry, resolve_media_path
 
 router = APIRouter(prefix="/api/media", tags=["Media"])
 

@@ -48,6 +48,9 @@ export class ConfigService {
             body.voice ||
             body.modules ||
             body.connector ||
+            body.telegram ||
+            body.communication ||
+            body.synthesis ||
             body.api ||
             body.vision ||
             body.audio ||

@@ -1,4 +1,4 @@
-﻿"""Ollama-based analyzer provider."""
+"""Ollama-based analyzer provider."""
 
 from __future__ import annotations
 
@@ -9,8 +9,8 @@ from typing import Any, Dict, Optional
 from constants.prompts import COGNITIVE_ANALYSIS_PROMPT
 from constants.settings import DEFAULT_MAX_TOKENS, DEFAULT_TEMPERATURE
 from modules.ollama import client as ollama_client
-from services import config_service
-from services.logger_service import AuditStatus, log_audit_entry
+from modules.system import config as config_service
+from modules.system.logger import AuditStatus, log_audit_entry
 
 from .base import AnalyzerProvider
 
@@ -28,6 +28,10 @@ class OllamaAnalyzerProvider(AnalyzerProvider):
 
     def is_available(self) -> bool:
         return True
+
+    def release_resources(self) -> None:
+        settings = self._get_settings()
+        ollama_client.release_model(model=settings.get("model"))
 
     async def analyze(
         self, content: str, context: Dict[str, Any]

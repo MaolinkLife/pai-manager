@@ -1,4 +1,4 @@
-﻿"""gTTS provider with pyttsx3 fallback support."""
+"""gTTS provider with pyttsx3 fallback support."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ except ImportError:  # pragma: no cover - optional dependency
 from modules.tts.providers.base import TTSProvider, TTSProviderError
 from modules.tts.providers.offline import OfflineTTSProvider
 from modules.tts.types import TTSRequest, TTSResult
-from services.logger_service import AuditStatus, log_audit_entry
+from modules.system.logger import AuditStatus, log_audit_entry
 
 
 def _as_bool(value: Any) -> bool:

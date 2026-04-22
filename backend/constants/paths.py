@@ -4,6 +4,7 @@ BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 PROJECT_DIR = os.path.dirname(BASE_DIR)
 CONFIG_DIR = os.path.join(BASE_DIR, "config")
 LOGS_DIR = os.path.join(BASE_DIR, "logs")
+TRACEBACK_LOGS_DIR = os.path.join(PROJECT_DIR, "logs")
 STORAGE_DIR = os.path.join(BASE_DIR, "storage")
 TEMP_DIR = os.path.join(BASE_DIR, "temp")
 

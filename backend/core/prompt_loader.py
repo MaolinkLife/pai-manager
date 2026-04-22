@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from services import character_service, config_service
-from services.logger_service import AuditStatus, log_audit_entry
+from modules.system import character as character_service
+from modules.system import config as config_service
+from modules.system.logger import AuditStatus, log_audit_entry
 
 
 def load_system_prompt() -> str:

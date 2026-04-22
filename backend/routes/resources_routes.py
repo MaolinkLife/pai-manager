@@ -1,7 +1,8 @@
-﻿import asyncio
+import asyncio
 import mimetypes
 import re
 from pathlib import Path
+from typing import Optional
 
 import edge_tts
 from fastapi import APIRouter, HTTPException, Query
@@ -9,11 +10,13 @@ from fastapi.responses import FileResponse
 
 from modules.tts.paths import voices_root
 from modules.tts.voice_import import summarize_voice_file
-from services import config_service
-from services.monitor_service import get_monitor_info, get_monitor_screens
-from services.resource_service import get_audio_resources
-from services.rvc_bootstrap_service import list_local_rvc_models
-from services.xtts_model_service import list_xtts_models
+from modules.system import config as config_service
+from modules.vision.monitor import get_monitor_info, get_monitor_screens
+from modules.vision.providers.apple_vision import AppleVisionProvider
+from modules.vision.providers.ollama_vision import OllamaVisionProvider
+from modules.system.resource import get_audio_resources
+from modules.tts.rvc_service import list_local_rvc_models
+from modules.tts.xtts import list_xtts_models
 
 router = APIRouter(prefix="/api/resources", tags=["Resources"])
 
@@ -192,3 +195,97 @@ def get_local_rvc_models():
             "message": f"Error getting local RVC models: {str(e)}",
             "models": [],
         }
+
+
+@router.get("/vision/provider-status")
+def get_vision_provider_status(
+    provider: Optional[str] = Query(default=None),
+    model: Optional[str] = Query(default=None),
+    probe: bool = Query(default=False),
+):
+    vision_cfg = config_service.get_config_value("vision", {}) or {}
+    provider_name = str(provider or vision_cfg.get("active_provider") or "apple_vision").strip()
+    vision_modules = vision_cfg.get("vision_modules") or {}
+    provider_cfg = dict(vision_modules.get(provider_name) or {})
+    if model:
+        if provider_name == "apple_vision":
+            provider_cfg["model_id"] = model
+        else:
+            provider_cfg["model"] = model
+
+    if provider_name == "apple_vision":
+        resolved_model = str(provider_cfg.get("model_id") or config_service.get_config_value("api.visual_model") or "").strip()
+        if not probe:
+            return {
+                "status": "ok",
+                "provider": {
+                    "name": provider_name,
+                    "model": resolved_model,
+                    "ready": None,
+                    "message": "configured",
+                    "probe": False,
+                },
+            }
+        try:
+            instance = AppleVisionProvider(model_id=resolved_model)
+            ready = bool(instance.is_ready())
+            return {
+                "status": "ok",
+                "provider": {
+                    "name": provider_name,
+                    "model": resolved_model,
+                    "ready": ready,
+                    "message": "supported" if ready else "unavailable",
+                    "probe": True,
+                },
+            }
+        except Exception as exc:
+            return {
+                "status": "ok",
+                "provider": {
+                    "name": provider_name,
+                    "model": resolved_model,
+                    "ready": False,
+                    "message": f"probe failed: {exc}",
+                    "probe": True,
+                },
+            }
+
+    if provider_name in {"ollama_vision", "llava"}:
+        instance = OllamaVisionProvider(provider_cfg)
+        resolved_model = instance.model_id
+        if not probe:
+            return {
+                "status": "ok",
+                "provider": {
+                    "name": provider_name,
+                    "model": resolved_model,
+                    "ready": None,
+                    "message": "configured",
+                    "probe": False,
+                },
+            }
+        ready = bool(instance.is_ready())
+        message = "supported" if ready else (instance._last_probe_error or "vision unavailable")
+        return {
+            "status": "ok",
+            "provider": {
+                "name": provider_name,
+                "model": resolved_model,
+                "ready": ready,
+                "message": message,
+                "probe": True,
+            },
+        }
+
+    return {
+        "status": "error",
+        "message": f"Unknown vision provider: {provider_name}",
+        "provider": {
+            "name": provider_name,
+            "model": str(model or ""),
+            "ready": False,
+            "message": "unknown provider",
+            "probe": bool(probe),
+        },
+    }

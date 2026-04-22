@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, Iterable, Optional
+from typing import Any, Dict, Iterable, List, Optional
 
 
 @dataclass
@@ -11,6 +11,8 @@ class GenerateRequest:
     messages: Iterable[Dict[str, Any]]
     options: Dict[str, Any] = field(default_factory=dict)
     metadata: Dict[str, Any] = field(default_factory=dict)
+    tools: Optional[List[Dict[str, Any]]] = None
+    tool_choice: Optional[Any] = None
 
 
 @dataclass
@@ -22,6 +24,7 @@ class GenerateResult:
     raw: Any = None
     reasoning: Optional[str] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
+    tool_calls: List[Dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass
@@ -34,3 +37,4 @@ class GenerateStreamChunk:
     done: bool = False
     reasoning: Optional[str] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
+    tool_calls: List[Dict[str, Any]] = field(default_factory=list)

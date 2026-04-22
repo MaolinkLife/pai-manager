@@ -2,6 +2,9 @@ export interface ProjectConfig {
     voice: VoiceConfig;
     modules: ModuleConfig;
     connector: ConnectorConfig;
+    telegram?: any;
+    communication?: any;
+    synthesis?: SynthesisConfig;
     vision: VisionConfig;
     audio: AudioConfig;
     rag: RagConfig;
@@ -59,6 +62,7 @@ export interface ModuleConfig {
     gaming: boolean;
     alarm: boolean;
     discord: boolean;
+    telegram?: boolean;
     rag: boolean;
     visual: boolean;
 }
@@ -72,6 +76,9 @@ export interface SystemConfig {
     systemPrompt: string;
     language: string;
     theme: string;
+    runtime?: {
+        modelMemoryProfile?: string;
+    };
 }
 
 export interface VisionConfig {
@@ -139,6 +146,74 @@ export interface MemoryConfig {
     embeddingModel: string;
 }
 
+export interface SynthesisSdWebUIConfig {
+    enabled: boolean;
+    base_url: string;
+    bearer_token: string;
+    timeout_sec: number;
+    checkpoint: string;
+    sampler_name: string;
+    scheduler: string;
+    cfg_scale_default: number;
+}
+
+export interface SynthesisComfyUIConfig {
+    enabled: boolean;
+    base_url: string;
+    websocket_url: string;
+    timeout_sec: number;
+    default_workflow: string;
+    default_model: string;
+}
+
+export interface SynthesisDiffusersConfig {
+    enabled: boolean;
+    device: string;
+    default_model: string;
+    local_models_path: string;
+    cache_dir: string;
+    torch_dtype: string;
+}
+
+export interface SynthesisPromptingConfig {
+    enabled: boolean;
+    max_attempts: number;
+    assess_enabled: boolean;
+    quality_threshold: number;
+    appearance_prompt: string;
+    default_negative_prompt: string;
+    visual_profile?: {
+        character_name?: string;
+        appearance_textarea?: string;
+        default_outfit?: string;
+        default_environment?: string;
+        style_preset?: string;
+        render_profile?: string;
+        selfie_bias?: number;
+        environment_bias?: number;
+        symbolic_bias?: number;
+        anti_repetition_strength?: number;
+        use_time_of_day?: boolean;
+        use_season?: boolean;
+        use_weather?: boolean;
+        use_relation_state?: boolean;
+        use_recent_topics?: boolean;
+        selfie_composition_base?: string;
+        selfie_composition_pool_override?: string;
+        environment_composition_pool_override?: string;
+        allow_self_images?: boolean;
+        allow_environment_images?: boolean;
+        allow_symbolic_images?: boolean;
+    };
+}
+
+export interface SynthesisConfig {
+    sd_webui: SynthesisSdWebUIConfig;
+    comfyui: SynthesisComfyUIConfig;
+    diffusers: SynthesisDiffusersConfig;
+    prompting?: SynthesisPromptingConfig;
+}
+
 export interface AudioConfig {
     inputDeviceId?: number;
     sampleRate?: number;
@@ -185,6 +260,13 @@ export interface RagVectorsConfig {
 export interface RagShortTermConfig {
     enabled: boolean;
     threshold: number;
+    lookbackDays: number;
+}
+
+export interface RagEmotionalConfig {
+    enabled: boolean;
+    lookbackDays: number;
+    limit: number;
 }
 
 export interface RagRerankWeights {
@@ -203,10 +285,17 @@ export interface RagRerankConfig {
 
 export interface RagRetrievalConfig {
     recent: { limit: number };
-    session: { enabled: boolean; window: string };
+    session: {
+        enabled: boolean;
+        window: string;
+        idleGapMinutes: number;
+        maxMessages: number;
+        chunkSize: number;
+    };
     keyword: RagKeywordConfig;
     vectors: RagVectorsConfig;
     shortTerm: RagShortTermConfig;
+    emotional?: RagEmotionalConfig;
     rerank: RagRerankConfig;
 }
 

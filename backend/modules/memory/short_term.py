@@ -1,4 +1,4 @@
-﻿"""Short-term memory helpers: schema management, summarization, retrieval."""
+"""Short-term memory helpers: schema management, summarization, retrieval."""
 
 from __future__ import annotations
 
@@ -12,10 +12,10 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from models.models import History, ShortTermMemory
-from services.db_core import engine, SessionLocal
-from services.logger_service import AuditStatus, log_audit_entry
-from services.localization_service import get_text
-from services import config_service
+from modules.database.core import engine, SessionLocal
+from modules.system.logger import AuditStatus, log_audit_entry
+from modules.system.localization import get_text
+from modules.system import config as config_service
 
 from modules.generative.manager import generation_manager, NoProviderResolved
 from modules.generative.types import GenerateRequest
@@ -208,16 +208,19 @@ def refresh_recent_days(
                 .all()
             )
 
-            if not day_messages:
-                continue
-
             dialogue_ids = [msg.id for msg in day_messages]
-            transcript = _build_transcript(day_messages)
-            summary, themes = _generate_day_summary(
-                transcript,
-                day_start,
-                summary_prompt=summary_prompt,
-            )
+            if day_messages:
+                transcript = _build_transcript(day_messages)
+                summary, themes = _generate_day_summary(
+                    transcript,
+                    day_start,
+                    summary_prompt=summary_prompt,
+                )
+            else:
+                summary = (
+                    f"{day_start.date()}: no dialogue activity recorded for this day."
+                )
+                themes = ["empty_day", "no_messages"]
 
             record = ShortTermMemory(
                 summary=summary,

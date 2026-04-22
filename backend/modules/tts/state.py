@@ -6,7 +6,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional
 
-from services.logger_service import log_audit_entry, AuditStatus
+from modules.system.logger import log_audit_entry, AuditStatus
 
 
 class VoiceStage(str, Enum):

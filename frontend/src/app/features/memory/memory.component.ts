@@ -25,8 +25,9 @@ interface HistoryPair {
     styleUrls: ['./memory.component.less'],
 })
 export class MemoryComponent implements OnInit {
-    isLoading = true;
+    isLoading = false;
     isRefreshing = false;
+    aiSearchStarted = false;
 
     activeTab: 'ai' | 'short' | 'all' = 'ai';
 
@@ -61,7 +62,6 @@ export class MemoryComponent implements OnInit {
 
     ngOnInit(): void {
         this.localizationService.init();
-        this.runAiSearch();
     }
 
     setTab(tab: 'ai' | 'short' | 'all'): void {
@@ -101,6 +101,7 @@ export class MemoryComponent implements OnInit {
     }
 
     runAiSearch(): void {
+        this.aiSearchStarted = true;
         this.isLoading = true;
         this.memoryService
             .emulateSearch$({
@@ -133,7 +134,14 @@ export class MemoryComponent implements OnInit {
         this.aiWindowPairs = 32;
         this.aiLookbackDays = 7;
         this.aiTopK = 8;
-        this.runAiSearch();
+        if (this.aiSearchStarted) {
+            this.runAiSearch();
+            return;
+        }
+        this.aiTrace = [];
+        this.aiHits = [];
+        this.total = 0;
+        this.generatedAt = '';
     }
 
     refreshMemories(): void {
@@ -144,7 +152,9 @@ export class MemoryComponent implements OnInit {
         this.memoryService.refresh$(this.days).subscribe(() => {
             this.isRefreshing = false;
             if (this.activeTab === 'ai') {
-                this.runAiSearch();
+                if (this.aiSearchStarted) {
+                    this.runAiSearch();
+                }
                 return;
             }
             if (this.activeTab === 'all') {

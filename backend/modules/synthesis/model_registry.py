@@ -7,7 +7,7 @@ from typing import Dict, List, Optional
 
 from constants.paths import DIFFUSER_MODELS_DIR
 from modules.synthesis.types import SynthesisModelInfo
-from services.logger_service import AuditStatus, log_audit_entry
+from modules.system.logger import AuditStatus, log_audit_entry
 
 MODEL_MANIFEST_FILE = "synthesis.model.json"
 MODEL_INDEX_FILE = "model_index.json"
@@ -67,6 +67,39 @@ class SynthesisModelRegistry:
                     "height": 1024,
                     "num_inference_steps": 9,
                     "guidance_scale": 0.0,
+                },
+            )
+        )
+        self._register(
+            SynthesisModelInfo(
+                model_id="stable_diffusion_v1_5",
+                label="Stable Diffusion v1.5 (RunwayML)",
+                family="stable-diffusion",
+                source="huggingface",
+                installed=False,
+                hf_repo_id="runwayml/stable-diffusion-v1-5",
+                default=False,
+                defaults={
+                    "width": 768,
+                    "height": 768,
+                    "num_inference_steps": 30,
+                    "guidance_scale": 7.0,
+                },
+            )
+        )
+        self._register(
+            SynthesisModelInfo(
+                model_id="stable_diffusion_webui",
+                label="Stable Diffusion WebUI API",
+                family="stable-diffusion-webui",
+                source="remote",
+                installed=True,
+                default=False,
+                defaults={
+                    "width": 768,
+                    "height": 768,
+                    "num_inference_steps": 30,
+                    "guidance_scale": 2.0,
                 },
             )
         )
@@ -221,4 +254,3 @@ class SynthesisModelRegistry:
 
     def get_model(self, model_id: str) -> Optional[SynthesisModelInfo]:
         return self._models.get(model_id)
-

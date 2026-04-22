@@ -1,9 +1,10 @@
-import { Component, OnDestroy, OnInit } from '@angular/core';
+import { ChangeDetectorRef, Component, OnDestroy, OnInit } from '@angular/core';
 import { UntypedFormBuilder, UntypedFormControl, UntypedFormGroup } from '@angular/forms';
 import { BehaviorSubject, Subject } from 'rxjs';
 import { finalize, take, takeUntil } from 'rxjs/operators';
 import { ConfigService } from '../../../../../core/services/config.service';
 import { ResourcesService } from '../../../../../core/services/resources.service';
+import { ApiService } from '../../../../../core/services/api.service';
 import { ModalService } from '../../../../../shared/components/modal/modal.service';
 import { MonitorSelectionModalComponent } from '../../monitor-selection-modal/monitor-selection-modal.component';
 import { NotificationService } from '../../../../../shared/components/notification/notification.service';
@@ -18,6 +19,20 @@ interface ProviderFieldMeta {
     type: ProviderFieldType;
 }
 
+interface VisionProviderStatusView {
+    provider: string;
+    model: string;
+    ready: boolean | null;
+    message: string;
+    probe: boolean;
+}
+
+const VISION_PROVIDER_DEFAULTS: Record<string, Record<string, any>> = {
+    apple_vision: { model_id: 'apple/FastVLM-1.5B', max_tokens: 128 },
+    llava: { model_id: 'llava-hf/llava-1.5-7b-hf', max_tokens: 128 },
+    ollama_vision: { model: 'llava:latest', max_tokens: 160, probe_enabled: true, probe_cache_seconds: 300 },
+};
+
 @Component({
     selector: 'app-vision-settings',
     templateUrl: './vision-settings.component.html',
@@ -29,6 +44,10 @@ export class VisionSettingsComponent implements OnInit, OnDestroy {
 
     visionProviders: { value: string; label: string }[] = [];
     isLoading$ = new BehaviorSubject<boolean>(true);
+    isCheckingProvider = false;
+    providerStatus: VisionProviderStatusView | null = null;
+    ollamaModels: string[] = [];
+    isLoadingOllamaModels = false;
 
     private providerFieldMeta: Record<string, ProviderFieldMeta[]> = {};
     private providerFieldTypes: Record<string, Record<string, ProviderFieldType>> = {};
@@ -40,9 +59,11 @@ export class VisionSettingsComponent implements OnInit, OnDestroy {
         private fb: UntypedFormBuilder,
         private configService: ConfigService,
         private resourcesService: ResourcesService,
+        private apiService: ApiService,
         private modalService: ModalService,
         private notificationService: NotificationService,
         private localizationService: LocalizationService,
+        private cdr: ChangeDetectorRef,
     ) {
         this.visionForm = this.createForm();
     }
@@ -97,6 +118,10 @@ export class VisionSettingsComponent implements OnInit, OnDestroy {
                     return;
                 }
                 this.ensureProviderGroup(providerName);
+                if (providerName === 'ollama_vision') {
+                    this.loadOllamaModels();
+                }
+                this.refreshProviderStatus(false);
             });
     }
 
@@ -139,6 +164,9 @@ export class VisionSettingsComponent implements OnInit, OnDestroy {
                         }, { emitEvent: false });
 
                         this.ensureProviderGroup(activeProvider);
+                        if (activeProvider === 'ollama_vision') {
+                            this.loadOllamaModels();
+                        }
                     } else {
                         this.populateProviders({});
                     }
@@ -147,6 +175,8 @@ export class VisionSettingsComponent implements OnInit, OnDestroy {
                     this.pendingChanges = {};
                     this.visionForm.markAsPristine();
                     this.isInitializing = false;
+                    this.refreshProviderStatus(false);
+                    this.cdr.markForCheck();
                 },
                 error: (error) => {
                     console.error('Failed to load vision config', error);
@@ -157,6 +187,7 @@ export class VisionSettingsComponent implements OnInit, OnDestroy {
                         autoClose: true,
                     });
                     this.isInitializing = false;
+                    this.cdr.markForCheck();
                 }
             });
     }
@@ -216,6 +247,7 @@ export class VisionSettingsComponent implements OnInit, OnDestroy {
                     this.pendingChanges = {};
                     this.visionForm.markAsPristine();
                     this.isInitializing = false;
+                    this.cdr.markForCheck();
                 },
                 error: (error) => {
                     console.error('Error updating vision settings:', error);
@@ -225,6 +257,7 @@ export class VisionSettingsComponent implements OnInit, OnDestroy {
                         type: 'error',
                         autoClose: false
                     });
+                    this.cdr.markForCheck();
                 }
             });
     }
@@ -257,6 +290,13 @@ export class VisionSettingsComponent implements OnInit, OnDestroy {
         ];
     }
 
+    get ollamaModelOptions(): UiSelectOption<string>[] {
+        return this.ollamaModels.map((item) => ({
+            value: item,
+            label: item,
+        }));
+    }
+
     get activeProvider(): string {
         return this.visionForm.get('activeProvider')?.value;
     }
@@ -267,6 +307,14 @@ export class VisionSettingsComponent implements OnInit, OnDestroy {
             return null;
         }
         return (this.visionForm.get('visionModules') as UntypedFormGroup)?.get(provider) as UntypedFormGroup;
+    }
+
+    checkProviderCapability(): void {
+        this.refreshProviderStatus(true);
+    }
+
+    refreshOllamaModels(): void {
+        this.loadOllamaModels(true);
     }
 
     getProviderFields(providerName: string): ProviderFieldMeta[] {
@@ -285,11 +333,17 @@ export class VisionSettingsComponent implements OnInit, OnDestroy {
     }
 
     private populateProviders(modules: Record<string, any>): void {
-        const providers = Object.keys(modules);
+        const mergedModules: Record<string, any> = { ...(modules || {}) };
+        Object.keys(VISION_PROVIDER_DEFAULTS).forEach((providerName) => {
+            if (!mergedModules[providerName]) {
+                mergedModules[providerName] = { ...VISION_PROVIDER_DEFAULTS[providerName] };
+            }
+        });
+        const providers = Object.keys(mergedModules);
         const modulesGroup = this.fb.group({});
 
         providers.forEach((providerName) => {
-            const providerConfig = modules[providerName] || {};
+            const providerConfig = mergedModules[providerName] || {};
             modulesGroup.addControl(providerName, this.createProviderGroup(providerName, providerConfig));
         });
 
@@ -307,8 +361,85 @@ export class VisionSettingsComponent implements OnInit, OnDestroy {
         }
 
         if (!modulesGroup.get(providerName)) {
-            modulesGroup.addControl(providerName, this.createProviderGroup(providerName, {}));
+            modulesGroup.addControl(
+                providerName,
+                this.createProviderGroup(providerName, VISION_PROVIDER_DEFAULTS[providerName] || {}),
+            );
         }
+    }
+
+    private loadOllamaModels(forceReload = false): void {
+        if (this.isLoadingOllamaModels) {
+            return;
+        }
+        if (!forceReload && this.ollamaModels.length > 0) {
+            return;
+        }
+        this.isLoadingOllamaModels = true;
+        this.apiService.getOllamaModels$()
+            .pipe(take(1), takeUntil(this.destroy$))
+            .subscribe({
+                next: (models) => {
+                    this.ollamaModels = Array.isArray(models) ? models : [];
+                    if (this.activeProvider === 'ollama_vision' && this.ollamaModels.length > 0) {
+                        const group = this.currentProviderGroup;
+                        const control = group?.get('model');
+                        const current = String(control?.value || '').trim();
+                        if (control && !current) {
+                            control.setValue(this.ollamaModels[0], { emitEvent: true });
+                        }
+                    }
+                    this.isLoadingOllamaModels = false;
+                    this.cdr.markForCheck();
+                },
+                error: () => {
+                    this.ollamaModels = [];
+                    this.isLoadingOllamaModels = false;
+                    this.cdr.markForCheck();
+                },
+            });
+    }
+
+    private refreshProviderStatus(probe: boolean): void {
+        const provider = String(this.activeProvider || '').trim();
+        if (!provider) {
+            this.providerStatus = null;
+            return;
+        }
+        const group = this.currentProviderGroup;
+        const model = String(
+            group?.get('model')?.value
+            ?? group?.get('model_id')?.value
+            ?? ''
+        ).trim();
+        this.isCheckingProvider = true;
+        this.resourcesService.getVisionProviderStatus$(provider, model || null, probe)
+            .pipe(take(1), takeUntil(this.destroy$))
+            .subscribe({
+                next: (response) => {
+                    const payload = response?.provider || {};
+                    this.providerStatus = {
+                        provider: String(payload.name || provider),
+                        model: String(payload.model || model || ''),
+                        ready: typeof payload.ready === 'boolean' ? payload.ready : null,
+                        message: String(payload.message || 'unknown'),
+                        probe: !!payload.probe,
+                    };
+                    this.isCheckingProvider = false;
+                    this.cdr.markForCheck();
+                },
+                error: () => {
+                    this.providerStatus = {
+                        provider,
+                        model: model || '',
+                        ready: false,
+                        message: 'status request failed',
+                        probe,
+                    };
+                    this.isCheckingProvider = false;
+                    this.cdr.markForCheck();
+                }
+            });
     }
 
     private createProviderGroup(providerName: string, providerConfig: Record<string, any>): UntypedFormGroup {

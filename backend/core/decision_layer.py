@@ -1,4 +1,4 @@
-﻿import asyncio
+import asyncio
 import hashlib
 import time
 from typing import Dict, Any, List, Optional, Tuple
@@ -20,9 +20,9 @@ from constants.indicators import (
     CREATIVE_THEMES,
 )
 
-from services import config_service
-from services.logger_service import log_audit_entry, AuditStatus
-from services.interaction_policy import resolve_interaction_policy
+from modules.system import config as config_service
+from modules.system.logger import log_audit_entry, AuditStatus
+from core.interaction import resolve_interaction_policy
 
 
 class DecisionLayer:
@@ -99,6 +99,13 @@ class DecisionLayer:
             "lore_block": "",
             "count": 0,
             "recent_history": [],
+            "conversation_state": {
+                "last_message_at": None,
+                "hours_since_last_message": None,
+                "inactivity_bucket": "unknown",
+                "last_topic": "",
+                "recent_tone_summary": "neutral",
+            },
         }
 
     # --------------------------------------------------------------------- #
@@ -275,10 +282,13 @@ class DecisionLayer:
             "count": memory_context.get("count"),
         }
 
+        existing_history = safe_user_message.get("history")
+        if not isinstance(existing_history, list):
+            existing_history = []
         history_preview = memory_context.get("recent_history") or []
         sanitized_history = self._sanitize_history_entries(history_preview)
-        safe_user_message["history"] = sanitized_history
         if sanitized_history:
+            safe_user_message["history"] = sanitized_history
             history_meta = memory_meta.get("history_preview", {}) if isinstance(memory_meta, dict) else {}
             history_limit_config = history_meta.get("limit", len(history_preview))
             log_audit_entry(
@@ -290,6 +300,15 @@ class DecisionLayer:
                     "history_limit": history_limit_config,
                 },
             )
+        else:
+            safe_user_message["history"] = existing_history
+            if existing_history:
+                log_audit_entry(
+                    "decision_layer_history_preserved",
+                    "[DecisionLayer] Memory history is empty, keeping incoming transport history.",
+                    AuditStatus.INFO,
+                    details={"messages_preserved": len(existing_history)},
+                )
 
         # --------------------------------------------------------------- #
         # 5️⃣  Evaluate moral state
@@ -700,8 +719,9 @@ class DecisionLayer:
     def _should_use_deep_memory(self, themes: List[str]) -> bool:
         """Check if deep memory module should be used."""
         allowed = self._is_deep_memory_enabled()
+        forced = bool(config_service.get_config_value("memory.force_deep_memory", False))
         thematic_match = any(theme in DEEP_MEMORY_THEMES for theme in themes)
-        result = bool(allowed and thematic_match)
+        result = bool(allowed and (thematic_match or forced))
         print(f"[DecisionLayer] Необходимость использования глубокой памяти: {result}")
         log_audit_entry(
             "decision_layer_deep_memory_decision",
@@ -711,6 +731,7 @@ class DecisionLayer:
                 "result": result,
                 "allowed_by_config": allowed,
                 "thematic_match": thematic_match,
+                "forced_by_config": forced,
             },
         )
         return result

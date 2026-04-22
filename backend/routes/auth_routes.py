@@ -4,7 +4,7 @@ from typing import Optional
 from fastapi import APIRouter, Header, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
-from services import auth_service
+from modules.system import auth as auth_service
 
 router = APIRouter(prefix="/api/auth", tags=["Auth"])
 

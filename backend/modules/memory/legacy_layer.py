@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-from services.logger_service import AuditStatus, log_audit_entry
+from modules.system.logger import AuditStatus, log_audit_entry
 
 from .service import MemoryModule
 

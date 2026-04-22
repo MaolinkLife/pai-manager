@@ -38,3 +38,7 @@ class GenerateProvider(ABC):
     async def stream(self, request: GenerateRequest) -> AsyncIterator[GenerateStreamChunk]:
         """Потоковая генерация. По умолчанию не поддерживается."""
         raise StreamingNotSupported(f"Provider {self.name} не поддерживает streaming")
+
+    def release_resources(self) -> None:
+        """Освобождение ресурсов провайдера после вызова."""
+        return None

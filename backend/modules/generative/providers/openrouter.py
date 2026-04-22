@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from typing import Any, AsyncIterator, Dict, Iterable, List
 
 from openai import OpenAI
@@ -16,8 +17,8 @@ from modules.generative.types import (
     GenerateResult,
     GenerateStreamChunk,
 )
-from services import config_service
-from services.logger_service import AuditStatus, log_audit_entry
+from modules.system import config as config_service
+from modules.system.logger import AuditStatus, log_audit_entry
 
 
 class OpenRouterGenerateProvider(GenerateProvider):
@@ -41,9 +42,59 @@ class OpenRouterGenerateProvider(GenerateProvider):
 
     @staticmethod
     def _ensure_list(messages: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        if isinstance(messages, list):
-            return messages
-        return list(messages)
+        if not isinstance(messages, list):
+            messages = list(messages)
+        sanitized: List[Dict[str, Any]] = []
+        for item in messages:
+            if not isinstance(item, dict):
+                continue
+            role = str(item.get("role") or "").strip()
+            if not role:
+                continue
+            payload: Dict[str, Any] = {
+                "role": role,
+                "content": item.get("content") if item.get("content") is not None else "",
+            }
+            if role == "assistant" and isinstance(item.get("tool_calls"), list):
+                payload["tool_calls"] = OpenRouterGenerateProvider._sanitize_tool_calls(
+                    item.get("tool_calls") or []
+                )
+            if role == "tool":
+                tool_call_id = str(item.get("tool_call_id") or "").strip()
+                if tool_call_id:
+                    payload["tool_call_id"] = tool_call_id
+                name = str(item.get("name") or "").strip()
+                if name:
+                    payload["name"] = name
+            name = str(item.get("name") or "").strip()
+            if role in {"system", "user", "assistant"} and name:
+                payload["name"] = name
+            sanitized.append(payload)
+        return sanitized
+
+    @staticmethod
+    def _sanitize_tool_calls(tool_calls: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        sanitized: List[Dict[str, Any]] = []
+        for idx, call in enumerate(tool_calls):
+            if not isinstance(call, dict):
+                continue
+            function = call.get("function") or {}
+            if not isinstance(function, dict):
+                function = {}
+            name = str(function.get("name") or "").strip()
+            if not name:
+                continue
+            arguments = function.get("arguments", "{}")
+            if not isinstance(arguments, str):
+                arguments = json.dumps(arguments or {}, ensure_ascii=False)
+            sanitized.append(
+                {
+                    "id": str(call.get("id") or f"tool_call_{idx + 1}"),
+                    "type": str(call.get("type") or "function"),
+                    "function": {"name": name, "arguments": arguments},
+                }
+            )
+        return sanitized
 
     def _compose_settings(
         self, request: GenerateRequest, cfg: Dict[str, Any]
@@ -54,6 +105,47 @@ class OpenRouterGenerateProvider(GenerateProvider):
             "max_tokens": int(options.get("max_tokens", cfg["max_tokens"])),
             "top_p": options.get("top_p"),
         }
+
+    @staticmethod
+    def _normalize_tool_calls(raw_tool_calls: Any) -> List[Dict[str, Any]]:
+        if not raw_tool_calls:
+            return []
+        normalized: List[Dict[str, Any]] = []
+        for idx, call in enumerate(raw_tool_calls):
+            try:
+                if isinstance(call, dict):
+                    function = call.get("function") or {}
+                    if not isinstance(function, dict):
+                        function = {}
+                    name = str(function.get("name") or "").strip()
+                    arguments = function.get("arguments", "{}")
+                    call_id = str(call.get("id") or f"openrouter_tool_{idx + 1}")
+                    call_type = str(call.get("type") or "function")
+                else:
+                    function = getattr(call, "function", None)
+                    name = str(getattr(function, "name", "") or "").strip()
+                    arguments = getattr(function, "arguments", "{}")
+                    call_id = str(getattr(call, "id", "") or f"openrouter_tool_{idx + 1}")
+                    call_type = str(getattr(call, "type", "function") or "function")
+                if not name:
+                    continue
+                if isinstance(arguments, str):
+                    args_payload = arguments
+                else:
+                    args_payload = json.dumps(arguments or {}, ensure_ascii=False)
+                normalized.append(
+                    {
+                        "id": call_id,
+                        "type": call_type,
+                        "function": {
+                            "name": name,
+                            "arguments": args_payload,
+                        },
+                    }
+                )
+            except Exception:
+                continue
+        return normalized
 
     def _build_client(self, cfg: Dict[str, Any]) -> OpenAI:
         if not cfg.get("api_key"):
@@ -81,18 +173,24 @@ class OpenRouterGenerateProvider(GenerateProvider):
         )
 
         try:
-            completion = client.chat.completions.create(
-                model=cfg["model"],
-                messages=messages,
-                temperature=settings["temperature"],
-                max_tokens=settings["max_tokens"],
-                top_p=settings["top_p"],
-            )
+            payload: Dict[str, Any] = {
+                "model": cfg["model"],
+                "messages": messages,
+                "temperature": settings["temperature"],
+                "max_tokens": settings["max_tokens"],
+                "top_p": settings["top_p"],
+            }
+            if request.tools:
+                payload["tools"] = request.tools
+            if request.tool_choice is not None:
+                payload["tool_choice"] = request.tool_choice
+            completion = client.chat.completions.create(**payload)
         except Exception as exc:  # pragma: no cover - внешняя библиотека
             raise ProviderError(str(exc)) from exc
 
         choice = completion.choices[0]
         content = (choice.message.content or "").strip()
+        tool_calls = self._normalize_tool_calls(getattr(choice.message, "tool_calls", None))
 
         log_audit_entry(
             event_type="generator_openrouter_success",
@@ -111,6 +209,7 @@ class OpenRouterGenerateProvider(GenerateProvider):
             content=content,
             raw=completion.model_dump(),
             metadata={"model": cfg["model"]},
+            tool_calls=tool_calls,
         )
 
     async def stream(
@@ -136,14 +235,19 @@ class OpenRouterGenerateProvider(GenerateProvider):
         )
 
         try:
-            stream = client.chat.completions.create(
-                model=cfg["model"],
-                messages=messages,
-                temperature=settings["temperature"],
-                max_tokens=settings["max_tokens"],
-                top_p=settings["top_p"],
-                stream=True,
-            )
+            payload: Dict[str, Any] = {
+                "model": cfg["model"],
+                "messages": messages,
+                "temperature": settings["temperature"],
+                "max_tokens": settings["max_tokens"],
+                "top_p": settings["top_p"],
+                "stream": True,
+            }
+            if request.tools:
+                payload["tools"] = request.tools
+            if request.tool_choice is not None:
+                payload["tool_choice"] = request.tool_choice
+            stream = client.chat.completions.create(**payload)
         except Exception as exc:  # pragma: no cover
             raise ProviderError(str(exc)) from exc
 
@@ -203,8 +307,11 @@ class OpenRouterGenerateProvider(GenerateProvider):
         choice = event.choices[0]
         delta = getattr(choice, "delta", None)
         content = ""
+        tool_calls: List[Dict[str, Any]] = []
         if delta and getattr(delta, "content", None):
             content = delta.content
+        if delta and getattr(delta, "tool_calls", None):
+            tool_calls = self._normalize_tool_calls(delta.tool_calls)
 
         done = bool(choice.finish_reason)
 
@@ -213,4 +320,5 @@ class OpenRouterGenerateProvider(GenerateProvider):
             content=content or "",
             raw=event.model_dump() if hasattr(event, "model_dump") else event,
             done=done,
+            tool_calls=tool_calls,
         )

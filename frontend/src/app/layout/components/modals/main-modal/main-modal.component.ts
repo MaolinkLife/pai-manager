@@ -19,6 +19,8 @@ export class MainModalComponent implements OnInit {
         { key: 'analyzer', label: 'Analyzer' },
         { key: 'moral', label: 'Moral Matrix' },
         { key: 'generate', label: 'Generation' },
+        { key: 'media', label: 'Media' },
+        { key: 'social', label: 'Social' },
         { key: 'core', label: 'Core' },
         { key: 'system', label: 'System' }
     ];

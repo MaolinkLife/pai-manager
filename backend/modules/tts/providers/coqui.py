@@ -18,13 +18,13 @@ from modules.tts.paths import create_temp_audio_file, voices_root
 from modules.tts.providers.base import TTSProvider, TTSProviderError
 from modules.tts.types import TTSRequest, TTSResult
 from modules.tts.voice_import import ensure_xtts_reference_file
-from services.rvc_bootstrap_service import (
+from modules.tts.rvc_service import (
     ensure_rvc_bootstrap,
     get_rvc_status,
     resolve_rvc_embedder_path,
     resolve_rvc_model_path,
 )
-from services.logger_service import AuditStatus, log_audit_entry
+from modules.system.logger import AuditStatus, log_audit_entry
 
 try:
     from TTS.api import TTS as CoquiTTS

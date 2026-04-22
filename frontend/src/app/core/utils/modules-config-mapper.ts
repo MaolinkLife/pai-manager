@@ -7,6 +7,7 @@ export const mapModulesDtoToModel = (dto: any) => ({
     gaming: dto.gaming,
     alarm: dto.alarm,
     discord: dto.discord,
+    telegram: dto.telegram,
     rag: dto.rag,
     visual: dto.visual,
 });
@@ -18,6 +19,7 @@ export const mapModulesModelToDto = (modules: ProjectConfig['modules']) => ({
     gaming: modules.gaming,
     alarm: modules.alarm,
     discord: modules.discord,
+    telegram: modules.telegram,
     rag: modules.rag,
     visual: modules.visual,
 });

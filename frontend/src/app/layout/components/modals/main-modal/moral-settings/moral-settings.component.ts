@@ -2,6 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { UntypedFormBuilder, UntypedFormGroup, Validators } from '@angular/forms';
 import { BehaviorSubject } from 'rxjs';
 import { finalize, take } from 'rxjs/operators';
+import { ApiService } from '../../../../../core/services/api.service';
 import { ConfigService } from '../../../../../core/services/config.service';
 import { NotificationService } from '../../../../../shared/components/notification/notification.service';
 import { UiSelectOption } from '../../../../../shared/ui/components/ui-select/ui-select.component';
@@ -15,9 +16,13 @@ export class MoralSettingsComponent implements OnInit {
     moralForm: UntypedFormGroup;
     isLoading$ = new BehaviorSubject<boolean>(true);
     originalConfig: any = {};
+    ollamaModelOptions: UiSelectOption[] = [
+        { value: '', label: 'Модели не найдены', disabled: true },
+    ];
 
     constructor(
         private fb: UntypedFormBuilder,
+        private apiService: ApiService,
         private configService: ConfigService,
         private notificationService: NotificationService
     ) {
@@ -26,6 +31,7 @@ export class MoralSettingsComponent implements OnInit {
 
     ngOnInit(): void {
         this.loadConfig();
+        this.loadOllamaModels();
         this.moralForm.get('activeProvider')?.valueChanges.subscribe((provider: string) => {
             this.toggleFallbackControls(provider);
         });
@@ -110,6 +116,24 @@ export class MoralSettingsComponent implements OnInit {
                     });
                 },
             });
+    }
+
+    private loadOllamaModels(): void {
+        this.apiService.getOllamaModels$().pipe(take(1)).subscribe({
+            next: (models: string[]) => {
+                const cleaned = (Array.isArray(models) ? models : [])
+                    .map((item) => String(item || '').trim())
+                    .filter((item) => item.length > 0);
+                if (cleaned.length > 0) {
+                    this.ollamaModelOptions = cleaned.map((model) => ({ value: model, label: model }));
+                    return;
+                }
+                this.ollamaModelOptions = [{ value: '', label: 'Модели не найдены', disabled: true }];
+            },
+            error: () => {
+                this.ollamaModelOptions = [{ value: '', label: 'Модели не найдены', disabled: true }];
+            },
+        });
     }
 
     private toggleFallbackControls(activeProvider: string): void {

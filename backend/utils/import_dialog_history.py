@@ -1,7 +1,7 @@
 import os
 import json
 from datetime import datetime, timezone
-from services import database_service
+from modules.database import service as database_service
 from constants.paths import STORAGE_DIR
 
 HISTORY_DIR = os.path.join(STORAGE_DIR, "history")  # путь к папке с .json

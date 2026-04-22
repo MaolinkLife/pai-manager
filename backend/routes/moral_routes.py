@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from datetime import date, datetime, timezone
 from typing import Any, Dict
@@ -9,8 +9,8 @@ from fastapi import APIRouter, Query, Request
 
 from modules.system.service import get_active_character_name
 from modules.moral_matrix.repository import MoralMatrixRepository
-from services.character_service import get_or_create_character
-from services import auth_service
+from modules.system.character import get_or_create_character
+from modules.system import auth as auth_service
 
 router = APIRouter(prefix="/api/moral", tags=["Moral Matrix"])
 

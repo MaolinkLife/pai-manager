@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Request, status
 
-from services import auth_service
-from services import tunnel_service
+from modules.system import auth as auth_service
+from modules.system import tunnel as tunnel_service
 
 router = APIRouter(prefix="/api/tunnel", tags=["Tunnel"])
 

@@ -5,9 +5,14 @@
                 <h2>{{ 'diary.title' | translate }}</h2>
                 <p>{{ 'diary.subtitle' | translate }}</p>
             </div>
-            <app-ui-button (pressed)="addMockEntry()">
-                {{ 'diary.create' | translate }}
-            </app-ui-button>
+            <div class="actions">
+                <app-ui-button (pressed)="refreshEntries()">
+                    Refresh
+                </app-ui-button>
+                <app-ui-button (pressed)="generateDailyEntry()">
+                    {{ generating ? 'Generating...' : ('diary.create' | translate) }}
+                </app-ui-button>
+            </div>
         </header>
 
         <section class="diary-list" *ngIf="entries.length; else emptyState">
@@ -19,7 +24,92 @@
                     <div class="mood">{{ 'diary.mood' | translate }}: {{ entry.mood }}</div>
                 </header>
 
-                <div class="content">{{ entry.content }}</div>
+                <section class="lead" *ngIf="entry.structured?.title">
+                    <h3>{{ entry.structured?.title }}</h3>
+                </section>
+
+                <div class="content">{{ entry.summary }}</div>
+
+                <section class="detail-grid" *ngIf="entry.structured as structured">
+                    <div class="detail-row" *ngIf="structured.importance_score !== null">
+                        <span class="label">Importance</span>
+                        <span class="value">{{ structured.importance_score }}</span>
+                    </div>
+                    <div class="detail-row" *ngIf="structured.emotion">
+                        <span class="label">Emotion</span>
+                        <span class="value">
+                            {{ structured.emotion.valence || 'neutral' }}
+                            <ng-container *ngIf="structured.emotion.arousal">
+                                / {{ structured.emotion.arousal }}
+                            </ng-container>
+                        </span>
+                    </div>
+                </section>
+
+                <section class="diary-block" *ngIf="entry.structured?.source_event">
+                    <h4>Source Event</h4>
+                    <p>{{ entry.structured?.source_event }}</p>
+                </section>
+
+                <section class="diary-block" *ngIf="entry.structured?.outcomes?.length">
+                    <h4>Outcomes</h4>
+                    <ul>
+                        <li *ngFor="let item of entry.structured?.outcomes">{{ item }}</li>
+                    </ul>
+                </section>
+
+                <section class="diary-block" *ngIf="entry.structured?.entities?.length">
+                    <h4>Entities</h4>
+                    <p>{{ entry.structured?.entities?.join(', ') }}</p>
+                </section>
+
+                <section class="diary-block" *ngIf="entry.structured?.key_messages?.length">
+                    <h4>Key Messages</h4>
+                    <ul>
+                        <li *ngFor="let item of entry.structured?.key_messages">{{ item }}</li>
+                    </ul>
+                </section>
+
+                <section class="diary-block" *ngIf="entry.structured?.importance_notes">
+                    <h4>Importance</h4>
+                    <p>{{ entry.structured?.importance_notes }}</p>
+                </section>
+
+                <section class="diary-block" *ngIf="entry.structured?.emotion?.notes">
+                    <h4>Emotion / Affect</h4>
+                    <p>{{ entry.structured?.emotion?.notes }}</p>
+                </section>
+
+                <section class="diary-block" *ngIf="entry.structured?.relationships">
+                    <h4>Relationships</h4>
+                    <p>{{ entry.structured?.relationships }}</p>
+                </section>
+
+                <section class="diary-block" *ngIf="entry.structured?.retrieval_cues?.length">
+                    <h4>Retrieval Cues</h4>
+                    <p>{{ entry.structured?.retrieval_cues?.join(' · ') }}</p>
+                </section>
+
+                <section class="diary-block" *ngIf="entry.structured?.similarities?.length">
+                    <h4>Similarities</h4>
+                    <ul>
+                        <li *ngFor="let item of entry.structured?.similarities">{{ item }}</li>
+                    </ul>
+                </section>
+
+                <section class="diary-block" *ngIf="entry.structured?.photo_descriptions?.length">
+                    <h4>Photo Descriptions</h4>
+                    <ul>
+                        <li *ngFor="let item of entry.structured?.photo_descriptions">{{ item }}</li>
+                    </ul>
+                </section>
+
+                <section class="diary-block" *ngIf="entry.structured?.contradictions?.length">
+                    <h4>Contradictions / Uncertainties</h4>
+                    <ul>
+                        <li *ngFor="let item of entry.structured?.contradictions">{{ item }}</li>
+                    </ul>
+                </section>
 
                 <footer>
                     <span *ngFor="let tag of entry.tags">#{{ tag }}</span>
@@ -30,7 +120,9 @@
         <ng-template #emptyState>
             <section class="empty-state">
                 <app-skeleton width="100%" height="120px"></app-skeleton>
-                <p>{{ 'diary.empty' | translate }}</p>
+                <p *ngIf="loading">Loading diary entries...</p>
+                <p *ngIf="!loading && error">{{ error }}</p>
+                <p *ngIf="!loading && !error">{{ 'diary.empty' | translate }}</p>
             </section>
         </ng-template>
     </div>

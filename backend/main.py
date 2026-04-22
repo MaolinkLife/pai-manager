@@ -11,11 +11,13 @@
 
 import asyncio
 import os
+import traceback
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from core.initialize import run_startup_checks
+from core.initialize import run_startup_checks, start_async_warmups
+from modules.system.logger import log_error, log_traceback
 
 # Windows: ProactorEventLoop may emit noisy ConnectionResetError traces
 # on abrupt client disconnects (WinError 10054). Selector loop is more stable
@@ -27,7 +29,16 @@ if os.name == "nt":
         pass
 
 # Запускаем инициализацию ДО импортов маршрутов
-run_startup_checks()
+try:
+    run_startup_checks()
+except Exception as exc:
+    log_traceback(exc, source="startup")
+    log_error(
+        error_msg=f"Startup checks failed: {exc}",
+        context={"traceback": traceback.format_exc()},
+        severity="critical",
+    )
+    raise
 
 # Теперь можно импортировать маршруты, т.к. конфиг уже инициализирован
 from routes.ollama_routes import router as ollama_router
@@ -45,10 +56,12 @@ from routes.memory_routes import router as memory_router
 from routes.moral_routes import router as moral_router
 from routes.auth_routes import router as auth_router
 from routes.tunnel_routes import router as tunnel_router
+from routes.telegram_routes import router as telegram_router
 from routes.synthesis_routes import router as synthesis_router
 
 from loops.loop_core import run_loop
-from services import tunnel_service
+from modules.system import tunnel as tunnel_service
+from modules.telegram.runtime import autostart_telegram_bridge, stop_telegram_bridge
 
 app = FastAPI()
 
@@ -75,6 +88,7 @@ app.include_router(memory_router)
 app.include_router(moral_router)
 app.include_router(auth_router)
 app.include_router(tunnel_router)
+app.include_router(telegram_router)
 app.include_router(synthesis_router)
 
 # Start background loops
@@ -83,11 +97,14 @@ run_loop()
 
 @app.on_event("startup")
 def app_startup() -> None:
+    start_async_warmups()
     tunnel_service.autostart_owner_tunnel()
+    autostart_telegram_bridge()
 
 
 @app.on_event("shutdown")
 def app_shutdown() -> None:
+    stop_telegram_bridge()
     tunnel_service.stop_tunnel()
 
 

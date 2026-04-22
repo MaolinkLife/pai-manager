@@ -24,6 +24,8 @@ import { GenerationSettingsComponent } from './layout/components/modals/main-mod
 import { MonitorSelectionModalComponent } from './layout/components/modals/monitor-selection-modal/monitor-selection-modal.component';
 import { CoreSettingsComponent } from './layout/components/modals/main-modal/core-settings/core-settings.component';
 import { SystemSettingsComponent } from './layout/components/modals/main-modal/system-settings/system-settings.component';
+import { SocialSettingsComponent } from './layout/components/modals/main-modal/social-settings/social-settings.component';
+import { MediaSettingsComponent } from './layout/components/modals/main-modal/media-settings/media-settings.component';
 import { AiEntityVisualizerComponent } from './layout/components/ai-entity-visualizer/ai-entity-visualizer.component';
 import { AuthInterceptor } from './core/interceptors/auth.interceptor';
 
@@ -43,6 +45,8 @@ import { AuthInterceptor } from './core/interceptors/auth.interceptor';
         AnalyzerSettingsComponent,
         MoralSettingsComponent,
         GenerationSettingsComponent,
+        SocialSettingsComponent,
+        MediaSettingsComponent,
         MonitorSelectionModalComponent,
         CoreSettingsComponent,
         SystemSettingsComponent,

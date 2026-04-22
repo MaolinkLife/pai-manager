@@ -1,4 +1,4 @@
-﻿"""OpenRouter-backed MoralMatrix provider."""
+"""OpenRouter-backed MoralMatrix provider."""
 
 from __future__ import annotations
 
@@ -17,8 +17,8 @@ from constants.settings import (
     OPENROUTER_BASE_URL,
     PROJECT_NAME,
 )
-from services import config_service
-from services.logger_service import AuditStatus, log_audit_entry
+from modules.system import config as config_service
+from modules.system.logger import AuditStatus, log_audit_entry
 
 from .base import MoralMatrixProvider
 

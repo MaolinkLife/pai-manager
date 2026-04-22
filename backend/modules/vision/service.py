@@ -1,4 +1,4 @@
-﻿"""
+"""
 Vision Service: Main service for vision analysis.
 """
 
@@ -11,8 +11,8 @@ from datetime import datetime
 from .worker import VisionBuffer, ScreenCapturer
 from .analyzer import VisionAnalyzer
 from constants.paths import TEMP_DIR
-from services import config_service
-from services.logger_service import log_audit_entry, AuditStatus
+from modules.system import config as config_service
+from modules.system.logger import log_audit_entry, AuditStatus
 
 
 class VisionService:

@@ -12,7 +12,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
 import uuid
-from services.db_core import Base
+from modules.database.core import Base
 
 
 # Character Table
@@ -376,3 +376,21 @@ class MoralStateSnapshot(Base):
 
     character = relationship("Character")
     message = relationship("History")
+
+
+class ConversationStateLog(Base):
+    __tablename__ = "conversation_state_logs"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    character_id = Column(String, ForeignKey("characters.id", ondelete="SET NULL"))
+    message_id = Column(String, nullable=True, index=True)
+    source = Column(String, nullable=False, default="memory_module")
+    last_message_at = Column(DateTime, nullable=True)
+    hours_since_last_message = Column(Float, nullable=True)
+    inactivity_bucket = Column(String, nullable=False, default="unknown")
+    last_topic = Column(Text, nullable=False, default="")
+    recent_tone_summary = Column(Text, nullable=False, default="neutral")
+    payload = Column(Text, default="{}")
+    created_at = Column(DateTime, default=datetime.now(timezone.utc), index=True)
+
+    character = relationship("Character")

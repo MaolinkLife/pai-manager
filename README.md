@@ -1,164 +1,249 @@
 # 💫 Z-Waif / AI Companion System
 
-### 🇷🇺 RU Adaptation — localized fork
+### RU Adaptation — independently evolved fork
 
-**System Version:** 0.4  
-**Document Version:** 1.1  
+**System Version:** 0.6  
 **Status:** Beta  
-**Last Updated:** October 7, 2025  
-**License:** Maolink Noncommercial License 1.0.0 (based on PolyForm NC)
-**Support & Developers:** see [Contacts / Credits](#8-contacts--credits) section
+**License:** Maolink Noncommercial License 1.0.0  
+**Original source project:** Z-Waif by SugarcaneDefender
 
 ---
 
-## 🧠 1. Introduction
+## 1. Introduction
 
-**Z-Waif** is an open-source platform for locally deploying an AI companion. It integrates dialogue, voice synthesis, visualization, behavioral logic, and deep customization.
+**Z-Waif / AI Companion System** is a modular platform for building and running a local-first AI companion with memory, voice, visualization, behavioral logic, and configurable runtime policies.
 
-### Components:
+This project started as a fork of the original **Z-Waif**, but has since evolved into an independently developed system with its own architecture, module boundaries, config model, auth flow, memory workflows, and companion-oriented runtime behavior.
 
-- **Ollama** — primary local LLM engine for dialogues
-- **OpenRouter & external APIs** — cloud providers for extended capabilities
-- **Z-Waif** — interface and logic: TTS, STT, RVC, VTube Studio, Lorebook, memory, etc.
-- **RVC / Voice Changer** — voice synthesis and personalization
-- **VTube Studio** — visual avatar
-- **Whisper / STT** — speech recognition
+The current focus is not only dialogue generation, but also:
 
-_Goal: integrate everything in one place for convenient development and use._
-
----
-
-## 🛣️ 2. Development Roadmap
-
-_From simple chatbot to Jarvis-level AI companion_
-
-| Stage | Content |
-|-------|---------|
-| **✅ 1. Basic Functions** | Installation, dialogue, TTS/STT, memory, modular architecture |
-| **✅ 2. Personalization** | Logging, voice control, styles, configuration system |
-| **✅ 3. Enhanced Assistance** | Full UI control, diagnostics, editors, multilingual support |
-| **🔄 4. Semi-Autonomy** | Self-initiative, offline mode, creativity, internet access |
-| **⏳ 5. Full Autonomy** | Self-learning, privacy, environment control |
+- persistent memory and retrieval
+- role-aware interaction policies
+- active character routing
+- voice and synthesis pipelines
+- diagnostics and traceability
+- modular runtime orchestration
+- groundwork for initiative and semi-autonomous behavior
 
 ---
 
-## 🔧 3. What's Implemented (v0.1-v0.4)
+## 2. Core Architecture
 
-### ✅ 3.1. Complete UI Management
-- **Completely redesigned interface** — all settings accessible from UI
-- **Visual editors** for memory, lorebook, system prompts
-- **Theme support** — light/dark themes with preference saving
-- **Advanced diagnostics panel** with visual debug log
+As of **v0.6**, the system follows a more explicit module-oriented design.
 
-### ✅ 3.2. Multilingual & Russian Localization
-- **EN/RU interface switching**
-- **Whisper adapted for Russian language**
-- **STT improvements for Russian speech**
-- **Full UTF-8 support** across all modules
-- **JSON translation files** for system messages (partial)
+### Main architectural domains
 
-### ✅ 3.3. Voice Interface
-- **Voice selection** (Male/Female) from UI when RVC is disabled
-- **VAD (Voice Activity Detection)** with wake words
-- **Multi-provider TTS:** ElevenLabs → gTTS → pyttsx3 (offline)
-- **Voice state control** (listening/waiting/speaking)
+- **core** — orchestration, startup, runtime coordination
+- **system** — config/runtime facade and cross-module safe access
+- **memory** — hybrid retrieval, anchors, associations, memory workflows
+- **moral_matrix** — behavioral evaluation and fallback-safe moral reasoning
+- **vision** — capture/inference pipeline
+- **voice / tts / rvc** — voice control, synthesis, playback, model integration
+- **synthesis** — image generation providers and routes
 
-### ✅ 3.4. Memory & Intelligence
-- **Lorebook in database** — auto-load deprecated, now part of DB
-- **Hybrid search** — embeddings + vector + keywords
-- **MemoryModule** with RAG search and metadata
-- **LLM initiative** and provider chain
+### Key platform principles
 
-### ✅ 3.5. Platform & Architecture
-- **Modular architecture** (voice, vision, memory, LLM)
-- **SQLite database** with reasoning and media attachments
-- **Unified configuration system** with UI↔backend sync
-
-### ✅ 3.6. LLM Providers
-- **Ollama** — primary local engine (replaces Oobabooga)
-- **OpenRouter & external APIs** — cloud providers
-- **Automatic failover** between providers
-- **Unified API** for all sources
+- **DB-first configuration**
+- **active-character based routing**
+- **owner/user role separation**
+- **provider failover**
+- **modular services instead of monolithic core logic**
+- **runtime-safe wrappers and guarded interactions**
 
 ---
 
-## 🔜 4. Upcoming Plans
+## 3. What is implemented in v0.6
 
-### 🤖 4.1. Autonomy & Behavior
-- Activity timers and reminder dialogues
-- Behavioral patterns and emotional memory
-- Extended initiative system
+### 3.1 Platform & Runtime
+- Module-oriented boundaries between `core`, `memory`, `moral_matrix`, `vision`, and `system`
+- `SystemModule` facade for runtime/config access
+- Interaction policy layer for role-based capabilities
+- Safer startup and readiness-first backend launch flow
+- Better runtime stability and schema/bootstrap ordering
 
-### 📡 4.2. Internet Access
-- Online search and parsing (Wikipedia, news)
-- Modes: Offline / Online / Auto
+### 3.2 Auth, Users & Roles
+- Full authentication flow:
+  - register
+  - login
+  - refresh
+  - logout
+- First registered account becomes **owner**
+- All next registrations default to **user**
+- Frontend guards/interceptors and backend auth services integrated
 
-### 🎨 4.3. Content Generation
-- Stable Diffusion integration (AUTOMATIC1111 API)
-- "Draw..." commands with image generation
+### 3.3 DB-First Config & Character Management
+- DB-first config model with split settings tables
+- Runtime-safe config wrappers
+- Character catalog endpoints and YAML import flow
+- `active_character_id` stored in user settings
+- Automatic fallback/backfill if active character is missing
 
-### 🧏‍♂️ 4.4. Documentation & Training
-- Video tutorial for Z-Waif usage
-- Real capabilities demonstration
+### 3.4 Chat & Realtime Reliability
+- Hardened WebSocket pipeline
+- Run IDs and stop semantics
+- Runtime trace streaming
+- Better reconnect/empty-state handling
+- Per-run metadata persistence:
+  - provider
+  - model
+  - usage
+  - traces
+  - timing
+
+### 3.5 Memory & Moral Matrix
+- Memory emulator for staged retrieval inspection/debugging
+- Expanded knowledge layer:
+  - anchors
+  - associations
+- Owner-scoped access control for memory-related actions
+- Safer Moral Matrix provider path and degraded fallback responses
+
+### 3.6 Voice / TTS / RVC
+- Expanded voice settings UI with provider-aware controls
+- RVC runtime assets and bootstrap services
+- Model status / download / import flows
+- Refactored TTS manager and provider selection lifecycle
+- Safer preview and playback control
+
+### 3.7 Synthesis (Image Generation)
+- Dedicated synthesis module and backend routes
+- Pluggable image providers
+- `Z-Image-Turbo` provider
+- Generic Diffusers-based local generation path
+
+### 3.8 Frontend Platform
+- New feature pages/modules:
+  - auth
+  - memory
+  - matrix
+  - synthesis
+  - audit
+  - diary
+- Shared UI-kit components
+- Expanded routing guards
+- Updated config mappers for new backend schema
+
+### 3.9 Storage & Paths
+- Consolidated model storage layout
+- Aligned path constants
+- Helper services for XTTS/RVC resources and model path resolution
 
 ---
 
-## ❓ 5. FAQ
+## 4. Current Capabilities
 
-**Q1:** Do I need to edit configs manually?  
-**A1:** **NO!** All settings available through intuitive UI.
+The system already supports:
 
-**Q2:** Which LLMs are supported?  
-**A2:** **Ollama (local)** + **OpenRouter & external APIs** (cloud)
+- local/cloud LLM orchestration
+- hybrid memory retrieval
+- configurable TTS/STT pipelines
+- role-aware auth and access
+- active character runtime switching
+- diagnostics and runtime trace visibility
+- voice model integration
+- local image generation support
+- modular backend/frontend architecture
 
-**Q3:** Russian language support?  
-**A3:** **Full support** — interface, STT, TTS, memory.
-
-**Q4:** Can it work without internet?  
-**A4:** **Yes.** Ollama works completely offline.
-
-**Q5:** What's the minimum PC requirement?  
-**A5:** Depends on Ollama model. 8 GB RAM minimum, 16+ GB recommended.
-
----
-
-## ⚙️ 6. Technical Features
-
-- **Zero-Code management** — everything through UI, no file editing needed
-- **Hybrid memory** — vector search + keywords + RAG
-- **Modular architecture** — voice/vision/memory work independently
-- **Theme support** — light/dark themes with auto-saving
-- **Ollama-centric** — optimized for modern local models
+This is no longer just a UI wrapper around a model.  
+It is becoming a configurable **AI companion runtime**.
 
 ---
 
-## 🚀 7. Conclusion
+## 5. Roadmap
 
-**Z-Waif 0.4 is a fully self-sufficient AI companion management system.**
+### Stage 1 — Core Companion Runtime ✅
+- dialogue
+- TTS/STT
+- memory
+- modular backend/frontend
+- diagnostics
+- config system
 
-No more editing configs, understanding code, or searching for settings in files. Everything — from voice selection to memory configuration — is available in a beautiful, intuitive interface.
+### Stage 2 — Personalization & Control ✅
+- roles/auth
+- active characters
+- interaction policy
+- expanded voice controls
+- localized UI and runtime messaging
 
-**Key changes:**
-- **Complete transition to Ollama** instead of Oobabooga
-- **OpenRouter integration** and external APIs
-- **Simplified installation** — fewer dependencies
+### Stage 3 — Platform Maturity ✅ / in progress
+- synthesis
+- traceable realtime runs
+- memory inspection tools
+- stronger provider lifecycle
+- safer config/runtime boundaries
 
-The system sees, hears, remembers, and speaks in Russian, while the modular architecture allows easy functionality expansion. **Jarvis-mode is becoming reality!**
+### Stage 4 — Semi-Autonomy 🔄
+- self-initiative
+- notification-driven event handling
+- time-aware behavior
+- quiet hours / activity windows
+- controlled proactive communication
+- Telegram/social bridge
+- external/public-source reflection
+
+### Stage 5 — Full Companion Environment ⏳
+- deeper autonomy
+- stronger long-term continuity
+- richer behavioral modeling
+- controlled environment/tool interaction
 
 ---
 
-## 🤝 8. Contacts / Credits
+## 6. Technical Highlights
 
-**Original Z-Waif author:** [GitHub Link](https://github.com/SugarcaneDefender/z-waif)
+- **DB-first config**
+- **active character model**
+- **owner/user role model**
+- **interaction policy layer**
+- **WebSocket trace streaming**
+- **hybrid memory retrieval**
+- **provider failover**
+- **pluggable synthesis**
+- **voice + RVC/XTTS integration**
+- **module-oriented backend boundaries**
 
-**This fork and adaptation:** [Z-Waif-RU-Adaptation](https://github.com/MaolinkLife/z-waif-ru-adaptation/tree/main)
+---
 
-**Feedback:**  
-Telegram with **Z-Waif** tag — @MaolinkLife or email maolink686@gmail.com
+## 7. Project Positioning
 
-**Third-party projects:**
-- Ollama: https://github.com/ollama/ollama
-- OpenRouter: https://openrouter.ai
-- RVC: https://github.com/RVC-Project/Retrieval-based-Voice-Conversion  
-- VTube Studio: https://store.steampowered.com/app/1325860/VTube_Studio/  
-- Whisper: https://github.com/openai/whisper
+This repository is best understood as an **independently evolving AI companion platform** that originated from a Z-Waif fork, but now follows its own architectural direction.
+
+The project is focused on:
+- companion behavior
+- persistent context
+- runtime safety
+- modular orchestration
+- future semi-autonomous flows
+
+rather than being only a traditional chatbot frontend.
+
+---
+
+## 8. Licensing and Credits
+
+### This repository
+Most of the current codebase is distributed under:
+
+**Maolink Noncommercial License 1.0.0**
+
+Commercial use is not allowed.
+
+### Original project
+Original Z-Waif by **SugarcaneDefender**:  
+https://github.com/SugarcaneDefender/z-waif
+
+The original project remains a separate work under its own license.
+
+### Derived / copied files
+Some explicitly identified files may still retain origin from the source project and should be treated according to their original license terms.
+
+---
+
+## 9. Contacts
+
+**Project / adaptation / current development:**  
+https://github.com/MaolinkLife/z-waif-ru-adaptation
+
+**Telegram:** @MaolinkLife  
+**Email:** maolink686@gmail.com

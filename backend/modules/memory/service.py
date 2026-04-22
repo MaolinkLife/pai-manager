@@ -1,20 +1,21 @@
-﻿"""Memory module: encapsulates retrieval of conversational context."""
+"""Memory module: encapsulates retrieval of conversational context."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import hashlib
 import math
 import re
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
-from services import database_service
-from services import config_service
-from services.logger_service import AuditStatus, log_audit_entry
+from modules.database import service as database_service
+from modules.system import config as config_service
+from modules.system.logger import AuditStatus, log_audit_entry
 from modules.system.service import get_active_character_name
 from modules.memory.embeddings import Provider, get_embedding, get_embeddings
 from modules.memory import lorebook
+from modules.memory import knowledge
 from modules.memory.short_term import (
     ShortTermRecord,
     find_matching_record,
@@ -27,7 +28,7 @@ DEFAULT_SESSION_WINDOW = "day"
 DEFAULT_EMBED_PROVIDER = Provider.AUTO
 DEFAULT_EMBED_MODEL = "nomic-embed-text"
 DEFAULT_FALLBACK_MESSAGE = "За сегодня ничего не найдено."
-SHORT_TERM_LOOKBACK_DAYS = 7
+DEFAULT_SHORT_TERM_LOOKBACK_DAYS = 7
 DEFAULT_KEYWORD_MAX_CANDIDATES = 8
 DEFAULT_KEYWORD_MIN_SCORE = 0.15
 DEFAULT_KEYWORD_MIN_OVERLAP = 0.2
@@ -52,6 +53,14 @@ DEFAULT_KEYWORD_STOPWORDS: Set[str] = {
 }
 DEFAULT_SHORT_TERM_THRESHOLD = 0.75
 DEFAULT_HISTORY_LIMIT = 20
+DEFAULT_SESSION_IDLE_GAP_MINUTES = 90
+DEFAULT_SESSION_MAX_MESSAGES = 512
+DEFAULT_SESSION_CHUNK_SIZE = 32
+DEFAULT_INACTIVITY_FRESH_HOURS = 3.0
+DEFAULT_INACTIVITY_RECENT_HOURS = 24.0
+DEFAULT_INACTIVITY_STALE_HOURS = 72.0
+DEFAULT_EMOTIONAL_LOOKBACK_DAYS = 14
+DEFAULT_EMOTIONAL_LIMIT = 5
 
 
 @dataclass
@@ -108,13 +117,22 @@ class MemoryModule:
             "character": char_name,
             "retrieval_settings": settings["retrieval"],
         }
+        scope = self._resolve_message_scope(message_payload)
+        meta["scope"] = scope
 
         history_limit = self._resolve_history_limit()
-        history_preview = self._load_history_preview(char_name, history_limit)
+        history_preview = self._load_history_preview(char_name, history_limit, scope=scope)
+        conversation_state = self._build_conversation_state(history_preview)
+        self._persist_conversation_state(
+            char_name,
+            conversation_state,
+            message_id=message_payload.get("id"),
+        )
         meta["history_preview"] = {
             "limit": history_limit,
             "count": len(history_preview),
         }
+        meta["conversation_state"] = conversation_state
 
         log_audit_entry(
             "memory_module.start",
@@ -141,6 +159,8 @@ class MemoryModule:
                     "session_length": 0,
                     "memory_status": "empty_input",
                     "matches": [],
+                    "recent_history": history_preview,
+                    "conversation_state": conversation_state,
                 },
                 meta=meta,
             )
@@ -161,49 +181,81 @@ class MemoryModule:
                     "session_length": 0,
                     "memory_status": "embedding_failed",
                     "matches": [],
+                    "recent_history": history_preview,
+                    "conversation_state": conversation_state,
                 },
                 meta=meta,
             )
 
         recent_payloads = self._load_recent_messages(
-            char_name, settings["recent_limit"]
+            char_name, settings["recent_limit"], scope=scope
         )
         session_payloads = self._load_session_messages(
             char_name,
             message_payload.get("timestamp"),
             settings["session"],
+            scope=scope,
         )
-        candidate_payloads = self._merge_payloads(recent_payloads, session_payloads)
+        stage_trace: List[Dict[str, Any]] = []
+        matches: List[MemoryMatch] = []
+        if recent_payloads:
+            matches = self._run_stage_search(
+                query=content,
+                candidate_payloads=recent_payloads,
+                settings=settings,
+                query_vectors=query_vectors,
+            )
+        stage_trace.append(
+            {
+                "stage": "session_recent_32",
+                "candidates": len(recent_payloads),
+                "matches": len(matches),
+                "status": "ok" if matches else "miss",
+            }
+        )
+        session_chunk_size = int(
+            settings["session"].get("chunk_size", DEFAULT_SESSION_CHUNK_SIZE)
+            or DEFAULT_SESSION_CHUNK_SIZE
+        )
+        session_chunk_size = max(1, min(session_chunk_size, 256))
+        session_chunk_trace: List[Dict[str, Any]] = []
+        if not matches and session_payloads:
+            for index, chunk in enumerate(
+                self._iter_chunks(session_payloads, session_chunk_size),
+                start=1,
+            ):
+                chunk_matches = self._run_stage_search(
+                    query=content,
+                    candidate_payloads=chunk,
+                    settings=settings,
+                    query_vectors=query_vectors,
+                )
+                chunk_info = {
+                    "index": index,
+                    "candidates": len(chunk),
+                    "matches": len(chunk_matches),
+                    "status": "ok" if chunk_matches else "miss",
+                }
+                session_chunk_trace.append(chunk_info)
+                if chunk_matches:
+                    matches = chunk_matches
+                    break
+        stage_trace.append(
+            {
+                "stage": "session_window",
+                "candidates": len(session_payloads),
+                "matches": len(matches),
+                "status": "ok" if matches else "miss",
+                "chunk_size": session_chunk_size,
+                "chunks_checked": len(session_chunk_trace),
+                "chunks": session_chunk_trace,
+            }
+        )
 
         candidate_map: Dict[str, CandidateEntry] = {}
-
-        if candidate_payloads:
-            if settings["retrieval"]["keyword"]["enabled"]:
-                self._apply_keyword_candidates(
-                    content,
-                    candidate_payloads,
-                    settings["retrieval"]["keyword"],
-                    candidate_map,
-                )
-
-            for vector_name, vector_cfg in settings["vectors"].items():
-                if not vector_cfg["enabled"]:
-                    continue
-                query_vec = query_vectors.get(vector_name)
-                if query_vec is None:
-                    continue
-                self._apply_vector_candidates(
-                    vector_name,
-                    vector_cfg,
-                    query_vec,
-                    candidate_payloads,
-                    candidate_map,
-                )
-        else:
-            print("[Memory] Нет кандидатов в недавней/сессионной истории.")
-
         short_term_meta: Dict[str, Any] = {}
-        if settings["short_term"]["enabled"]:
+        short_term_skipped = bool(matches)
+        if not matches and settings["short_term"]["enabled"]:
             primary_vector_name = settings["primary_vector"]
             if primary_vector_name:
                 primary_vector = query_vectors.get(primary_vector_name)
@@ -229,11 +281,91 @@ class MemoryModule:
                     },
                 )
                 short_term_meta = short_meta or {}
+            matches = self._rerank_candidates(
+                candidate_map,
+                settings,
+                query_vectors=query_vectors,
+            )
+        stage_trace.append(
+            {
+                "stage": "short_term_days",
+                "candidates": len(candidate_map),
+                "matches": len(matches) if not short_term_skipped else 0,
+                "status": (
+                    "skipped"
+                    if short_term_skipped
+                    else ("ok" if matches else "miss")
+                ),
+                "record_id": short_term_meta.get("record_id") if short_term_meta else None,
+            }
+        )
 
-        matches = self._rerank_candidates(
-            candidate_map,
-            settings,
-            query_vectors=query_vectors,
+        anchor_meta: Dict[str, Any] = {}
+        anchor_skipped = bool(matches)
+        if not matches:
+            matches, anchor_meta = self._search_anchor_facts(
+                char_name=char_name,
+                query=content,
+                scope=scope,
+                settings=settings,
+                query_vectors=query_vectors,
+            )
+        stage_trace.append(
+            {
+                "stage": "anchor_facts",
+                "matches": len(matches) if not anchor_skipped else 0,
+                "anchors": anchor_meta.get("anchors", 0),
+                "status": (
+                    "skipped"
+                    if anchor_skipped
+                    else ("ok" if matches else "miss")
+                ),
+            }
+        )
+
+        graph_meta: Dict[str, Any] = {}
+        graph_skipped = bool(matches)
+        if not matches:
+            matches, graph_meta = self._search_associative_graph(
+                char_name=char_name,
+                query=content,
+                scope=scope,
+                settings=settings,
+                query_vectors=query_vectors,
+            )
+        stage_trace.append(
+            {
+                "stage": "associative_graph",
+                "matches": len(matches) if not graph_skipped else 0,
+                "expansions": graph_meta.get("expansions", 0),
+                "status": (
+                    "skipped"
+                    if graph_skipped
+                    else ("ok" if matches else "miss")
+                ),
+            }
+        )
+
+        emotional_items: List[Dict[str, Any]] = []
+        emotional_cfg = settings.get("emotional", {})
+        if bool(emotional_cfg.get("enabled", True)) and char_name:
+            character = database_service.get_or_create_character(char_name)
+            if character:
+                emotional_items = knowledge.list_emotion_events(
+                    character_id=character.id,
+                    days=int(
+                        emotional_cfg.get(
+                            "lookback_days", DEFAULT_EMOTIONAL_LOOKBACK_DAYS
+                        )
+                    ),
+                    limit=int(emotional_cfg.get("limit", DEFAULT_EMOTIONAL_LIMIT)),
+                )
+        stage_trace.append(
+            {
+                "stage": "emotional_memory",
+                "status": "ok" if emotional_items else "miss",
+                "matches": len(emotional_items),
+            }
         )
 
         for match in matches:
@@ -251,11 +383,14 @@ class MemoryModule:
             }
             context.update(lore_context)
             context["recent_history"] = history_preview
+            context["conversation_state"] = conversation_state
+            context["emotional_events"] = emotional_items
             meta.update(
                 {
                     "matches_found": 0,
                     "lore_count": lore_context.get("count", 0),
                     "history_preview_count": len(history_preview),
+                    "stage_trace": stage_trace,
                 }
             )
             return MemoryContextResult(context=context, meta=meta)
@@ -279,6 +414,7 @@ class MemoryModule:
             "memory_status": "ready",
             "session_length": len(matches),
             "matches": context_matches,
+            "stage_trace": stage_trace,
         }
 
         if short_term_meta:
@@ -287,6 +423,8 @@ class MemoryModule:
 
         context.update(lore_context)
         context["recent_history"] = history_preview
+        context["conversation_state"] = conversation_state
+        context["emotional_events"] = emotional_items
 
         meta.update(
             {
@@ -294,6 +432,9 @@ class MemoryModule:
                 "lore_count": lore_context.get("count", 0),
                 "short_term_meta": short_term_meta,
                 "history_preview_count": len(history_preview),
+                "anchor_meta": anchor_meta,
+                "graph_meta": graph_meta,
+                "stage_trace": stage_trace,
             }
         )
 
@@ -306,11 +447,145 @@ class MemoryModule:
                 "short_term_present": bool(short_term_meta),
                 "lore_count": lore_context.get("count", 0),
                 "history_preview_count": len(history_preview),
+                "stage_trace": stage_trace,
             },
         )
         print("[Memory] Контекст собран и возвращается вызывающей стороне.")
 
         return MemoryContextResult(context=context, meta=meta)
+
+    def _build_conversation_state(
+        self,
+        history_preview: Sequence[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        entries = [item for item in (history_preview or []) if isinstance(item, dict)]
+        if not entries:
+            return {
+                "last_message_at": None,
+                "hours_since_last_message": None,
+                "inactivity_bucket": "unknown",
+                "last_topic": "",
+                "recent_tone_summary": "neutral",
+            }
+
+        last_entry = entries[-1]
+        last_timestamp = self._parse_iso_datetime(last_entry.get("timestamp"))
+        now = datetime.now(timezone.utc)
+        hours_since: Optional[float] = None
+        if last_timestamp is not None:
+            if last_timestamp.tzinfo is None:
+                last_timestamp = last_timestamp.replace(tzinfo=timezone.utc)
+            delta = now - last_timestamp.astimezone(timezone.utc)
+            hours_since = max(0.0, delta.total_seconds() / 3600.0)
+
+        recent_user_messages = [
+            str(item.get("content") or "").strip()
+            for item in entries[-8:]
+            if (item.get("role") or "").lower() == "user"
+            and str(item.get("content") or "").strip()
+        ]
+        last_topic = self._extract_topic(recent_user_messages[-1] if recent_user_messages else "")
+        tone_summary = self._summarize_recent_tone(recent_user_messages)
+
+        return {
+            "last_message_at": last_entry.get("timestamp"),
+            "hours_since_last_message": (
+                round(hours_since, 2) if hours_since is not None else None
+            ),
+            "inactivity_bucket": self._bucketize_inactivity(hours_since),
+            "last_topic": last_topic,
+            "recent_tone_summary": tone_summary,
+        }
+
+    def _persist_conversation_state(
+        self,
+        char_name: Optional[str],
+        conversation_state: Dict[str, Any],
+        *,
+        message_id: Optional[str] = None,
+    ) -> None:
+        if not char_name or not isinstance(conversation_state, dict):
+            return
+        try:
+            database_service.add_conversation_state_log(
+                char_name,
+                conversation_state,
+                message_id=message_id,
+                source="memory_module",
+            )
+        except Exception:
+            return
+
+    @staticmethod
+    def _parse_iso_datetime(raw: Any) -> Optional[datetime]:
+        if isinstance(raw, datetime):
+            return raw
+        if not isinstance(raw, str) or not raw.strip():
+            return None
+        try:
+            return datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        except Exception:
+            return None
+
+    @staticmethod
+    def _bucketize_inactivity(hours_since: Optional[float]) -> str:
+        if hours_since is None:
+            return "unknown"
+        if hours_since <= DEFAULT_INACTIVITY_FRESH_HOURS:
+            return "fresh"
+        if hours_since <= DEFAULT_INACTIVITY_RECENT_HOURS:
+            return "recent"
+        if hours_since <= DEFAULT_INACTIVITY_STALE_HOURS:
+            return "stale"
+        return "long_gap"
+
+    @staticmethod
+    def _extract_topic(raw_text: str) -> str:
+        text = re.sub(r"<think>.*?</think>", " ", raw_text or "", flags=re.IGNORECASE | re.DOTALL)
+        text = re.sub(r"\s+", " ", text).strip()
+        if not text:
+            return ""
+        words = text.split(" ")
+        return " ".join(words[:12]).strip(" .,!?:;")
+
+    @staticmethod
+    def _summarize_recent_tone(messages: Sequence[str]) -> str:
+        if not messages:
+            return "neutral"
+
+        positive_markers = (
+            "спасибо",
+            "класс",
+            "отлично",
+            "люблю",
+            "thanks",
+            "great",
+            "awesome",
+            "love",
+        )
+        negative_markers = (
+            "плохо",
+            "бесит",
+            "ненавижу",
+            "грустно",
+            "ужас",
+            "hate",
+            "bad",
+            "angry",
+            "sad",
+        )
+
+        combined = " ".join(messages[-5:]).lower()
+        positive_score = sum(1 for marker in positive_markers if marker in combined)
+        negative_score = sum(1 for marker in negative_markers if marker in combined)
+
+        if negative_score > positive_score:
+            return "tense/negative"
+        if positive_score > negative_score:
+            return "warm/positive"
+        if "?" in combined:
+            return "curious/questioning"
+        return "neutral"
 
     async def collect_lore_context(self, text: str) -> Dict[str, Any]:
         """Backward-compatible wrapper for lore-only requests."""
@@ -503,6 +778,20 @@ class MemoryModule:
             "threshold": float(
                 short_term_cfg.get("threshold", DEFAULT_SHORT_TERM_THRESHOLD)
             ),
+            "lookback_days": int(
+                short_term_cfg.get("lookback_days", DEFAULT_SHORT_TERM_LOOKBACK_DAYS)
+            ),
+        }
+        emotional_raw = (
+            retrieval_cfg.get("emotional") if isinstance(retrieval_cfg, dict) else {}
+        )
+        emotional_cfg = emotional_raw if isinstance(emotional_raw, dict) else {}
+        emotional_settings = {
+            "enabled": bool(emotional_cfg.get("enabled", True)),
+            "lookback_days": int(
+                emotional_cfg.get("lookback_days", DEFAULT_EMOTIONAL_LOOKBACK_DAYS)
+            ),
+            "limit": int(emotional_cfg.get("limit", DEFAULT_EMOTIONAL_LIMIT)),
         }
 
         session_raw = (
@@ -519,6 +808,15 @@ class MemoryModule:
             "window": session_cfg.get(
                 "window",
                 config_service.get_config_value("memory.session_window", DEFAULT_SESSION_WINDOW),
+            ),
+            "idle_gap_minutes": float(
+                session_cfg.get("idle_gap_minutes", DEFAULT_SESSION_IDLE_GAP_MINUTES)
+            ),
+            "max_messages": int(
+                session_cfg.get("max_messages", DEFAULT_SESSION_MAX_MESSAGES)
+            ),
+            "chunk_size": int(
+                session_cfg.get("chunk_size", DEFAULT_SESSION_CHUNK_SIZE)
             ),
         }
 
@@ -546,6 +844,7 @@ class MemoryModule:
             "short_term": short_term_settings,
             "recent_limit": recent_limit,
             "session": session_settings,
+            "emotional": emotional_settings,
         }
 
         return {
@@ -555,6 +854,7 @@ class MemoryModule:
             "retrieval": retrieval_settings,
             "session": session_settings,
             "short_term": short_term_settings,
+            "emotional": emotional_settings,
         }
 
     def _search_short_term_memory(
@@ -566,7 +866,12 @@ class MemoryModule:
         if user_embedding is None or not vector_cfg:
             return None, None, {}
 
-        records = load_recent_records(SHORT_TERM_LOOKBACK_DAYS)
+        lookback_days = int(
+            short_term_cfg.get("lookback_days", DEFAULT_SHORT_TERM_LOOKBACK_DAYS)
+            or DEFAULT_SHORT_TERM_LOOKBACK_DAYS
+        )
+        lookback_days = max(1, min(lookback_days, 60))
+        records = load_recent_records(lookback_days)
         if not records:
             return None, None, {}
 
@@ -615,6 +920,16 @@ class MemoryModule:
 
         meta = {"record_id": record.id, "dialogue_ids": record.dialogue_ids}
         return match, payload_item, meta
+
+    @staticmethod
+    def _iter_chunks(
+        payloads: Sequence[Dict[str, Any]],
+        chunk_size: int,
+    ) -> Iterable[List[Dict[str, Any]]]:
+        size = max(1, int(chunk_size or 1))
+        rows = [item for item in (payloads or []) if isinstance(item, dict)]
+        for idx in range(0, len(rows), size):
+            yield rows[idx : idx + size]
 
     def _prepare_history_payload(self, row: Any) -> Dict[str, Any]:
         timestamp = (
@@ -743,6 +1058,8 @@ class MemoryModule:
         self,
         char_name: Optional[str],
         limit: int,
+        *,
+        scope: Optional[Dict[str, Any]] = None,
     ) -> List[Dict[str, Any]]:
         if not char_name:
             return []
@@ -752,7 +1069,8 @@ class MemoryModule:
         except Exception:
             return []
 
-        return list(reversed(recent))
+        filtered = self._apply_scope_filter(recent, scope)
+        return list(reversed(filtered))
 
     def _resolve_history_limit(self) -> int:
         raw_limit = config_service.get_config_value("rag.history_limit", DEFAULT_HISTORY_LIMIT)
@@ -766,6 +1084,8 @@ class MemoryModule:
         self,
         char_name: Optional[str],
         limit: int,
+        *,
+        scope: Optional[Dict[str, Any]] = None,
     ) -> List[Dict[str, Any]]:
         if not char_name or limit <= 0:
             return []
@@ -774,6 +1094,7 @@ class MemoryModule:
             history_rows = database_service.get_history(char_name, limit=limit) or []
         except Exception:
             return []
+        history_rows = self._apply_scope_filter(history_rows, scope)
 
         preview: List[Dict[str, Any]] = []
         for item in reversed(history_rows):
@@ -809,18 +1130,286 @@ class MemoryModule:
         char_name: Optional[str],
         timestamp: Optional[str],
         session_cfg: Dict[str, Any],
+        *,
+        scope: Optional[Dict[str, Any]] = None,
     ) -> List[Dict[str, Any]]:
         if not char_name or not session_cfg.get("enabled", True):
             return []
-
-        start = self._compute_session_start(
-            timestamp, session_cfg.get("window", DEFAULT_SESSION_WINDOW)
+        max_messages = int(session_cfg.get("max_messages", DEFAULT_SESSION_MAX_MESSAGES) or DEFAULT_SESSION_MAX_MESSAGES)
+        max_messages = max(32, min(max_messages, 4000))
+        idle_gap_minutes = float(
+            session_cfg.get("idle_gap_minutes", DEFAULT_SESSION_IDLE_GAP_MINUTES)
+            or DEFAULT_SESSION_IDLE_GAP_MINUTES
         )
-        try:
-            payloads = database_service.get_history_since(char_name, start) or []
-        except Exception:
-            payloads = []
-        return payloads
+        idle_gap_minutes = max(5.0, min(idle_gap_minutes, 720.0))
+        reference_dt = self._parse_timestamp(timestamp) or datetime.now(timezone.utc)
+
+        payloads = self._load_recent_messages(char_name, max_messages, scope=scope)
+        if not payloads:
+            return []
+
+        with_ts: List[Tuple[Dict[str, Any], datetime]] = []
+        for row in payloads:
+            ts = self._parse_timestamp(row.get("timestamp"))
+            if ts is None:
+                continue
+            if ts <= reference_dt + timedelta(seconds=2):
+                with_ts.append((row, ts))
+        if not with_ts:
+            return []
+
+        anchor_idx = len(with_ts) - 1
+        for idx, (_, ts) in enumerate(with_ts):
+            if ts <= reference_dt + timedelta(seconds=2):
+                anchor_idx = idx
+
+        collected: List[Dict[str, Any]] = [with_ts[anchor_idx][0]]
+        newer_ts = with_ts[anchor_idx][1]
+        for idx in range(anchor_idx - 1, -1, -1):
+            row, older_ts = with_ts[idx]
+            gap_min = (newer_ts - older_ts).total_seconds() / 60.0
+            if gap_min > idle_gap_minutes:
+                break
+            collected.append(row)
+            newer_ts = older_ts
+        collected.reverse()
+        return collected
+
+    def _run_stage_search(
+        self,
+        *,
+        query: str,
+        candidate_payloads: Sequence[Dict[str, Any]],
+        settings: Dict[str, Any],
+        query_vectors: Dict[str, Optional[List[float]]],
+    ) -> List[MemoryMatch]:
+        candidate_map: Dict[str, CandidateEntry] = {}
+        if candidate_payloads:
+            if settings["retrieval"]["keyword"]["enabled"]:
+                self._apply_keyword_candidates(
+                    query,
+                    candidate_payloads,
+                    settings["retrieval"]["keyword"],
+                    candidate_map,
+                )
+            for vector_name, vector_cfg in settings["vectors"].items():
+                if not vector_cfg["enabled"]:
+                    continue
+                query_vec = query_vectors.get(vector_name)
+                if query_vec is None:
+                    continue
+                self._apply_vector_candidates(
+                    vector_name,
+                    vector_cfg,
+                    query_vec,
+                    candidate_payloads,
+                    candidate_map,
+                )
+        return self._rerank_candidates(
+            candidate_map,
+            settings,
+            query_vectors=query_vectors,
+        )
+
+    def _search_anchor_facts(
+        self,
+        *,
+        char_name: Optional[str],
+        query: str,
+        scope: Optional[Dict[str, Any]],
+        settings: Dict[str, Any],
+        query_vectors: Dict[str, Optional[List[float]]],
+    ) -> Tuple[List[MemoryMatch], Dict[str, Any]]:
+        if not char_name:
+            return [], {}
+        character = database_service.get_or_create_character(char_name)
+        if not character:
+            return [], {}
+        query_tokens = self._tokenize(query, set(DEFAULT_KEYWORD_STOPWORDS))
+        anchors = knowledge.search_anchors(
+            character_id=character.id,
+            query_tokens=query_tokens,
+            date_keys=[],
+            limit=24,
+        )
+        if not anchors:
+            return [], {"anchors": 0}
+
+        dialogue_ids: List[str] = []
+        for anchor in anchors:
+            refs = anchor.get("refs") if isinstance(anchor, dict) else {}
+            if isinstance(refs, dict):
+                ids = refs.get("dialogue_ids")
+                if isinstance(ids, list):
+                    dialogue_ids.extend(str(item) for item in ids if str(item))
+        rows = database_service.get_history_by_ids(dialogue_ids) if dialogue_ids else []
+        payloads: List[Dict[str, Any]] = []
+        for row in rows or []:
+            payloads.append(
+                {
+                    "id": getattr(row, "id", ""),
+                    "role": getattr(row, "role", "assistant"),
+                    "content": getattr(row, "content", ""),
+                    "timestamp": getattr(row, "timestamp", ""),
+                    "runtime_meta": {},
+                }
+            )
+        payloads = self._apply_scope_filter(payloads, scope)
+        matches = self._run_stage_search(
+            query=query,
+            candidate_payloads=payloads,
+            settings=settings,
+            query_vectors=query_vectors,
+        )
+        if matches:
+            return matches, {"anchors": len(anchors), "dialogue_ids": len(dialogue_ids)}
+
+        pseudo_matches: List[MemoryMatch] = []
+        for anchor in anchors[:4]:
+            score = float(anchor.get("score") or 0.0)
+            if score <= 0:
+                continue
+            pseudo_matches.append(
+                MemoryMatch(
+                    message_id=f"anchor:{anchor.get('id')}",
+                    role="assistant",
+                    content=str(anchor.get("content") or ""),
+                    timestamp=str(anchor.get("updated_at") or ""),
+                    score=score,
+                    source="anchor_fact",
+                    details={"anchor_key": anchor.get("anchor_key"), "anchor_type": anchor.get("anchor_type")},
+                )
+            )
+        return pseudo_matches, {"anchors": len(anchors), "dialogue_ids": len(dialogue_ids)}
+
+    def _search_associative_graph(
+        self,
+        *,
+        char_name: Optional[str],
+        query: str,
+        scope: Optional[Dict[str, Any]],
+        settings: Dict[str, Any],
+        query_vectors: Dict[str, Optional[List[float]]],
+    ) -> Tuple[List[MemoryMatch], Dict[str, Any]]:
+        if not char_name:
+            return [], {}
+        character = database_service.get_or_create_character(char_name)
+        if not character:
+            return [], {}
+        query_tokens = self._tokenize(query, set(DEFAULT_KEYWORD_STOPWORDS))
+        expansions = knowledge.expand_associative_terms(
+            character_id=character.id,
+            tokens=query_tokens,
+            limit=12,
+        )
+        if not expansions:
+            return [], {"expansions": 0}
+
+        expanded_tokens = list(query_tokens)
+        expanded_tokens.extend(str(item.get("term") or "").strip().lower() for item in expansions)
+        expanded_tokens = [item for item in expanded_tokens if item]
+        anchors = knowledge.search_anchors(
+            character_id=character.id,
+            query_tokens=expanded_tokens,
+            date_keys=[],
+            limit=24,
+        )
+        if not anchors:
+            return [], {"expansions": len(expansions), "anchors": 0}
+
+        dialogue_ids: List[str] = []
+        for anchor in anchors:
+            refs = anchor.get("refs") if isinstance(anchor, dict) else {}
+            if isinstance(refs, dict):
+                ids = refs.get("dialogue_ids")
+                if isinstance(ids, list):
+                    dialogue_ids.extend(str(item) for item in ids if str(item))
+        rows = database_service.get_history_by_ids(dialogue_ids) if dialogue_ids else []
+        payloads: List[Dict[str, Any]] = []
+        for row in rows or []:
+            payloads.append(
+                {
+                    "id": getattr(row, "id", ""),
+                    "role": getattr(row, "role", "assistant"),
+                    "content": getattr(row, "content", ""),
+                    "timestamp": getattr(row, "timestamp", ""),
+                    "runtime_meta": {},
+                }
+            )
+        payloads = self._apply_scope_filter(payloads, scope)
+        matches = self._run_stage_search(
+            query=query,
+            candidate_payloads=payloads,
+            settings=settings,
+            query_vectors=query_vectors,
+        )
+        if matches:
+            return matches, {"expansions": len(expansions), "anchors": len(anchors), "dialogue_ids": len(dialogue_ids)}
+        return [], {"expansions": len(expansions), "anchors": len(anchors), "dialogue_ids": len(dialogue_ids)}
+
+    @staticmethod
+    def _resolve_message_scope(message_payload: Dict[str, Any]) -> Dict[str, Any]:
+        runtime_meta = message_payload.get("runtime_meta")
+        if not isinstance(runtime_meta, dict):
+            return {"channel": "main_chat"}
+        transport = runtime_meta.get("transport")
+        if not isinstance(transport, dict):
+            return {"channel": "main_chat"}
+        name = str(transport.get("name") or "").strip().lower()
+        if name == "telegram":
+            scope: Dict[str, Any] = {"channel": "telegram"}
+            try:
+                chat_id = int(transport.get("chat_id"))
+                if chat_id != 0:
+                    scope["chat_id"] = chat_id
+            except Exception:
+                pass
+            return scope
+        return {"channel": "main_chat"}
+
+    @staticmethod
+    def _apply_scope_filter(
+        payloads: Sequence[Dict[str, Any]],
+        scope: Optional[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        rows = [item for item in (payloads or []) if isinstance(item, dict)]
+        channel = str((scope or {}).get("channel") or "main_chat").strip().lower()
+        if channel == "telegram":
+            chat_id = (scope or {}).get("chat_id")
+            filtered: List[Dict[str, Any]] = []
+            for row in rows:
+                runtime_meta = row.get("runtime_meta")
+                if not isinstance(runtime_meta, dict):
+                    continue
+                transport = runtime_meta.get("transport")
+                if not isinstance(transport, dict):
+                    continue
+                if str(transport.get("name") or "").strip().lower() != "telegram":
+                    continue
+                if chat_id is not None:
+                    try:
+                        if int(transport.get("chat_id") or 0) != int(chat_id):
+                            continue
+                    except Exception:
+                        continue
+                filtered.append(row)
+            return filtered
+
+        # Main chat scope: hide external transports (telegram and others).
+        filtered = []
+        for row in rows:
+            runtime_meta = row.get("runtime_meta")
+            if not isinstance(runtime_meta, dict):
+                filtered.append(row)
+                continue
+            transport = runtime_meta.get("transport")
+            if not isinstance(transport, dict):
+                filtered.append(row)
+                continue
+            name = str(transport.get("name") or "").strip().lower()
+            if name in {"", "main_chat"}:
+                filtered.append(row)
+        return filtered
 
     def _merge_payloads(
         self,

@@ -1,9 +1,14 @@
 export interface DebugLogsDto {
     session_id: string;
-    logs: LogsDto[]
+    logs: LogsDto[];
+    total?: number;
+    offset?: number;
+    limit?: number | null;
+    has_more?: boolean;
 }
 
 export interface LogsDto {
+    msg?: string;
     details: {
         context: string;
         error: string;
@@ -14,5 +19,8 @@ export interface LogsDto {
         severity: string;
     }
     session_id: string;
+    language?: string;
+    message_key?: string | null;
     timestamp: string;
+    status?: string;
 }

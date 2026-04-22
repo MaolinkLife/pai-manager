@@ -48,7 +48,7 @@ class VisionAnalyzer:
         }
 
         # YOLO detector
-        from services.yolo_detector import YOLODetector
+        from modules.vision.yolo import YOLODetector
 
         yolo_weights = str(Path(VISION_MODELS_DIR) / "yolov8n.pt")
         self.yolo_detector = YOLODetector(

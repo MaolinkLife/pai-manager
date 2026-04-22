@@ -4,8 +4,8 @@
 # Depends on: database_service
 # =========================================================
 
-from services.database_service import get_full_history
-from services.logger_service import log_audit_entry, AuditStatus
+from modules.database.service import get_full_history
+from modules.system.logger import log_audit_entry, AuditStatus
 import re
 
 # Extract keywords (4+ characters, no stop words yet)

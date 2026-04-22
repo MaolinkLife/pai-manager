@@ -23,6 +23,11 @@ class SystemConfig(BaseModel):
     language: str = "en-US"
     system_prompt: str = ""  # будет подтягиваться из characters/{char_name}.yaml
     theme: str = "default"
+    runtime: Dict[str, Any] = Field(
+        default_factory=lambda: {
+            "model_memory_profile": "low_memory_strict",
+        }
+    )
 
 
 class CoreConfig(BaseModel):
@@ -91,8 +96,30 @@ class ModulesConfig(BaseModel):
     gaming: bool = False
     alarm: bool = False
     discord: bool = False
+    telegram: bool = False
     rag: bool = True
     visual: bool = True
+
+
+class CommunicationChannelConfig(BaseModel):
+    enabled: bool = True
+    allow_fallback: bool = False
+
+
+class CommunicationChannelsConfig(BaseModel):
+    main_chat: CommunicationChannelConfig = CommunicationChannelConfig(
+        enabled=True,
+        allow_fallback=False,
+    )
+    telegram: CommunicationChannelConfig = CommunicationChannelConfig(
+        enabled=True,
+        allow_fallback=False,
+    )
+
+
+class CommunicationConfig(BaseModel):
+    priority: List[str] = Field(default_factory=lambda: ["main_chat", "telegram"])
+    channels: CommunicationChannelsConfig = CommunicationChannelsConfig()
 
 
 class AudioConfig(BaseModel):
@@ -139,6 +166,12 @@ class VisionConfig(BaseModel):
     vision_modules: Dict[str, Any] = {
         "apple_vision": {"model_id": "apple/FastVLM-1.5B", "max_tokens": 128},
         "llava": {"model_id": "llava-hf/llava-1.5-7b-hf", "max_tokens": 128},
+        "ollama_vision": {
+            "model": "llava:latest",
+            "max_tokens": 160,
+            "probe_enabled": True,
+            "probe_cache_seconds": 300,
+        },
     }
 
 
@@ -290,12 +323,289 @@ class MoralMatrixConfig(BaseModel):
 
 
 class MemoryConfig(BaseModel):
+    deep_memory_enabled: bool = True
+    force_deep_memory: bool = False
     recent_limit: int = 32
     similarity_threshold: float = 0.7
     session_window: str = "day"
     session_enabled: bool = True
     embedding_provider: str = "auto"
     embedding_model: str = "nomic-embed-text"
+
+
+class SynthesisSdWebUIConfig(BaseModel):
+    enabled: bool = False
+    base_url: str = "http://127.0.0.1:7860"
+    bearer_token: str = ""
+    timeout_sec: int = 180
+    checkpoint: str = ""
+    sampler_name: str = "DPM++ 2M"
+    scheduler: str = "Automatic"
+    cfg_scale_default: float = 2.0
+
+
+class SynthesisComfyUIConfig(BaseModel):
+    enabled: bool = False
+    base_url: str = "http://127.0.0.1:8188"
+    websocket_url: str = "ws://127.0.0.1:8188/ws"
+    timeout_sec: int = 180
+    default_workflow: str = ""
+    default_model: str = ""
+
+
+class SynthesisDiffusersConfig(BaseModel):
+    enabled: bool = True
+    device: str = "auto"
+    default_model: str = "z_image_turbo"
+    local_models_path: str = ""
+    cache_dir: str = ""
+    torch_dtype: str = "auto"
+
+
+class SynthesisPromptingConfig(BaseModel):
+    enabled: bool = True
+    max_attempts: int = 3
+    assess_enabled: bool = True
+    quality_threshold: float = 0.72
+    appearance_prompt: str = ""
+    default_negative_prompt: str = "(text:2), (signature:2), raw photo"
+    visual_profile: dict = Field(
+        default_factory=lambda: {
+            "character_name": "PAI",
+            "appearance_textarea": "",
+            "default_outfit": "",
+            "default_environment": "",
+            "style_preset": "anime",
+            "render_profile": "default_anime",
+            "selfie_bias": 0.85,
+            "environment_bias": 0.10,
+            "symbolic_bias": 0.05,
+            "anti_repetition_strength": 0.65,
+            "use_time_of_day": True,
+            "use_season": True,
+            "use_weather": True,
+            "use_relation_state": True,
+            "use_recent_topics": True,
+            "selfie_composition_base": "",
+            "selfie_composition_pool_override": "",
+            "environment_composition_pool_override": "",
+            "allow_self_images": True,
+            "allow_environment_images": True,
+            "allow_symbolic_images": True,
+        }
+    )
+
+
+class SynthesisConfig(BaseModel):
+    sd_webui: SynthesisSdWebUIConfig = SynthesisSdWebUIConfig()
+    comfyui: SynthesisComfyUIConfig = SynthesisComfyUIConfig()
+    diffusers: SynthesisDiffusersConfig = SynthesisDiffusersConfig()
+    prompting: SynthesisPromptingConfig = SynthesisPromptingConfig()
+
+
+class TelegramRoutingConfig(BaseModel):
+    allow_private: bool = True
+    allow_groups: bool = True
+    allow_channels: bool = True
+    write_private: bool = True
+    write_groups: bool = True
+    write_channels: bool = False
+    read_only_non_private: bool = True
+    groups_require_mention: bool = False
+    allowed_chat_ids: List[int] = Field(default_factory=list)
+
+
+class TelegramLockdownConfig(BaseModel):
+    enabled: bool = False
+    owner_chat_id: int = 0
+
+
+class TelegramPresenceConfig(BaseModel):
+    enabled: bool = True
+    auto_offline_after_send: bool = True
+
+
+class TelegramChannelsConfig(BaseModel):
+    read_enabled: bool = True
+    mark_read_enabled: bool = True
+    reflect_enabled: bool = False
+    reflection_instruction: str = (
+        "Reflect shortly on key facts and implications from this channel post."
+    )
+
+
+class TelegramWritePolicyConfig(BaseModel):
+    allow_private: bool = True
+    allow_groups: bool = False
+    allow_channels: bool = False
+    allowed_private_chat_ids: List[int] = Field(default_factory=list)
+    denied_chat_ids: List[int] = Field(default_factory=list)
+    sandbox_chat_ids: List[int] = Field(default_factory=list)
+
+
+class TelegramReflectionConfig(BaseModel):
+    enabled: bool = True
+    source_chat_ids: List[int] = Field(default_factory=list)
+    source_chat_kinds: List[str] = Field(default_factory=lambda: ["channel", "group"])
+    target_chat_id: int = 0
+    prompt: str = (
+        "Read the public Telegram post below and write a short private reflection for the owner. "
+        "Do not address the public chat. Do not write as a reply to the channel. "
+        "Summarize what happened, what the PAI thinks about it, and why it may matter."
+    )
+    include_source_excerpt: bool = True
+    include_source_link: bool = True
+    max_source_excerpt_chars: int = 800
+    max_reflection_length: int = 1200
+    min_source_text_chars: int = 25
+    cooldown_per_source_chat_seconds: int = 90
+    dedup_enabled: bool = True
+
+
+class TelegramQuietHoursConfig(BaseModel):
+    enabled: bool = True
+    start: str = "00:00"
+    end: str = "09:00"
+
+
+class TelegramAntiSpamConfig(BaseModel):
+    per_chat_max_messages: int = 5
+    global_max_messages: int = 24
+    window_seconds: float = 15.0
+    min_delay_seconds: float = 0.7
+    typing_delay_enabled: bool = True
+    typing_ms_per_char: float = 22.0
+    typing_min_ms: float = 220.0
+    typing_max_ms: float = 2200.0
+
+
+class TelegramAntiRepeatConfig(BaseModel):
+    history_size: int = 32
+    similarity_threshold: float = 0.92
+    jaccard_threshold: float = 0.88
+    semantic_enabled: bool = True
+    semantic_history_size: int = 32
+    semantic_max_similarity_threshold: float = 0.75
+    semantic_avg_similarity_threshold: float = 0.73
+    semantic_provider: str = "auto"
+    semantic_model: str = "nomic-embed-text"
+    enforce_for_incoming_dialogs: bool = False
+    retry_on_block: bool = True
+    retry_attempts: int = 1
+    retry_use_memory: bool = True
+    retry_memory_chars: int = 1200
+
+
+class TelegramInitiativeConfig(BaseModel):
+    enabled: bool = False
+    check_every_seconds: int = 60
+    idle_minutes: int = 60
+    min_gap_minutes: int = 30
+    max_proactive_per_day: int = 3
+    morning_checkin_enabled: bool = True
+    evening_checkin_enabled: bool = True
+    daily_digest_enabled: bool = True
+    daily_digest_window_start: str = "20:00"
+    daily_digest_window_end: str = "22:00"
+    owner_chat_only: bool = True
+    bootstrap_from_catalog: bool = True
+    bootstrap_max_chats: int = 64
+    allow_private: bool = True
+    allow_groups: bool = False
+    prompt_template: str = (
+        "You have not heard from this chat for {idle_minutes} minutes. "
+        "Send one short warm proactive message, if appropriate."
+    )
+
+
+class TelegramAutonomousInboxConfig(BaseModel):
+    enabled: bool = False
+    check_every_seconds: int = 45
+    max_candidates: int = 8
+    max_actions_per_cycle: int = 2
+    include_private: bool = True
+    include_groups: bool = True
+    include_channels: bool = True
+    private_pause_probability: float = 0.2
+    prompt_template: str = (
+        "You are online and received unread events in Telegram. "
+        "Choose one action: open chat, answer, read channel, or pause."
+    )
+
+
+class TelegramToolSwitchesConfig(BaseModel):
+    get_telegram_chats: bool = True
+    open_chat_by_id: bool = True
+    get_chat_photo: bool = True
+    ask_memory: bool = True
+    take_photo: bool = True
+    send_generated_photo: bool = True
+    send_telegram_message: bool = True
+    ask_google: bool = True
+    wait_pause: bool = True
+
+
+class TelegramOrchestrationConfig(BaseModel):
+    enabled: bool = True
+    allow_llm_tool_actions: bool = False
+    max_rounds: int = 4
+    max_tool_output_chars: int = 3000
+    max_manual_sends_per_turn: int = 3
+    require_tool_call: bool = False
+    max_no_tool_retries: int = 2
+    tools: TelegramToolSwitchesConfig = TelegramToolSwitchesConfig()
+
+
+class TelegramImageConfig(BaseModel):
+    enabled: bool = True
+    command_prefix: str = "/image"
+    default_model: str = ""
+    negative_prompt: str = ""
+    width: int = 1024
+    height: int = 1024
+    num_inference_steps: int = 9
+    guidance_scale: float = 0.0
+    caption_template: str = "Generated image ✨"
+    autonomous_random_enabled: bool = False
+    autonomous_random_probability: float = 0.5
+
+
+class TelegramMediaConfig(BaseModel):
+    ingest_enabled: bool = True
+    max_incoming_media_bytes: int = 2_000_000
+
+
+class TelegramFormattingConfig(BaseModel):
+    max_chars_per_message: int = 700
+    max_messages_per_turn: int = 3
+
+
+class TelegramConfig(BaseModel):
+    enabled: bool = False
+    mode: str = "mtproto"
+    api_id: int = 0
+    api_hash: str = ""
+    session_name: str = "z_waif"
+    session_dir: str = "data/telegram"
+    phone_number: str = ""
+    bot_token: str = ""
+    queue_size: int = 256
+    history_max_messages: int = 24
+    lockdown: TelegramLockdownConfig = TelegramLockdownConfig()
+    presence: TelegramPresenceConfig = TelegramPresenceConfig()
+    routing: TelegramRoutingConfig = TelegramRoutingConfig()
+    write_policy: TelegramWritePolicyConfig = TelegramWritePolicyConfig()
+    channels: TelegramChannelsConfig = TelegramChannelsConfig()
+    reflection: TelegramReflectionConfig = TelegramReflectionConfig()
+    quiet_hours: TelegramQuietHoursConfig = TelegramQuietHoursConfig()
+    anti_spam: TelegramAntiSpamConfig = TelegramAntiSpamConfig()
+    anti_repeat: TelegramAntiRepeatConfig = TelegramAntiRepeatConfig()
+    initiative: TelegramInitiativeConfig = TelegramInitiativeConfig()
+    autonomous_inbox: TelegramAutonomousInboxConfig = TelegramAutonomousInboxConfig()
+    orchestration: TelegramOrchestrationConfig = TelegramOrchestrationConfig()
+    image: TelegramImageConfig = TelegramImageConfig()
+    media: TelegramMediaConfig = TelegramMediaConfig()
+    formatting: TelegramFormattingConfig = TelegramFormattingConfig()
 
 
 class GeneratorProviderBaseConfig(BaseModel):
@@ -352,12 +662,15 @@ class AppConfig(BaseModel):
     voice: "VoiceConfig" = None
     stt: "STTConfig" = None
     modules: "ModulesConfig" = None
+    communication: "CommunicationConfig" = None
     audio: "AudioConfig" = None
     vision: "VisionConfig" = None
     rag: "RAGConfig" = None
     analyzer: "AnalyzerConfig" = None
     moral: "MoralMatrixConfig" = None
     memory: "MemoryConfig" = None
+    synthesis: "SynthesisConfig" = None
+    telegram: "TelegramConfig" = None
     api: "APIConfig" = None
     generate_settings: "GenerateSettingsConfig" = None
 

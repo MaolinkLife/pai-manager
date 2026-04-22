@@ -1,4 +1,4 @@
-﻿import asyncio
+import asyncio
 import re
 import numpy as np
 import sounddevice as sd
@@ -10,10 +10,11 @@ import os
 import wave
 import json
 
-from services import config_service
+from modules.system import config as config_service
 from core.decision_layer import decision_layer
 from core.instructor import Instructor
 from core.websocket_manager import manager
+from core.channel_router import can_accept_ingress
 from modules.tts.state import voice_state, VoiceStage
 from modules.tts.service import (
     log_last_output,
@@ -21,10 +22,10 @@ from modules.tts.service import (
     force_cut_voice,
     check_if_speaking,
 )
-from services import stt_service
+from modules.voice import stt as stt_service
 from modules.generative.conversation import generate_stream
-from services.logger_service import log_audit_entry, AuditStatus
-from services.localization_service import get_text
+from modules.system.logger import log_audit_entry, AuditStatus
+from modules.system.localization import get_text
 from modules.system.service import get_active_character_name
 
 try:
@@ -322,6 +323,21 @@ class VADListener:
             wf.writeframes(audio.tobytes())
 
     async def handle_transcript(self, transcript):
+        channel_allowed, reason = can_accept_ingress("main_chat")
+        if not channel_allowed:
+            blocked_message = get_text(
+                "logger.vad_main_chat_disabled",
+                default="[VAD] Main chat is disabled by communication policy",
+            )
+            log_audit_entry(
+                event_type="vad_main_chat_disabled",
+                msg=blocked_message,
+                status=AuditStatus.INFO,
+                details={"reason": reason},
+                message_key="logger.vad_main_chat_disabled",
+            )
+            return
+
         transcript_received_message = get_text(
             "logger.vad_transcript_received",
             default="[VAD] Transcript received, checking triggers",
@@ -553,6 +569,7 @@ class VADListener:
                 formatted_history = await instructor.format_for_api(
                     processing_result["system_prompt"],
                     processing_result["user_message"],
+                    memory_context=processing_result.get("memory_context"),
                 )
 
                 async def broadcast_send(payload: dict) -> bool:

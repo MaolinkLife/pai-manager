@@ -8,7 +8,7 @@
 # ========================================================
 
 from fastapi import APIRouter, HTTPException, Request, status
-from services.character_service import (
+from modules.system.character import (
     get_active_character_for_user,
     get_character_prompt,
     import_character_yaml_text,
@@ -17,7 +17,7 @@ from services.character_service import (
     save_character_prompt,
     set_active_character_for_user,
 )
-from services import auth_service
+from modules.system import auth as auth_service
 from modules.system import service as system_service
 
 router = APIRouter(prefix="/api/config", tags=["Config"])

@@ -28,6 +28,11 @@ class ImageGenerationRequest:
     num_inference_steps: int = 9
     guidance_scale: float = 0.0
     seed: Optional[int] = None
+    # Optional per-request override. None -> use global config.
+    use_prompt_engineering: Optional[bool] = None
+    use_visual_intent: Optional[bool] = None
+    visual_intent_input: Optional[Dict[str, Any]] = None
+    visual_profile: Optional[Dict[str, Any]] = None
 
 
 @dataclass

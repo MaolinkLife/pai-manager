@@ -179,11 +179,11 @@
                 <div formGroupName="ollama">
                     <div class="form-group">
                         <label for="ollamaModel">Model</label>
-                        <app-ui-input
+                        <app-ui-select
                             id="ollamaModel"
-                            type="text"
+                            [options]="ollamaModelOptions"
                             formControlName="model"
-                        ></app-ui-input>
+                        ></app-ui-select>
                     </div>
 
                     <div class="form-group">

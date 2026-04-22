@@ -3,7 +3,7 @@ export const environment = {
     apiBaseUrl: '/api',
     uiFeatures: {
         audit: false,
-        diary: false,
+        diary: true,
         tasks: false,
     },
 };

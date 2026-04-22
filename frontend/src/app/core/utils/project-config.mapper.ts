@@ -47,6 +47,9 @@ export const mapProjectConfigDtoToModel = (dto: ProjectConfigDto): ProjectConfig
     voice: mapVoiceDtoToModel(dto.voice),
     modules: mapModulesDtoToModel(dto.modules),
     connector: mapConnectorDtoToModel(dto.connector),
+    telegram: dto.telegram,
+    communication: dto.communication,
+    synthesis: dto.synthesis,
     vision: mapVisionDtoToModel(dto.vision),
     audio: mapAudioDtoToModel(dto.audio),
     rag: mapRagDtoToModel(dto.rag),
@@ -62,6 +65,9 @@ export const mapProjectConfigModelToDto = (model: ProjectConfig): ProjectConfigD
     voice: mapVoiceModelToDto(model.voice),
     modules: mapModulesModelToDto(model.modules),
     connector: mapConnectorModelToDto(model.connector),
+    telegram: model.telegram,
+    communication: model.communication,
+    synthesis: model.synthesis,
     vision: mapVisionModelToDto(model.vision),
     audio: mapAudioModelToDto(model.audio),
     rag: mapRagModelToDto(model.rag),
@@ -110,6 +116,15 @@ export const mapPartialModelToDto = (
                 break;
             case 'connector':
                 dto.connector = mapConnectorModelToDto(model.connector!);
+                break;
+            case 'telegram':
+                dto.telegram = model.telegram as any;
+                break;
+            case 'communication':
+                dto.communication = model.communication as any;
+                break;
+            case 'synthesis':
+                dto.synthesis = model.synthesis as any;
                 break;
             case 'vision':
                 dto.vision = mapVisionModelToDto(model.vision!);

@@ -88,6 +88,12 @@
             min-height: 100px;
         }
 
+        .form-hint {
+            margin-top: 6px;
+            font-size: 12px;
+            color: color-mix(in srgb, var(--color-text) 72%, white 28%);
+        }
+
         span {
             color: var(--color-text);
             margin-left: 10px;
@@ -172,6 +178,12 @@
         gap: 0 12px;
     }
 
+    .telegram-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0 12px;
+    }
+
     .tunnel-status {
         margin-top: 4px;
         padding: 10px 12px;
@@ -207,6 +219,51 @@
         }
     }
 
+    .telegram-status {
+        margin-top: 4px;
+        padding: 10px 12px;
+        border-radius: 10px;
+        border: 1px solid var(--color-border);
+        background: color-mix(in srgb, var(--color-surface) 86%, black 14%);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #9ca3af;
+        }
+
+        .status-text {
+            font-size: 13px;
+            color: var(--color-text);
+        }
+
+        .status-meta {
+            font-size: 12px;
+            color: color-mix(in srgb, var(--color-text) 75%, white 25%);
+        }
+    }
+
+    .telegram-status--running {
+        .status-dot {
+            background: #34d399;
+        }
+    }
+
+    .telegram-error {
+        margin-top: 8px;
+        padding: 8px 10px;
+        border-radius: 8px;
+        border: 1px solid color-mix(in srgb, #ef4444 45%, var(--color-border));
+        background: color-mix(in srgb, #ef4444 12%, var(--color-surface));
+        color: color-mix(in srgb, #ef4444 78%, var(--color-text-active));
+        font-size: 12px;
+    }
+
     .tunnel-status--running {
         .status-dot {
             background: #34d399;
@@ -239,5 +296,49 @@
                 cursor: not-allowed;
             }
         }
+    }
+
+    .telegram-actions {
+        margin-top: 12px;
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+
+        button {
+            background: color-mix(in srgb, var(--color-surface) 75%, black 25%);
+            color: var(--color-text-active);
+            border: 1px solid var(--color-border);
+            padding: 8px 12px;
+            border-radius: var(--radius);
+            cursor: pointer;
+            font-family: var(--font-family);
+            transition: border-color 0.2s ease, background 0.2s ease;
+
+            &:hover:not(:disabled) {
+                border-color: color-mix(in srgb, var(--color-accent) 60%, transparent);
+                background: color-mix(in srgb, var(--color-surface) 65%, black 35%);
+            }
+
+            &:disabled {
+                opacity: 0.5;
+                cursor: not-allowed;
+            }
+        }
+    }
+
+    .telegram-auth {
+        margin-top: 12px;
+        padding-top: 12px;
+        border-top: 1px dashed var(--color-border);
+    }
+
+    .communication-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0 12px;
+    }
+
+    .communication-channel {
+        padding: 6px 0;
     }
 }

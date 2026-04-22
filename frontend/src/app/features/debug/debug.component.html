@@ -1,4 +1,7 @@
 <div class="filters">
+    <div class="debug-session" *ngIf="currentSessionId">
+        Session: {{ currentSessionId }}
+    </div>
     <!-- первая строка: источники -->
     <div class="chips">
         <span
@@ -43,9 +46,9 @@
     </div>
 </div>
 
-<div class="debug-log">
+<div class="debug-log" #debugLogContainer (scroll)="onLogScroll(debugLogContainer)">
     <div
-        *ngFor="let log of filteredLogs; let i = index"
+        *ngFor="let log of visibleLogs; let i = index"
         class="log-entry"
         [ngClass]="getLogClass(log)"
     >
@@ -101,5 +104,12 @@
             <span class="meta-source">{{ log.meta?.source }}</span>
             <span class="meta-severity">{{ log.statusLabel }}</span>
         </div>
+    </div>
+
+    <div class="log-loading" *ngIf="isInitialLoading">Loading records...</div>
+    <div class="log-loading" *ngIf="!isInitialLoading && isLoadingMore">Loading more records...</div>
+    <div class="log-loading" *ngIf="!isInitialLoading && !visibleLogs.length">No debug records.</div>
+    <div class="log-loading" *ngIf="!isInitialLoading && visibleLogs.length && !hasMoreLogs">
+        End of log list.
     </div>
 </div>

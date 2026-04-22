@@ -1,0 +1,299 @@
+<div class="settings-wrapper">
+    <form [formGroup]="mediaForm" (ngSubmit)="saveChanges()" class="settings-form">
+        <h2>🎨 Media Generation Settings</h2>
+
+        <div class="section" formGroupName="sd_webui">
+            <h3>Stable Diffusion WebUI</h3>
+            <div class="form-group">
+                <label class="checkbox">
+                    <input type="checkbox" formControlName="enabled" />
+                    Enable SD WebUI API provider
+                </label>
+            </div>
+            <div class="grid">
+                <div class="form-group">
+                    <label for="sd-webui-base-url">Base URL</label>
+                    <app-ui-input id="sd-webui-base-url" type="text" formControlName="base_url"></app-ui-input>
+                </div>
+                <div class="form-group">
+                    <label for="sd-webui-bearer-token">Bearer Token</label>
+                    <app-ui-input id="sd-webui-bearer-token" type="password" formControlName="bearer_token"></app-ui-input>
+                </div>
+                <div class="form-group">
+                    <label for="sd-webui-timeout">Timeout (sec)</label>
+                    <app-ui-input id="sd-webui-timeout" type="number" formControlName="timeout_sec"></app-ui-input>
+                </div>
+                <div class="form-group">
+                    <label for="sd-webui-checkpoint">Checkpoint</label>
+                    <app-ui-input id="sd-webui-checkpoint" type="text" formControlName="checkpoint"></app-ui-input>
+                </div>
+                <div class="form-group">
+                    <label for="sd-webui-sampler">Sampler</label>
+                    <app-ui-input id="sd-webui-sampler" type="text" formControlName="sampler_name"></app-ui-input>
+                </div>
+                <div class="form-group">
+                    <label for="sd-webui-scheduler">Scheduler</label>
+                    <app-ui-input id="sd-webui-scheduler" type="text" formControlName="scheduler"></app-ui-input>
+                </div>
+                <div class="form-group">
+                    <label for="sd-webui-cfg-scale">Default CFG Scale</label>
+                    <app-ui-input id="sd-webui-cfg-scale" type="number" formControlName="cfg_scale_default"></app-ui-input>
+                </div>
+            </div>
+        </div>
+
+        <div class="section" formGroupName="comfyui">
+            <h3>ComfyUI</h3>
+            <div class="form-group">
+                <label class="checkbox">
+                    <input type="checkbox" formControlName="enabled" />
+                    Enable ComfyUI provider
+                </label>
+            </div>
+            <div class="grid">
+                <div class="form-group">
+                    <label for="comfy-base-url">Base URL</label>
+                    <app-ui-input id="comfy-base-url" type="text" formControlName="base_url"></app-ui-input>
+                </div>
+                <div class="form-group">
+                    <label for="comfy-websocket-url">Websocket URL</label>
+                    <app-ui-input id="comfy-websocket-url" type="text" formControlName="websocket_url"></app-ui-input>
+                </div>
+                <div class="form-group">
+                    <label for="comfy-timeout">Timeout (sec)</label>
+                    <app-ui-input id="comfy-timeout" type="number" formControlName="timeout_sec"></app-ui-input>
+                </div>
+                <div class="form-group">
+                    <label for="comfy-workflow">Default workflow</label>
+                    <app-ui-input id="comfy-workflow" type="text" formControlName="default_workflow"></app-ui-input>
+                </div>
+                <div class="form-group">
+                    <label for="comfy-model">Default model</label>
+                    <app-ui-input id="comfy-model" type="text" formControlName="default_model"></app-ui-input>
+                </div>
+            </div>
+        </div>
+
+        <div class="section" formGroupName="diffusers">
+            <h3>Diffusers (direct model)</h3>
+            <div class="form-group">
+                <label class="checkbox">
+                    <input type="checkbox" formControlName="enabled" />
+                    Enable Diffusers provider
+                </label>
+            </div>
+            <div class="grid">
+                <div class="form-group">
+                    <label for="diffusers-device">Device</label>
+                    <app-ui-input id="diffusers-device" type="text" formControlName="device"></app-ui-input>
+                </div>
+                <div class="form-group">
+                    <label for="diffusers-model">Default model</label>
+                    <app-ui-input id="diffusers-model" type="text" formControlName="default_model"></app-ui-input>
+                </div>
+                <div class="form-group">
+                    <label for="diffusers-path">Local models path</label>
+                    <app-ui-input id="diffusers-path" type="text" formControlName="local_models_path"></app-ui-input>
+                </div>
+                <div class="form-group">
+                    <label for="diffusers-cache">Cache dir</label>
+                    <app-ui-input id="diffusers-cache" type="text" formControlName="cache_dir"></app-ui-input>
+                </div>
+                <div class="form-group">
+                    <label for="diffusers-dtype">Torch dtype</label>
+                    <app-ui-input id="diffusers-dtype" type="text" formControlName="torch_dtype"></app-ui-input>
+                </div>
+            </div>
+        </div>
+
+        <div class="section" formGroupName="prompting">
+            <h3>Character & Prompting</h3>
+            <div class="form-group checkbox-group">
+                <label class="checkbox">
+                    <input type="checkbox" formControlName="enabled" />
+                    Enable prompt engineering loop
+                </label>
+                <label class="checkbox">
+                    <input type="checkbox" formControlName="assess_enabled" />
+                    Enable post-generation quality assessment
+                </label>
+            </div>
+            <div class="grid">
+                <div class="form-group">
+                    <label for="prompting-max-attempts">Max attempts</label>
+                    <app-ui-input id="prompting-max-attempts" type="number" formControlName="max_attempts"></app-ui-input>
+                </div>
+                <div class="form-group">
+                    <label for="prompting-threshold">Quality threshold (0..1)</label>
+                    <app-ui-input id="prompting-threshold" type="number" formControlName="quality_threshold"></app-ui-input>
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="prompting-appearance">Character appearance prompt</label>
+                <app-ui-textarea
+                    id="prompting-appearance"
+                    [rows]="5"
+                    [autoResize]="true"
+                    formControlName="appearance_prompt"
+                    placeholder="Describe stable appearance: hair, eyes, style, age, mood, signature traits."
+                ></app-ui-textarea>
+            </div>
+            <div class="form-group">
+                <label for="prompting-negative">Default negative prompt</label>
+                <app-ui-textarea
+                    id="prompting-negative"
+                    [rows]="3"
+                    [autoResize]="true"
+                    formControlName="default_negative_prompt"
+                ></app-ui-textarea>
+            </div>
+
+            <div class="subsection" formGroupName="visual_profile">
+                <h4>Visual Profile (UI-first)</h4>
+                <div class="grid">
+                    <div class="form-group">
+                        <label for="vp-character-name">Character name</label>
+                        <app-ui-input id="vp-character-name" type="text" formControlName="character_name"></app-ui-input>
+                    </div>
+                    <div class="form-group">
+                        <label for="vp-style-preset">Style preset</label>
+                        <app-ui-select id="vp-style-preset" formControlName="style_preset" [options]="stylePresetOptions"></app-ui-select>
+                    </div>
+                    <div class="form-group">
+                        <label for="vp-render-profile">Render profile</label>
+                        <app-ui-select id="vp-render-profile" formControlName="render_profile" [options]="renderProfileOptions"></app-ui-select>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="vp-appearance-root">Appearance root</label>
+                    <app-ui-textarea
+                        id="vp-appearance-root"
+                        [rows]="5"
+                        [autoResize]="true"
+                        formControlName="appearance_textarea"
+                        placeholder="Main identity anchor (hair, eyes, signature traits, style)."
+                    ></app-ui-textarea>
+                </div>
+
+                <div class="grid">
+                    <div class="form-group">
+                        <label for="vp-default-outfit">Default outfit (optional)</label>
+                        <app-ui-textarea
+                            id="vp-default-outfit"
+                            [rows]="3"
+                            [autoResize]="true"
+                            formControlName="default_outfit"
+                        ></app-ui-textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="vp-default-environment">Default environment (optional)</label>
+                        <app-ui-textarea
+                            id="vp-default-environment"
+                            [rows]="3"
+                            [autoResize]="true"
+                            formControlName="default_environment"
+                        ></app-ui-textarea>
+                    </div>
+                </div>
+
+                <div class="grid">
+                    <div class="form-group">
+                        <label for="vp-selfie-bias">Selfie bias (0..1)</label>
+                        <app-ui-input id="vp-selfie-bias" type="number" formControlName="selfie_bias"></app-ui-input>
+                    </div>
+                    <div class="form-group">
+                        <label for="vp-environment-bias">Environment bias (0..1)</label>
+                        <app-ui-input id="vp-environment-bias" type="number" formControlName="environment_bias"></app-ui-input>
+                    </div>
+                    <div class="form-group">
+                        <label for="vp-symbolic-bias">Symbolic bias (0..1)</label>
+                        <app-ui-input id="vp-symbolic-bias" type="number" formControlName="symbolic_bias"></app-ui-input>
+                    </div>
+                    <div class="form-group">
+                        <label for="vp-anti-repeat">Anti repetition strength (0..1)</label>
+                        <app-ui-input id="vp-anti-repeat" type="number" formControlName="anti_repetition_strength"></app-ui-input>
+                    </div>
+                </div>
+
+                <div class="form-group checkbox-group">
+                    <label class="checkbox">
+                        <input type="checkbox" formControlName="allow_self_images" />
+                        Allow self images
+                    </label>
+                    <label class="checkbox">
+                        <input type="checkbox" formControlName="allow_environment_images" />
+                        Allow environment images
+                    </label>
+                    <label class="checkbox">
+                        <input type="checkbox" formControlName="allow_symbolic_images" />
+                        Allow symbolic images
+                    </label>
+                </div>
+
+                <div class="form-group checkbox-group">
+                    <label class="checkbox">
+                        <input type="checkbox" formControlName="use_time_of_day" />
+                        Use time of day
+                    </label>
+                    <label class="checkbox">
+                        <input type="checkbox" formControlName="use_season" />
+                        Use season
+                    </label>
+                    <label class="checkbox">
+                        <input type="checkbox" formControlName="use_weather" />
+                        Use weather
+                    </label>
+                    <label class="checkbox">
+                        <input type="checkbox" formControlName="use_relation_state" />
+                        Use relation state
+                    </label>
+                    <label class="checkbox">
+                        <input type="checkbox" formControlName="use_recent_topics" />
+                        Use recent topics
+                    </label>
+                </div>
+
+                <div class="form-group">
+                    <label for="vp-selfie-base">Selfie composition base</label>
+                    <app-ui-textarea
+                        id="vp-selfie-base"
+                        [rows]="4"
+                        [autoResize]="true"
+                        formControlName="selfie_composition_base"
+                    ></app-ui-textarea>
+                </div>
+
+                <div class="grid">
+                    <div class="form-group">
+                        <label for="vp-selfie-pool">Selfie composition pool override (JSON/YAML)</label>
+                        <app-ui-textarea
+                            id="vp-selfie-pool"
+                            [rows]="6"
+                            [autoResize]="true"
+                            formControlName="selfie_composition_pool_override"
+                        ></app-ui-textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="vp-env-pool">Environment composition pool override (JSON/YAML)</label>
+                        <app-ui-textarea
+                            id="vp-env-pool"
+                            [rows]="6"
+                            [autoResize]="true"
+                            formControlName="environment_composition_pool_override"
+                        ></app-ui-textarea>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h3>Video & Audio</h3>
+            <p class="hint">Reserved section for video/audio providers. Image stack is already split here.</p>
+        </div>
+
+        <div class="button-row">
+            <button type="submit" [disabled]="!hasChanges()">💾 Save media settings</button>
+        </div>
+    </form>
+</div>

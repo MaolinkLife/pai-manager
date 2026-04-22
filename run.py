@@ -9,6 +9,7 @@ import urllib.error
 
 
 sys.dont_write_bytecode = True
+IS_WINDOWS = os.name == "nt"
 
 
 def load_ports():
@@ -65,6 +66,47 @@ def wait_backend_ready(
     return False
 
 
+def _popen_creationflags() -> int:
+    if not IS_WINDOWS:
+        return 0
+    return getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+
+
+def stop_process(process: subprocess.Popen, *, label: str, timeout_sec: float = 8.0) -> None:
+    if process.poll() is not None:
+        return
+
+    try:
+        if IS_WINDOWS:
+            ctrl_break = getattr(signal, "CTRL_BREAK_EVENT", None)
+            if ctrl_break is not None:
+                try:
+                    process.send_signal(ctrl_break)
+                except Exception:
+                    process.terminate()
+            else:
+                process.terminate()
+        else:
+            process.send_signal(signal.SIGINT)
+    except Exception as exc:
+        print(f"Warning: failed to signal {label}: {exc}. Trying terminate().")
+        try:
+            process.terminate()
+        except Exception as terminate_exc:
+            print(f"Warning: failed to terminate {label}: {terminate_exc}.")
+
+    try:
+        process.wait(timeout=timeout_sec)
+        return
+    except subprocess.TimeoutExpired:
+        print(f"{label} did not stop in time. Killing...")
+        try:
+            process.kill()
+            process.wait(timeout=3.0)
+        except Exception as kill_exc:
+            print(f"Warning: failed to kill {label}: {kill_exc}")
+
+
 def main():
     frontend_port, backend_port = load_ports()
     sync_frontend_proxy_target(backend_port)
@@ -83,6 +125,7 @@ def main():
             stdout=sys.stdout,
             stderr=sys.stderr,
             shell=False,
+            creationflags=_popen_creationflags(),
         )
         processes.append(backend)
 
@@ -93,8 +136,7 @@ def main():
                 f"Backend did not become ready within timeout on port {backend_port}. "
                 "Frontend start is cancelled."
             )
-            if backend.poll() is None:
-                backend.send_signal(signal.SIGINT)
+            stop_process(backend, label="Backend")
             return
 
         print("Backend is ready. Starting frontend...")
@@ -113,6 +155,7 @@ def main():
             stdout=sys.stdout,
             stderr=sys.stderr,
             shell=False,
+            creationflags=_popen_creationflags(),
         )
         processes.append(frontend)
 
@@ -122,9 +165,10 @@ def main():
 
     except KeyboardInterrupt:
         print("\nInterrupt! Terminating processes...")
-        for p in processes:
+        for index, p in enumerate(processes):
             if p.poll() is None:
-                p.send_signal(signal.SIGINT)
+                label = "Backend" if index == 0 else f"Process #{index + 1}"
+                stop_process(p, label=label)
         print("All processes are completed.")
 
 

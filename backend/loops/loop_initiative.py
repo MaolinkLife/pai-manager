@@ -1,12 +1,19 @@
-﻿import time
-from datetime import datetime, timedelta, timezone
+import time
+from datetime import datetime, timedelta, timezone, time as dt_time
 from dateutil.parser import isoparse
 
-from services.database_service import get_last_messages
-from services.logger_service import log_error, log_audit_entry, AuditStatus
+from modules.database.service import get_last_messages
+from modules.database import service as database_service
+from modules.system.logger import log_error, log_audit_entry, AuditStatus
 from modules.system.service import get_active_character_name
+from modules.system import character as character_service
+from modules.memory.diary import generate_daily_activity_entry, run_sleeping_consolidation
 
 CHECK_EVERY = 60  # We check every minute
+DIARY_TRIGGER_HOUR_UTC = 0
+DIARY_TRIGGER_MINUTE_UTC = 0
+DIARY_IDLE_WINDOW_MINUTES = 20
+DIARY_WAIT_LOG_INTERVAL_SECONDS = 300
 
 # Store state between iterations
 last_triggered_phase = None
@@ -15,6 +22,10 @@ MIN_INTERVAL = timedelta(minutes=10)  # minimum time between initiatives
 
 # Добавим флаг, чтобы отслеживать, был ли уже пропуск "no_messages"
 last_skip_reason = None
+last_daily_diary_for_day = None
+last_diary_consolidation_for_day = None
+pending_daily_diary_for_day = None
+last_daily_diary_wait_log_at = None
 
 
 def ensure_datetime(value):
@@ -52,8 +63,33 @@ def analyze_pattern(messages):
     return None
 
 
+def _get_last_activity_timestamp(char_name: str):
+    rows = get_last_messages(char_name, limit=1) or []
+    if not rows:
+        return None
+    last_row = rows[-1]
+    return ensure_datetime(last_row.get("timestamp"))
+
+
+def _is_daily_diary_due(now: datetime, diary_day_iso: str | None) -> bool:
+    trigger_dt = datetime.combine(
+        now.date(),
+        dt_time(DIARY_TRIGGER_HOUR_UTC, DIARY_TRIGGER_MINUTE_UTC),
+        tzinfo=timezone.utc,
+    )
+    if now < trigger_dt:
+        return False
+    return bool(diary_day_iso)
+
+
 def initiative_monitor():
-    global last_triggered_phase, last_initiative_time, last_skip_reason
+    global last_triggered_phase
+    global last_initiative_time
+    global last_skip_reason
+    global last_daily_diary_for_day
+    global last_diary_consolidation_for_day
+    global pending_daily_diary_for_day
+    global last_daily_diary_wait_log_at
     log_audit_entry(
         event_type="loop_started",
         msg="[Initiative] Loop started",
@@ -63,6 +99,134 @@ def initiative_monitor():
 
     while True:
         try:
+            now = datetime.now(timezone.utc)
+            diary_day = (now - timedelta(days=1)).date()
+            diary_day_iso = diary_day.isoformat()
+            if (
+                last_daily_diary_for_day != diary_day_iso
+                and pending_daily_diary_for_day is None
+                and _is_daily_diary_due(now, diary_day_iso)
+            ):
+                pending_daily_diary_for_day = diary_day_iso
+                log_audit_entry(
+                    event_type="daily_diary_queued",
+                    msg="[Initiative] Daily diary queued and waiting for idle window.",
+                    status=AuditStatus.INFO,
+                    details={
+                        "day": diary_day_iso,
+                        "idle_window_minutes": DIARY_IDLE_WINDOW_MINUTES,
+                        "trigger_utc": f"{DIARY_TRIGGER_HOUR_UTC:02d}:{DIARY_TRIGGER_MINUTE_UTC:02d}",
+                    },
+                )
+
+            if pending_daily_diary_for_day and pending_daily_diary_for_day == diary_day_iso:
+                try:
+                    char_name = get_active_character_name(default="default_waifu")
+                    character = character_service.get_or_create_character(char_name)
+                    last_activity_at = _get_last_activity_timestamp(char_name)
+                    idle_minutes = None
+                    if last_activity_at is not None:
+                        idle_minutes = int(
+                            max(
+                                0.0,
+                                (now - ensure_datetime(last_activity_at)).total_seconds() / 60.0,
+                            )
+                        )
+                    if idle_minutes is not None and idle_minutes < DIARY_IDLE_WINDOW_MINUTES:
+                        can_log_wait = (
+                            last_daily_diary_wait_log_at is None
+                            or (now - last_daily_diary_wait_log_at).total_seconds()
+                            >= DIARY_WAIT_LOG_INTERVAL_SECONDS
+                        )
+                        if can_log_wait:
+                            last_daily_diary_wait_log_at = now
+                            log_audit_entry(
+                                event_type="daily_diary_waiting_idle_window",
+                                msg="[Initiative] Daily diary postponed due to active session.",
+                                status=AuditStatus.INFO,
+                                details={
+                                    "day": diary_day_iso,
+                                    "idle_minutes": idle_minutes,
+                                    "required_idle_minutes": DIARY_IDLE_WINDOW_MINUTES,
+                                },
+                            )
+                        time.sleep(CHECK_EVERY)
+                        continue
+                    result = generate_daily_activity_entry(
+                        character_id=character.id,
+                        target_day=diary_day,
+                        force=False,
+                    )
+                    last_daily_diary_for_day = diary_day_iso
+                    pending_daily_diary_for_day = None
+                    last_daily_diary_wait_log_at = None
+                    log_audit_entry(
+                        event_type="daily_diary_generated",
+                        msg="[Initiative] Daily diary generation check completed.",
+                        status=AuditStatus.INFO,
+                        details={
+                            "day": diary_day_iso,
+                            "generated": bool(result.get("generated")),
+                            "character_id": character.id,
+                            "entry_id": ((result.get("entry") or {}).get("id") if isinstance(result, dict) else None),
+                        },
+                    )
+                    entry_payload = (result.get("entry") or {}) if isinstance(result, dict) else {}
+                    if isinstance(entry_payload, dict) and entry_payload.get("summary"):
+                        try:
+                            database_service.add_tool_event_to_history(
+                                character_name=char_name,
+                                tool_name="daily_activity_diary",
+                                content=(
+                                    f"[OK]: daily diary entry prepared for {diary_day_iso}. "
+                                    f"mood={entry_payload.get('mood') or 'neutral'}; "
+                                    f"summary={str(entry_payload.get('summary') or '').strip()[:800]}"
+                                ),
+                                timestamp=now,
+                                runtime_meta={
+                                    "source": "initiative_monitor",
+                                    "event": "daily_activity_diary",
+                                    "tool": {
+                                        "name": "daily_activity_diary",
+                                        "status": "ok",
+                                        "generated": bool(result.get("generated")),
+                                        "entry_id": entry_payload.get("id"),
+                                        "day": diary_day_iso,
+                                    },
+                                },
+                                tags=["tool", "diary", "ok"],
+                            )
+                        except Exception as persist_exc:
+                            log_audit_entry(
+                                event_type="daily_diary_history_persist_failed",
+                                msg="[Initiative] Daily diary history persist failed.",
+                                status=AuditStatus.WARNING,
+                                details={"error": str(persist_exc), "day": diary_day_iso},
+                            )
+                    if last_diary_consolidation_for_day != diary_day_iso:
+                        consolidation = run_sleeping_consolidation(
+                            character_id=character.id,
+                            lookback_days=14,
+                        )
+                        last_diary_consolidation_for_day = diary_day_iso
+                        log_audit_entry(
+                            event_type="daily_diary_consolidation",
+                            msg="[Initiative] Daily diary consolidation completed.",
+                            status=AuditStatus.INFO,
+                            details={
+                                "day": diary_day_iso,
+                                "character_id": character.id,
+                                **(consolidation or {}),
+                            },
+                        )
+                except Exception as diary_exc:
+                    log_audit_entry(
+                        event_type="daily_diary_generation_error",
+                        msg="[Initiative] Daily diary generation failed.",
+                        status=AuditStatus.WARNING,
+                        details={"error": str(diary_exc), "day": diary_day_iso},
+                    )
+
             char_name = get_active_character_name(default="default")
             messages = get_last_messages(char_name, limit=10)
 

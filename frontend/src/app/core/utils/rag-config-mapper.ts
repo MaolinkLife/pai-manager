@@ -290,6 +290,7 @@ const mapRetrievalDtoToModel = (dto: RagRetrievalDto | undefined) => {
     const keywordDto = dto.keyword ?? {};
     const vectorsDto = dto.vectors ?? {};
     const shortTermDto = dto.short_term ?? {};
+    const emotionalDto = dto.emotional ?? {};
     const rerankDto = dto.rerank ?? {};
     const weightsDto = rerankDto.weights ?? {};
 
@@ -300,6 +301,9 @@ const mapRetrievalDtoToModel = (dto: RagRetrievalDto | undefined) => {
         session: {
             enabled: sessionDto.enabled ?? true,
             window: sessionDto.window ?? 'day',
+            idleGapMinutes: sessionDto.idle_gap_minutes ?? 90,
+            maxMessages: sessionDto.max_messages ?? 512,
+            chunkSize: sessionDto.chunk_size ?? 32,
         },
         keyword: {
             enabled: keywordDto.enabled ?? true,
@@ -317,6 +321,12 @@ const mapRetrievalDtoToModel = (dto: RagRetrievalDto | undefined) => {
         shortTerm: {
             enabled: shortTermDto.enabled ?? true,
             threshold: shortTermDto.threshold ?? 0.6,
+            lookbackDays: shortTermDto.lookback_days ?? 7,
+        },
+        emotional: {
+            enabled: emotionalDto.enabled ?? true,
+            lookbackDays: emotionalDto.lookback_days ?? 14,
+            limit: emotionalDto.limit ?? 5,
         },
         rerank: {
             enabled: rerankDto.enabled ?? true,
@@ -361,6 +371,9 @@ const mapRetrievalModelToDto = (retrieval: RagConfig['retrieval'] | undefined): 
             ? {
                 enabled: retrieval.session.enabled,
                 window: retrieval.session.window,
+                idle_gap_minutes: retrieval.session.idleGapMinutes,
+                max_messages: retrieval.session.maxMessages,
+                chunk_size: retrieval.session.chunkSize,
             }
             : undefined,
         keyword: retrieval.keyword
@@ -384,6 +397,14 @@ const mapRetrievalModelToDto = (retrieval: RagConfig['retrieval'] | undefined): 
             ? {
                 enabled: retrieval.shortTerm.enabled,
                 threshold: retrieval.shortTerm.threshold,
+                lookback_days: retrieval.shortTerm.lookbackDays,
+            }
+            : undefined,
+        emotional: retrieval.emotional
+            ? {
+                enabled: retrieval.emotional.enabled,
+                lookback_days: retrieval.emotional.lookbackDays,
+                limit: retrieval.emotional.limit,
             }
             : undefined,
         rerank: retrieval.rerank

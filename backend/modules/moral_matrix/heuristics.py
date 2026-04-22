@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from typing import Dict, List
 
-from services.logger_service import AuditStatus, log_audit_entry
+from modules.system.logger import AuditStatus, log_audit_entry
 
 # RU Segment
 INTENT_PATTERNS_RU = {

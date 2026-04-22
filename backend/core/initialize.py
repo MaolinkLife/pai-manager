@@ -1,4 +1,4 @@
-﻿# ==========================================================
+# ==========================================================
 # Module: initialize.py
 # Purpose: Primary initialization of the LIM project before starting FastAPI.
 # Responsible for preparing the environment: creating a config, generating user_id,
@@ -10,6 +10,7 @@
 # - Can be called separately as a setup procedure
 # =========================================================
 import os
+import threading
 from modules.system.service import (
     ensure_config_exists,
     get_active_character_name,
@@ -18,8 +19,8 @@ from modules.system.service import (
     migrate_split_settings_if_needed,
 )
 from constants.paths import MODEL_SUBDIRS
-from services.logger_service import initialize_log_files, log_audit_entry, AuditStatus
-from services.localization_service import get_text
+from modules.system.logger import initialize_logger_runtime, log_audit_entry, AuditStatus
+from modules.system.localization import get_text
 from utils.structure_utils import get_label_from_file
 
 
@@ -29,11 +30,11 @@ def run_startup_checks():
     Runs when main.py starts, before the application starts.
     """
     # Local imports prevent cyclic import during bootstrap.
-    from services import database_service
+    from modules.database import service as database_service
     from services import preset_service
-    from services import character_service
+    from modules.system import character as character_service
     from modules.vision.service import VisionService
-    from modules.memory.short_term import ensure_short_term_schema, refresh_recent_days
+    from modules.memory.short_term import ensure_short_term_schema
     from modules.memory.knowledge import ensure_memory_knowledge_schema
 
 
@@ -62,7 +63,7 @@ def run_startup_checks():
     ensure_config_exists()
     preset_service.ensure_presets_exist()
 
-    initialize_log_files()
+    initialize_logger_runtime()
 
     for model_dir in MODEL_SUBDIRS:
         os.makedirs(model_dir, exist_ok=True)
@@ -87,20 +88,6 @@ def run_startup_checks():
     character = None
     if char_name:
         character = character_service.get_or_create_character(char_name)
-        try:
-            refresh_recent_days(character.id)
-        except Exception as exc:
-            log_audit_entry(
-                event_type="short_memory_refresh_failed",
-                msg=get_text(
-                    "initialize.short_memory_refresh_failed",
-                    default="[Initialize] Не удалось обновить short-term память на старте. Продолжаем запуск.",
-                ),
-                status=AuditStatus.WARNING,
-                details={"error": str(exc), "character_id": character.id},
-                message_key="initialize.short_memory_refresh_failed",
-                message_args={"error": str(exc), "character_id": character.id},
-            )
         log_audit_entry(
             event_type="character_bootstrap",
             msg=get_text(
@@ -117,8 +104,6 @@ def run_startup_checks():
     # - presence of directories
     # - presence of char_name
     # - config.json structure
-
-    # Initialize and launch the vision service
     vision_enabled = bool(get_config_value("vision.enabled", False))
     if vision_enabled:
         try:
@@ -157,6 +142,51 @@ def run_startup_checks():
         message_key="initialize.startup_complete",
         message_args={"label": label},
     )
+
+
+def start_async_warmups() -> None:
+    thread = threading.Thread(
+        target=_run_short_memory_refresh_warmup,
+        name="short-memory-startup-warmup",
+        daemon=True,
+    )
+    thread.start()
+
+
+def _run_short_memory_refresh_warmup() -> None:
+    try:
+        from modules.system import character as character_service
+        from modules.memory.short_term import refresh_recent_days
+
+        char_name = get_active_character_name(default="default_waifu")
+        if not char_name:
+            return
+        character = character_service.get_or_create_character(char_name)
+        log_audit_entry(
+            event_type="short_memory_refresh_background_start",
+            msg="[Initialize] Starting background short-term memory refresh.",
+            status=AuditStatus.INFO,
+            details={"character_id": character.id, "character_name": char_name},
+        )
+        refresh_recent_days(character.id)
+        log_audit_entry(
+            event_type="short_memory_refresh_background_complete",
+            msg="[Initialize] Background short-term memory refresh complete.",
+            status=AuditStatus.SUCCESS,
+            details={"character_id": character.id, "character_name": char_name},
+        )
+    except Exception as exc:
+        log_audit_entry(
+            event_type="short_memory_refresh_failed",
+            msg=get_text(
+                "initialize.short_memory_refresh_failed",
+                default="[Initialize] Не удалось обновить short-term память на старте. Продолжаем запуск.",
+            ),
+            status=AuditStatus.WARNING,
+            details={"error": str(exc)},
+            message_key="initialize.short_memory_refresh_failed",
+            message_args={"error": str(exc), "character_id": ""},
+        )
 
 
 def shutdown_services():

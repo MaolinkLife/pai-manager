@@ -17,3 +17,6 @@ class AnalyzerProvider:
 
     def is_available(self) -> bool:
         return True
+
+    def release_resources(self) -> None:
+        return None

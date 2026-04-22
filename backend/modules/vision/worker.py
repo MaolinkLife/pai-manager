@@ -1,4 +1,4 @@
-﻿"""
+"""
 Vision Worker: Captures screen frames and stores them in a buffer.
 """
 
@@ -10,9 +10,9 @@ import threading
 from collections import deque
 from typing import Optional, List, Tuple
 
-from services import config_service
-from services.logger_service import log_audit_entry, AuditStatus
-from services.localization_service import get_text
+from modules.system import config as config_service
+from modules.system.logger import log_audit_entry, AuditStatus
+from modules.system.localization import get_text
 
 
 class VisionBuffer:

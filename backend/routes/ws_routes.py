@@ -13,13 +13,40 @@ from modules.system.service import (
 )
 from core.websocket_manager import manager
 from modules.generative import conversation
-from services import database_service
-from services import auth_service
-from services.logger_service import log_audit_entry, AuditStatus
-from services.interaction_policy import resolve_interaction_policy
+from modules.database import service as database_service
+from modules.system import auth as auth_service
+from modules.system.logger import log_audit_entry, AuditStatus
+from core.interaction import resolve_interaction_policy
 from core.decision_layer import decision_layer
+from core.channel_router import can_accept_ingress
+from core import tool_event_bus
 
 ws_router = APIRouter(prefix="/api", tags=["WebSocket"])
+
+
+def _is_chat_visible_history_item(item: dict) -> bool:
+    if not isinstance(item, dict):
+        return False
+    role = str(item.get("role") or "").strip().lower()
+    if role == "tool":
+        return False
+    runtime_meta = item.get("runtime_meta")
+    if isinstance(runtime_meta, dict):
+        event_name = str(runtime_meta.get("event") or "").strip().lower()
+        if event_name == "tool_event":
+            return False
+        transport = runtime_meta.get("transport")
+        if isinstance(transport, dict):
+            transport_name = str(transport.get("name") or "").strip().lower()
+            # Main chat feed must stay isolated from external transports (telegram, etc.).
+            if transport_name and transport_name != "main_chat":
+                return False
+    tags = item.get("tags")
+    if isinstance(tags, list):
+        lowered = {str(tag).strip().lower() for tag in tags}
+        if "tool" in lowered:
+            return False
+    return True
 
 async def _safe_send_json(websocket: WebSocket, payload: dict) -> bool:
     try:
@@ -173,6 +200,37 @@ async def websocket_endpoint(websocket: WebSocket):
                     continue
 
             if action == "send_message":
+                channel_allowed, reason = can_accept_ingress("main_chat")
+                if not channel_allowed:
+                    tool_event_bus.emit_tool_event(
+                        tool_name="channel.policy",
+                        status="error",
+                        source="ws_pipeline",
+                        content=(
+                            "[ERROR]: main_chat channel is disabled by communication policy. "
+                            f"reason={reason}"
+                        ),
+                        runtime_meta={
+                            "event": "tool_event",
+                            "tool": {"name": "channel.policy", "status": "error"},
+                            "transport": {"name": "main_chat"},
+                            "reason": reason,
+                            "actor_user_uuid": data.get("actor_user_uuid"),
+                        },
+                        tags=["tool", "policy", "error"],
+                    )
+                    if not await _safe_send_json(
+                        websocket,
+                        {
+                            "type": "error",
+                            "message": "Main chat channel is disabled by communication policy",
+                            "code": "main_chat_disabled",
+                            "reason": reason,
+                        },
+                    ):
+                        break
+                    continue
+
                 log_audit_entry(
                     "ws_send_message_received",
                     "[WS] send_message action received.",
@@ -254,6 +312,35 @@ async def websocket_endpoint(websocket: WebSocket):
                             processing_result = await decision_layer.process_message(
                                 payload_data, websocket, trace_hook=trace_hook
                             )
+                            decisions_payload = processing_result.get("decisions") or {}
+                            active_decisions = [
+                                name
+                                for name, is_active in decisions_payload.items()
+                                if bool(is_active)
+                            ]
+                            memory_context_payload = processing_result.get("memory_context") or {}
+                            conversation_state = memory_context_payload.get("conversation_state") or {}
+                            memory_status = memory_context_payload.get("memory_status")
+                            if not memory_status:
+                                memory_status = "available" if memory_context_payload else "unknown"
+                            tool_event_bus.emit_tool_event(
+                                tool_name="pipeline.decision_layer",
+                                status="ok",
+                                content=(
+                                    "[OK]: decision context prepared. "
+                                    f"active_decisions={active_decisions or ['none']}; "
+                                    f"memory_status={memory_status}; "
+                                    f"last_topic={conversation_state.get('last_topic') or '-'}"
+                                ),
+                                source="ws_pipeline",
+                                runtime_meta={
+                                    "run_id": payload_run_id,
+                                    "transport": {"name": "main_chat"},
+                                    "decisions": decisions_payload,
+                                    "actor_user_uuid": payload_data.get("actor_user_uuid"),
+                                },
+                                tags=["tool", "pipeline", "ok"],
+                            )
                             moral_state_payload = processing_result.get("moral_state")
                             if isinstance(moral_state_payload, dict):
                                 await _safe_send_json(
@@ -311,6 +398,7 @@ async def websocket_endpoint(websocket: WebSocket):
                             formatted_history = await instructor.format_for_api(
                                 processing_result["system_prompt"],
                                 processing_result["user_message"],
+                                memory_context=processing_result.get("memory_context"),
                             )
 
                             async def emit(payload: dict) -> bool:
@@ -408,6 +496,18 @@ async def websocket_endpoint(websocket: WebSocket):
                                 },
                             )
                         except Exception as e:
+                            tool_event_bus.emit_tool_event(
+                                tool_name="pipeline.run",
+                                status="error",
+                                content=f"[ERROR]: ws generation run failed: {e}",
+                                source="ws_pipeline",
+                                runtime_meta={
+                                    "run_id": payload_run_id,
+                                    "transport": {"name": "main_chat"},
+                                    "actor_user_uuid": payload_data.get("actor_user_uuid"),
+                                },
+                                tags=["tool", "pipeline", "error"],
+                            )
                             log_audit_entry(
                                 "ws_send_message_error",
                                 "[WS] Error while processing message.",
@@ -489,7 +589,15 @@ async def websocket_endpoint(websocket: WebSocket):
                     user_uuid=actor_user_uuid,
                     default="default_waifu",
                 )
-                history = database_service.get_history(char_name, limit, offset)
+                # Hide internal tool-role telemetry from the end-user chat feed.
+                raw_history = database_service.get_history(
+                    char_name,
+                    max(1, int(limit)) * 3,
+                    max(0, int(offset)),
+                )
+                history = [
+                    item for item in (raw_history or []) if _is_chat_visible_history_item(item)
+                ][: max(1, int(limit))]
                 if not await _safe_send_json(
                     websocket, {"type": "history", "items": history}
                 ):

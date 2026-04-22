@@ -1,6 +1,6 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, date
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Request, status
@@ -11,21 +11,28 @@ from modules.memory.short_term import (
     load_recent_records,
     refresh_recent_days,
 )
+from modules.memory.diary import (
+    generate_daily_activity_entry,
+    list_daily_activity_entries,
+)
 from modules.memory.emulator import MemorySearchEmulator
 from modules.memory.knowledge import (
     ensure_memory_knowledge_schema,
     list_anchors,
     list_associations,
+    list_emotion_events,
+    log_emotion_event,
     upsert_anchor,
     upsert_association,
 )
 from models.models import History
-from services import character_service, database_service
-from services.db_core import SessionLocal
-from services import auth_service
-from services.logger_service import AuditStatus, log_audit_entry
-from services.localization_service import get_text
-from services.interaction_policy import (
+from modules.system import character as character_service
+from modules.database import service as database_service
+from modules.database.core import SessionLocal
+from modules.system import auth as auth_service
+from modules.system.logger import AuditStatus, log_audit_entry
+from modules.system.localization import get_text
+from core.interaction import (
     resolve_interaction_policy,
 )
 from modules.system.service import get_active_character_name
@@ -86,6 +93,19 @@ def _normalize_utc_iso(value: Any) -> Optional[str]:
 
 def _safe_lower(value: Any) -> str:
     return str(value or "").strip().lower()
+
+
+def _parse_day(value: Optional[str]) -> Optional[date]:
+    text_raw = str(value or "").strip()
+    if not text_raw:
+        return None
+    try:
+        return date.fromisoformat(text_raw)
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Invalid date format. Use YYYY-MM-DD.",
+        )
 
 
 def _score_record(
@@ -343,6 +363,50 @@ async def list_full_history(
     }
 
 
+@router.get("/diary")
+async def list_diary_entries(
+    request: Request,
+    days: int = Query(default=30, ge=1, le=365),
+) -> dict:
+    actor_user_uuid = _require_owner_memory_access(request)
+    char_name = get_active_character_name(
+        user_uuid=actor_user_uuid,
+        default="default_waifu",
+    )
+    character = character_service.get_or_create_character(char_name)
+    entries = list_daily_activity_entries(character_id=character.id, days=days)
+    return {
+        "status": "ok",
+        "entries": [entry.to_dict() for entry in entries],
+        "total": len(entries),
+        "days": days,
+    }
+
+
+@router.post("/diary/generate")
+async def generate_diary_entry(
+    request: Request,
+    day: Optional[str] = Query(default=None),
+    force: bool = Query(default=False),
+) -> dict:
+    actor_user_uuid = _require_owner_memory_access(request)
+    char_name = get_active_character_name(
+        user_uuid=actor_user_uuid,
+        default="default_waifu",
+    )
+    character = character_service.get_or_create_character(char_name)
+    target_day = _parse_day(day)
+    result = generate_daily_activity_entry(
+        character_id=character.id,
+        target_day=target_day,
+        force=bool(force),
+    )
+    return {
+        "status": "ok",
+        **result,
+    }
+
+
 @router.get("/anchors")
 async def get_memory_anchors(
     request: Request,
@@ -415,5 +479,49 @@ async def create_or_update_association(
         target_key=str(payload.get("target_key") or ""),
         weight=float(payload.get("weight") or 1.0),
         meta=payload.get("meta") if isinstance(payload.get("meta"), dict) else {},
+    )
+
+
+@router.get("/emotions")
+async def get_emotion_events(
+    request: Request,
+    days: int = Query(default=14, ge=1, le=365),
+    limit: int = Query(default=100, ge=1, le=500),
+    emotion: str = Query(default=""),
+) -> dict:
+    actor_user_uuid = _require_owner_memory_access(request)
+    ensure_memory_knowledge_schema()
+    char_name = get_active_character_name(
+        user_uuid=actor_user_uuid,
+        default="default_waifu",
+    )
+    character = character_service.get_or_create_character(char_name)
+    items = list_emotion_events(
+        character_id=character.id,
+        days=days,
+        limit=limit,
+        emotion=emotion,
+    )
+    return {"status": "success", "events": items, "total": len(items)}
+
+
+@router.post("/emotions")
+async def create_emotion_event(request: Request, payload: Dict[str, Any]) -> dict:
+    actor_user_uuid = _require_owner_memory_access(request)
+    ensure_memory_knowledge_schema()
+    char_name = get_active_character_name(
+        user_uuid=actor_user_uuid,
+        default="default_waifu",
+    )
+    character = character_service.get_or_create_character(char_name)
+    return log_emotion_event(
+        character_id=character.id,
+        message_id=str(payload.get("message_id") or "").strip() or None,
+        emotion=str(payload.get("emotion") or ""),
+        intensity=float(payload.get("intensity") or 0.0),
+        trigger_text=str(payload.get("trigger_text") or ""),
+        source=str(payload.get("source") or "manual"),
+        meta=payload.get("meta") if isinstance(payload.get("meta"), dict) else {},
+        occurred_at=str(payload.get("occurred_at") or "").strip() or None,
     )
 

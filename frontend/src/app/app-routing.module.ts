@@ -3,7 +3,6 @@ import { RouterModule, Routes } from '@angular/router';
 import { LayoutComponent } from './layout/layout.component';
 import { AuthGuard } from './core/guards/auth.guard';
 import { GuestGuard } from './core/guards/guest.guard';
-import { AuthenticatedUserGuard } from './core/guards/authenticated-user.guard';
 
 const routes: Routes = [
     {
@@ -24,11 +23,6 @@ const routes: Routes = [
             { path: 'synthesis', loadChildren: () => import('./features/synthesis/synthesis.module').then(m => m.SynthesisModule) },
             { path: 'diary', loadChildren: () => import('./features/diary/diary.module').then(m => m.DiaryModule) },
             { path: 'audit', loadChildren: () => import('./features/audit/audit.module').then(m => m.AuditModule) },
-            {
-                path: 'settings',
-                canActivate: [AuthenticatedUserGuard],
-                loadChildren: () => import('./features/settings/settings.module').then(m => m.SettingsModule)
-            },
             { path: 'tasks', loadChildren: () => import('./features/tasks/tasks.module').then(m => m.TasksModule) },
             { path: 'debug', loadChildren: () => import('./features/debug/debug.module').then(m => m.DebugModule) },
         ]

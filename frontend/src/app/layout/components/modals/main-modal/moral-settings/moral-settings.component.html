@@ -121,7 +121,11 @@
                 <div formGroupName="ollama">
                     <div class="form-group">
                         <label for="moralOllamaModel">Model</label>
-                        <app-ui-input id="moralOllamaModel" type="text" formControlName="model" ></app-ui-input>
+                        <app-ui-select
+                            id="moralOllamaModel"
+                            [options]="ollamaModelOptions"
+                            formControlName="model"
+                        ></app-ui-select>
                     </div>
 
                     <div class="form-group">

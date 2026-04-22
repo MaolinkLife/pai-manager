@@ -13,3 +13,5 @@ class ImageProvider:
     def generate(self, request: ImageGenerationRequest) -> ImageGenerationResult:
         raise NotImplementedError
 
+    def release_resources(self) -> None:
+        return None

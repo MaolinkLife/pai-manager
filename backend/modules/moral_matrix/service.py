@@ -1,4 +1,4 @@
-﻿"""High-level orchestration for the Moral Matrix module."""
+"""High-level orchestration for the Moral Matrix module."""
 
 from __future__ import annotations
 
@@ -26,9 +26,10 @@ from modules.moral_matrix.providers import (
     OpenRouterMoralProvider,
 )
 from modules.moral_matrix.providers.base import MoralMatrixProvider
-from services import character_service
-from services import config_service
-from services.logger_service import AuditStatus, log_audit_entry
+from modules.system import character as character_service
+from modules.system import config as config_service
+from modules.system.logger import AuditStatus, log_audit_entry
+from modules.system.runtime_profile import should_release_resources
 from modules.system.service import get_active_character_name
 
 
@@ -65,9 +66,21 @@ class MoralMatrixProviderManager:
             if not provider.is_available():
                 errors.append(f"{provider.name}_unavailable")
                 continue
-            result = await provider.run(payload)
-            if result:
-                return ProviderRunResult(payload=result, provider=provider.name)
+            try:
+                result = await provider.run(payload)
+                if result:
+                    return ProviderRunResult(payload=result, provider=provider.name)
+            finally:
+                if should_release_resources("moral"):
+                    try:
+                        provider.release_resources()
+                    except Exception as exc:
+                        log_audit_entry(
+                            "moral_matrix_provider_release_error",
+                            "[MoralMatrix] Provider resource release failed.",
+                            AuditStatus.WARNING,
+                            details={"provider": provider.name, "error": str(exc)},
+                        )
         if errors:
             log_audit_entry(
                 "moral_matrix.providers_unavailable",
@@ -237,6 +250,7 @@ class MoralMatrixModule:
             "analysis_result": analysis_result,
             "relationship_status": relationship_status,
             "heuristics": heuristic_snapshot,
+            "conversation_state": (memory_context or {}).get("conversation_state", {}),
         }
         provider_result = await self._provider_manager.run(provider_payload)
 
@@ -259,6 +273,7 @@ class MoralMatrixModule:
                 "matches_found": (memory_meta or {}).get("matches_found"),
                 "short_term_record_id": (memory_meta or {}).get("short_term_record_id"),
             },
+            "conversation_state": (memory_context or {}).get("conversation_state", {}),
             "heuristics": heuristic_snapshot,
         }
 

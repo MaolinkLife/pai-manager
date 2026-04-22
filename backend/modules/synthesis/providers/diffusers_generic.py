@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import io
+import gc
 import os
 import time
-from typing import Dict, Tuple
+from typing import Tuple
 
 from modules.synthesis.providers.base import ImageProviderError
 from modules.synthesis.types import (
@@ -11,13 +12,12 @@ from modules.synthesis.types import (
     ImageGenerationResult,
     SynthesisModelInfo,
 )
-from services.logger_service import AuditStatus, log_audit_entry
+from modules.system.logger import AuditStatus, log_audit_entry
 
 
 class DiffusersGenericProvider:
     def __init__(self) -> None:
-        self._cache: Dict[str, object] = {}
-        self._cache_device: Dict[str, str] = {}
+        pass
 
     def _resolve_model_ref(self, model: SynthesisModelInfo) -> str:
         if model.source == "local":
@@ -89,11 +89,39 @@ class DiffusersGenericProvider:
         return pipe, device
 
     def _get_pipeline(self, model: SynthesisModelInfo) -> Tuple[object, str]:
-        if model.model_id not in self._cache:
-            pipe, device = self._build_pipeline(model)
-            self._cache[model.model_id] = pipe
-            self._cache_device[model.model_id] = device
-        return self._cache[model.model_id], self._cache_device[model.model_id]
+        return self._build_pipeline(model)
+
+    def _release_pipeline(self, pipe: object, device: str) -> None:
+        try:
+            if hasattr(pipe, "to"):
+                pipe.to("cpu")
+        except Exception:
+            pass
+        try:
+            del pipe
+        except Exception:
+            pass
+        gc.collect()
+        if device == "cuda":
+            try:
+                import torch
+
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                    torch.cuda.ipc_collect()
+            except Exception:
+                pass
+
+    def release_resources(self) -> None:
+        gc.collect()
+        try:
+            import torch
+
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                torch.cuda.ipc_collect()
+        except Exception:
+            pass
 
     def _merge_with_defaults(self, request: ImageGenerationRequest, model: SynthesisModelInfo) -> ImageGenerationRequest:
         defaults = model.defaults or {}
@@ -159,6 +187,8 @@ class DiffusersGenericProvider:
             raise ImageProviderError(
                 f"Image generation failed for model '{model.model_id}': {exc}"
             ) from exc
+        finally:
+            self._release_pipeline(pipe, device)
 
         buffer = io.BytesIO()
         image.save(buffer, format="PNG")

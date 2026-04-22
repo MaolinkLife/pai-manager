@@ -16,8 +16,8 @@ from models.models import (
     EmotionalTrace,
     MoralStateSnapshot,
 )
-from services.db_core import SessionLocal
-from services.logger_service import AuditStatus, log_audit_entry
+from modules.database.core import SessionLocal
+from modules.system.logger import AuditStatus, log_audit_entry
 
 
 @dataclass

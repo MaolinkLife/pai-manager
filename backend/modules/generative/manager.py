@@ -5,9 +5,10 @@ from typing import AsyncIterator, Dict, Iterable, List
 from modules.generative.providers.base import GenerateProvider, ProviderError
 from modules.generative.providers.ollama import OllamaGenerateProvider
 from modules.generative.providers.openrouter import OpenRouterGenerateProvider
+from modules.system.runtime_profile import should_release_resources
 from modules.generative.types import GenerateRequest, GenerateResult, GenerateStreamChunk
-from services import config_service
-from services.logger_service import AuditStatus, log_audit_entry
+from modules.system import config as config_service
+from modules.system.logger import AuditStatus, log_audit_entry
 
 
 class NoProviderResolved(ProviderError):
@@ -38,10 +39,20 @@ class GenerationManager:
 
     def generate(self, request: GenerateRequest) -> GenerateResult:
         print("[Generator] Поиск провайдера (standard).")
+        normalized_messages = list(request.messages)
+        effective_request = GenerateRequest(
+            messages=normalized_messages,
+            options=dict(request.options or {}),
+            metadata=dict(request.metadata or {}),
+            tools=list(request.tools) if request.tools else None,
+            tool_choice=request.tool_choice,
+        )
         request_overview = {
-            "messages": list(request.messages),
-            "options": request.options,
-            "metadata": request.metadata,
+            "messages": normalized_messages,
+            "options": effective_request.options,
+            "metadata": effective_request.metadata,
+            "tools": effective_request.tools,
+            "tool_choice": effective_request.tool_choice,
         }
         log_audit_entry(
             event_type="generator_generate_start",
@@ -56,7 +67,7 @@ class GenerationManager:
                 errors.append({"provider": provider.name, "reason": "not_available"})
                 continue
             try:
-                result = provider.generate(request)
+                result = provider.generate(effective_request)
                 log_audit_entry(
                     event_type="generator_provider_resolved",
                     msg="[Generator] Провайдер выбран",
@@ -78,6 +89,17 @@ class GenerationManager:
                     },
                 )
                 print(f"[Generator] Провайдер '{provider.name}' отказал (standard).")
+            finally:
+                if should_release_resources("generative"):
+                    try:
+                        provider.release_resources()
+                    except Exception as exc:
+                        log_audit_entry(
+                            event_type="generator_provider_release_error",
+                            msg="[Generator] Ошибка освобождения ресурсов провайдера.",
+                            status=AuditStatus.WARNING,
+                            details={"provider": provider.name, "error": str(exc)},
+                        )
 
         log_audit_entry(
             event_type="generator_provider_exhausted",
@@ -90,10 +112,20 @@ class GenerationManager:
 
     async def stream(self, request: GenerateRequest) -> AsyncIterator[GenerateStreamChunk]:
         print("[Generator] Поиск провайдера (stream).")
+        normalized_messages = list(request.messages)
+        effective_request = GenerateRequest(
+            messages=normalized_messages,
+            options=dict(request.options or {}),
+            metadata=dict(request.metadata or {}),
+            tools=list(request.tools) if request.tools else None,
+            tool_choice=request.tool_choice,
+        )
         request_overview = {
-            "messages": list(request.messages),
-            "options": request.options,
-            "metadata": request.metadata,
+            "messages": normalized_messages,
+            "options": effective_request.options,
+            "metadata": effective_request.metadata,
+            "tools": effective_request.tools,
+            "tool_choice": effective_request.tool_choice,
         }
         log_audit_entry(
             event_type="generator_stream_start",
@@ -111,7 +143,7 @@ class GenerationManager:
                 errors.append({"provider": provider.name, "reason": "not_streaming"})
                 continue
             try:
-                async for chunk in provider.stream(request):
+                async for chunk in provider.stream(effective_request):
                     yield chunk
                 log_audit_entry(
                     event_type="generator_provider_stream_resolved",
@@ -137,6 +169,17 @@ class GenerationManager:
                     f"[Generator] Провайдер '{provider.name}' отказал (stream)."
                 )
                 continue
+            finally:
+                if should_release_resources("generative"):
+                    try:
+                        provider.release_resources()
+                    except Exception as exc:
+                        log_audit_entry(
+                            event_type="generator_provider_release_error",
+                            msg="[Generator] Ошибка освобождения ресурсов провайдера.",
+                            status=AuditStatus.WARNING,
+                            details={"provider": provider.name, "error": str(exc), "mode": "stream"},
+                        )
 
         log_audit_entry(
             event_type="generator_provider_stream_exhausted",

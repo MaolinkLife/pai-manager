@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional, Sequence, Set
 
 from sqlalchemy import text
 
-from services.db_core import engine
+from modules.database.core import engine
 
 
 def _now_iso() -> str:
@@ -72,7 +72,143 @@ def ensure_memory_knowledge_schema() -> None:
                 "CREATE INDEX IF NOT EXISTS idx_memory_assoc_source ON memory_associations(source_key)"
             )
         )
+        connection.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS memory_emotion_events (
+                    id TEXT PRIMARY KEY,
+                    character_id TEXT NOT NULL,
+                    message_id TEXT,
+                    emotion TEXT NOT NULL,
+                    intensity REAL NOT NULL DEFAULT 0.0,
+                    trigger_text TEXT NOT NULL DEFAULT '',
+                    source TEXT NOT NULL DEFAULT 'runtime',
+                    meta TEXT NOT NULL DEFAULT '{}',
+                    occurred_at TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                )
+                """
+            )
+        )
+        connection.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS idx_memory_emotions_character ON memory_emotion_events(character_id)"
+            )
+        )
+        connection.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS idx_memory_emotions_time ON memory_emotion_events(occurred_at)"
+            )
+        )
         connection.commit()
+
+
+def log_emotion_event(
+    *,
+    character_id: str,
+    emotion: str,
+    intensity: float = 0.0,
+    trigger_text: str = "",
+    source: str = "runtime",
+    message_id: Optional[str] = None,
+    meta: Optional[Dict[str, Any]] = None,
+    occurred_at: Optional[str] = None,
+) -> Dict[str, Any]:
+    ensure_memory_knowledge_schema()
+    if not character_id or not str(emotion or "").strip():
+        return {"status": "error"}
+
+    event_id = str(uuid.uuid4())
+    now_iso = _now_iso()
+    payload = {
+        "id": event_id,
+        "character_id": character_id,
+        "message_id": str(message_id or "").strip() or None,
+        "emotion": str(emotion or "").strip().lower(),
+        "intensity": float(intensity or 0.0),
+        "trigger_text": str(trigger_text or "").strip(),
+        "source": str(source or "runtime").strip().lower(),
+        "meta": json.dumps(dict(meta or {}), ensure_ascii=False),
+        "occurred_at": str(occurred_at or now_iso),
+        "created_at": now_iso,
+    }
+    with engine.connect() as connection:
+        connection.execute(
+            text(
+                """
+                INSERT INTO memory_emotion_events (
+                    id, character_id, message_id, emotion, intensity, trigger_text,
+                    source, meta, occurred_at, created_at
+                )
+                VALUES (
+                    :id, :character_id, :message_id, :emotion, :intensity, :trigger_text,
+                    :source, :meta, :occurred_at, :created_at
+                )
+                """
+            ),
+            payload,
+        )
+        connection.commit()
+    return {"status": "ok", "id": event_id}
+
+
+def list_emotion_events(
+    *,
+    character_id: str,
+    days: int = 14,
+    limit: int = 100,
+    emotion: str = "",
+) -> List[Dict[str, Any]]:
+    ensure_memory_knowledge_schema()
+    if not character_id:
+        return []
+
+    safe_days = max(1, min(int(days or 14), 365))
+    safe_limit = max(1, min(int(limit or 100), 500))
+    threshold_dt = datetime.now(timezone.utc).timestamp() - (safe_days * 86400)
+    threshold_iso = datetime.fromtimestamp(threshold_dt, tz=timezone.utc).isoformat()
+
+    params: Dict[str, Any] = {
+        "character_id": character_id,
+        "threshold_iso": threshold_iso,
+        "limit": safe_limit,
+    }
+    sql = """
+        SELECT id, message_id, emotion, intensity, trigger_text, source, meta, occurred_at, created_at
+        FROM memory_emotion_events
+        WHERE character_id = :character_id
+          AND occurred_at >= :threshold_iso
+    """
+    normalized_emotion = str(emotion or "").strip().lower()
+    if normalized_emotion:
+        sql += " AND emotion = :emotion"
+        params["emotion"] = normalized_emotion
+    sql += " ORDER BY occurred_at DESC LIMIT :limit"
+
+    with engine.connect() as connection:
+        rows = connection.execute(text(sql), params).fetchall()
+
+    result: List[Dict[str, Any]] = []
+    for row in rows:
+        parsed_meta: Dict[str, Any] = {}
+        try:
+            parsed_meta = json.loads(row[6] or "{}")
+        except Exception:
+            parsed_meta = {}
+        result.append(
+            {
+                "id": row[0],
+                "message_id": row[1],
+                "emotion": row[2],
+                "intensity": float(row[3] or 0.0),
+                "trigger_text": row[4] or "",
+                "source": row[5] or "",
+                "meta": parsed_meta,
+                "occurred_at": row[7],
+                "created_at": row[8],
+            }
+        )
+    return result
 
 
 def upsert_anchor(

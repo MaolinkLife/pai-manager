@@ -28,14 +28,15 @@ from modules.tts.text_processing import prepare_tts_text
 from modules.tts.types import TTSRequest
 from modules.tts.voice_import import import_voice_sample
 from modules.voice.vad_listener import is_vad_running, start_vad_background, stop_vad
-from services import config_service, voice_controller
-from services.interaction_policy import (
+from modules.system import config as config_service
+from modules.voice import controller as voice_controller
+from core.interaction import (
     resolve_actor_uuid_from_auth_header,
     resolve_interaction_policy,
 )
 from modules.system.service import get_active_character_name
-from services.rvc_bootstrap_service import get_rvc_status
-from services.xtts_model_service import start_xtts_model_download
+from modules.tts.rvc_service import get_rvc_status
+from modules.tts.xtts import start_xtts_model_download
 
 router = APIRouter(prefix="/api/voice", tags=["Voice"])
 

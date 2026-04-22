@@ -210,6 +210,20 @@
                         (change)="onThemeChange($event)"
                     ></app-ui-select>
                 </div>
+
+                <div class="form-group">
+                    <label for="model_memory_profile">{{
+                        "settings.modelMemoryProfile" | translate
+                    }}</label>
+                    <app-ui-select
+                        id="model_memory_profile"
+                        formControlName="model_memory_profile"
+                        [options]="modelMemoryProfileOptions"
+                    ></app-ui-select>
+                    <small class="form-hint">{{
+                        "settings.modelMemoryProfileHint" | translate
+                    }}</small>
+                </div>
             </div>
 
             <div class="section">
@@ -241,6 +255,10 @@
                         {{ "settings.discord" | translate }}
                     </label>
                     <label class="checkbox">
+                        <input type="checkbox" formControlName="telegram" />
+                        Telegram
+                    </label>
+                    <label class="checkbox">
                         <input type="checkbox" formControlName="rag" />
                         {{ "settings.rag" | translate }}
                     </label>
@@ -248,6 +266,294 @@
                         <input type="checkbox" formControlName="visual" />
                         {{ "settings.visual" | translate }}
                     </label>
+                </div>
+            </div>
+
+            <div class="section" formGroupName="telegram">
+                <h3>Telegram Bridge</h3>
+
+                <div class="telegram-grid">
+                    <div class="form-group">
+                        <label class="checkbox">
+                            <input type="checkbox" formControlName="enabled" />
+                            Enable Telegram bridge
+                        </label>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="telegram-mode">Mode</label>
+                        <app-ui-select
+                            id="telegram-mode"
+                            formControlName="mode"
+                            [options]="telegramModeOptions"
+                        ></app-ui-select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="telegram-api-id">API ID</label>
+                        <app-ui-input
+                            id="telegram-api-id"
+                            type="number"
+                            formControlName="api_id"
+                            [min]="0"
+                            [step]="1"
+                        ></app-ui-input>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="telegram-api-hash">API Hash</label>
+                        <app-ui-input
+                            id="telegram-api-hash"
+                            type="text"
+                            formControlName="api_hash"
+                        ></app-ui-input>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="telegram-phone">Phone Number</label>
+                        <app-ui-input
+                            id="telegram-phone"
+                            type="text"
+                            formControlName="phone_number"
+                            [placeholder]="'+79991234567'"
+                        ></app-ui-input>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="telegram-bot-token">Bot Token</label>
+                        <app-ui-input
+                            id="telegram-bot-token"
+                            type="text"
+                            formControlName="bot_token"
+                        ></app-ui-input>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="telegram-session-name">Session Name</label>
+                        <app-ui-input
+                            id="telegram-session-name"
+                            type="text"
+                            formControlName="session_name"
+                        ></app-ui-input>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="telegram-session-dir">Session Dir</label>
+                        <app-ui-input
+                            id="telegram-session-dir"
+                            type="text"
+                            formControlName="session_dir"
+                        ></app-ui-input>
+                    </div>
+                </div>
+
+                <div class="telegram-status" [class.telegram-status--running]="telegramStatus?.running">
+                    <span class="status-dot"></span>
+                    <span class="status-text">
+                        {{ telegramStatus?.running ? 'Running' : 'Stopped' }} |
+                        auth={{ telegramStatus?.auth_state || 'unknown' }} |
+                        connected={{ telegramStatus?.connected ? 'yes' : 'no' }} |
+                        authorized={{ telegramStatus?.authorized ? 'yes' : 'no' }}
+                    </span>
+                    <span class="status-meta" *ngIf="telegramStatus?.self_username">
+                        &#64;{{ telegramStatus?.self_username }}
+                    </span>
+                    <span class="status-meta" *ngIf="telegramStatus?.last_ping_ms !== null && telegramStatus?.last_ping_ms !== undefined">
+                        ping={{ telegramStatus?.last_ping_ms }}ms
+                    </span>
+                </div>
+
+                <div class="telegram-error" *ngIf="telegramStatus?.last_error">
+                    {{ telegramStatus?.last_error }}
+                </div>
+
+                <div class="telegram-actions">
+                    <button type="button" [disabled]="isTelegramBusy" (click)="startTelegram()">
+                        Start
+                    </button>
+                    <button type="button" [disabled]="isTelegramBusy" (click)="stopTelegram()">
+                        Stop
+                    </button>
+                    <button type="button" [disabled]="isTelegramBusy" (click)="pingTelegram()">
+                        Ping
+                    </button>
+                    <button type="button" [disabled]="isTelegramBusy" (click)="refreshTelegramStatus()">
+                        Refresh status
+                    </button>
+                </div>
+
+                <div class="telegram-auth">
+                    <div class="form-group">
+                        <label for="telegram-auth-phone">Auth phone override (optional)</label>
+                        <app-ui-input
+                            id="telegram-auth-phone"
+                            type="text"
+                            [(ngModel)]="authPhoneInput"
+                            [ngModelOptions]="{ standalone: true }"
+                            placeholder="+79991234567"
+                        ></app-ui-input>
+                    </div>
+                    <div class="telegram-actions">
+                        <button type="button" [disabled]="isTelegramBusy" (click)="requestTelegramCode()">
+                            Request code
+                        </button>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="telegram-auth-code">Auth code</label>
+                        <app-ui-input
+                            id="telegram-auth-code"
+                            type="text"
+                            [(ngModel)]="authCodeInput"
+                            [ngModelOptions]="{ standalone: true }"
+                            [placeholder]="'12345'"
+                        ></app-ui-input>
+                    </div>
+                    <div class="telegram-actions">
+                        <button type="button" [disabled]="isTelegramBusy" (click)="submitTelegramCode()">
+                            Submit code
+                        </button>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="telegram-auth-password">2FA password</label>
+                        <app-ui-input
+                            id="telegram-auth-password"
+                            type="password"
+                            [(ngModel)]="authPasswordInput"
+                            [ngModelOptions]="{ standalone: true }"
+                            [placeholder]="'your_2fa_password'"
+                        ></app-ui-input>
+                    </div>
+                    <div class="telegram-actions">
+                        <button type="button" [disabled]="isTelegramBusy" (click)="submitTelegramPassword()">
+                            Submit password
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section" formGroupName="synthesis">
+                <h3>Stable Diffusion WebUI</h3>
+
+                <div class="telegram-grid" formGroupName="sd_webui">
+                    <div class="form-group">
+                        <label class="checkbox">
+                            <input type="checkbox" formControlName="enabled" />
+                            Enable SD WebUI API provider
+                        </label>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="sd-webui-base-url">Base URL</label>
+                        <app-ui-input
+                            id="sd-webui-base-url"
+                            type="text"
+                            formControlName="base_url"
+                            [placeholder]="'http://127.0.0.1:7860'"
+                        ></app-ui-input>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="sd-webui-bearer-token">Bearer Token</label>
+                        <app-ui-input
+                            id="sd-webui-bearer-token"
+                            type="password"
+                            formControlName="bearer_token"
+                            [placeholder]="'Optional'"
+                        ></app-ui-input>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="sd-webui-timeout">Timeout (sec)</label>
+                        <app-ui-input
+                            id="sd-webui-timeout"
+                            type="number"
+                            formControlName="timeout_sec"
+                            [min]="1"
+                            [step]="1"
+                        ></app-ui-input>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="sd-webui-checkpoint">Checkpoint (optional)</label>
+                        <app-ui-input
+                            id="sd-webui-checkpoint"
+                            type="text"
+                            formControlName="checkpoint"
+                            [placeholder]="'v1-5-pruned.safetensors'"
+                        ></app-ui-input>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="sd-webui-sampler">Sampler Name</label>
+                        <app-ui-input
+                            id="sd-webui-sampler"
+                            type="text"
+                            formControlName="sampler_name"
+                            [placeholder]="'DPM++ 2M'"
+                        ></app-ui-input>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="sd-webui-scheduler">Scheduler</label>
+                        <app-ui-input
+                            id="sd-webui-scheduler"
+                            type="text"
+                            formControlName="scheduler"
+                            [placeholder]="'Automatic'"
+                        ></app-ui-input>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="sd-webui-cfg-scale">Default CFG Scale</label>
+                        <app-ui-input
+                            id="sd-webui-cfg-scale"
+                            type="number"
+                            formControlName="cfg_scale_default"
+                            [min]="0"
+                            [step]="0.1"
+                        ></app-ui-input>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section" formGroupName="communication">
+                <h3>Channel Priority</h3>
+
+                <div class="communication-grid">
+                    <div class="form-group">
+                        <label for="comm-primary-channel">Primary channel</label>
+                        <app-ui-select
+                            id="comm-primary-channel"
+                            formControlName="primary_channel"
+                            [options]="communicationPrimaryOptions"
+                        ></app-ui-select>
+                    </div>
+                </div>
+
+                <div class="form-group checkbox-group" formGroupName="channels">
+                    <div class="communication-channel" formGroupName="main_chat">
+                        <label class="checkbox">
+                            <input type="checkbox" formControlName="enabled" />
+                            Main chat enabled
+                        </label>
+                    </div>
+
+                    <div class="communication-channel" formGroupName="telegram">
+                        <label class="checkbox">
+                            <input type="checkbox" formControlName="enabled" />
+                            Telegram enabled
+                        </label>
+                        <label class="checkbox">
+                            <input
+                                type="checkbox"
+                                formControlName="allow_fallback"
+                                [disabled]="systemForm.get('communication.primary_channel')?.value === 'main_chat'"
+                            />
+                            Use main chat as fallback on Telegram failure
+                        </label>
+                    </div>
                 </div>
             </div>
 

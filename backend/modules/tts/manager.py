@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
 import os
@@ -21,8 +21,8 @@ from modules.tts.providers.gtts import GTTSProvider
 from modules.tts.providers.offline import OfflineTTSProvider
 from modules.tts.state import voice_state
 from modules.tts.types import TTSRequest, TTSResult
-from services import config_service
-from services.logger_service import AuditStatus, log_audit_entry
+from modules.system import config as config_service
+from modules.system.logger import AuditStatus, log_audit_entry
 
 
 def _as_bool(value: object) -> bool:

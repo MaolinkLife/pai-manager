@@ -162,3 +162,51 @@
         }
     }
 }
+
+.provider-status-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+
+    .provider-status-text {
+        color: var(--color-text);
+        font-size: 13px;
+    }
+
+    .provider-status-model {
+        margin-left: 4px;
+        color: var(--color-text-active);
+    }
+
+    .provider-status-message {
+        margin-left: 6px;
+        color: var(--color-text-muted);
+    }
+
+    .select-monitor-btn {
+        background: var(--color-accent);
+        color: var(--color-surface);
+        border: none;
+        padding: 8px 12px;
+        border-radius: var(--radius);
+        font-family: var(--font-family);
+        transition: background 0.2s ease;
+        box-shadow: var(--shadow-soft);
+        cursor: pointer;
+        white-space: nowrap;
+
+        &:hover {
+            background: var(--color-accent-dark);
+        }
+
+        &:disabled {
+            background: var(--color-border);
+            color: #777;
+            cursor: not-allowed;
+            box-shadow: none;
+            opacity: 0.6;
+        }
+    }
+}

@@ -42,6 +42,7 @@ export interface ModuleConfigDto {
     gaming: boolean;
     alarm: boolean;
     discord: boolean;
+    telegram?: boolean;
     rag: boolean;
     visual: boolean;
 }
@@ -113,7 +114,13 @@ export interface RagVectorProfileDto {
 
 export interface RagRetrievalDto {
     recent?: { limit?: number };
-    session?: { enabled?: boolean; window?: string };
+    session?: {
+        enabled?: boolean;
+        window?: string;
+        idle_gap_minutes?: number;
+        max_messages?: number;
+        chunk_size?: number;
+    };
     keyword?: {
         enabled?: boolean;
         max_candidates?: number;
@@ -127,7 +134,8 @@ export interface RagRetrievalDto {
         primary?: string;
         profiles?: Record<string, RagVectorProfileDto>;
     };
-    short_term?: { enabled?: boolean; threshold?: number };
+    short_term?: { enabled?: boolean; threshold?: number; lookback_days?: number };
+    emotional?: { enabled?: boolean; lookback_days?: number; limit?: number };
     rerank?: {
         enabled?: boolean;
         top_n?: number;
@@ -205,6 +213,74 @@ export interface MemoryConfigDto {
     embedding_model: string;
 }
 
+export interface SynthesisSdWebUIConfigDto {
+    enabled: boolean;
+    base_url: string;
+    bearer_token: string;
+    timeout_sec: number;
+    checkpoint: string;
+    sampler_name: string;
+    scheduler: string;
+    cfg_scale_default: number;
+}
+
+export interface SynthesisComfyUIConfigDto {
+    enabled: boolean;
+    base_url: string;
+    websocket_url: string;
+    timeout_sec: number;
+    default_workflow: string;
+    default_model: string;
+}
+
+export interface SynthesisDiffusersConfigDto {
+    enabled: boolean;
+    device: string;
+    default_model: string;
+    local_models_path: string;
+    cache_dir: string;
+    torch_dtype: string;
+}
+
+export interface SynthesisPromptingConfigDto {
+    enabled: boolean;
+    max_attempts: number;
+    assess_enabled: boolean;
+    quality_threshold: number;
+    appearance_prompt: string;
+    default_negative_prompt: string;
+    visual_profile?: {
+        character_name?: string;
+        appearance_textarea?: string;
+        default_outfit?: string;
+        default_environment?: string;
+        style_preset?: string;
+        render_profile?: string;
+        selfie_bias?: number;
+        environment_bias?: number;
+        symbolic_bias?: number;
+        anti_repetition_strength?: number;
+        use_time_of_day?: boolean;
+        use_season?: boolean;
+        use_weather?: boolean;
+        use_relation_state?: boolean;
+        use_recent_topics?: boolean;
+        selfie_composition_base?: string;
+        selfie_composition_pool_override?: string;
+        environment_composition_pool_override?: string;
+        allow_self_images?: boolean;
+        allow_environment_images?: boolean;
+        allow_symbolic_images?: boolean;
+    };
+}
+
+export interface SynthesisConfigDto {
+    sd_webui: SynthesisSdWebUIConfigDto;
+    comfyui: SynthesisComfyUIConfigDto;
+    diffusers: SynthesisDiffusersConfigDto;
+    prompting?: SynthesisPromptingConfigDto;
+}
+
 export interface GeneratorProviderConfigDto {
     model: string;
     temperature: number;
@@ -247,12 +323,18 @@ export interface SystemConfigDto {
     system_prompt?: string;
     language?: string;
     theme?: string;
+    runtime?: {
+        model_memory_profile?: string;
+    };
 }
 
 export interface ProjectConfigDto extends BaseConfigDto {
     voice: VoiceConfigDto;
     modules: ModuleConfigDto;
     connector: ConnectorConfigDto;
+    telegram?: any;
+    communication?: any;
+    synthesis?: SynthesisConfigDto;
     audio: AudioConfigDto;
     vision: VisionConfigDto;
     rag: RagConfigDto;

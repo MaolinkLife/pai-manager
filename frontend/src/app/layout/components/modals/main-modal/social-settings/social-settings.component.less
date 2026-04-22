@@ -1,0 +1,208 @@
+@import "../../../../../../assets/styles/lim-ui/colors.less";
+
+:host {
+    display: block;
+}
+
+.settings-wrapper {
+    background-color: var(--color-surface);
+    padding: 24px;
+    border-radius: var(--radius);
+    color: var(--color-text);
+    overflow-x: hidden;
+}
+
+.settings-form {
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+    min-width: 0;
+}
+
+.section {
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    padding: 18px;
+    background: color-mix(in srgb, var(--color-bg) 86%, transparent);
+    min-width: 0;
+    box-sizing: border-box;
+
+    h3,
+    h4 {
+        margin: 0 0 10px;
+    }
+}
+
+.section--nested {
+    margin-top: 18px;
+    padding: 16px;
+    background: color-mix(in srgb, var(--color-bg) 92%, transparent);
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 14px;
+    min-width: 0;
+
+    label {
+        margin-bottom: 6px;
+        font-weight: 500;
+    }
+}
+
+.checkbox-group {
+    display: grid;
+    gap: 8px;
+}
+
+.checkbox {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.telegram-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 10px 12px;
+    min-width: 0;
+}
+
+.telegram-status {
+    margin-top: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #f59e0b;
+}
+
+.telegram-status--running .status-dot {
+    background: #22c55e;
+}
+
+.telegram-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 10px;
+
+    button {
+        background: var(--color-accent);
+        border: none;
+        padding: 8px 12px;
+        border-radius: var(--radius);
+        color: #071018;
+        cursor: pointer;
+    }
+}
+
+.button-row {
+    display: flex;
+    justify-content: flex-end;
+
+    button {
+        background: var(--color-accent);
+        border: none;
+        padding: 10px 14px;
+        border-radius: var(--radius);
+        color: #071018;
+        cursor: pointer;
+    }
+}
+
+.hint {
+    margin: 6px 0 0;
+    font-size: 13px;
+    color: var(--color-text);
+    opacity: 0.85;
+    line-height: 1.45;
+}
+
+.peer-list {
+    display: grid;
+    gap: 8px;
+    max-height: 220px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-right: 6px;
+    margin-top: 10px;
+    min-width: 0;
+}
+
+.peer-list--sources {
+    max-height: 260px;
+}
+
+.peer-item,
+.peer-item-checkbox {
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    padding: 8px 10px;
+    background: color-mix(in srgb, var(--color-bg) 92%, transparent);
+    min-width: 0;
+    box-sizing: border-box;
+}
+
+.peer-item-checkbox {
+    width: 100%;
+    justify-content: flex-start;
+    padding: 10px 12px;
+    overflow: hidden;
+
+    ::ng-deep .ui-checkbox {
+        width: 100%;
+        justify-content: flex-start;
+        min-width: 0;
+    }
+
+    ::ng-deep .ui-checkbox__label {
+        width: 100%;
+        min-width: 0;
+        white-space: normal;
+        word-break: break-word;
+    }
+}
+
+.peer-item__label {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+    min-width: 0;
+    word-break: break-word;
+}
+
+.empty-peer-state {
+    margin-top: 10px;
+    padding: 12px 14px;
+    border: 1px dashed var(--color-border);
+    border-radius: var(--radius);
+    background: color-mix(in srgb, var(--color-bg) 94%, transparent);
+}
+
+.source-selection-summary {
+    margin-top: 10px;
+    padding: 10px 12px;
+    border: 1px dashed color-mix(in srgb, var(--color-border) 80%, transparent);
+    border-radius: var(--radius);
+    background: color-mix(in srgb, var(--color-bg) 95%, transparent);
+}
+
+.source-selection-summary__mode {
+    opacity: 1;
+}
+
+app-ui-input,
+app-ui-select,
+app-ui-textarea {
+    min-width: 0;
+    width: 100%;
+    box-sizing: border-box;
+}

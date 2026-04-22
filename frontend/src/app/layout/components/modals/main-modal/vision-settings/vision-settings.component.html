@@ -79,6 +79,27 @@
                         [options]="visionProviderOptions"
                     ></app-ui-select>
                 </div>
+
+                <div class="form-group provider-status" *ngIf="activeProvider">
+                    <div class="provider-status-row">
+                        <div class="provider-status-text" *ngIf="providerStatus; else noProviderStatus">
+                            <strong>{{ "settings.visionProviderStatus" | translate }}:</strong>
+                            <span *ngIf="providerStatus.ready === true">{{ "settings.visionStatusSupported" | translate }}</span>
+                            <span *ngIf="providerStatus.ready === false">{{ "settings.visionStatusUnavailable" | translate }}</span>
+                            <span *ngIf="providerStatus.ready === null">{{ "settings.visionStatusConfigured" | translate }}</span>
+                            <span class="provider-status-model" *ngIf="providerStatus.model">({{ providerStatus.model }})</span>
+                            <span class="provider-status-message">- {{ providerStatus.message }}</span>
+                        </div>
+                        <ng-template #noProviderStatus>
+                            <div class="provider-status-text">
+                                <strong>{{ "settings.visionProviderStatus" | translate }}:</strong> {{ "settings.visionStatusUnknown" | translate }}
+                            </div>
+                        </ng-template>
+                        <button type="button" class="select-monitor-btn" (click)="checkProviderCapability()" [disabled]="isCheckingProvider">
+                            {{ isCheckingProvider ? ('settings.visionChecking' | translate) : ('settings.visionCheckSupport' | translate) }}
+                        </button>
+                    </div>
+                </div>
             </div>
 
             <div class="section provider-settings" formGroupName="visionModules" *ngIf="activeProvider && currentProviderGroup">
@@ -100,6 +121,25 @@
                             >
                                 {{ field.label }}
                             </label>
+                            <ng-container *ngIf="activeProvider === 'ollama_vision' && field.key === 'model'; else standardProviderField">
+                                <div class="monitor-selection">
+                                    <app-ui-select
+                                        class="provider-input"
+                                        [id]="activeProvider + '-' + field.key"
+                                        [formControlName]="field.key"
+                                        [options]="ollamaModelOptions"
+                                    ></app-ui-select>
+                                    <button
+                                        type="button"
+                                        class="select-monitor-btn"
+                                        (click)="refreshOllamaModels()"
+                                        [disabled]="isLoadingOllamaModels"
+                                    >
+                                        {{ isLoadingOllamaModels ? ('settings.loading' | translate) : ('settings.refreshModels' | translate) }}
+                                    </button>
+                                </div>
+                            </ng-container>
+                            <ng-template #standardProviderField>
                             <app-ui-input
                                 *ngIf="field.type === 'number'"
                                 type="number"
@@ -114,6 +154,7 @@
                                 [id]="activeProvider + '-' + field.key"
                                 [formControlName]="field.key"
                             ></app-ui-input>
+                            </ng-template>
                         </div>
                     </ng-container>
                 </div>

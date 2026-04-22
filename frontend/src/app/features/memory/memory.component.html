@@ -95,6 +95,7 @@
 
             <div class="search-meta">
                 <span>{{ "memory.found" | translate }}: {{ aiHits.length }}</span>
+                <span *ngIf="!aiSearchStarted">Press Search to run diagnostics.</span>
             </div>
         </section>
 

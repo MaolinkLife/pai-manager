@@ -17,8 +17,8 @@ from pydub import AudioSegment
 
 from modules.tts.providers.base import TTSProvider, TTSProviderError
 from modules.tts.types import TTSRequest, TTSResult
-from services.logger_service import AuditStatus, log_audit_entry
-from services.localization_service import get_text
+from modules.system.logger import AuditStatus, log_audit_entry
+from modules.system.localization import get_text
 
 
 class OfflineTTSProvider(TTSProvider):

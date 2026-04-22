@@ -34,6 +34,8 @@ Pillow>=10.0.0
 
 # Async/HTTP
 aiohttp
+telethon>=1.36.0
+cryptg
 
 # Vector DB
 chromadb

@@ -1,4 +1,4 @@
-﻿"""Embedding helpers for memory and lorebook subsystems."""
+"""Embedding helpers for memory and lorebook subsystems."""
 
 from __future__ import annotations
 
@@ -15,7 +15,8 @@ import requests
 from requests import Response
 from sentence_transformers import SentenceTransformer
 
-from services import config_service
+from modules.system import config as config_service
+from modules.system.runtime_profile import should_release_resources
 
 _LOG_LEVEL = os.getenv("EMBED_SVC_LOG_LEVEL", "INFO").upper()
 logging.basicConfig(level=_LOG_LEVEL, format="%(levelname)s %(name)s: %(message)s")
@@ -27,6 +28,8 @@ OLLAMA_TIMEOUT_SEC: float = float(os.getenv("OLLAMA_TIMEOUT_SEC", "30"))
 OLLAMA_MAX_RETRIES: int = int(os.getenv("OLLAMA_MAX_RETRIES", "2"))
 OLLAMA_RETRY_BACKOFF_SEC: float = float(os.getenv("OLLAMA_RETRY_BACKOFF_SEC", "0.75"))
 OLLAMA_DOWN_COOLDOWN_SEC: float = float(os.getenv("OLLAMA_DOWN_COOLDOWN_SEC", "45"))
+OLLAMA_MAX_INPUT_CHARS: int = int(os.getenv("OLLAMA_MAX_INPUT_CHARS", "12000"))
+OLLAMA_MIN_INPUT_CHARS: int = int(os.getenv("OLLAMA_MIN_INPUT_CHARS", "1200"))
 
 DEFAULT_ST_MODEL_NAME: str = os.getenv(
     "ST_DEFAULT_MODEL", "paraphrase-multilingual-MiniLM-L12-v2"
@@ -56,6 +59,32 @@ _st_models_cache: Dict[str, SentenceTransformer] = {}
 _ollama_state_lock = Lock()
 _ollama_unavailable_until: float = 0.0
 _ollama_last_error: str = ""
+
+
+def _audit_embedding_event(
+    event_type: str,
+    msg: str,
+    *,
+    details: Optional[Dict[str, Any]] = None,
+    status: str = "info",
+) -> None:
+    try:
+        from modules.system.logger import AuditStatus, log_audit_entry
+
+        status_map = {
+            "info": AuditStatus.INFO,
+            "warning": AuditStatus.WARNING,
+            "error": AuditStatus.ERROR,
+            "success": AuditStatus.SUCCESS,
+        }
+        log_audit_entry(
+            event_type,
+            msg,
+            status_map.get(status, AuditStatus.INFO),
+            details=details or {},
+        )
+    except Exception:
+        return
 
 
 def _resolve_profile_settings(profile_name: Optional[str] = None) -> Dict[str, Any]:
@@ -116,6 +145,34 @@ def _prepare_settings(
     return dict(resolved) if resolved else {}
 
 
+def _normalize_ollama_input_limits(settings: Optional[Dict[str, Any]]) -> tuple[int, int]:
+    cfg = dict(settings or {})
+    max_chars = cfg.get("max_input_chars", OLLAMA_MAX_INPUT_CHARS)
+    min_chars = cfg.get("min_input_chars", OLLAMA_MIN_INPUT_CHARS)
+    try:
+        max_chars_int = int(max_chars)
+    except Exception:
+        max_chars_int = OLLAMA_MAX_INPUT_CHARS
+    try:
+        min_chars_int = int(min_chars)
+    except Exception:
+        min_chars_int = OLLAMA_MIN_INPUT_CHARS
+    max_chars_int = max(256, max_chars_int)
+    min_chars_int = max(128, min(min_chars_int, max_chars_int))
+    return max_chars_int, min_chars_int
+
+
+def _trim_text_for_ollama(text: str, max_chars: int) -> str:
+    payload = str(text or "").strip()
+    if len(payload) <= max_chars:
+        return payload
+    cut = payload[:max_chars]
+    last_boundary = max(cut.rfind("\n"), cut.rfind(". "), cut.rfind(" "))
+    if last_boundary > int(max_chars * 0.6):
+        cut = cut[:last_boundary]
+    return cut.rstrip()
+
+
 def _should_trust_remote_code(model_name: str) -> bool:
     return any(model_name.startswith(org) for org in TRUST_REMOTE_CODE_ORGS)
 
@@ -150,6 +207,43 @@ def _get_st_model(model_name: Optional[str] = None) -> Optional[SentenceTransfor
         if model is not None:
             _st_models_cache[name] = model
         return model
+
+
+def _release_st_models(model_name: Optional[str] = None) -> None:
+    with _st_model_lock:
+        if model_name:
+            name = _normalize_st_model_name(model_name)
+            model = _st_models_cache.pop(name, None)
+            models = [model] if model is not None else []
+        else:
+            models = list(_st_models_cache.values())
+            _st_models_cache.clear()
+    for model in models:
+        if model is None:
+            continue
+        try:
+            if hasattr(model, "to"):
+                model.to("cpu")
+        except Exception:
+            pass
+        try:
+            del model
+        except Exception:
+            pass
+    try:
+        import gc
+
+        gc.collect()
+    except Exception:
+        pass
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.ipc_collect()
+    except Exception:
+        pass
 
 
 def _safe_read_text(res: Optional[Response]) -> str:
@@ -219,6 +313,15 @@ def _mark_ollama_unavailable(error_text: str) -> None:
             OLLAMA_DOWN_COOLDOWN_SEC,
             error_text,
         )
+        _audit_embedding_event(
+            "memory_embeddings_ollama_unavailable",
+            "[MemoryEmbeddings] Ollama embeddings unavailable; fallback cooldown started.",
+            status="warning",
+            details={
+                "cooldown_seconds": OLLAMA_DOWN_COOLDOWN_SEC,
+                "reason": str(error_text)[:400],
+            },
+        )
 
 
 # Ollama embeddings ---------------------------------------------------------
@@ -234,27 +337,75 @@ def _ollama_embed_one(
         return None
 
     cfg = _normalize_ollama_settings(settings)
-    payload = {"model": model, "prompt": text}
-    payload.update(cfg.get("request_overrides") or {})
-    try:
-        res = _post_with_retries(
-            cfg["url"],
-            json_payload=payload,
-            timeout=cfg["timeout"],
-            max_retries=cfg["max_retries"],
-            backoff=cfg["retry_backoff"],
-            headers=cfg.get("headers"),
-            verify=cfg.get("verify"),
-        )
-        data = res.json()
-        vector = data.get("embedding")
-        if not vector:
-            logger.warning("Ollama returned empty embedding for prompt len=%s", len(text))
-            return None
-        return vector
-    except (OllamaError, ValueError, json.JSONDecodeError) as exc:
-        _mark_ollama_unavailable(str(exc))
+    max_chars, min_chars = _normalize_ollama_input_limits(settings)
+    original = str(text or "").strip()
+    current = _trim_text_for_ollama(original, max_chars)
+    if not current:
         return None
+    if len(current) != len(original):
+        _audit_embedding_event(
+            "memory_embeddings_ollama_trimmed_input",
+            "[MemoryEmbeddings] Ollama embedding input trimmed before request.",
+            details={
+                "original_chars": len(original),
+                "trimmed_chars": len(current),
+                "max_input_chars": max_chars,
+            },
+        )
+
+    while True:
+        payload = {"model": model, "prompt": current}
+        payload.update(cfg.get("request_overrides") or {})
+        try:
+            res = _post_with_retries(
+                cfg["url"],
+                json_payload=payload,
+                timeout=cfg["timeout"],
+                max_retries=cfg["max_retries"],
+                backoff=cfg["retry_backoff"],
+                headers=cfg.get("headers"),
+                verify=cfg.get("verify"),
+            )
+            data = res.json()
+            vector = data.get("embedding")
+            if not vector:
+                logger.warning(
+                    "Ollama returned empty embedding for prompt len=%s",
+                    len(current),
+                )
+                return None
+            if len(current) != len(original):
+                logger.info(
+                    "Ollama embedding input trimmed from %s to %s chars.",
+                    len(original),
+                    len(current),
+                )
+            return vector
+        except (OllamaError, ValueError, json.JSONDecodeError) as exc:
+            err = str(exc).lower()
+            overflow = "input length exceeds the context length" in err
+            if overflow and len(current) > min_chars:
+                next_len = max(min_chars, int(len(current) * 0.7))
+                if next_len < len(current):
+                    logger.warning(
+                        "Ollama embedding overflow at %s chars, retry with %s chars.",
+                        len(current),
+                        next_len,
+                    )
+                    _audit_embedding_event(
+                        "memory_embeddings_ollama_overflow_retry",
+                        "[MemoryEmbeddings] Ollama overflow detected; retry with shorter input.",
+                        status="warning",
+                        details={
+                            "current_chars": len(current),
+                            "next_chars": next_len,
+                            "min_input_chars": min_chars,
+                        },
+                    )
+                    current = _trim_text_for_ollama(current, next_len)
+                    continue
+            _mark_ollama_unavailable(str(exc))
+            return None
 
 
 def get_embedding_ollama(
@@ -287,6 +438,10 @@ def _st_embed(
     *,
     settings: Optional[Dict[str, Any]] = None,
 ) -> Optional[List[List[float]]]:
+    release_after_call = should_release_resources("embeddings")
+    if isinstance(settings, dict):
+        if "release_after_call" in settings:
+            release_after_call = bool(settings.get("release_after_call"))
     model = _get_st_model(model_name)
     if model is None:
         return None
@@ -315,6 +470,9 @@ def _st_embed(
         return normalized
     except Exception as exc:
         raise STModelError(str(exc)) from exc
+    finally:
+        if release_after_call:
+            _release_st_models(model_name)
 
 
 def get_embedding_st(
@@ -438,4 +596,3 @@ def get_embeddings_batch_both(
     embeddings_384 = get_embeddings_st(texts, settings=cfg)
     embeddings_768 = get_embeddings_ollama(texts, settings=cfg)
     return embeddings_384, embeddings_768
-

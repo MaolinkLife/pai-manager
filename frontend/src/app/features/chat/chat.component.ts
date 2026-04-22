@@ -227,7 +227,10 @@ export class ChatComponent implements OnInit, OnDestroy {
                 }
 
                 case 'history':
-                    const newMessages = event.items.map((m: any) => {
+                    const newMessages = (event.items || []).filter((m: any) => {
+                        const role = String(m?.role || '').toLowerCase();
+                        return role !== 'tool';
+                    }).map((m: any) => {
                         const runtime = this.hydrateRuntimeFromHistory(m.runtime_meta);
                         const runId = runtime?.runId;
                         if (runtime && runId) {

@@ -104,7 +104,9 @@ backend/temp/vision/*
 backend/temp/voice/*
 
 backend/logs/
-
-# Временно
-old-project
-docs
+backend/telegram/data/
+backend/data/*.db
+backend/data/telegram/*.session
+backend/data/telegram/*.session-journal
+backend/**/z-waif.session
+backend/**/z-waif.session-journal

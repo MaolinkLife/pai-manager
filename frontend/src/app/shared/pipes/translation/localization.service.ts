@@ -8,12 +8,13 @@ export class LocalizationService {
     private readonly translations = signal<Record<string, unknown>>({});
     readonly translationsState = this.translations.asReadonly();
     readonly currentLang = signal<string>('ru-RU');
+    private readonly cacheBuster = Date.now();
 
     constructor(private http: HttpClient) { }
 
-    setLanguage(lang: string) {
+    setLanguage(lang: string, forceReload = false) {
         const normalizedLang = this.normalizeLanguage(lang);
-        if (this.currentLang() === normalizedLang && Object.keys(this.translations()).length > 0) {
+        if (!forceReload && this.currentLang() === normalizedLang && Object.keys(this.translations()).length > 0) {
             return;
         }
         this.currentLang.set(normalizedLang);
@@ -45,7 +46,7 @@ export class LocalizationService {
             }
 
             const candidate = candidates[index];
-            this.http.get<Record<string, unknown>>(`/assets/i18n/${candidate}.json`).subscribe(
+            this.http.get<Record<string, unknown>>(`/assets/i18n/${candidate}.json?v=${this.cacheBuster}`).subscribe(
                 (data) => this.translations.set(data),
                 () => tryLoad(index + 1)
             );
@@ -56,7 +57,7 @@ export class LocalizationService {
 
     init() {
         const saved = localStorage.getItem('language') || 'ru-RU';
-        this.setLanguage(saved);
+        this.setLanguage(saved, true);
     }
 
     private normalizeLanguage(lang: string): string {

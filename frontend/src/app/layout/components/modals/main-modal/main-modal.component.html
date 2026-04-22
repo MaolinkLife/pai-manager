@@ -26,6 +26,8 @@
         <app-generation-settings
             *ngIf="activeView === 'generate'"
         ></app-generation-settings>
+        <app-media-settings *ngIf="activeView === 'media'"></app-media-settings>
+        <app-social-settings *ngIf="activeView === 'social'"></app-social-settings>
         <app-core-settings *ngIf="activeView === 'core'"></app-core-settings>
         <app-system-settings
             *ngIf="activeView === 'system'"

@@ -16,9 +16,10 @@ from modules.generative import NoProviderResolved, generation_manager
 from modules.generative.types import GenerateRequest, GenerateStreamChunk
 from modules.system.service import get_active_character_name
 from core.decision_layer import decision_layer
-from services import database_service
-from services import config_service
-from services.logger_service import AuditStatus, log_audit_entry
+from modules.database import service as database_service
+from modules.system import config as config_service
+from modules.system.logger import AuditStatus, log_audit_entry
+from core import tool_event_bus
 from modules.tts.state import VoiceStage, voice_state
 from utils.time_utils import to_user_tz_iso
 
@@ -243,6 +244,100 @@ def _voice_streaming_available() -> bool:
     )
 
 
+def _emit_generation_tool_event(
+    *,
+    tool_name: str,
+    content: str,
+    status: str,
+    runtime_meta: Optional[Dict[str, Any]] = None,
+) -> None:
+    try:
+        tool_event_bus.emit_tool_event(
+            tool_name=tool_name,
+            content=content,
+            status=status,
+            source="generation_pipeline",
+            runtime_meta=runtime_meta or {},
+            tags=["tool", "generation", status],
+        )
+    except Exception:
+        # Tool event persistence should never break generation flow.
+        pass
+
+
+def _recover_empty_content_with_retries(
+    *,
+    chat_history: list,
+    options: dict,
+    assistant_reasoning: str,
+    mode: str,
+) -> tuple[str, str, str]:
+    """
+    Recovery when provider produced only reasoning and empty visible content.
+    Does not try to parse visible text from reasoning directly.
+    Makes up to 2 strict retry attempts, then returns empty content.
+    Returns: (content, reasoning, provider)
+    """
+    attempts = 2
+    prior_reasoning = (assistant_reasoning or "").strip()
+    used_provider = ""
+
+    for attempt in range(1, attempts + 1):
+        reasoning_snippet = prior_reasoning
+        if len(reasoning_snippet) > 1200:
+            reasoning_snippet = reasoning_snippet[-1200:]
+
+        recovery_instruction = (
+            "Your previous response produced empty visible content. "
+            "Return ONLY one short final user-facing reply. "
+            "No reasoning, no analysis, no lists, no metadata."
+        )
+        if reasoning_snippet:
+            recovery_instruction += (
+                "\n\nPrevious internal reasoning snapshot (for continuity, do not echo literally):\n"
+                f"{reasoning_snippet}"
+            )
+
+        retry_options = dict(options or {})
+        if attempt >= 2:
+            try:
+                base_predict = int(retry_options.get("num_predict", 2048) or 2048)
+            except Exception:
+                base_predict = 2048
+            retry_options["num_predict"] = max(base_predict, min(base_predict + 512, 4096))
+
+        recovery_messages = list(chat_history) + [
+            {"role": "user", "content": recovery_instruction}
+        ]
+        result = generation_manager.generate(
+            GenerateRequest(
+                messages=recovery_messages,
+                options=retry_options,
+                metadata={"mode": f"{mode}_empty_content_recovery", "attempt": attempt},
+            )
+        )
+        used_provider = str(result.provider or used_provider or "")
+        raw = (result.content or "").strip()
+        recovered_reasoning = (result.reasoning or "").strip()
+        if recovered_reasoning:
+            recovered_content = raw
+            prior_reasoning = recovered_reasoning
+        else:
+            recovered_content, parsed_reasoning = split_reasoning(raw)
+            prior_reasoning = (parsed_reasoning or prior_reasoning).strip()
+
+        if (recovered_content or "").strip():
+            return (recovered_content or "").strip(), (prior_reasoning or "").strip(), used_provider
+
+    log_audit_entry(
+        "conversation_empty_content_recovery_exhausted",
+        "[Conversation] Empty content recovery exhausted after retries.",
+        AuditStatus.ERROR,
+        details={"mode": mode, "attempts": attempts, "provider": used_provider},
+    )
+    return "", (prior_reasoning or "").strip(), used_provider
+
+
 async def _ensure_voice_ready() -> None:
     retries = 5
     while voice_state.stage() is VoiceStage.PREPARING and retries > 0:
@@ -349,6 +444,25 @@ async def generate_standard(
     except NoProviderResolved as exc:
         print("[Generator] Провайдеры недоступны (standard).")
         provider_errors = _extract_provider_errors(exc)
+        _emit_generation_tool_event(
+            tool_name="generation.provider",
+            status="error",
+            content=(
+                "[ERROR]: generation provider not available. "
+                + (
+                    "; ".join(
+                        f"{item.get('provider')}: {item.get('reason')}"
+                        for item in provider_errors
+                    )
+                    if provider_errors
+                    else str(exc)
+                )
+            ),
+            runtime_meta={
+                "mode": "standard",
+                "providers": provider_errors,
+            },
+        )
         log_audit_entry(
             event_type="generation_provider_failure",
             msg="[Generator] Не удалось подобрать провайдера",
@@ -380,6 +494,32 @@ async def generate_standard(
         assistant_content = assistant_raw
     else:
         assistant_content, assistant_reasoning = split_reasoning(assistant_raw)
+    if not assistant_content:
+        try:
+            recovered_content, recovered_reasoning, recovered_provider = _recover_empty_content_with_retries(
+                chat_history=chat_history,
+                options=request_payload.options,
+                assistant_reasoning=assistant_reasoning,
+                mode="standard",
+            )
+            if recovered_content:
+                assistant_content = recovered_content
+                assistant_reasoning = recovered_reasoning or assistant_reasoning
+                if recovered_provider:
+                    generate_result.provider = recovered_provider
+                log_audit_entry(
+                    "conversation_standard_empty_content_recovered",
+                    "[Conversation] Empty content recovered by retry regeneration.",
+                    AuditStatus.WARNING,
+                    details={"provider": generate_result.provider},
+                )
+        except Exception as exc:
+            log_audit_entry(
+                "conversation_standard_empty_content_recovery_failed",
+                "[Conversation] Empty content recovery failed.",
+                AuditStatus.WARNING,
+                details={"error": str(exc)},
+            )
     log_audit_entry(
         "conversation_standard_result",
         "[Conversation] Результат стандартной генерации получен.",
@@ -400,14 +540,19 @@ async def generate_standard(
         user_tags = _generate_tags_for_text(
             last_user_message.get("content", ""), extra=extra_tags
         )
-        database_service.add_message_to_history(
-            character_name=get_active_character_name(default="default"),
-            role="user",
-            content=last_user_message["content"],
-            timestamp=datetime.now(timezone.utc),
-            media=user_media_for_storage,
-            tags=user_tags,
-        )
+        existing_user = None
+        message_id = str(last_user_message.get("id") or "").strip()
+        if message_id:
+            existing_user = database_service.get_message_by_id(message_id)
+        if not existing_user:
+            database_service.add_message_to_history(
+                character_name=get_active_character_name(default="default"),
+                role="user",
+                content=last_user_message["content"],
+                timestamp=datetime.now(timezone.utc),
+                media=user_media_for_storage,
+                tags=user_tags,
+            )
 
         assistant_tags = _generate_tags_for_text(
             assistant_content, extra=extra_tags + ["assistant"]
@@ -572,14 +717,19 @@ async def generate_stream(
         user_tags = _generate_tags_for_text(
             last_user_message.get("content", ""), extra=extra_tags
         )
-        stored_user_entry = database_service.add_message_to_history(
-            character_name=get_active_character_name(default="default"),
-            role="user",
-            content=last_user_message.get("content", ""),
-            timestamp=datetime.now(timezone.utc),
-            media=user_media_for_storage,
-            tags=user_tags,
-        )
+        existing_user = None
+        message_id = str(last_user_message.get("id") or "").strip()
+        if message_id:
+            existing_user = database_service.get_message_by_id(message_id)
+        if not existing_user:
+            stored_user_entry = database_service.add_message_to_history(
+                character_name=get_active_character_name(default="default"),
+                role="user",
+                content=last_user_message.get("content", ""),
+                timestamp=datetime.now(timezone.utc),
+                media=user_media_for_storage,
+                tags=user_tags,
+            )
     if stored_user_entry and last_user_message:
         stored_media = getattr(stored_user_entry, "media_payload", []) or []
         user_media_for_emit = stored_media
@@ -766,6 +916,26 @@ async def generate_stream(
     except NoProviderResolved as exc:
         print("[Generator] Провайдеры недоступны для потока.")
         provider_errors = _extract_provider_errors(exc)
+        _emit_generation_tool_event(
+            tool_name="generation.provider",
+            status="error",
+            content=(
+                "[ERROR]: generation provider not available. "
+                + (
+                    "; ".join(
+                        f"{item.get('provider')}: {item.get('reason')}"
+                        for item in provider_errors
+                    )
+                    if provider_errors
+                    else str(exc)
+                )
+            ),
+            runtime_meta={
+                "mode": "stream",
+                "providers": provider_errors,
+                "run_id": run_id,
+            },
+        )
         payload: Dict[str, Any] = {
             "type": "error",
             "message": "Generation provider not available",
@@ -793,6 +963,32 @@ async def generate_stream(
         assistant_content = assistant_raw
     else:
         assistant_content, assistant_reasoning = split_reasoning(assistant_raw)
+    if not assistant_content:
+        try:
+            recovered_content, recovered_reasoning, recovered_provider = _recover_empty_content_with_retries(
+                chat_history=chat_history,
+                options=request_payload.options,
+                assistant_reasoning=assistant_reasoning,
+                mode="stream_response",
+            )
+            if recovered_content:
+                assistant_content = recovered_content
+                assistant_reasoning = recovered_reasoning or assistant_reasoning
+                if recovered_provider:
+                    provider_used_stream = recovered_provider
+                log_audit_entry(
+                    "conversation_stream_response_empty_content_recovered",
+                    "[Conversation] Empty content recovered by retry regeneration.",
+                    AuditStatus.WARNING,
+                    details={"provider": provider_used_stream},
+                )
+        except Exception as exc:
+            log_audit_entry(
+                "conversation_stream_response_empty_content_recovery_failed",
+                "[Conversation] Empty content recovery failed.",
+                AuditStatus.WARNING,
+                details={"error": str(exc)},
+            )
     reasoning_elapsed_ms = (
         round((reasoning_finished_at - reasoning_started_at) * 1000, 2)
         if reasoning_started_at is not None and reasoning_finished_at is not None
