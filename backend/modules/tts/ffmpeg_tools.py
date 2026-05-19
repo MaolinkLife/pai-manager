@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 from pathlib import Path
 from typing import Any, Sequence
@@ -30,6 +31,9 @@ def find_binary(base_name: str) -> Path | None:
             candidate = directory / candidate_name
             if candidate.exists() and candidate.is_file():
                 return candidate
+    system_binary = shutil.which(base_name)
+    if system_binary:
+        return Path(system_binary)
     return None
 
 
@@ -37,7 +41,7 @@ def require_binary(base_name: str) -> Path:
     binary = find_binary(base_name)
     if binary is None:
         raise FFmpegError(
-            f"Local {base_name} binary not found. Expected it in tools/ffmpeg or tools/ffmpeg/bin."
+            f"{base_name} binary not found. Expected it in tools/ffmpeg, tools/ffmpeg/bin, or PATH."
         )
     return binary
 
@@ -75,4 +79,3 @@ def probe_audio(file_path: str | Path) -> dict[str, Any]:
         return json.loads(completed.stdout or "{}")
     except json.JSONDecodeError as exc:
         raise FFmpegError(f"Failed to parse ffprobe output for {file_path}") from exc
-

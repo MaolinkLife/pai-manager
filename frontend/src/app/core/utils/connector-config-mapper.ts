@@ -4,8 +4,8 @@ import { ConnectorConfig, TunnelingConfig } from '../models/project-config.model
 const DEFAULT_TUNNELING: TunnelingConfig = {
     enabled: false,
     provider: 'cloudflared',
-    localUrl: 'http://127.0.0.1:4200',
-    localPort: 4200,
+    localUrl: 'http://127.0.0.1:3880',
+    localPort: 3880,
     commandPath: '',
     publicUrl: '',
 };

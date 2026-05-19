@@ -14,6 +14,13 @@
     gap: 14px;
 }
 
+.page-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+}
+
 .page-header h2 {
     margin: 0;
     font-size: 28px;
@@ -89,6 +96,213 @@
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 10px;
+}
+
+.comfyui-panel {
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    background: var(--color-bg);
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.ai-lab-panel {
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    background: var(--color-bg);
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.ai-lab-panel__header {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    align-items: center;
+
+    div {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        min-width: 0;
+    }
+
+    strong {
+        color: var(--color-text-active);
+        font-size: 13px;
+    }
+
+    span {
+        color: var(--color-text);
+        font-size: 11px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    button {
+        height: 28px;
+        border: 1px solid var(--color-border);
+        border-radius: 8px;
+        background: transparent;
+        color: var(--color-text);
+        font-size: 11px;
+        cursor: pointer;
+        padding: 0 10px;
+    }
+}
+
+.ai-lab-nodes {
+    display: grid;
+    gap: 10px;
+}
+
+.ai-lab-node {
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    background: var(--color-surface);
+    padding: 10px;
+    display: grid;
+    gap: 10px;
+
+    header {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 10px;
+
+        span {
+            color: var(--color-accent);
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0;
+        }
+
+        strong {
+            color: var(--color-text-active);
+            font-size: 13px;
+        }
+    }
+}
+
+.ai-lab-action-field {
+    justify-content: end;
+}
+
+.ai-lab-hint {
+    margin: 0;
+    color: var(--color-text);
+    font-size: 11px;
+    line-height: 1.45;
+}
+
+.ai-lab-chip-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+
+    span {
+        border: 1px solid var(--color-border);
+        border-radius: 999px;
+        color: var(--color-text);
+        font-size: 11px;
+        padding: 4px 8px;
+    }
+}
+
+.comfyui-panel__header {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    align-items: center;
+
+    div {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        min-width: 0;
+    }
+
+    strong {
+        color: var(--color-text-active);
+        font-size: 13px;
+    }
+
+    span {
+        color: var(--color-text);
+        font-size: 11px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    button {
+        height: 28px;
+        border: 1px solid var(--color-border);
+        border-radius: 8px;
+        background: transparent;
+        color: var(--color-text);
+        font-size: 11px;
+        cursor: pointer;
+        padding: 0 10px;
+    }
+}
+
+.comfyui-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+
+    span {
+        border: 1px solid var(--color-border);
+        border-radius: 999px;
+        color: var(--color-text);
+        font-size: 11px;
+        padding: 4px 8px;
+
+        &.is-ok {
+            border-color: var(--color-accent);
+            color: var(--color-text-active);
+        }
+    }
+}
+
+.endpoint-list {
+    display: grid;
+    gap: 4px;
+    max-height: 180px;
+    overflow: auto;
+}
+
+.endpoint-row {
+    display: grid;
+    grid-template-columns: 54px minmax(0, 1fr) 68px;
+    gap: 8px;
+    align-items: center;
+    color: var(--color-text);
+    font-size: 11px;
+}
+
+.endpoint-method,
+.endpoint-status {
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    padding: 3px 6px;
+    text-align: center;
+}
+
+.endpoint-status.is-ok {
+    border-color: var(--color-accent);
+    color: var(--color-text-active);
+}
+
+.endpoint-path {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .panel-output {
@@ -167,5 +381,9 @@
 
     .page-header h2 {
         font-size: 24px;
+    }
+
+    .page-header {
+        flex-direction: column;
     }
 }

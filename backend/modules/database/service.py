@@ -51,6 +51,10 @@ def add_message_to_history(
     media: list | None = None,
     tags: list | None = None,
     runtime_meta: dict | None = None,
+    parent_message_id: str | None = None,
+    variant_group_id: str | None = None,
+    variant_index: int | None = None,
+    active_variant: bool = True,
 ):
     if isinstance(timestamp, str):
         try:
@@ -71,6 +75,10 @@ def add_message_to_history(
         media_items=media,
         tags=tags,
         runtime_meta=runtime_meta,
+        parent_message_id=parent_message_id,
+        variant_group_id=variant_group_id,
+        variant_index=variant_index,
+        active_variant=active_variant,
     )
 
 
@@ -111,7 +119,7 @@ def get_history(character_name: str, limit: int = 20, offset: int = 0):
 def delete_telegram_history_by_message_id(
     *,
     character_name: str,
-    chat_id: int,
+    chat_id: int | None,
     telegram_message_ids: list[int],
 ) -> int:
     char = character_service.get_character(character_name)
@@ -119,7 +127,7 @@ def delete_telegram_history_by_message_id(
         return 0
     return history_service.delete_telegram_history_entries(
         char.id,
-        chat_id=int(chat_id),
+        chat_id=int(chat_id) if chat_id is not None else None,
         telegram_message_ids=list(telegram_message_ids or []),
     )
 
@@ -147,6 +155,10 @@ async def reroll_message(message_id: str):
 
 def prepare_reroll_payload(message_id: str) -> dict:
     return history_service.prepare_reroll_payload(message_id)
+
+
+def prepare_continue_payload(message_id: str) -> dict:
+    return history_service.prepare_continue_payload(message_id)
 
 
 def prepare_edit_payload(message_id: str, new_content: str) -> dict:
@@ -182,6 +194,27 @@ def add_reasoning_entry(message_id: str, content: str):
     return history_service.add_reasoning_entry(message_id, content)
 
 
+def append_to_history_message(
+    message_id: str,
+    content_delta: str,
+    *,
+    reasoning_delta: str | None = None,
+    media: list | None = None,
+    runtime_meta: dict | None = None,
+):
+    return history_service.append_to_history_message(
+        message_id,
+        content_delta,
+        reasoning_delta=reasoning_delta,
+        media_items=media,
+        runtime_meta=runtime_meta,
+    )
+
+
+def activate_history_variant(message_id: str) -> dict:
+    return history_service.activate_history_variant(message_id)
+
+
 def get_reasoning_by_message_id(message_id: str):
     return history_service.get_reasoning_by_message_id(message_id)
 
@@ -209,8 +242,11 @@ def get_recent_conversation_state_logs(character_name: str, limit: int = 20):
 
 
 def _serialize_history_rows(rows):
+    variant_meta = _build_variant_meta(rows)
     serialized = []
     for row in rows:
+        row_variant_group = getattr(row, "variant_group_id", None)
+        row_variants = variant_meta.get(row_variant_group) if row_variant_group else None
         serialized.append(
             {
                 "id": row.id,
@@ -224,9 +260,59 @@ def _serialize_history_rows(rows):
                 "media": serialize_media_entries(getattr(row, "media", [])),
                 "tags": json.loads(getattr(row, "tags", "[]") or "[]"),
                 "runtime_meta": json.loads(getattr(row, "runtime_meta", "{}") or "{}"),
+                "parent_message_id": getattr(row, "parent_message_id", None),
+                "variant_group_id": row_variant_group,
+                "variant_index": getattr(row, "variant_index", None) or 1,
+                "active_variant": bool(getattr(row, "active_variant", True)),
+                "variants": row_variants,
             }
         )
     return serialized
+
+
+def _build_variant_meta(rows):
+    from modules.database.core import SessionLocal
+    from models.models import History
+
+    group_ids = {
+        str(getattr(row, "variant_group_id", "") or "").strip()
+        for row in rows or []
+        if str(getattr(row, "variant_group_id", "") or "").strip()
+    }
+    if not group_ids:
+        return {}
+
+    session = SessionLocal()
+    try:
+        siblings = (
+            session.query(History)
+            .filter(History.variant_group_id.in_(group_ids), History.role == "assistant")
+            .order_by(History.variant_group_id.asc(), History.variant_index.asc(), History.timestamp.asc())
+            .all()
+        )
+        result = {}
+        for group_id in group_ids:
+            group = [item for item in siblings if item.variant_group_id == group_id]
+            if not group:
+                continue
+            active = next((item for item in group if bool(item.active_variant)), group[-1])
+            result[group_id] = {
+                "group_id": group_id,
+                "count": len(group),
+                "active_id": active.id,
+                "active_index": int(getattr(active, "variant_index", 1) or 1),
+                "items": [
+                    {
+                        "id": item.id,
+                        "index": int(getattr(item, "variant_index", 1) or 1),
+                        "active": bool(getattr(item, "active_variant", False)),
+                    }
+                    for item in group
+                ],
+            }
+        return result
+    finally:
+        session.close()
 
 
 def _merge_reasoning(history_row) -> str:

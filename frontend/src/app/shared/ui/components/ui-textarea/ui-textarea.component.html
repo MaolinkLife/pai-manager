@@ -9,6 +9,7 @@
         [disabled]="disabled"
         [readonly]="isReadonly"
         [value]="value"
+        [style.height]="height"
         (input)="onInputEvent($event)"
         (blur)="markTouched()"
     ></textarea>

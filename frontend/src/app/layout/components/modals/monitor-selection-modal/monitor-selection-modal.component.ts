@@ -1,5 +1,5 @@
 import { Component, Inject, OnInit } from '@angular/core';
-import { catchError, map, startWith, finalize } from 'rxjs/operators';
+import { catchError, map, startWith } from 'rxjs/operators';
 import { Observable, of } from 'rxjs';
 import { ResourcesService } from '../../../../core/services/resources.service';
 import { ModalRef } from '../../../../shared/components/modal/modal-ref';
@@ -26,17 +26,16 @@ interface MonitorResponse {
 export class MonitorSelectionModalComponent implements OnInit {
     selectedMonitor: number = 0;
     error: string | null = null;
-    debugInfo: string = 'Initial state';
+    statusText = '';
 
-    monitors$: Observable<Monitor[]> = of([]);
+    monitors$: Observable<Monitor[] | null> = of(null);
 
     constructor(
         @Inject('MODAL_DATA') public data: any,
         private modalRef: ModalRef,
         private resourcesService: ResourcesService
     ) {
-        this.selectedMonitor = data?.selectedMonitor || 0;
-        console.log('Modal data received:', this.data);
+        this.selectedMonitor = this.getPayload()?.selectedMonitor ?? 0;
     }
 
     ngOnInit(): void {
@@ -46,89 +45,83 @@ export class MonitorSelectionModalComponent implements OnInit {
     private cleanBase64String(base64String: string): string {
         if (!base64String) return '';
 
-        // Убираем data URL префикс если есть
         let cleanString = base64String.replace(/^data:image\/[a-z]+;base64,/, '');
-
-        // Убираем пробелы и переносы строк
         cleanString = cleanString.replace(/\s/g, '');
 
         return cleanString;
     }
 
     private loadMonitorData(): void {
-        console.log('Starting to load monitor data...');
+        const payload = this.getPayload();
 
-        // Если данные уже переданы через data, используем их
-        if (this.data?.monitors) {
-            console.log('Using monitors data from modal input:', this.data.monitors);
-            // Восстановим выбранный монитор из данных, если он есть
-            this.selectedMonitor = this.data?.selectedMonitor || 0;
-            const cleanedMonitors = this.data.monitors.map((monitor: any) => ({
+        if (payload?.monitors) {
+            this.selectedMonitor = payload?.selectedMonitor ?? 0;
+            const cleanedMonitors = payload.monitors.map((monitor: any) => ({
                 ...monitor,
                 preview: this.cleanBase64String(monitor.preview)
             }));
             this.monitors$ = of(cleanedMonitors);
-            this.debugInfo = `Loaded ${cleanedMonitors.length} monitors from input`;
-            console.log('Final monitors array:', cleanedMonitors);
+            this.statusText = this.getStatusText(cleanedMonitors.length);
             return;
         }
 
-        console.log('Calling getMonitorScreens$()...');
-
-        // Загружаем данные с сервера
         this.monitors$ = this.resourcesService.getMonitorScreens$().pipe(
             map((response: MonitorResponse) => {
-                console.log('Raw response from server:', response);
-
                 if (response && response.monitors) {
                     const cleanedMonitors = response.monitors.map((monitor: any) => ({
                         ...monitor,
                         preview: this.cleanBase64String(monitor.preview)
                     }));
-                    console.log('Processed monitors:', cleanedMonitors);
-                    this.debugInfo = `Loaded ${cleanedMonitors.length} monitors from server`;
+                    this.statusText = this.getStatusText(cleanedMonitors.length);
                     return cleanedMonitors;
-                } else {
-                    throw new Error('No monitor data received');
                 }
+
+                throw new Error('No monitor data received');
             }),
+            startWith(null),
             catchError(error => {
-                console.error('Error loading monitor data from server:', error);
                 this.error = 'Failed to load monitor information';
-                this.debugInfo = 'Error loading data';
+                this.statusText = 'Monitor data is unavailable';
                 return of([]);
             })
         );
     }
 
-    trackByIndex(index: number, item: any): number {
-        return index;
+    private getPayload(): any {
+        return this.data?.data ?? this.data ?? {};
     }
 
-    // Методы для обработки событий изображения
-    onImageError(index: number, event: any): void {
-        console.error(`Image load error for monitor ${index}`, event);
+    private getStatusText(count: number): string {
+        if (count === 1) {
+            return '1 monitor detected';
+        }
+        return `${count} monitors detected`;
     }
 
-    onImageLoad(index: number): void {
-        console.log(`Image loaded successfully for monitor ${index}`);
+    trackByIndex(index: number, item: Monitor): number {
+        return item?.index ?? index;
+    }
+
+    onImageError(index: number, event: Event): void {
+        const image = event.target as HTMLImageElement | null;
+        image?.classList.add('monitor-card__image--hidden');
     }
 
     selectMonitor(index: number): void {
-        console.log(`Monitor ${index} selected`);
-        this.selectedMonitor = index; // Сохраняем выбранный индекс
+        this.selectedMonitor = index;
+    }
 
-        // Вызываем callback если он передан
-        if (this.data?.onSelect && typeof this.data.onSelect === 'function') {
-            this.data.onSelect({ selectedMonitor: index });
+    confirmSelection(): void {
+        const payload = this.getPayload();
+
+        if (payload?.onSelect && typeof payload.onSelect === 'function') {
+            payload.onSelect({ selectedMonitor: this.selectedMonitor });
         }
 
-        // Закрываем модалку с результатом
-        this.modalRef.closeModal({ selectedMonitor: index });
+        this.modalRef.closeModal({ selectedMonitor: this.selectedMonitor });
     }
 
     close(): void {
-        console.log('Modal closed');
         this.modalRef.closeModal();
     }
 }

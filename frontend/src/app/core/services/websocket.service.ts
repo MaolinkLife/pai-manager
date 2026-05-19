@@ -2,12 +2,23 @@ import { Injectable } from '@angular/core';
 import { Subject } from 'rxjs';
 import { AuthService } from './auth.service';
 
+export interface BufferedWebsocketMessage {
+    sequence: number;
+    data: string;
+    receivedAt: number;
+}
+
 @Injectable({
     providedIn: 'root'
 })
 export class WebsocketService {
+    private static readonly EVENT_BUFFER_LIMIT = 5000;
+
     private socket: WebSocket | null = null;
     private messageQueue: string[] = [];
+    private readonly eventBuffer: BufferedWebsocketMessage[] = [];
+    private readonly consumerCursors = new Map<string, number>();
+    private eventSequence = 0;
     private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     private reconnectAttempts = 0;
     private manualDisconnect = false;
@@ -16,6 +27,7 @@ export class WebsocketService {
     private readonly reconnectMaxDelayMs = 10000;
 
     messages$ = new Subject<string>();
+    bufferedMessages$ = new Subject<BufferedWebsocketMessage>();
     constructor(private authService: AuthService) { }
 
     connect(): void {
@@ -41,10 +53,7 @@ export class WebsocketService {
             }
         };
 
-        this.socket.onmessage = (event) => {
-            // console.log('[WS] Message:', event.data);
-            this.messages$.next(event.data);
-        };
+        this.socket.onmessage = (event) => this.recordIncomingMessage(String(event.data || ''));
 
         this.socket.onerror = (error) => {
             console.error('[WS] ❌ Error:', error);
@@ -90,6 +99,37 @@ export class WebsocketService {
     reconnect(): void {
         this.disconnect();
         this.connect();
+    }
+
+    getLatestSequence(): number {
+        return this.eventSequence;
+    }
+
+    getBufferedMessagesAfter(sequence: number): BufferedWebsocketMessage[] {
+        const cursor = Math.max(0, Number(sequence || 0));
+        return this.eventBuffer.filter((item) => item.sequence > cursor);
+    }
+
+    getConsumerCursor(consumer: string): number {
+        return this.consumerCursors.get(consumer) || 0;
+    }
+
+    setConsumerCursor(consumer: string, sequence: number): void {
+        this.consumerCursors.set(consumer, Math.max(0, Number(sequence || 0)));
+    }
+
+    private recordIncomingMessage(data: string): void {
+        const event: BufferedWebsocketMessage = {
+            sequence: ++this.eventSequence,
+            data,
+            receivedAt: Date.now(),
+        };
+        this.eventBuffer.push(event);
+        if (this.eventBuffer.length > WebsocketService.EVENT_BUFFER_LIMIT) {
+            this.eventBuffer.splice(0, this.eventBuffer.length - WebsocketService.EVENT_BUFFER_LIMIT);
+        }
+        this.messages$.next(event.data);
+        this.bufferedMessages$.next(event);
     }
 
     private shouldAutoReconnect(): boolean {

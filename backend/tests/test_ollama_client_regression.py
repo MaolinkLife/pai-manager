@@ -8,6 +8,7 @@ class _FakeResponse:
         self.status_code = status_code
         self._payload = payload or {}
         self.reason = reason
+        self.text = ""
 
     def json(self) -> dict:
         return dict(self._payload)
@@ -79,3 +80,27 @@ def test_chat_with_tools_degrades_once_after_400(monkeypatch):
     assert captured_payloads[0]["tool_choice"] == "auto"
     assert "tools" not in captured_payloads[1]
     assert "tool_choice" not in captured_payloads[1]
+
+
+def test_chat_with_tools_does_not_fallback_to_generate_when_model_missing(monkeypatch):
+    captured_urls: list[str] = []
+
+    def _fake_post(url: str, *, payload: dict, timeout: int, retries: int = 2, retry_backoff_sec: float = 0.6):
+        captured_urls.append(url)
+        return _FakeResponse(404, {"error": "model 'missing-model' not found"}, reason="Not Found")
+
+    monkeypatch.setattr(ollama_client, "_post_json_with_retries", _fake_post)
+
+    try:
+        ollama_client.chat_with_tools(
+            messages=[{"role": "user", "content": "hi"}],
+            options={"temperature": 0.7},
+            model="missing-model",
+        )
+    except RuntimeError as exc:
+        assert "missing-model" in str(exc)
+        assert "not installed" in str(exc)
+    else:
+        raise AssertionError("Expected missing model RuntimeError")
+
+    assert captured_urls == [f"{ollama_client.OLLAMA_API_URL}/chat"]

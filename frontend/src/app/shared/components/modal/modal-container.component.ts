@@ -21,7 +21,7 @@ export class ModalContainerComponent implements AfterViewInit {
     @ViewChild('dynamicComponent', { read: ViewContainerRef }) vcr!: ViewContainerRef;
 
     title: string = '';
-    appearance = 'fullscreen'; // 'fullscreen' | 'default'
+    appearance: 'fullscreen' | 'default' = 'fullscreen';
 
     constructor(
         @Inject('MODAL_DATA') public data: any,
@@ -33,6 +33,10 @@ export class ModalContainerComponent implements AfterViewInit {
 
     ngAfterViewInit() {
         this.ngZone.run(() => {
+            if (this.data?.appearance === 'default' || this.data?.appearance === 'fullscreen') {
+                this.appearance = this.data.appearance;
+            }
+
             if (this.data?.component) {
                 const factory = this.cfr.resolveComponentFactory(this.data.component);
                 const compRef = this.vcr.createComponent(factory);

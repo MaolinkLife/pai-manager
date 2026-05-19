@@ -9,6 +9,11 @@ from constants.settings import (
     DEFAULT_TEMPERATURE,
     OPENROUTER_BASE_URL,
 )
+from constants.prompts import (
+    COGNITIVE_ANALYSIS_PROMPT,
+    INSTRUCTOR_BUILD_SCHEMA_PROMPT,
+    MORAL_MATRIX_PROVIDER_PROMPT,
+)
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
 
@@ -36,11 +41,45 @@ class CoreConfig(BaseModel):
     debug: bool = False
 
 
+class DecisionLayerCapabilitiesConfig(BaseModel):
+    tool: bool = False
+    vision: bool = False
+    thinking: bool = False
+
+
+class DecisionLayerProviderOllamaConfig(BaseModel):
+    model: str = "llama3.2"
+    temperature: float = 0.2
+    max_tokens: int = 512
+    thinking: bool = False
+
+
+class DecisionLayerProvidersConfig(BaseModel):
+    ollama: DecisionLayerProviderOllamaConfig = DecisionLayerProviderOllamaConfig()
+
+
+class DecisionLayerInstructorConfig(BaseModel):
+    build_schema: str = INSTRUCTOR_BUILD_SCHEMA_PROMPT
+    include_datetime: bool = True
+    include_geolocation: bool = False
+    exclude_disabled_modules: bool = True
+
+
+class DecisionLayerConfig(BaseModel):
+    mode: str = "system"
+    active_provider: str = "ollama"
+    max_steps: int = 4
+    release_after_use: bool = True
+    capabilities: DecisionLayerCapabilitiesConfig = DecisionLayerCapabilitiesConfig()
+    providers: DecisionLayerProvidersConfig = DecisionLayerProvidersConfig()
+    instructor: DecisionLayerInstructorConfig = DecisionLayerInstructorConfig()
+
+
 class ConnectorTunnelingConfig(BaseModel):
     enabled: bool = False
     provider: str = "cloudflared"
-    local_url: str = "http://127.0.0.1:4200"
-    local_port: int = 4200
+    local_url: str = "http://127.0.0.1:3880"
+    local_port: int = 3880
     command_path: str = ""
     public_url: str = ""
 
@@ -168,9 +207,11 @@ class VisionConfig(BaseModel):
         "llava": {"model_id": "llava-hf/llava-1.5-7b-hf", "max_tokens": 128},
         "ollama_vision": {
             "model": "llava:latest",
-            "max_tokens": 160,
+            "max_tokens": 512,
             "probe_enabled": True,
             "probe_cache_seconds": 300,
+            "image_format": "PNG",
+            "keep_alive": "5m",
         },
     }
 
@@ -272,15 +313,16 @@ class RAGConfig(BaseModel):
 
 class AnalyzerProviderOpenRouterConfig(BaseModel):
     api_key: str = ""
-    model: str = "openai/gpt-4o-mini"
-    temperature: float = DEFAULT_TEMPERATURE
+    model: str = ""
+    temperature: float = 0.1
     max_tokens: int = DEFAULT_MAX_TOKENS
 
 
 class AnalyzerProviderOllamaConfig(BaseModel):
     model: str = "llama3.2"
-    temperature: float = DEFAULT_TEMPERATURE
+    temperature: float = 0.1
     max_tokens: int = DEFAULT_MAX_TOKENS
+    thinking: bool = False
 
 
 class AnalyzerProvidersConfig(BaseModel):
@@ -289,8 +331,11 @@ class AnalyzerProvidersConfig(BaseModel):
 
 
 class AnalyzerConfig(BaseModel):
-    active_provider: str = "openrouter"
-    fallback_order: List[str] = ["ollama"]
+    enabled: bool = True
+    active_provider: str = "ollama"
+    fallback_order: List[str] = Field(default_factory=list)
+    release_after_use: bool = True
+    system_prompt: str = COGNITIVE_ANALYSIS_PROMPT
     providers: AnalyzerProvidersConfig = AnalyzerProvidersConfig()
 
 
@@ -298,6 +343,7 @@ class MoralProviderOllamaConfig(BaseModel):
     model: str = "llama3.2"
     temperature: float = DEFAULT_TEMPERATURE
     max_tokens: int = 512
+    thinking: bool = False
 
 
 class MoralProviderOpenRouterConfig(BaseModel):
@@ -319,6 +365,8 @@ class MoralMatrixConfig(BaseModel):
     fallback_order: List[str] = Field(
         default_factory=lambda: ["openrouter", "heuristic"]
     )
+    release_after_use: bool = True
+    system_prompt: str = MORAL_MATRIX_PROVIDER_PROMPT
     providers: MoralProvidersConfig = MoralProvidersConfig()
 
 
@@ -351,15 +399,31 @@ class SynthesisComfyUIConfig(BaseModel):
     timeout_sec: int = 180
     default_workflow: str = ""
     default_model: str = ""
+    sampler: str = "euler"
+    scheduler: str = "normal"
+    steps: int = 30
+    cfg: float = 7.0
+    width: int = 1024
+    height: int = 1024
+    aspect_ratio: str = "1:1"
 
 
 class SynthesisDiffusersConfig(BaseModel):
     enabled: bool = True
     device: str = "auto"
     default_model: str = "z_image_turbo"
-    local_models_path: str = ""
+    local_models_path: str = "storage/models/image-generation"
     cache_dir: str = ""
     torch_dtype: str = "auto"
+    keep_loaded: bool = True
+    sampler: str = "euler"
+    scheduler: str = "normal"
+    steps: int = 30
+    cfg: float = 7.0
+    width: int = 1024
+    height: int = 1024
+    aspect_ratio: str = "1:1"
+    allow_comfyui_fallback: bool = True
 
 
 class SynthesisPromptingConfig(BaseModel):
@@ -394,9 +458,12 @@ class SynthesisPromptingConfig(BaseModel):
             "allow_symbolic_images": True,
         }
     )
+    per_character_visual_profiles: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
+    scenarios: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
 
 
 class SynthesisConfig(BaseModel):
+    active_provider: str = "core"
     sd_webui: SynthesisSdWebUIConfig = SynthesisSdWebUIConfig()
     comfyui: SynthesisComfyUIConfig = SynthesisComfyUIConfig()
     diffusers: SynthesisDiffusersConfig = SynthesisDiffusersConfig()
@@ -413,6 +480,18 @@ class TelegramRoutingConfig(BaseModel):
     read_only_non_private: bool = True
     groups_require_mention: bool = False
     allowed_chat_ids: List[int] = Field(default_factory=list)
+
+
+class TelegramSyncConfig(BaseModel):
+    enabled: bool = True
+    startup_reindex_enabled: bool = True
+    connect_reindex_enabled: bool = True
+    max_chats: int = 32
+    messages_per_chat: int = 80
+
+
+class TelegramPersonaBindingsConfig(BaseModel):
+    chat_character_map: Dict[str, str] = Field(default_factory=dict)
 
 
 class TelegramLockdownConfig(BaseModel):
@@ -591,6 +670,8 @@ class TelegramConfig(BaseModel):
     bot_token: str = ""
     queue_size: int = 256
     history_max_messages: int = 24
+    sync: TelegramSyncConfig = TelegramSyncConfig()
+    persona_bindings: TelegramPersonaBindingsConfig = TelegramPersonaBindingsConfig()
     lockdown: TelegramLockdownConfig = TelegramLockdownConfig()
     presence: TelegramPresenceConfig = TelegramPresenceConfig()
     routing: TelegramRoutingConfig = TelegramRoutingConfig()
@@ -616,6 +697,7 @@ class GeneratorProviderBaseConfig(BaseModel):
 
 class GeneratorProviderOllamaConfig(GeneratorProviderBaseConfig):
     streaming: bool = True
+    base_url: str = "http://localhost:11434"
 
 
 class GeneratorProviderOpenRouterConfig(GeneratorProviderBaseConfig):
@@ -623,9 +705,25 @@ class GeneratorProviderOpenRouterConfig(GeneratorProviderBaseConfig):
     base_url: str = OPENROUTER_BASE_URL
 
 
+class GeneratorProviderTransformersConfig(GeneratorProviderBaseConfig):
+    model: str = ""
+    streaming: bool = True
+    device_map: str = "auto"
+    torch_dtype: str = "auto"
+    trust_remote_code: bool = True
+    low_cpu_mem_usage: bool = True
+    do_sample: bool = True
+    top_p: float = 0.9
+    top_k: int = 50
+    repetition_penalty: float = 1.1
+    keep_loaded: bool = True
+    source: str = "huggingface"
+
+
 class APIProvidersConfig(BaseModel):
     ollama: GeneratorProviderOllamaConfig = GeneratorProviderOllamaConfig()
     openrouter: GeneratorProviderOpenRouterConfig = GeneratorProviderOpenRouterConfig()
+    transformers: GeneratorProviderTransformersConfig = GeneratorProviderTransformersConfig()
 
 
 class APIConfig(BaseModel):
@@ -633,8 +731,9 @@ class APIConfig(BaseModel):
     streaming: bool = True
     model: str = "llama3.2"
     visual_model: str = "apple/FastVLM-1.5B"
+    visual_model_options: List[str] = Field(default_factory=lambda: ["apple/FastVLM-1.5B"])
     token_limit: int = 4096
-    message_pair_limit: int = 10
+    message_pair_limit: int = 4
     active_provider: str = "ollama"
     fallback_order: List[str] = Field(default_factory=list)
     providers: APIProvidersConfig = APIProvidersConfig()
@@ -648,6 +747,7 @@ class GenerateSettingsConfig(BaseModel):
     repeat_penalty: float = 1.2
     stop: Optional[Any] = None
     num_predict: int = 2048
+    normalize_messages: bool = False
     name: str = "Default"
     description: str = "Basic generation parameters"
 
@@ -658,6 +758,7 @@ class GenerateSettingsConfig(BaseModel):
 class AppConfig(BaseModel):
     system: SystemConfig = SystemConfig()
     core: CoreConfig = CoreConfig()
+    decision_layer: DecisionLayerConfig = DecisionLayerConfig()
     connector: ConnectorConfig = ConnectorConfig()
     voice: "VoiceConfig" = None
     stt: "STTConfig" = None

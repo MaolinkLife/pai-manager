@@ -7,7 +7,7 @@ import uuid
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Optional
+from typing import Any, Optional
 
 from constants.paths import LOGS_DIR, TRACEBACK_LOGS_DIR
 from modules.system.localization import get_active_language, get_text
@@ -83,6 +83,7 @@ SESSION_ID = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}
 DEBUG_FILE_PER_SESSION = os.path.join(LOGS_DIR, f"{SESSION_ID}_debug.jsonl")
 DEBUG_FILE_CURRENT = os.path.join(LOGS_DIR, "debug_log.jsonl")
 _LOGGER_INIT_LOCK = threading.Lock()
+_LOG_WRITE_LOCK = threading.Lock()
 _LOGGER_RUNTIME_INITIALIZED = False
 
 
@@ -131,8 +132,30 @@ def initialize_logger_runtime(*, keep_sessions: int = 1) -> None:
 
 
 def _write_jsonl(filepath, record):
-    with open_utf8(filepath, "a") as file:
-        file.write(json.dumps(record, ensure_ascii=False) + "\n")
+    line = json.dumps(record, ensure_ascii=False) + "\n"
+    with _LOG_WRITE_LOCK:
+        with open_utf8(filepath, "a") as file:
+            file.write(line)
+
+
+def _read_log_lines_lossy(filepath: str) -> list[str]:
+    with open(filepath, "rb") as file:
+        return file.read().decode("utf-8", errors="replace").splitlines()
+
+
+def _parse_log_lines(lines: list[str]) -> list[dict]:
+    logs: list[dict] = []
+    for line in lines:
+        raw_line = str(line or "").strip()
+        if not raw_line:
+            continue
+        try:
+            payload = json.loads(raw_line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(payload, dict):
+            logs.append(payload)
+    return logs
 
 
 def _default_message_key(event_type: Optional[str]) -> Optional[str]:
@@ -217,6 +240,18 @@ def log_debug(message, tag="DEBUG"):
     print(f"[{tag}][{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {message}")
 
 
+def log_console(component: str, message: str, details: Optional[dict[str, Any]] = None) -> None:
+    prefix = f"[{component}]"
+    if details:
+        try:
+            payload = json.dumps(details, ensure_ascii=False, default=str)
+        except Exception:
+            payload = str(details)
+        print(f"{prefix} {message} | {payload}", flush=True)
+        return
+    print(f"{prefix} {message}", flush=True)
+
+
 def get_debug_log(limit: Optional[int] = None, offset: int = 0, session_id: Optional[str] = None):
     resolved_session_id = str(session_id or get_session_id()).strip()
     log_file = os.path.join(LOGS_DIR, f"{resolved_session_id}_debug.jsonl")
@@ -232,8 +267,7 @@ def get_debug_log(limit: Optional[int] = None, offset: int = 0, session_id: Opti
         else:
             safe_limit = max(int(limit), 1)
 
-        with open_utf8(log_file, "r") as file:
-            lines = file.readlines()
+        lines = _read_log_lines_lossy(log_file)
 
         total = len(lines)
         if safe_limit is None:
@@ -244,7 +278,7 @@ def get_debug_log(limit: Optional[int] = None, offset: int = 0, session_id: Opti
             start_idx = max(end_idx - safe_limit, 0)
             selected_lines = lines[start_idx:end_idx]
 
-        logs = [json.loads(line) for line in selected_lines]
+        logs = _parse_log_lines(selected_lines)
         logs.reverse()
         return logs, resolved_session_id, total
     except Exception as exc:

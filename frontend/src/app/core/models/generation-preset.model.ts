@@ -8,4 +8,6 @@ export interface GenerationPreset {
     repeat_penalty: number;
     stop: string[] | null;
     num_predict: number;
+    normalize_messages?: boolean;
+    normalizeMessages?: boolean;
 }

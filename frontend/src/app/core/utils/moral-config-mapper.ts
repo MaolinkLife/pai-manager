@@ -10,6 +10,7 @@ const mapProviderDtoToModel = (dto?: MoralProviderConfigDto): MoralProviderConfi
         model: dto.model,
         temperature: dto.temperature,
         maxTokens: dto.max_tokens,
+        thinking: dto.thinking,
     };
 };
 
@@ -22,6 +23,7 @@ const mapProviderModelToDto = (config?: MoralProviderConfig): MoralProviderConfi
         model: config.model,
         temperature: config.temperature,
         max_tokens: config.maxTokens,
+        thinking: config.thinking,
     };
 };
 
@@ -29,6 +31,8 @@ export const mapMoralDtoToModel = (dto?: MoralConfigDto): MoralConfig => ({
     enabled: dto?.enabled ?? true,
     activeProvider: dto?.active_provider ?? 'heuristic',
     fallbackOrder: dto?.fallback_order ?? [],
+    releaseAfterUse: dto?.release_after_use ?? true,
+    systemPrompt: dto?.system_prompt ?? '',
     providers: {
         heuristic: dto?.providers?.heuristic ?? {},
         ollama: mapProviderDtoToModel(dto?.providers?.ollama),
@@ -40,6 +44,8 @@ export const mapMoralModelToDto = (model?: MoralConfig): MoralConfigDto => ({
     enabled: model?.enabled ?? true,
     active_provider: model?.activeProvider ?? 'heuristic',
     fallback_order: model?.fallbackOrder ?? [],
+    release_after_use: model?.releaseAfterUse ?? true,
+    system_prompt: model?.systemPrompt ?? '',
     providers: {
         heuristic: model?.providers?.heuristic ?? {},
         ollama: mapProviderModelToDto(model?.providers?.ollama),
@@ -68,6 +74,14 @@ export const mapMoralPartialModelToDto = (
         dto.fallback_order = model.fallbackOrder;
     }
 
+    if (model.releaseAfterUse !== undefined) {
+        dto.release_after_use = model.releaseAfterUse;
+    }
+
+    if (model.systemPrompt !== undefined) {
+        dto.system_prompt = model.systemPrompt;
+    }
+
     if (model.providers !== undefined) {
         const providersDto: Partial<MoralConfigDto['providers']> = {};
         const providers = model.providers;
@@ -88,6 +102,9 @@ export const mapMoralPartialModelToDto = (
                 }
                 if (ollama.maxTokens !== undefined) {
                     providersDto.ollama.max_tokens = ollama.maxTokens;
+                }
+                if (ollama.thinking !== undefined) {
+                    providersDto.ollama.thinking = ollama.thinking;
                 }
             } else {
                 providersDto.ollama = undefined;

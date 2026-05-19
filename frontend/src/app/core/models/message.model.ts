@@ -23,9 +23,32 @@ export interface Message {
     provider?: string;
     reasoning?: string;
     stopped?: boolean;
+    parent_message_id?: string | null;
+    variant_group_id?: string | null;
+    variant_index?: number | null;
+    active_variant?: boolean;
+    variants?: {
+        group_id: string;
+        count: number;
+        active_id: string;
+        active_index: number;
+        items: Array<{
+            id: string;
+            index: number;
+            active: boolean;
+        }>;
+    } | null;
+    source?: {
+        name: string;
+        label: string;
+        chatId?: number | string;
+        chatKind?: string;
+        chatTitle?: string;
+        messageId?: number | string;
+    };
     runtime?: {
         runId: string;
-        status: 'started' | 'running' | 'stopping' | 'stopped' | 'completed' | 'error' | 'no_active_run';
+        status: 'queued' | 'started' | 'running' | 'stopping' | 'stopped' | 'completed' | 'error' | 'no_active_run' | 'skip_thinking_restarted';
         startedAt?: string;
         finishedAt?: string;
         elapsedMs?: number;
@@ -33,6 +56,7 @@ export interface Message {
         usage?: Record<string, any> | null;
         meta?: Record<string, any> | null;
         reasoningElapsedMs?: number;
+        answerElapsedMs?: number;
         detailsOpen?: boolean;
         traces: Array<{
             stage: string;

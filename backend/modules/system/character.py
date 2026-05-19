@@ -141,6 +141,61 @@ def get_character_by_id(character_id: str) -> Optional[Character]:
         session.close()
 
 
+def create_character_record(name: str, prompt: str | None = None) -> dict:
+    char = get_or_create_character(name, prompt)
+    configs = _safe_load_configs(char.configs)
+    resolved_prompt = str(configs.get("prompt") or "").strip() or _read_yaml_prompt(char.name)
+    return {
+        "id": char.id,
+        "name": char.name,
+        "prompt": resolved_prompt,
+        "has_prompt": bool(resolved_prompt),
+        "source": str(configs.get("source") or "db"),
+        "updated_at": char.updated_at.isoformat() if char.updated_at else None,
+    }
+
+
+def delete_character_record(
+    *,
+    character_id: str | None = None,
+    char_name: str | None = None,
+    user_uuid: str | None = None,
+) -> dict:
+    session: Session = SessionLocal()
+    try:
+        character: Optional[Character] = None
+        if character_id:
+            character = session.query(Character).filter_by(id=character_id).first()
+        elif char_name:
+            normalized_name = _normalize_character_name(char_name)
+            if normalized_name:
+                character = session.query(Character).filter_by(name=normalized_name).first()
+
+        if not character:
+            raise FileNotFoundError("Character not found")
+
+        history_count = session.query(History).filter_by(character_id=character.id).count()
+        if history_count > 0:
+            raise ValueError("Cannot delete character with chat history")
+
+        deleted_id = character.id
+        deleted_name = character.name
+
+        if user_uuid:
+            settings = session.query(UserSettings).filter_by(user_uuid=user_uuid).first()
+            if settings and settings.active_character_id == deleted_id:
+                settings.active_character_id = None
+
+        session.delete(character)
+        session.commit()
+        return {"id": deleted_id, "name": deleted_name}
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
+
+
 def list_characters(sync_from_yaml: bool = True) -> list[dict]:
     if sync_from_yaml:
         import_characters_from_yaml_dir(update_existing=False)

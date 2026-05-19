@@ -1,4 +1,4 @@
-import { Component, ElementRef, OnDestroy, OnInit, ViewChild } from '@angular/core';
+import { ChangeDetectorRef, Component, ElementRef, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { FormBuilder, FormGroup } from '@angular/forms';
 import { BehaviorSubject, Observable, forkJoin, of } from 'rxjs';
 import { finalize, take } from 'rxjs/operators';
@@ -229,6 +229,7 @@ export class VoiceSettingsComponent implements OnInit, OnDestroy {
     previewText = 'Приветик~ Я уже ждала тебя.';
     isGeneratingPreview = false;
     isImportingVoice = false;
+    isImportingRvcModel = false;
     devicesRefreshing = false;
     lastImportedVoice: ImportVoiceResponse | null = null;
 
@@ -240,6 +241,7 @@ export class VoiceSettingsComponent implements OnInit, OnDestroy {
     private providerStatusPollHandle: ReturnType<typeof setInterval> | null = null;
     private voiceAutoApplyTimer: ReturnType<typeof setTimeout> | null = null;
     private isHydratingForm = false;
+    private xttsDownloadInFlight = new Set<string>();
     currentPreviewQuickLines: string[] = [];
     providerStatus: VoiceProvidersResponse['providers']['coqui'] | null = null;
     providerStatuses: Record<string, TTSProviderStatus> = {};
@@ -250,6 +252,7 @@ export class VoiceSettingsComponent implements OnInit, OnDestroy {
         disabled: module.disabled,
     }));
     edgeVoices: { name: string; language: string; gender: string; styles: string[] }[] = [];
+    edgeVoiceSearch = '';
 
     readonly previewQuickLines: string[] = [
         'Приветик~',
@@ -268,6 +271,7 @@ export class VoiceSettingsComponent implements OnInit, OnDestroy {
     localRvcModels: LocalRvcModelOption[] = [];
 
     @ViewChild('voiceImportInput') private voiceImportInputRef?: ElementRef<HTMLInputElement>;
+    @ViewChild('rvcImportInput') private rvcImportInputRef?: ElementRef<HTMLInputElement>;
 
     constructor(
         private fb: FormBuilder,
@@ -276,6 +280,7 @@ export class VoiceSettingsComponent implements OnInit, OnDestroy {
         private voiceService: VoiceService,
         private notificationService: NotificationService,
         private localizationService: LocalizationService,
+        private cdr: ChangeDetectorRef,
     ) {
         this.voiceForm = this.createForm();
     }
@@ -284,6 +289,9 @@ export class VoiceSettingsComponent implements OnInit, OnDestroy {
         this.syncPreviewPresets(true);
         this.loadAllData();
         this.localizationService.init();
+        this.voiceForm.get('activeModule')?.valueChanges.subscribe((moduleName: string) => {
+            this.loadProviderResources(String(moduleName || 'coqui'));
+        });
         this.getCoquiField('language')?.valueChanges.subscribe(() => this.syncPreviewPresets());
         this.getCoquiField('preloadModel')?.valueChanges.subscribe(() => this.syncProviderStatusPolling());
         this.getCoquiField('volume')?.valueChanges.subscribe(() => this.syncLocalAudioVolumes());
@@ -394,28 +402,56 @@ export class VoiceSettingsComponent implements OnInit, OnDestroy {
         forkJoin({
             config: this.configService.getConfig$().pipe(take(1)),
             devices: this.resourcesService.getAudioDevices$().pipe(take(1)),
-            voices: this.resourcesService.getEdgeVoices$().pipe(take(1)),
-            localVoiceFiles: this.resourcesService.getLocalVoiceFiles$().pipe(take(1)),
-            localXttsModels: this.resourcesService.getLocalXttsModels$().pipe(take(1)),
-            localRvcModels: this.resourcesService.getLocalRvcModels$().pipe(take(1)),
             providers: this.voiceService.providersStatus$().pipe(take(1)),
         }).pipe(
             finalize(() => this.isLoading$.next(false))
         ).subscribe({
-            next: ({ config, devices, voices, localVoiceFiles, localXttsModels, localRvcModels, providers }) => {
-                this.loadLocalVoiceFiles(localVoiceFiles);
-                this.loadLocalXttsModels(localXttsModels);
-                this.loadLocalRvcModels(localRvcModels);
+            next: ({ config, devices, providers }) => {
                 this.loadConfig(config);
                 this.loadDevices(devices);
-                this.loadEdgeVoices(voices);
                 this.applyProviderStatuses(providers);
                 this.loadProviderStatus(providers);
+                this.loadProviderResources(this.getActiveModule());
+                this.cdr.markForCheck();
             },
             error: (error) => {
                 console.error('Error loading voice settings:', error);
+                this.cdr.markForCheck();
             }
         });
+    }
+
+    private loadProviderResources(activeModule: string): void {
+        const moduleName = String(activeModule || 'coqui').trim().toLowerCase();
+        if (moduleName === 'edge') {
+            this.resourcesService.getEdgeVoices$().pipe(take(1)).subscribe({
+                next: (voices) => this.loadEdgeVoices(voices),
+                error: (error) => console.error('Error loading Edge voices:', error),
+            });
+            return;
+        }
+
+        if (moduleName === 'coqui') {
+            forkJoin({
+                localVoiceFiles: this.resourcesService.getLocalVoiceFiles$().pipe(take(1)),
+                localXttsModels: this.resourcesService.getLocalXttsModels$().pipe(take(1)),
+                localRvcModels: this.resourcesService.getLocalRvcModels$().pipe(take(1)),
+            }).subscribe({
+                next: ({ localVoiceFiles, localXttsModels, localRvcModels }) => {
+                    this.loadLocalVoiceFiles(localVoiceFiles);
+                    this.loadLocalXttsModels(localXttsModels);
+                    this.loadLocalRvcModels(localRvcModels);
+                    this.reconcileSelectedModelRevision();
+                    this.reconcileSelectedVoiceFile();
+                    this.reconcileSelectedRvcModel();
+                    this.cdr.markForCheck();
+                },
+                error: (error) => {
+                    console.error('Error loading XTTS resources:', error);
+                    this.cdr.markForCheck();
+                },
+            });
+        }
     }
 
     loadConfig(config: any): void {
@@ -518,6 +554,7 @@ export class VoiceSettingsComponent implements OnInit, OnDestroy {
         this.syncPreviewPresets(true);
         this.isHydratingForm = false;
         this.originalConfig = JSON.parse(JSON.stringify(this.voiceForm.value));
+        this.cdr.markForCheck();
     }
 
     private scheduleCriticalVoiceAutoApply(): void {
@@ -595,16 +632,19 @@ export class VoiceSettingsComponent implements OnInit, OnDestroy {
             value: device.id,
             label: `[${device.id}]: ${device.name}`,
         }));
+        this.cdr.markForCheck();
     }
 
     loadLocalVoiceFiles(payload: any): void {
         if (payload?.status === 'success' && Array.isArray(payload.files)) {
             this.localVoiceFiles = payload.files;
             this.reconcileSelectedVoiceFile();
+            this.cdr.markForCheck();
             return;
         }
         this.localVoiceFiles = [];
         this.reconcileSelectedVoiceFile();
+        this.cdr.markForCheck();
     }
 
     loadLocalXttsModels(payload: any): void {
@@ -612,21 +652,25 @@ export class VoiceSettingsComponent implements OnInit, OnDestroy {
             this.localXttsModels = payload.models;
             this.reconcileSelectedModelRevision();
             this.syncXttsPolling();
+            this.cdr.markForCheck();
             return;
         }
         this.localXttsModels = [];
         this.reconcileSelectedModelRevision();
         this.syncXttsPolling();
+        this.cdr.markForCheck();
     }
 
     loadLocalRvcModels(payload: any): void {
         if (payload?.status === 'success' && Array.isArray(payload.models)) {
             this.localRvcModels = payload.models;
             this.reconcileSelectedRvcModel();
+            this.cdr.markForCheck();
             return;
         }
         this.localRvcModels = [];
         this.reconcileSelectedRvcModel();
+        this.cdr.markForCheck();
     }
 
     get localXttsModelOptions(): UiSelectOption<string>[] {
@@ -637,13 +681,26 @@ export class VoiceSettingsComponent implements OnInit, OnDestroy {
     }
 
     get localVoiceFileOptions(): UiSelectOption<string>[] {
-        return [
+        const voiceFiles = [...this.localVoiceFiles].sort((left, right) => {
+            const leftReady = left.summary?.is_xtts_compatible || left.summary?.is_prepared_xtts;
+            const rightReady = right.summary?.is_xtts_compatible || right.summary?.is_prepared_xtts;
+            if (leftReady !== rightReady) {
+                return leftReady ? -1 : 1;
+            }
+            return left.name.localeCompare(right.name);
+        });
+        const options = [
             { value: '', label: 'Not selected' },
-            ...this.localVoiceFiles.map((voiceFile) => ({
+            ...voiceFiles.map((voiceFile) => ({
                 value: voiceFile.path,
-                label: voiceFile.name,
+                label: `${voiceFile.summary?.is_xtts_compatible || voiceFile.summary?.is_prepared_xtts ? '[XTTS]' : '[Source]'} ${voiceFile.name}`,
             })),
         ];
+        const current = String(this.getCoquiField('speakerWav')?.value || '').trim();
+        if (current && !options.some((item) => item.value === current)) {
+            options.splice(1, 0, { value: current, label: `[Selected] ${current}` });
+        }
+        return options;
     }
 
     get localRvcModelOptions(): UiSelectOption<string>[] {
@@ -660,7 +717,16 @@ export class VoiceSettingsComponent implements OnInit, OnDestroy {
         if (!Array.isArray(this.edgeVoices) || this.edgeVoices.length === 0) {
             return [{ value: '', label: 'No voices loaded' }];
         }
-        return this.edgeVoices.map((voice) => ({
+        const query = this.edgeVoiceSearch.trim().toLowerCase();
+        return this.edgeVoices.filter((voice) => {
+            if (!query) {
+                return true;
+            }
+            return [voice.name, voice.language, voice.gender, ...(voice.styles || [])]
+                .join(' ')
+                .toLowerCase()
+                .includes(query);
+        }).map((voice) => ({
             value: voice.name,
             label: voice.name,
         }));
@@ -669,14 +735,17 @@ export class VoiceSettingsComponent implements OnInit, OnDestroy {
     loadProviderStatus(payload: VoiceProvidersResponse | null | undefined): void {
         this.providerStatus = payload?.providers?.coqui || null;
         this.syncProviderStatusPolling();
+        this.cdr.markForCheck();
     }
 
     private loadEdgeVoices(payload: any): void {
         if (payload && payload.status === 'success' && Array.isArray(payload.voices)) {
             this.edgeVoices = payload.voices;
+            this.cdr.markForCheck();
             return;
         }
         this.edgeVoices = [];
+        this.cdr.markForCheck();
     }
 
     private syncVoiceModuleOptions(): void {
@@ -731,6 +800,7 @@ export class VoiceSettingsComponent implements OnInit, OnDestroy {
         });
 
         this.syncVoiceModuleOptions();
+        this.cdr.markForCheck();
     }
 
     refreshLocalVoiceFiles(): void {
@@ -742,8 +812,12 @@ export class VoiceSettingsComponent implements OnInit, OnDestroy {
                     this.stopVoiceSample();
                     this.getCoquiField('speakerWav')?.setValue('', { emitEvent: false });
                 }
+                this.cdr.markForCheck();
             },
-            error: (error) => console.error('Error refreshing local voice files:', error),
+            error: (error) => {
+                console.error('Error refreshing local voice files:', error);
+                this.cdr.markForCheck();
+            },
         });
     }
 
@@ -820,7 +894,7 @@ export class VoiceSettingsComponent implements OnInit, OnDestroy {
                 this.notificationService.open({
                     title: 'Voice settings updated',
                     type: 'success',
-                    message: JSON.stringify(response),
+                    message: this.buildVoiceSettingsUpdatedMessage(response),
                     autoClose: true,
                 });
                 this.originalConfig = JSON.parse(JSON.stringify(this.voiceForm.value));
@@ -830,11 +904,37 @@ export class VoiceSettingsComponent implements OnInit, OnDestroy {
                 this.notificationService.open({
                     title: 'Error updating voice settings',
                     type: 'error',
-                    message: JSON.stringify(error),
+                    message: this.extractNotificationErrorMessage(error, 'Failed to update voice settings'),
                     autoClose: true,
                 });
             }
         });
+    }
+
+    private buildVoiceSettingsUpdatedMessage(response: any): string {
+        const updated = Array.isArray(response?.updated) ? response.updated.length : 0;
+        if (updated > 0) {
+            return `${updated} setting${updated === 1 ? '' : 's'} applied.`;
+        }
+        if (response?.status === 'ok') {
+            return 'Changes saved.';
+        }
+        return 'Voice configuration saved.';
+    }
+
+    private extractNotificationErrorMessage(error: any, fallback: string): string {
+        const candidates = [
+            error?.error?.detail,
+            error?.error?.message,
+            error?.message,
+            error?.statusText,
+        ];
+        for (const candidate of candidates) {
+            if (typeof candidate === 'string' && candidate.trim()) {
+                return candidate.trim();
+            }
+        }
+        return fallback;
     }
 
     private getChanges(): any {
@@ -944,10 +1044,11 @@ export class VoiceSettingsComponent implements OnInit, OnDestroy {
 
     downloadSelectedXttsModel(): void {
         const selectedModel = this.getSelectedXttsModel();
-        if (!selectedModel || !selectedModel.downloadable || selectedModel.downloading) {
+        if (!selectedModel || !selectedModel.downloadable || selectedModel.downloading || this.xttsDownloadInFlight.has(selectedModel.path)) {
             return;
         }
 
+        this.xttsDownloadInFlight.add(selectedModel.path);
         selectedModel.downloading = true;
         selectedModel.status = 'downloading';
         selectedModel.message = 'Starting download...';
@@ -955,7 +1056,12 @@ export class VoiceSettingsComponent implements OnInit, OnDestroy {
         this.localXttsModels = [...this.localXttsModels];
         this.startXttsPolling();
 
-        this.voiceService.downloadXttsModel$(selectedModel.path).pipe(take(1)).subscribe({
+        this.voiceService.downloadXttsModel$(selectedModel.path).pipe(
+            take(1),
+            finalize(() => {
+                this.xttsDownloadInFlight.delete(selectedModel.path);
+            })
+        ).subscribe({
             next: () => this.refreshLocalXttsModels(),
             error: (error) => {
                 const message = error?.error?.detail || 'Failed to start XTTS model download';
@@ -981,7 +1087,11 @@ export class VoiceSettingsComponent implements OnInit, OnDestroy {
 
     canDownloadSelectedXttsModel(): boolean {
         const selectedModel = this.getSelectedXttsModel();
-        return !!selectedModel && selectedModel.downloadable && !selectedModel.installed && !selectedModel.downloading;
+        return !!selectedModel
+            && selectedModel.downloadable
+            && !selectedModel.installed
+            && !selectedModel.downloading
+            && !this.xttsDownloadInFlight.has(selectedModel.path);
     }
 
     canApplySelectedXttsModel(): boolean {
@@ -1020,7 +1130,7 @@ export class VoiceSettingsComponent implements OnInit, OnDestroy {
     }
 
     private syncXttsPolling(): void {
-        if (this.localXttsModels.some((item) => item.downloading)) {
+        if (this.localXttsModels.some((item) => item.downloading || item.status === 'downloading')) {
             this.startXttsPolling();
             return;
         }
@@ -1383,13 +1493,13 @@ export class VoiceSettingsComponent implements OnInit, OnDestroy {
 
         const rows: Array<{ label: string; value: string }> = [];
         if (typeof summary.duration_seconds === 'number' && summary.duration_seconds > 0) {
-            rows.push({ label: 'Duration', value: `${summary.duration_seconds.toFixed(2)} s` });
+            rows.push({ label: 'Duration', value: this.formatVoiceDuration(summary.duration_seconds) });
         }
         if (typeof summary.sample_rate === 'number' && summary.sample_rate > 0) {
-            rows.push({ label: 'Sample rate', value: `${summary.sample_rate} Hz` });
+            rows.push({ label: 'Sample rate', value: this.formatSampleRate(summary.sample_rate) });
         }
         if (typeof summary.channels === 'number' && summary.channels > 0) {
-            rows.push({ label: 'Channels', value: summary.channels === 1 ? 'Mono' : `${summary.channels}` });
+            rows.push({ label: 'Channels', value: this.formatChannels(summary.channels) });
         }
         if (summary.codec) {
             rows.push({ label: 'Format', value: String(summary.codec).toUpperCase() });
@@ -1449,8 +1559,8 @@ export class VoiceSettingsComponent implements OnInit, OnDestroy {
         return [
             { label: 'Source', value: payload.original_file?.name || 'Unknown' },
             { label: 'Prepared', value: payload.processed_file?.name || 'Unknown' },
-            { label: 'Duration', value: `${Number(payload.processed_duration_seconds || 0).toFixed(2)} s` },
-            { label: 'XTTS format', value: `${payload.sample_rate || 22050} Hz / ${payload.channels === 1 ? 'Mono' : payload.channels || 1}` },
+            { label: 'Duration', value: this.formatVoiceDuration(payload.processed_duration_seconds) },
+            { label: 'XTTS format', value: `${this.formatSampleRate(payload.sample_rate)} / ${this.formatChannels(payload.channels)}` },
         ];
     }
 
@@ -1526,6 +1636,12 @@ export class VoiceSettingsComponent implements OnInit, OnDestroy {
         }
     }
 
+    openRvcImportDialog(): void {
+        if (!this.isImportingRvcModel) {
+            this.rvcImportInputRef?.nativeElement.click();
+        }
+    }
+
     onVoiceImportSelected(event: Event): void {
         const input = event.target as HTMLInputElement | null;
         const file = input?.files?.[0];
@@ -1563,16 +1679,105 @@ export class VoiceSettingsComponent implements OnInit, OnDestroy {
         const processedPath = String(payload?.processed_file?.path || '').trim();
         if (processedPath) {
             this.stopVoiceSample();
-            this.getCoquiField('speakerWav')?.setValue(processedPath, { emitEvent: false });
+            this.getCoquiField('speakerWav')?.setValue(processedPath, { emitEvent: true });
         }
 
         this.refreshLocalVoiceFiles();
         this.notificationService.open({
             title: 'Voice imported',
             type: 'success',
-            message: `Prepared ${payload.processed_file.name} (${payload.processed_duration_seconds}s, ${payload.sample_rate} Hz mono).`,
+            message: this.buildVoiceImportNotificationMessage(payload),
+            duration: 4500,
             autoClose: true,
         });
+    }
+
+    onRvcImportSelected(event: Event): void {
+        const input = event.target as HTMLInputElement | null;
+        const file = input?.files?.[0];
+        if (!file || this.isImportingRvcModel) {
+            if (input) {
+                input.value = '';
+            }
+            return;
+        }
+        this.isImportingRvcModel = true;
+        this.voiceService.importRvcModel$(file).pipe(
+            finalize(() => {
+                this.isImportingRvcModel = false;
+                if (input) {
+                    input.value = '';
+                }
+            })
+        ).subscribe({
+            next: (payload) => {
+                const modelPath = String(payload?.model?.path || '').trim();
+                if (modelPath) {
+                    this.getRvcField('modelFile')?.setValue(modelPath, { emitEvent: false });
+                }
+                this.refreshLocalRvcModels();
+                this.notificationService.open({
+                    title: 'RVC model imported',
+                    type: 'success',
+                    message: payload?.model?.name || 'Model imported.',
+                    autoClose: true,
+                });
+            },
+            error: (error: any) => {
+                this.notificationService.open({
+                    title: 'RVC import error',
+                    type: 'error',
+                    message: error?.error?.detail || 'Failed to import RVC model',
+                    autoClose: true,
+                });
+            },
+        });
+    }
+
+    private buildVoiceImportNotificationMessage(payload: ImportVoiceResponse): string {
+        const preparedName = String(payload?.processed_file?.name || 'Prepared voice sample').trim();
+        const duration = this.formatVoiceDuration(payload?.processed_duration_seconds);
+        const sampleRate = this.formatSampleRate(payload?.sample_rate);
+        const channels = this.formatChannels(payload?.channels);
+        return `${preparedName}\n${duration} · ${sampleRate} · ${channels}`;
+    }
+
+    private formatVoiceDuration(value: unknown): string {
+        const seconds = Number(value);
+        if (!Number.isFinite(seconds) || seconds <= 0) {
+            return 'Unknown';
+        }
+        if (seconds < 10) {
+            return `${seconds.toFixed(2)} s`;
+        }
+        return `${seconds.toFixed(1)} s`;
+    }
+
+    private formatSampleRate(value: unknown): string {
+        const sampleRate = Number(value);
+        if (!Number.isFinite(sampleRate) || sampleRate <= 0) {
+            return 'Unknown';
+        }
+        if (sampleRate >= 1000) {
+            const khz = sampleRate / 1000;
+            const formatted = Number.isInteger(khz) ? String(khz) : khz.toFixed(1);
+            return `${formatted} kHz`;
+        }
+        return `${Math.round(sampleRate)} Hz`;
+    }
+
+    private formatChannels(value: unknown): string {
+        const channels = Number(value);
+        if (!Number.isFinite(channels) || channels <= 0) {
+            return 'Unknown';
+        }
+        if (channels === 1) {
+            return 'Mono';
+        }
+        if (channels === 2) {
+            return 'Stereo';
+        }
+        return `${Math.round(channels)} ch`;
     }
 
     getCoquiSpeedLabel(): string {
@@ -2028,6 +2233,12 @@ export class VoiceSettingsComponent implements OnInit, OnDestroy {
     }
 
     private normalizeCoquiVoiceFile(...candidates: Array<string | null | undefined>): string {
+        const normalizedCandidates = candidates
+            .map((candidate) => String(candidate || '').trim().replace(/\\/g, '/'))
+            .filter(Boolean);
+        if (this.localVoiceFiles.length === 0) {
+            return normalizedCandidates[0] || '';
+        }
         const availablePaths = new Set(this.localVoiceFiles.map((item) => item.path));
         const xttsReadyFiles = this.localVoiceFiles.filter(
             (item) => item.summary?.is_xtts_compatible || item.summary?.is_prepared_xtts
@@ -2055,11 +2266,7 @@ export class VoiceSettingsComponent implements OnInit, OnDestroy {
             return preparedByStem?.path || '';
         };
 
-        for (const candidate of candidates) {
-            const value = String(candidate || '').trim().replace(/\\/g, '/');
-            if (!value) {
-                continue;
-            }
+        for (const value of normalizedCandidates) {
             const preparedCompanion = findPreparedCompanion(value);
             if (preparedCompanion && availablePaths.has(preparedCompanion)) {
                 return preparedCompanion;
@@ -2166,6 +2373,16 @@ export class VoiceSettingsComponent implements OnInit, OnDestroy {
         if (!text || this.isGeneratingPreview) {
             return;
         }
+        const previewValidationMessage = this.getPreviewValidationMessage();
+        if (previewValidationMessage) {
+            this.notificationService.open({
+                title: 'Voice preview error',
+                type: 'warning',
+                message: previewValidationMessage,
+                autoClose: true,
+            });
+            return;
+        }
 
         this.stopPreview();
         this.isGeneratingPreview = true;
@@ -2173,6 +2390,7 @@ export class VoiceSettingsComponent implements OnInit, OnDestroy {
         this.voiceService.preview$(text, this.voiceForm.value).pipe(
             finalize(() => {
                 this.isGeneratingPreview = false;
+                this.cdr.markForCheck();
             })
         ).subscribe({
             next: (blob: Blob) => {
@@ -2183,20 +2401,66 @@ export class VoiceSettingsComponent implements OnInit, OnDestroy {
                 this.previewUrl = URL.createObjectURL(blob);
                 this.previewAudio = new Audio(this.previewUrl);
                 this.syncLocalAudioVolumes();
+                this.cdr.markForCheck();
                 this.previewAudio.play().catch((error) => {
                     console.error('Preview playback error:', error);
+                    this.notificationService.open({
+                        title: 'Voice preview error',
+                        type: 'error',
+                        message: 'Preview audio was generated, but browser playback failed.',
+                        autoClose: true,
+                    });
                 });
             },
-            error: (error: any) => {
-                const message = error?.error?.detail || 'Failed to generate preview';
+            error: async (error: any) => {
+                const message = await this.extractPreviewErrorMessage(error);
                 this.notificationService.open({
                     title: 'Voice preview error',
                     type: 'error',
                     message,
                     autoClose: true,
                 });
+                this.cdr.markForCheck();
             }
         });
+    }
+
+    private getPreviewValidationMessage(): string {
+        if (this.isActiveModule('coqui')) {
+            if (!this.getSelectedVoiceFilePath()) {
+                return 'Select or import an XTTS voice file before generating a preview.';
+            }
+            const modelRevision = String(this.getCoquiField('modelRevision')?.value || '').trim();
+            const selectedModel = this.localXttsModels.find((item) => item.path === modelRevision);
+            if (selectedModel && !selectedModel.installed && !selectedModel.custom) {
+                return 'Download and apply the selected XTTS model before generating a preview.';
+            }
+        }
+        return '';
+    }
+
+    private async extractPreviewErrorMessage(error: any): Promise<string> {
+        const fallback = 'Failed to generate preview';
+        const rawError = error?.error;
+
+        if (rawError instanceof Blob) {
+            try {
+                const text = await rawError.text();
+                if (!text.trim()) {
+                    return fallback;
+                }
+                try {
+                    const payload = JSON.parse(text);
+                    return payload?.detail || payload?.message || text;
+                } catch {
+                    return text;
+                }
+            } catch {
+                return fallback;
+            }
+        }
+
+        return rawError?.detail || rawError?.message || error?.message || fallback;
     }
 
     stopPreview(): void {

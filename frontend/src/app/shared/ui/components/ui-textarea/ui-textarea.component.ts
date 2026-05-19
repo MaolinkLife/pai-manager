@@ -31,6 +31,7 @@ export class UiTextareaComponent implements ControlValueAccessor, AfterViewInit 
     @Input() maxLength: number | null = null;
     @Input() autoResize = true;
     @Input() showCounter = false;
+    @Input() height: string | null = null;
 
     @Output() valueChange = new EventEmitter<string>();
 

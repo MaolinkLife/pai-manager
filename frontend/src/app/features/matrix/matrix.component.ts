@@ -1,6 +1,7 @@
 import { Component, DestroyRef, OnInit, inject } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import {
+    MoralDashboardPayload,
     MoralDashboardState,
     MoralStateService,
 } from '../../core/services/moral-state.service';
@@ -15,6 +16,9 @@ export class MatrixComponent implements OnInit {
     private readonly destroyRef = inject(DestroyRef);
     isLoading = true;
     state: MoralDashboardState | null = null;
+    latestSnapshot: any = null;
+    dailySummary: any = null;
+    recentTraces: any[] = [];
 
     readonly stateMetrics = [
         { key: 'trust', color: 'metric--trust' },
@@ -24,13 +28,17 @@ export class MatrixComponent implements OnInit {
     ];
 
     readonly emotionBars = [
+        { key: 'longing', color: 'emotion--sorrow' },
         { key: 'joy', color: 'emotion--joy' },
+        { key: 'frustration', color: 'emotion--irritation' },
         { key: 'sadness', color: 'emotion--sadness' },
-        { key: 'anger', color: 'emotion--anger' },
-        { key: 'irritation', color: 'emotion--irritation' },
-        { key: 'happiness', color: 'emotion--happiness' },
-        { key: 'sorrow', color: 'emotion--sorrow' },
-        { key: 'grief', color: 'emotion--grief' },
+        { key: 'embarrassment', color: 'emotion--happiness' },
+        { key: 'anxiety', color: 'emotion--anger' },
+        { key: 'peace', color: 'emotion--joy' },
+        { key: 'confusion', color: 'emotion--grief' },
+        { key: 'pride', color: 'emotion--happiness' },
+        { key: 'resentment', color: 'emotion--irritation' },
+        { key: 'tenderness', color: 'emotion--joy' },
         { key: 'jealousy', color: 'emotion--jealousy' },
     ];
 
@@ -41,11 +49,11 @@ export class MatrixComponent implements OnInit {
 
     ngOnInit(): void {
         this.localizationService.init();
-        this.moralStateService.state$
+        this.moralStateService.dashboard$
             .pipe(takeUntilDestroyed(this.destroyRef))
-            .subscribe((nextState) => {
-                if (nextState) {
-                    this.state = nextState;
+            .subscribe((payload: MoralDashboardPayload | null) => {
+                if (payload?.state) {
+                    this.applyPayload(payload);
                 }
             });
         this.loadState();
@@ -53,9 +61,23 @@ export class MatrixComponent implements OnInit {
 
     loadState(): void {
         this.isLoading = true;
-        this.moralStateService.getState$().subscribe((response) => {
-            this.state = response?.state || null;
-            this.isLoading = false;
+        this.moralStateService.getState$().subscribe({
+            next: (response) => {
+                if (response?.state) {
+                    this.applyPayload({
+                        state: response.state,
+                        latestSnapshot: response.latest_snapshot || null,
+                        dailySummary: response.daily_summary || null,
+                        recentTraces: Array.isArray(response.recent_traces) ? response.recent_traces : [],
+                    });
+                } else {
+                    this.state = null;
+                }
+                this.isLoading = false;
+            },
+            error: () => {
+                this.isLoading = false;
+            },
         });
     }
 
@@ -71,6 +93,41 @@ export class MatrixComponent implements OnInit {
 
     get coherencePercent(): number {
         return Math.round(this.getMetricValue('stability') * 100);
+    }
+
+    get latestTrace(): any {
+        return this.recentTraces[0] || null;
+    }
+
+    get traceCount(): number {
+        return this.recentTraces.length;
+    }
+
+    get affectiveTrigger(): string {
+        return String(this.state?.trigger || this.state?.affective_state?.['trigger'] || '').trim();
+    }
+
+    get influenceEntries(): Array<{ key: string; value: any }> {
+        const influence = this.state?.influence || this.state?.affective_state?.['influence'] || {};
+        if (!influence || typeof influence !== 'object') {
+            return [];
+        }
+        return Object.entries(influence).map(([key, value]) => ({ key, value }));
+    }
+
+    get associatedEvents(): string[] {
+        const events = this.state?.associated_events || this.state?.affective_state?.['associated_events'] || [];
+        return Array.isArray(events) ? events.map((item) => String(item)) : [];
+    }
+
+    get latestTraceCause(): string {
+        return this.formatTraceCause(this.latestTrace?.cause);
+    }
+
+    get latestTraceOutcomes(): any[] {
+        const notes = this.latestTrace?.notes;
+        const outcomes = notes && typeof notes === 'object' ? notes.outcomes : [];
+        return Array.isArray(outcomes) ? outcomes : [];
     }
 
     formatUpdatedAt(value: string | null | undefined): string {
@@ -106,5 +163,29 @@ export class MatrixComponent implements OnInit {
             return 0;
         }
         return Math.min(Math.max(value, 0), 1);
+    }
+
+    private formatTraceCause(value: any): string {
+        const raw = String(value || '').replace(/\s+/g, ' ').trim();
+        if (!raw) {
+            return '';
+        }
+        const lower = raw.toLowerCase();
+        const internalMarkers = [
+            'this is a proactive private check-in',
+            'send one short natural message only',
+            'avoid guilt-tripping',
+        ];
+        if (internalMarkers.some((marker) => lower.includes(marker))) {
+            return 'внутренний proactive check-in';
+        }
+        return raw;
+    }
+
+    private applyPayload(payload: MoralDashboardPayload): void {
+        this.state = payload.state || null;
+        this.latestSnapshot = payload.latestSnapshot || null;
+        this.dailySummary = payload.dailySummary || null;
+        this.recentTraces = Array.isArray(payload.recentTraces) ? payload.recentTraces : [];
     }
 }

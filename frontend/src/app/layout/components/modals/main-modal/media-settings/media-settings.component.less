@@ -9,31 +9,65 @@
     padding: 24px;
     border-radius: var(--radius);
     color: var(--color-text);
+    max-width: 700px;
+    margin: 0 auto 24px auto;
+
+    h2 {
+        color: var(--color-text-active);
+        margin-top: 0;
+        margin-bottom: 12px;
+        font-size: 20px;
+    }
 }
 
 .settings-form {
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 0;
 }
 
 .section {
+    margin-bottom: 30px;
     border: 1px solid var(--color-border);
     border-radius: var(--radius);
-    padding: 16px;
-    background: color-mix(in srgb, var(--color-bg) 86%, transparent);
+    padding: 20px;
+    background-color: var(--color-bg);
+
+    h3 {
+        margin-top: 0;
+        margin-bottom: 10px;
+        color: var(--color-text-active);
+        border-bottom: 2px solid var(--color-accent);
+        padding-bottom: 10px;
+        font-size: 16px;
+    }
 }
 
 .grid {
     display: grid;
-    gap: 10px 12px;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 0 12px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.textarea-grid,
+.composition-pool-grid {
+    gap: 12px;
+    align-items: stretch;
+}
+
+.textarea-grid .form-group,
+.composition-pool-grid .form-group {
+    min-width: 0;
+}
+
+.composition-pool-grid {
+    grid-template-columns: 1fr;
 }
 
 .form-group {
     display: flex;
     flex-direction: column;
-    margin-bottom: 10px;
+    margin-bottom: 15px;
 
     label {
         margin-bottom: 6px;
@@ -41,10 +75,10 @@
     }
 }
 
-.checkbox {
-    display: flex;
-    align-items: center;
-    gap: 8px;
+.fallback-checkbox {
+    justify-content: center;
+    min-height: 68px;
+    padding-top: 24px;
 }
 
 .checkbox-group {
@@ -52,9 +86,18 @@
     gap: 8px;
 }
 
+.dimension-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    min-width: 0;
+}
+
 .button-row {
     display: flex;
     justify-content: flex-end;
+    margin-top: 20px;
+    gap: 12px;
 
     button {
         background: var(--color-accent);
@@ -63,6 +106,15 @@
         border-radius: var(--radius);
         color: #071018;
         cursor: pointer;
+        font-family: var(--font-family);
+        box-shadow: var(--shadow-soft);
+
+        &:disabled {
+            background-color: var(--color-border);
+            color: color-mix(in srgb, var(--color-text) 50%, transparent);
+            cursor: not-allowed;
+            box-shadow: none;
+        }
     }
 }
 
@@ -81,5 +133,82 @@
         margin: 0 0 10px 0;
         font-size: 15px;
         font-weight: 600;
+        color: var(--color-text-active);
+    }
+}
+
+.subsection-header,
+.scenario-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+
+    button {
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius);
+        background: var(--color-surface);
+        color: var(--color-text);
+        cursor: pointer;
+        padding: 7px 10px;
+        font-family: var(--font-family);
+    }
+}
+
+.scenario-list {
+    display: grid;
+    gap: 12px;
+    margin-top: 12px;
+}
+
+.scenario-card {
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    padding: 14px;
+    background: var(--color-surface);
+}
+
+app-ui-input,
+app-ui-select,
+app-ui-textarea,
+app-ui-checkbox {
+    display: block;
+    width: 100%;
+}
+
+.select-with-action {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    align-items: center;
+
+    button {
+        height: 34px;
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius);
+        background: var(--color-surface);
+        color: var(--color-text);
+        cursor: pointer;
+        padding: 0 10px;
+        font-family: var(--font-family);
+
+        &:disabled {
+            cursor: not-allowed;
+            opacity: 0.65;
+        }
+    }
+}
+
+@media (max-width: 720px) {
+    .grid {
+        grid-template-columns: 1fr;
+    }
+
+    .select-with-action {
+        grid-template-columns: 1fr;
+    }
+
+    .dimension-row {
+        grid-template-columns: 1fr;
     }
 }

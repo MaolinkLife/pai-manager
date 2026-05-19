@@ -47,6 +47,33 @@ export interface ModuleConfigDto {
     visual: boolean;
 }
 
+export interface DecisionLayerConfigDto {
+    mode: 'system' | 'llm';
+    active_provider: string;
+    max_steps: number;
+    release_after_use?: boolean;
+    capabilities: {
+        tool: boolean;
+        vision: boolean;
+        thinking: boolean;
+    };
+    providers: {
+        ollama: {
+            model: string;
+            temperature: number;
+            max_tokens: number;
+            thinking?: boolean;
+        };
+        [key: string]: any;
+    };
+    instructor?: {
+        build_schema?: string;
+        include_datetime?: boolean;
+        include_geolocation?: boolean;
+        exclude_disabled_modules?: boolean;
+    };
+}
+
 export interface TunnelingConfigDto {
     enabled: boolean;
     provider: string;
@@ -178,8 +205,11 @@ export interface AnalyzerProviderConfigDto {
 }
 
 export interface AnalyzerConfigDto {
+    enabled?: boolean;
     active_provider: string;
     fallback_order: string[];
+    release_after_use?: boolean;
+    system_prompt?: string;
     providers: {
         [key: string]: AnalyzerProviderConfigDto;
     };
@@ -190,12 +220,15 @@ export interface MoralProviderConfigDto {
     model?: string;
     temperature?: number;
     max_tokens?: number;
+    thinking?: boolean;
 }
 
 export interface MoralConfigDto {
     enabled: boolean;
     active_provider: string;
     fallback_order: string[];
+    release_after_use?: boolean;
+    system_prompt?: string;
     providers: {
         heuristic?: Record<string, any>;
         ollama?: MoralProviderConfigDto;
@@ -231,6 +264,13 @@ export interface SynthesisComfyUIConfigDto {
     timeout_sec: number;
     default_workflow: string;
     default_model: string;
+    sampler?: string;
+    scheduler?: string;
+    steps?: number;
+    cfg?: number;
+    width?: number;
+    height?: number;
+    aspect_ratio?: string;
 }
 
 export interface SynthesisDiffusersConfigDto {
@@ -246,6 +286,7 @@ export interface SynthesisPromptingConfigDto {
     enabled: boolean;
     max_attempts: number;
     assess_enabled: boolean;
+    retry_enabled?: boolean;
     quality_threshold: number;
     appearance_prompt: string;
     default_negative_prompt: string;
@@ -272,9 +313,32 @@ export interface SynthesisPromptingConfigDto {
         allow_environment_images?: boolean;
         allow_symbolic_images?: boolean;
     };
+    per_character_visual_profiles?: Record<string, SynthesisPromptingConfigDto['visual_profile']>;
+    scenarios?: Record<string, {
+        title?: string;
+        enabled?: boolean;
+        image_provider?: string;
+        image_model?: string;
+        width?: number | null;
+        height?: number | null;
+        steps?: number | null;
+        num_inference_steps?: number | null;
+        cfg?: number | null;
+        guidance_scale?: number | null;
+        sampler?: string;
+        scheduler?: string;
+        use_prompt_builder?: boolean;
+        review_generated_image?: boolean;
+        use_visual_intent?: boolean;
+        prompt_policy?: string;
+        style_prompt?: string;
+        negative_prompt?: string;
+        system_prompt?: string;
+    }>;
 }
 
 export interface SynthesisConfigDto {
+    active_provider?: string;
     sd_webui: SynthesisSdWebUIConfigDto;
     comfyui: SynthesisComfyUIConfigDto;
     diffusers: SynthesisDiffusersConfigDto;
@@ -283,11 +347,12 @@ export interface SynthesisConfigDto {
 
 export interface GeneratorProviderConfigDto {
     model: string;
-    temperature: number;
-    max_tokens: number;
+    temperature?: number;
+    max_tokens?: number;
     streaming?: boolean;
     api_key?: string;
     base_url?: string;
+    [key: string]: any;
 }
 
 export interface ApiConfigDto {
@@ -295,6 +360,7 @@ export interface ApiConfigDto {
     streaming: boolean;
     model: string;
     visual_model: string;
+    visual_model_options?: string[];
     token_limit: number;
     message_pair_limit: number;
     active_provider: string;
@@ -331,6 +397,7 @@ export interface SystemConfigDto {
 export interface ProjectConfigDto extends BaseConfigDto {
     voice: VoiceConfigDto;
     modules: ModuleConfigDto;
+    decision_layer: DecisionLayerConfigDto;
     connector: ConnectorConfigDto;
     telegram?: any;
     communication?: any;

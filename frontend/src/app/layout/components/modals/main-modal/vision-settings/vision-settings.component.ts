@@ -30,7 +30,7 @@ interface VisionProviderStatusView {
 const VISION_PROVIDER_DEFAULTS: Record<string, Record<string, any>> = {
     apple_vision: { model_id: 'apple/FastVLM-1.5B', max_tokens: 128 },
     llava: { model_id: 'llava-hf/llava-1.5-7b-hf', max_tokens: 128 },
-    ollama_vision: { model: 'llava:latest', max_tokens: 160, probe_enabled: true, probe_cache_seconds: 300 },
+    ollama_vision: { model: 'llava:latest', max_tokens: 512, probe_enabled: true, probe_cache_seconds: 300, image_format: 'PNG', keep_alive: '5m', use_main_model_context: false },
 };
 
 @Component({
@@ -41,6 +41,7 @@ const VISION_PROVIDER_DEFAULTS: Record<string, Record<string, any>> = {
 export class VisionSettingsComponent implements OnInit, OnDestroy {
     visionForm: UntypedFormGroup;
     originalConfig: any = {};
+    originalModules: any = {};
 
     visionProviders: { value: string; label: string }[] = [];
     isLoading$ = new BehaviorSubject<boolean>(true);
@@ -136,6 +137,7 @@ export class VisionSettingsComponent implements OnInit, OnDestroy {
             .subscribe({
                 next: (config) => {
                     const vision = config?.vision;
+                    this.originalModules = this.normalizeModulesPayload(config?.modules);
                     this.isInitializing = true;
                     this.resetProviderControls();
 
@@ -198,6 +200,8 @@ export class VisionSettingsComponent implements OnInit, OnDestroy {
             .subscribe(response => {
             if (response && response.monitors) {
                 const modalRef = this.modalService.open(MonitorSelectionModalComponent, {
+                    title: 'Select Monitor',
+                    appearance: 'default',
                     data: {
                         monitors: response.monitors,
                         selectedMonitor: this.visionForm.get('monitorIndex')?.value,
@@ -227,12 +231,19 @@ export class VisionSettingsComponent implements OnInit, OnDestroy {
 
     saveChanges(): void {
         const changes = this.pendingChanges;
-        if (!changes || Object.keys(changes).length === 0) {
+        const modules = this.buildModulesPayload();
+        const updateData: any = {};
+        if (changes && Object.keys(changes).length > 0) {
+            updateData.vision = JSON.parse(JSON.stringify(changes));
+        }
+        if (JSON.stringify(modules) !== JSON.stringify(this.originalModules)) {
+            updateData.modules = modules;
+        }
+        if (Object.keys(updateData).length === 0) {
             return;
         }
 
-        const payload = JSON.parse(JSON.stringify(changes));
-        this.configService.updateConfig$({ vision: payload })
+        this.configService.updateConfig$(updateData)
             .pipe(take(1), takeUntil(this.destroy$))
             .subscribe({
                 next: () => {
@@ -244,6 +255,7 @@ export class VisionSettingsComponent implements OnInit, OnDestroy {
                     });
                     this.isInitializing = true;
                     this.originalConfig = this.buildVisionConfigFromForm();
+                    this.originalModules = modules;
                     this.pendingChanges = {};
                     this.visionForm.markAsPristine();
                     this.isInitializing = false;
@@ -263,7 +275,33 @@ export class VisionSettingsComponent implements OnInit, OnDestroy {
     }
 
     hasChanges(): boolean {
-        return !!this.pendingChanges && Object.keys(this.pendingChanges).length > 0;
+        const modules = this.buildModulesPayload();
+        return (
+            (!!this.pendingChanges && Object.keys(this.pendingChanges).length > 0) ||
+            JSON.stringify(modules) !== JSON.stringify(this.originalModules)
+        );
+    }
+
+    private normalizeModulesPayload(modules: any): any {
+        const source = modules || {};
+        return {
+            vtubeStudio: !!(source.vtubeStudio ?? source.vtube_studio),
+            whisper: !!source.whisper,
+            minecraft: !!source.minecraft,
+            gaming: !!source.gaming,
+            alarm: !!source.alarm,
+            discord: !!source.discord,
+            telegram: !!source.telegram,
+            rag: !!source.rag,
+            visual: !!source.visual,
+        };
+    }
+
+    private buildModulesPayload(): any {
+        return {
+            ...this.originalModules,
+            visual: !!this.visionForm.get('enabled')?.value,
+        };
     }
 
     get visionProviderOptions(): UiSelectOption<string>[] {
@@ -412,6 +450,13 @@ export class VisionSettingsComponent implements OnInit, OnDestroy {
             ?? group?.get('model_id')?.value
             ?? ''
         ).trim();
+        this.providerStatus = {
+            provider,
+            model,
+            ready: this.providerStatus?.ready ?? null,
+            message: probe ? 'checking...' : (this.providerStatus?.message || 'not checked'),
+            probe,
+        };
         this.isCheckingProvider = true;
         this.resourcesService.getVisionProviderStatus$(provider, model || null, probe)
             .pipe(take(1), takeUntil(this.destroy$))
@@ -447,6 +492,23 @@ export class VisionSettingsComponent implements OnInit, OnDestroy {
         Object.keys(providerConfig || {}).forEach((fieldName) => {
             group.addControl(fieldName, new UntypedFormControl(providerConfig[fieldName]));
         });
+
+        group.valueChanges
+            .pipe(takeUntil(this.destroy$))
+            .subscribe((value) => {
+                if (this.isInitializing || providerName !== this.activeProvider) {
+                    return;
+                }
+                const model = String(value?.model ?? value?.model_id ?? '').trim();
+                this.providerStatus = {
+                    provider: providerName,
+                    model,
+                    ready: null,
+                    message: 'not checked',
+                    probe: false,
+                };
+                this.cdr.markForCheck();
+            });
 
         this.setProviderMetadata(providerName, providerConfig || {});
 

@@ -166,11 +166,6 @@ export class AuthService {
             return of(null);
         }
 
-        const cached = this.getCurrentUser();
-        if (cached) {
-            return of(cached);
-        }
-
         return this.me$().pipe(
             switchMap((user) => {
                 if (user) {
@@ -192,6 +187,7 @@ export class AuthService {
         localStorage.removeItem(this.accessTokenKey);
         localStorage.removeItem(this.refreshTokenKey);
         localStorage.removeItem(this.userKey);
+        this.refreshInFlight$ = null;
         if (emit) {
             this.currentUserSubject.next(null);
         }

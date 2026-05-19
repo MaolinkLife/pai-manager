@@ -12,10 +12,27 @@ sys.dont_write_bytecode = True
 IS_WINDOWS = os.name == "nt"
 
 
+def log_console(component: str, message: str, details: dict | None = None) -> None:
+    prefix = f"[{component}]"
+    if details:
+        payload = ", ".join(f"{key}={value}" for key, value in details.items())
+        print(f"{prefix} {message} | {payload}", flush=True)
+        return
+    print(f"{prefix} {message}", flush=True)
+
+
 def load_ports():
+    log_console("Launcher", "Читаем конфигурацию портов.")
     with open(os.path.join("config", "port-config.json"), encoding="utf-8") as f:
         data = json.load(f)
-    return data.get("frontend", 4200), data.get("backend", 8000)
+    frontend_port = data.get("frontend", 3880)
+    backend_port = data.get("backend", 8000)
+    log_console(
+        "Launcher",
+        "Порты загружены.",
+        {"frontend": frontend_port, "backend": backend_port},
+    )
+    return frontend_port, backend_port
 
 
 def sync_frontend_proxy_target(backend_port: int) -> None:
@@ -30,15 +47,16 @@ def sync_frontend_proxy_target(backend_port: int) -> None:
             return
         desired_target = f"http://127.0.0.1:{backend_port}"
         if api_cfg.get("target") == desired_target:
+            log_console("Launcher", "Frontend proxy уже указывает на backend.", {"target": desired_target})
             return
         api_cfg["target"] = desired_target
         proxy_cfg["/api"] = api_cfg
         with open(proxy_path, "w", encoding="utf-8") as file:
             json.dump(proxy_cfg, file, ensure_ascii=False, indent=4)
             file.write("\n")
-        print(f"Proxy target updated: {desired_target}")
+        log_console("Launcher", "Frontend proxy обновлен.", {"target": desired_target})
     except Exception as exc:
-        print(f"Warning: failed to sync proxy target: {exc}")
+        log_console("Launcher", "Не удалось синхронизировать frontend proxy.", {"error": exc})
 
 
 def wait_backend_ready(
@@ -50,8 +68,10 @@ def wait_backend_ready(
 
     while time.time() < deadline:
         if backend_process.poll() is not None:
-            print(
-                f"Backend process exited early with code {backend_process.returncode}."
+            log_console(
+                "Launcher",
+                "Backend завершился до готовности.",
+                {"code": backend_process.returncode},
             )
             return False
         try:
@@ -111,8 +131,8 @@ def main():
     frontend_port, backend_port = load_ports()
     sync_frontend_proxy_target(backend_port)
 
-    print(f"Start Frontend (port {frontend_port})")
-    print(f"Start Backend (port {backend_port})")
+    log_console("Launcher", "Готовим запуск backend.", {"port": backend_port})
+    log_console("Launcher", "Готовим запуск frontend.", {"port": frontend_port})
     print("-" * 50)
 
     processes = []
@@ -120,7 +140,7 @@ def main():
     try:
         # Backend first
         backend = subprocess.Popen(
-            ["uvicorn", "main:app", "--port", str(backend_port)],
+            [sys.executable, "run_uvicorn.py", "--port", str(backend_port)],
             cwd="backend",
             stdout=sys.stdout,
             stderr=sys.stderr,
@@ -129,17 +149,22 @@ def main():
         )
         processes.append(backend)
 
-        print(f"Waiting backend readiness: http://127.0.0.1:{backend_port}/api/ping")
+        log_console(
+            "Launcher",
+            "Ожидаем готовность backend.",
+            {"url": f"http://127.0.0.1:{backend_port}/api/ping"},
+        )
         ready = wait_backend_ready(backend, backend_port, timeout_sec=120)
         if not ready:
-            print(
-                f"Backend did not become ready within timeout on port {backend_port}. "
-                "Frontend start is cancelled."
+            log_console(
+                "Launcher",
+                "Backend не стал готовым в таймаут, запуск WebUI отменен.",
+                {"port": backend_port},
             )
             stop_process(backend, label="Backend")
             return
 
-        print("Backend is ready. Starting frontend...")
+        log_console("Launcher", "Backend готов, запускаем WebUI.", {"port": frontend_port})
         # Angular
         frontend = subprocess.Popen(
             [
@@ -164,12 +189,12 @@ def main():
             p.wait()
 
     except KeyboardInterrupt:
-        print("\nInterrupt! Terminating processes...")
+        log_console("Launcher", "Получен interrupt, останавливаем процессы.")
         for index, p in enumerate(processes):
             if p.poll() is None:
                 label = "Backend" if index == 0 else f"Process #{index + 1}"
                 stop_process(p, label=label)
-        print("All processes are completed.")
+        log_console("Launcher", "Все процессы остановлены.")
 
 
 if __name__ == "__main__":

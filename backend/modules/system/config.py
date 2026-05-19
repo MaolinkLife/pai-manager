@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 from contextvars import ContextVar
 from sqlalchemy.exc import OperationalError, ProgrammingError
 from utils.open_file_w_utf8 import open_utf8
-from modules.system.logger import log_audit_entry, AuditStatus
+from modules.system.logger import log_audit_entry, AuditStatus, log_console
 from models.config_model import CONFIG_PATHS
 from models.models import (
     User,
@@ -202,6 +202,14 @@ def normalize_config_structure(config: dict | None) -> dict:
         _merge_missing(modules_section, modules_defaults)
     normalized["modules"] = modules_section
 
+    decision_layer_defaults = DEFAULT_CONFIG.get("decision_layer", {})
+    decision_layer_section = normalized.get("decision_layer")
+    if not isinstance(decision_layer_section, dict):
+        decision_layer_section = copy.deepcopy(decision_layer_defaults)
+    else:
+        _merge_missing(decision_layer_section, decision_layer_defaults)
+    normalized["decision_layer"] = decision_layer_section
+
     # Ensure connector section exists (user tunnel settings).
     if not isinstance(normalized.get("connector"), dict):
         normalized["connector"] = copy.deepcopy(DEFAULT_CONFIG.get("connector", {}))
@@ -277,6 +285,30 @@ def normalize_config_structure(config: dict | None) -> dict:
             if isinstance(telegram_channel_cfg, dict):
                 telegram_channel_cfg["allow_fallback"] = False
     normalized["communication"] = communication_section
+
+    api_defaults = DEFAULT_CONFIG.get("api", {})
+    api_section = normalized.get("api")
+    if not isinstance(api_section, dict):
+        api_section = copy.deepcopy(api_defaults)
+    else:
+        _merge_missing(api_section, api_defaults)
+    normalized["api"] = api_section
+
+    analyzer_defaults = DEFAULT_CONFIG.get("analyzer", {})
+    analyzer_section = normalized.get("analyzer")
+    if not isinstance(analyzer_section, dict):
+        analyzer_section = copy.deepcopy(analyzer_defaults)
+    else:
+        _merge_missing(analyzer_section, analyzer_defaults)
+    normalized["analyzer"] = analyzer_section
+
+    moral_defaults = DEFAULT_CONFIG.get("moral", {})
+    moral_section = normalized.get("moral")
+    if not isinstance(moral_section, dict):
+        moral_section = copy.deepcopy(moral_defaults)
+    else:
+        _merge_missing(moral_section, moral_defaults)
+    normalized["moral"] = moral_section
 
     return normalized
 
@@ -363,9 +395,19 @@ def ensure_user_config_exists(user_uuid: str) -> dict:
     if existing is not None:
         return existing
 
+    log_console(
+        "Config",
+        "Создаем настройки по умолчанию.",
+        {"user_uuid": user_uuid},
+    )
     seed = _build_seed_config_for_user(user_uuid)
     _persist_split_settings(user_uuid, seed)
     _save_user_config_to_db(user_uuid, _strip_split_settings(seed))
+    log_console(
+        "Config",
+        "Настройки по умолчанию созданы.",
+        {"user_uuid": user_uuid},
+    )
     return seed
 
 
@@ -571,12 +613,23 @@ def migrate_owner_config_if_needed() -> bool:
     try:
         owner = _pick_owner_like_user(session)
         if not owner:
+            log_console("Config", "Владелец не найден, миграция конфигурации пропущена.")
             return False
 
         existing = session.query(UserConfig).filter_by(user_uuid=owner.uuid).first()
         if existing:
+            log_console(
+                "Config",
+                "Конфигурация владельца уже существует.",
+                {"user_uuid": owner.uuid},
+            )
             return False
 
+        log_console(
+            "Config",
+            "Создаем конфигурационный файл под владельца.",
+            {"user_uuid": owner.uuid},
+        )
         seed = _build_seed_config_for_user(owner.uuid)
         session.add(
             UserConfig(
@@ -924,6 +977,15 @@ def validate_config(config: dict) -> tuple[bool, list]:
             if similarity is not None and not isinstance(similarity, (float, int)):
                 errors.append("memory.similarity_threshold must be a number")
 
+    if "analyzer" in config:
+        analyzer_cfg = config["analyzer"]
+        if not isinstance(analyzer_cfg, dict):
+            errors.append("analyzer must be an object")
+        else:
+            release_after_use = analyzer_cfg.get("release_after_use")
+            if release_after_use is not None and not isinstance(release_after_use, bool):
+                errors.append("analyzer.release_after_use must be boolean")
+
     if "moral" in config:
         moral_cfg = config["moral"]
         if not isinstance(moral_cfg, dict):
@@ -942,6 +1004,9 @@ def validate_config(config: dict) -> tuple[bool, list]:
             fallback_order = moral_cfg.get("fallback_order")
             if fallback_order is not None and not isinstance(fallback_order, list):
                 errors.append("moral.fallback_order must be a list")
+            release_after_use = moral_cfg.get("release_after_use")
+            if release_after_use is not None and not isinstance(release_after_use, bool):
+                errors.append("moral.release_after_use must be boolean")
             if (
                 isinstance(active_provider, str)
                 and isinstance(providers, dict)
@@ -949,6 +1014,32 @@ def validate_config(config: dict) -> tuple[bool, list]:
                 and active_provider != "heuristic"
             ):
                 errors.append("moral.active_provider must exist inside moral.providers")
+
+    if "decision_layer" in config:
+        dl_cfg = config["decision_layer"]
+        if not isinstance(dl_cfg, dict):
+            errors.append("decision_layer must be an object")
+        else:
+            mode = str(dl_cfg.get("mode") or "system").strip().lower()
+            if mode not in {"system", "llm"}:
+                errors.append("decision_layer.mode must be one of: system, llm")
+            active_provider = str(dl_cfg.get("active_provider") or "ollama").strip()
+            providers = dl_cfg.get("providers")
+            if providers is not None and not isinstance(providers, dict):
+                errors.append("decision_layer.providers must be an object")
+            elif active_provider and isinstance(providers, dict) and active_provider not in providers:
+                errors.append("decision_layer.active_provider must exist inside decision_layer.providers")
+            capabilities = dl_cfg.get("capabilities")
+            if capabilities is not None and not isinstance(capabilities, dict):
+                errors.append("decision_layer.capabilities must be an object")
+            max_steps = dl_cfg.get("max_steps")
+            if max_steps is not None and (
+                not isinstance(max_steps, int) or max_steps <= 0
+            ):
+                errors.append("decision_layer.max_steps must be a positive integer")
+            release_after_use = dl_cfg.get("release_after_use")
+            if release_after_use is not None and not isinstance(release_after_use, bool):
+                errors.append("decision_layer.release_after_use must be boolean")
 
     # Validate newly added sections
     if "system" in config:
@@ -1243,6 +1334,27 @@ def load_generation_presets() -> list:
         return json.load(f)
 
 
+def _normalize_generation_preset(preset: dict) -> dict:
+    return {
+        "name": preset.get("name") or "Default",
+        "description": preset.get("description", ""),
+        "temperature": preset.get("temperature", 1.0),
+        "min_p": preset.get("min_p", preset.get("minP", 0.05)),
+        "top_p": preset.get("top_p", preset.get("topP", 0.9)),
+        "top_k": preset.get("top_k", preset.get("topK", 40)),
+        "repeat_penalty": preset.get(
+            "repeat_penalty",
+            preset.get("repeatPenalty", 1.0),
+        ),
+        "stop": preset.get("stop"),
+        "num_predict": preset.get("num_predict", preset.get("numPredict", 1024)),
+        "normalize_messages": preset.get(
+            "normalize_messages",
+            preset.get("normalizeMessages", False),
+        ),
+    }
+
+
 def apply_preset_by_name(preset_name: str, user_uuid: Optional[str] = None) -> bool:
     presets = load_generation_presets()
     matched = next((p for p in presets if p["name"] == preset_name), None)
@@ -1251,7 +1363,7 @@ def apply_preset_by_name(preset_name: str, user_uuid: Optional[str] = None) -> b
         return False
 
     config = get_config(user_uuid=user_uuid)
-    config["generate_settings"] = matched
+    config["generate_settings"] = _normalize_generation_preset(matched)
     save_config(config, user_uuid=user_uuid)
     return True
 

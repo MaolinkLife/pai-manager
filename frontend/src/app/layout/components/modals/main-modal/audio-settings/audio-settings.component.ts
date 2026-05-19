@@ -6,6 +6,7 @@ import { Observable, BehaviorSubject, combineLatest } from 'rxjs';
 import { map, startWith, tap, finalize } from 'rxjs/operators';
 import { LocalizationService } from '../../../../../shared/pipes/translation/localization.service';
 import { UiSelectOption } from '../../../../../shared/ui/components/ui-select/ui-select.component';
+import { NotificationService } from '../../../../../shared/components/notification/notification.service';
 
 interface AudioDevice {
     id: number;
@@ -24,6 +25,7 @@ interface AudioDevicesData {
 export class AudioSettingsComponent implements OnInit {
     audioForm: UntypedFormGroup;
     originalConfig: any = {};
+    originalModules: any = {};
     isLoading$ = new BehaviorSubject<boolean>(true);
 
     devices$: Observable<AudioDevicesData> = new Observable<AudioDevicesData>();
@@ -38,6 +40,7 @@ export class AudioSettingsComponent implements OnInit {
         private configService: ConfigService,
         private resourcesService: ResourcesService,
         private localizationService: LocalizationService,
+        private notificationService: NotificationService,
     ) {
         this.audioForm = this.createForm();
     }
@@ -49,6 +52,7 @@ export class AudioSettingsComponent implements OnInit {
 
     private createForm(): UntypedFormGroup {
         return this.fb.group({
+            sttEnabled: [false],
             inputDeviceId: [0],
             sampleRate: [16000],
             channels: [1],
@@ -70,10 +74,18 @@ export class AudioSettingsComponent implements OnInit {
         ]).pipe(
             tap(() => this.isLoading$.next(true)),
             map(([config, devices]) => {
+                this.originalModules = this.normalizeModulesPayload(config?.modules);
                 // Load config
                 if (config && config.audio) {
                     this.originalConfig = this.normalizeAudioPayload(config.audio);
-                    this.audioForm.patchValue(this.originalConfig);
+                    this.audioForm.patchValue({
+                        ...this.originalConfig,
+                        sttEnabled: this.originalModules.whisper,
+                    });
+                } else {
+                    this.audioForm.patchValue({
+                        sttEnabled: this.originalModules.whisper,
+                    });
                 }
 
                 // Load devices
@@ -101,15 +113,34 @@ export class AudioSettingsComponent implements OnInit {
 
     saveChanges(): void {
         const normalized = this.normalizeAudioPayload(this.audioForm.value);
+        const modules = this.buildModulesPayload();
+        const updateData: any = {};
         if (this.hasPayloadChanged(normalized)) {
-            const updateData = { audio: normalized };
+            updateData.audio = normalized;
+        }
+        if (JSON.stringify(modules) !== JSON.stringify(this.originalModules)) {
+            updateData.modules = modules;
+        }
+        if (Object.keys(updateData).length > 0) {
             this.configService.updateConfig$(updateData).subscribe({
                 next: (response) => {
                     console.log('Audio settings updated:', response);
                     this.originalConfig = normalized;
+                    this.notificationService.open({
+                        title: 'Success',
+                        type: 'success',
+                        message: 'Audio settings updated successfully',
+                        autoClose: true,
+                    });
                 },
                 error: (error) => {
                     console.error('Error updating audio settings:', error);
+                    this.notificationService.open({
+                        title: 'Error',
+                        type: 'error',
+                        message: 'Failed to update audio settings',
+                        autoClose: true,
+                    });
                 }
             });
         }
@@ -121,7 +152,33 @@ export class AudioSettingsComponent implements OnInit {
 
     hasChanges(): boolean {
         const normalized = this.normalizeAudioPayload(this.audioForm.value);
-        return this.hasPayloadChanged(normalized);
+        const modules = this.buildModulesPayload();
+        return (
+            this.hasPayloadChanged(normalized) ||
+            JSON.stringify(modules) !== JSON.stringify(this.originalModules)
+        );
+    }
+
+    private normalizeModulesPayload(modules: any): any {
+        const source = modules || {};
+        return {
+            vtubeStudio: !!(source.vtubeStudio ?? source.vtube_studio),
+            whisper: !!source.whisper,
+            minecraft: !!source.minecraft,
+            gaming: !!source.gaming,
+            alarm: !!source.alarm,
+            discord: !!source.discord,
+            telegram: !!source.telegram,
+            rag: !!source.rag,
+            visual: !!source.visual,
+        };
+    }
+
+    private buildModulesPayload(): any {
+        return {
+            ...this.originalModules,
+            whisper: !!this.audioForm.get('sttEnabled')?.value,
+        };
     }
 
     private normalizeAudioPayload(source: any): any {

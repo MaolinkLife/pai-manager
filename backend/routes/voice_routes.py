@@ -1,5 +1,6 @@
 ﻿import json
 import os
+import asyncio
 import threading
 from datetime import datetime, timezone
 from typing import Any, Dict
@@ -11,6 +12,8 @@ from core.decision_layer import decision_layer
 from core.websocket_manager import manager
 from modules.generative.conversation import generate_standard, play_message
 from modules.tts.paths import create_temp_audio_file
+from modules.tts.paths import voices_root
+from modules.tts.ffmpeg_tools import FFmpegError
 from modules.tts.providers.base import TTSProviderError
 from modules.tts.providers.coqui import CoquiTTSProvider
 from modules.tts.providers.edge import EdgeTTSProvider
@@ -34,8 +37,9 @@ from core.interaction import (
     resolve_actor_uuid_from_auth_header,
     resolve_interaction_policy,
 )
+from modules.system.logger import AuditStatus, log_audit_entry
 from modules.system.service import get_active_character_name
-from modules.tts.rvc_service import get_rvc_status
+from modules.tts.rvc_service import get_rvc_status, import_rvc_model
 from modules.tts.xtts import start_xtts_model_download
 
 router = APIRouter(prefix="/api/voice", tags=["Voice"])
@@ -146,6 +150,33 @@ def _get_preview_provider(active_module: str, voice_modules: Dict[str, Dict[str,
         return provider, False, cache_enabled
 
 
+def _validate_preview_voice_config(active_module: str, module_cfg: Dict[str, Any]) -> None:
+    if active_module != "coqui":
+        return
+
+    speaker_wav = str(
+        _pick(module_cfg, "speaker_wav", "speakerWav", default="") or ""
+    ).strip()
+    if not speaker_wav:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="XTTS voice file is not selected. Select or import a voice file before generating preview.",
+        )
+
+    resolved = (voices_root() / speaker_wav).resolve()
+    root = voices_root().resolve()
+    if root not in resolved.parents and resolved != root:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="XTTS voice file path is outside the local voices folder.",
+        )
+    if not resolved.exists() or not resolved.is_file():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"XTTS voice file was not found in storage/models/tts/voices: {speaker_wav}",
+        )
+
+
 @router.post("/preview")
 async def preview_voice(payload: dict = Body(...)):
     text = str(payload.get("text") or "").strip()
@@ -165,6 +196,7 @@ async def preview_voice(payload: dict = Body(...)):
 
     active_module, voice_modules = _resolve_voice_payload(voice_payload)
     module_cfg = voice_modules.get(active_module, {}) or {}
+    _validate_preview_voice_config(active_module, module_cfg)
     if active_module == "coqui":
         rvc_cfg = module_cfg.get("rvc") or {}
         log_audit_entry(
@@ -189,6 +221,12 @@ async def preview_voice(payload: dict = Body(...)):
 
     provider, _, keep_loaded = _get_preview_provider(active_module, voice_modules)
     if not provider.is_available():
+        log_audit_entry(
+            "voice_preview_provider_unavailable",
+            "[Voice] Preview provider is unavailable.",
+            AuditStatus.WARNING,
+            details={"provider": active_module, "module_config": module_cfg},
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Provider '{active_module}' is unavailable",
@@ -198,7 +236,11 @@ async def preview_voice(payload: dict = Body(...)):
     os.close(tmp_fd)
 
     try:
-        result = provider.synthesize(TTSRequest(text=text), tmp_path)
+        result = await asyncio.to_thread(
+            provider.synthesize,
+            TTSRequest(text=text),
+            tmp_path,
+        )
         if not result.success or not os.path.exists(tmp_path):
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -214,11 +256,25 @@ async def preview_voice(payload: dict = Body(...)):
             headers={"X-TTS-Provider": active_module},
         )
     except TTSProviderError as exc:
+        log_audit_entry(
+            "voice_preview_provider_failed",
+            "[Voice] Preview provider failed.",
+            AuditStatus.ERROR,
+            details={"provider": active_module, "error": str(exc)},
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(exc),
         ) from exc
+    except HTTPException:
+        raise
     except Exception as exc:
+        log_audit_entry(
+            "voice_preview_failed",
+            "[Voice] Preview failed unexpectedly.",
+            AuditStatus.ERROR,
+            details={"provider": active_module, "error": str(exc)},
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Preview generation failed: {exc}",
@@ -274,7 +330,17 @@ def play_message_by_id(request: Request, payload: dict = Body(...)):
 
 @router.post("/record/start")
 def start_record():
-    return voice_controller.start_recording()
+    try:
+        return voice_controller.start_recording()
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "status": "error",
+                "code": "audio_input_unavailable",
+                "message": "Аудиовход недоступен.",
+            },
+        ) from exc
 
 
 @router.post("/record/stop")
@@ -286,7 +352,41 @@ async def stop_record(request: Request):
         user_uuid=actor_user_uuid,
         default="default_waifu",
     )
-    data = voice_controller.stop_recording_and_process(char_name)
+    try:
+        data = voice_controller.stop_recording_and_process(char_name)
+    except RuntimeError as exc:
+        message = str(exc)
+        if "Recording is not active" in message:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "status": "error",
+                    "code": "recording_not_active",
+                    "message": "Запись уже остановлена или не была запущена.",
+                },
+            ) from exc
+        if (
+            "Audio input" in message
+            or "No audio input" in message
+            or "No speech detected" in message
+            or "No valid speech detected" in message
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "status": "error",
+                    "code": "audio_input_unavailable",
+                    "message": "Аудиовход недоступен или речь не обнаружена.",
+                },
+            ) from exc
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "status": "error",
+                "code": "recording_failed",
+                "message": message or "Не удалось обработать запись.",
+            },
+        ) from exc
     if not data:
         return {"status": "error", "message": "No transcription"}
 
@@ -378,10 +478,42 @@ async def import_voice(
         return {"status": "ok", **result}
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except FFmpegError as exc:
+        log_audit_entry(
+            "voice_import_ffmpeg_failed",
+            "[Voice] Voice import failed during audio probing/conversion.",
+            AuditStatus.ERROR,
+            details={"filename": filename, "error": str(exc)},
+        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     except TTSProviderError as exc:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
     except Exception as exc:
+        log_audit_entry(
+            "voice_import_failed",
+            "[Voice] Voice import failed unexpectedly.",
+            AuditStatus.ERROR,
+            details={"filename": filename, "error": str(exc)},
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Voice import failed: {exc}",
+        ) from exc
+
+
+@router.post("/rvc/import")
+async def import_rvc_voice(
+    request: Request,
+    filename: str = Query(..., min_length=1, max_length=255),
+):
+    try:
+        file_bytes = await request.body()
+        model = import_rvc_model(filename, file_bytes)
+        return {"status": "ok", "model": model}
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"RVC import failed: {exc}",
         ) from exc

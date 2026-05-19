@@ -11,7 +11,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 })
 export class AppComponent implements OnInit {
     private readonly destroyRef = inject(DestroyRef);
-    title = 'z-waif-project';
+    title = 'pai-manager';
 
     constructor(
         private websocketService: WebsocketService,

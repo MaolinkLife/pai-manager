@@ -1,0 +1,555 @@
+@import "../../../assets/styles/lim-ui/colors.less";
+
+:host {
+    display: block;
+    height: 100%;
+    min-height: 0;
+    background: var(--color-bg);
+    color: var(--color-text);
+    overflow: hidden;
+}
+
+.sandbox-shell {
+    height: 100%;
+    min-height: 0;
+    padding: 28px 28px 20px;
+    box-sizing: border-box;
+    overflow: hidden;
+}
+
+.sandbox-panel {
+    max-width: 1680px;
+    height: 100%;
+    max-height: 100%;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.sandbox-header {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 18px;
+    margin-bottom: 20px;
+
+    h1 {
+        margin: 0 0 6px;
+        font-size: 1.65rem;
+        line-height: 1.2;
+    }
+
+    p {
+        margin: 0;
+        color: fade(@color-text, 68%);
+        font-size: 0.9rem;
+    }
+}
+
+.sandbox-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+.sandbox-grid {
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: minmax(300px, 360px) minmax(420px, 1fr) minmax(280px, 360px);
+    gap: 18px;
+    align-items: stretch;
+    overflow: hidden;
+}
+
+.sandbox-controls,
+.sandbox-chat,
+.sandbox-process {
+    border: 1px solid var(--color-border);
+    background: fade(@color-surface, 52%);
+    border-radius: 10px;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.sandbox-controls {
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+.control-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    min-width: 0;
+}
+
+.control-group {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    min-width: 0;
+
+    label {
+        font-size: 0.78rem;
+        color: fade(@color-text, 76%);
+    }
+}
+
+.sandbox-textarea,
+.composer-input {
+    width: 100%;
+    box-sizing: border-box;
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    background: fade(@color-bg, 42%);
+    color: var(--color-text);
+    resize: vertical;
+    outline: none;
+    font: inherit;
+    line-height: 1.5;
+    padding: 10px 12px;
+
+    &:focus {
+        border-color: fade(@color-accent, 70%);
+    }
+}
+
+.file-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+}
+
+.file-button {
+    height: 34px;
+    padding: 0 12px;
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    background: fade(@color-bg, 42%);
+    color: fade(@color-text, 86%);
+    font-size: 0.8rem;
+    cursor: pointer;
+
+    input {
+        display: none;
+    }
+
+    &:hover {
+        border-color: fade(@color-accent, 58%);
+    }
+}
+
+.asset-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 4px;
+
+    span {
+        padding: 4px 8px;
+        border: 1px solid var(--color-border);
+        border-radius: 999px;
+        color: fade(@color-text, 68%);
+        font-size: 0.72rem;
+    }
+}
+
+.image-pipeline-controls {
+    display: grid;
+    gap: 14px;
+    padding: 14px;
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    background: fade(@color-bg, 24%);
+    min-width: 0;
+    overflow: hidden;
+
+    .control-row {
+        grid-template-columns: 1fr;
+    }
+
+    .control-row.numeric {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+.inline-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: fade(@color-text, 78%);
+    font-size: 0.78rem;
+    cursor: pointer;
+
+    input {
+        accent-color: @color-accent;
+    }
+}
+
+.sandbox-chat {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.sandbox-messages {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 18px;
+}
+
+.sandbox-message {
+    margin-bottom: 18px;
+
+    &.user {
+        max-width: 76%;
+        margin-left: auto;
+        padding: 12px 14px;
+        border: 1px solid var(--color-border);
+        border-radius: 10px;
+        background: fade(@color-surface, 72%);
+    }
+
+    &.assistant {
+        max-width: 100%;
+    }
+
+    &.pending {
+        padding: 12px 0;
+    }
+}
+
+.message-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 7px;
+    color: fade(@color-text, 58%);
+    font-size: 0.72rem;
+}
+
+.generated-media {
+    margin: 8px 0 14px;
+
+    img {
+        display: block;
+        max-width: min(100%, 720px);
+        max-height: 720px;
+        border-radius: 8px;
+        border: 1px solid var(--color-border);
+        object-fit: contain;
+        background: fade(@color-bg, 38%);
+    }
+}
+
+.sandbox-empty {
+    height: 100%;
+    min-height: 300px;
+    display: grid;
+    place-items: center;
+    color: fade(@color-text, 46%);
+    font-size: 0.95rem;
+}
+
+.typing-line {
+    display: inline-flex;
+    gap: 4px;
+    align-items: center;
+
+    span {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: @color-accent;
+        animation: sandboxTyping 0.9s ease-in-out infinite;
+    }
+
+    span:nth-child(2) {
+        animation-delay: 0.14s;
+    }
+
+    span:nth-child(3) {
+        animation-delay: 0.28s;
+    }
+}
+
+.sandbox-composer {
+    flex: 0 0 auto;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 12px;
+    padding: 14px;
+    border-top: 1px solid var(--color-border);
+    background: fade(@color-bg, 28%);
+}
+
+.composer-input {
+    min-height: 92px;
+    max-height: 220px;
+}
+
+.sandbox-process {
+    display: flex;
+    flex-direction: column;
+}
+
+.process-header {
+    flex: 0 0 auto;
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px;
+    border-bottom: 1px solid var(--color-border);
+    background: fade(@color-bg, 28%);
+
+    h2 {
+        margin: 0 0 4px;
+        font-size: 0.98rem;
+        line-height: 1.2;
+    }
+
+    p {
+        margin: 0;
+        color: fade(@color-text, 58%);
+        font-size: 0.72rem;
+        line-height: 1.35;
+    }
+
+    > span {
+        flex: 0 0 auto;
+        color: @color-accent;
+        font-size: 0.72rem;
+    }
+}
+
+.process-scroll {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 14px;
+    display: grid;
+    align-content: start;
+    gap: 12px;
+}
+
+.process-empty {
+    min-height: 220px;
+    display: grid;
+    place-items: center;
+    color: fade(@color-text, 46%);
+    text-align: center;
+    font-size: 0.86rem;
+}
+
+.process-card {
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    background: fade(@color-bg, 30%);
+    padding: 12px;
+    min-width: 0;
+
+    &.warning {
+        border-color: fade(@color-accent, 42%);
+        background: fade(@color-accent, 8%);
+    }
+
+    pre {
+        margin: 0;
+        white-space: pre-wrap;
+        word-break: break-word;
+        color: fade(@color-text, 86%);
+        font: 0.78rem/1.45 var(--font-family);
+    }
+}
+
+.process-card-title {
+    margin-bottom: 9px;
+    color: fade(@color-text, 82%);
+    font-size: 0.74rem;
+    text-transform: uppercase;
+    letter-spacing: 0;
+}
+
+.process-step {
+    padding: 8px 0;
+    border-top: 1px solid fade(@color-border, 58%);
+    color: fade(@color-text, 64%);
+
+    &:first-of-type {
+        border-top: 0;
+        padding-top: 0;
+    }
+
+    &.active {
+        color: @color-accent;
+    }
+
+    &.done {
+        color: fade(@color-text, 78%);
+    }
+
+    &.error {
+        color: #ff6b6b;
+    }
+}
+
+.process-step-main,
+.process-step-meta,
+.param-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    min-width: 0;
+}
+
+.process-step-name,
+.process-step-state,
+.process-step-meta span,
+.param-row span,
+.param-row strong {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.process-step-main {
+    font-size: 0.78rem;
+}
+
+.process-step-meta {
+    margin-top: 4px;
+    color: fade(@color-text, 52%);
+    font-size: 0.68rem;
+}
+
+.tool-row {
+    display: grid;
+    gap: 4px;
+    padding: 8px 0;
+    border-top: 1px solid fade(@color-border, 58%);
+
+    &:first-of-type {
+        border-top: 0;
+        padding-top: 0;
+    }
+
+    span {
+        color: @color-accent;
+        font-size: 0.72rem;
+    }
+
+    p {
+        margin: 0;
+        color: fade(@color-text, 78%);
+        font-size: 0.76rem;
+        line-height: 1.38;
+        word-break: break-word;
+    }
+}
+
+.param-row {
+    padding: 5px 0;
+    font-size: 0.72rem;
+
+    span {
+        color: fade(@color-text, 56%);
+    }
+
+    strong {
+        max-width: 58%;
+        color: fade(@color-text, 86%);
+        font-weight: 500;
+        text-align: right;
+    }
+}
+
+.process-result-image {
+    display: block;
+    width: 100%;
+    max-height: 320px;
+    object-fit: contain;
+    border-radius: 8px;
+    border: 1px solid var(--color-border);
+    background: fade(@color-bg, 38%);
+}
+
+.custom-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: fade(@color-accent, 68%) transparent;
+
+    &::-webkit-scrollbar {
+        width: 7px;
+        height: 7px;
+    }
+
+    &::-webkit-scrollbar-track {
+        background: transparent;
+    }
+
+    &::-webkit-scrollbar-thumb {
+        background: fade(@color-accent, 68%);
+        border-radius: 999px;
+    }
+}
+
+@keyframes sandboxTyping {
+    0%,
+    100% {
+        opacity: 0.35;
+        transform: translateY(0);
+    }
+    50% {
+        opacity: 1;
+        transform: translateY(-3px);
+    }
+}
+
+@media (max-width: 980px) {
+    .sandbox-shell {
+        padding: 16px;
+        height: auto;
+        min-height: 100vh;
+        overflow: visible;
+    }
+
+    .sandbox-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .sandbox-controls,
+    .sandbox-chat,
+    .sandbox-process {
+        min-height: 620px;
+    }
+}
+
+@media (max-width: 640px) {
+    .sandbox-header,
+    .sandbox-composer,
+    .control-row {
+        grid-template-columns: 1fr;
+    }
+
+    .sandbox-header {
+        display: grid;
+    }
+
+    .sandbox-message.user {
+        max-width: 100%;
+    }
+}

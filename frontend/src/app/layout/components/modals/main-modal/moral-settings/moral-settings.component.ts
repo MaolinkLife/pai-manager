@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit } from '@angular/core';
 import { UntypedFormBuilder, UntypedFormGroup, Validators } from '@angular/forms';
 import { BehaviorSubject } from 'rxjs';
 import { finalize, take } from 'rxjs/operators';
@@ -6,6 +6,7 @@ import { ApiService } from '../../../../../core/services/api.service';
 import { ConfigService } from '../../../../../core/services/config.service';
 import { NotificationService } from '../../../../../shared/components/notification/notification.service';
 import { UiSelectOption } from '../../../../../shared/ui/components/ui-select/ui-select.component';
+import { LocalizationService } from '../../../../../shared/pipes/translation/localization.service';
 
 @Component({
     selector: 'app-moral-settings',
@@ -19,21 +20,29 @@ export class MoralSettingsComponent implements OnInit {
     ollamaModelOptions: UiSelectOption[] = [
         { value: '', label: 'Модели не найдены', disabled: true },
     ];
+    private readonly defaultMoralSystemPrompt = `You are the MoralMatrix governor. Your output augments an AI companion's emotional behaviour. Receive the current evaluation payload (JSON) and respond with STRICT JSON containing guidance.`;
 
     constructor(
         private fb: UntypedFormBuilder,
         private apiService: ApiService,
         private configService: ConfigService,
-        private notificationService: NotificationService
+        private notificationService: NotificationService,
+        private localizationService: LocalizationService,
+        private cdr: ChangeDetectorRef,
     ) {
         this.moralForm = this.createForm();
     }
 
     ngOnInit(): void {
+        this.localizationService.init();
         this.loadConfig();
         this.loadOllamaModels();
         this.moralForm.get('activeProvider')?.valueChanges.subscribe((provider: string) => {
-            this.toggleFallbackControls(provider);
+            const normalized = this.normalizeProvider(provider);
+            if (normalized !== provider) {
+                this.moralForm.get('activeProvider')?.setValue(normalized, { emitEvent: false });
+            }
+            this.toggleFallbackControls(normalized);
         });
     }
 
@@ -44,11 +53,14 @@ export class MoralSettingsComponent implements OnInit {
             fallbackHeuristic: [true],
             fallbackOllama: [true],
             fallbackOpenrouter: [false],
+            releaseAfterUse: [true],
+            systemPrompt: [this.defaultMoralSystemPrompt, Validators.required],
             providers: this.fb.group({
                 ollama: this.fb.group({
                     model: ['', Validators.required],
                     temperature: [0.6, [Validators.min(0), Validators.max(2)]],
                     maxTokens: [512, [Validators.min(1), Validators.max(4096)]],
+                    thinking: [false],
                 }),
                 openrouter: this.fb.group({
                     apiKey: [''],
@@ -76,10 +88,12 @@ export class MoralSettingsComponent implements OnInit {
 
                     this.moralForm.patchValue({
                         enabled: moral.enabled ?? true,
-                        activeProvider: moral.activeProvider || 'ollama',
+                        activeProvider: this.normalizeProvider(moral.activeProvider || 'ollama'),
                         fallbackHeuristic: (moral.fallbackOrder || []).includes('heuristic'),
                         fallbackOllama: (moral.fallbackOrder || []).includes('ollama'),
                         fallbackOpenrouter: (moral.fallbackOrder || []).includes('openrouter'),
+                        releaseAfterUse: moral.releaseAfterUse ?? true,
+                        systemPrompt: moral.systemPrompt || this.defaultMoralSystemPrompt,
                     });
 
                     const providersGroup = this.moralForm.get('providers') as UntypedFormGroup;
@@ -91,6 +105,7 @@ export class MoralSettingsComponent implements OnInit {
                             model: providers.ollama.model || '',
                             temperature: providers.ollama.temperature ?? 0.6,
                             maxTokens: providers.ollama.maxTokens ?? providers.ollama.max_tokens ?? 512,
+                            thinking: providers.ollama.thinking ?? false,
                         });
                     }
 
@@ -104,7 +119,9 @@ export class MoralSettingsComponent implements OnInit {
                     }
 
                     this.originalConfig = this.buildMoralConfigFromForm();
-                    this.toggleFallbackControls(this.moralForm.get('activeProvider')?.value);
+                    this.toggleFallbackControls(this.activeProvider);
+                    this.ensureCurrentOllamaModelOption();
+                    this.cdr.markForCheck();
                 },
                 error: (error) => {
                     console.error('Error loading moral config:', error);
@@ -114,6 +131,7 @@ export class MoralSettingsComponent implements OnInit {
                         message: 'Failed to load Moral Matrix configuration',
                         autoClose: true,
                     });
+                    this.cdr.markForCheck();
                 },
             });
     }
@@ -126,32 +144,47 @@ export class MoralSettingsComponent implements OnInit {
                     .filter((item) => item.length > 0);
                 if (cleaned.length > 0) {
                     this.ollamaModelOptions = cleaned.map((model) => ({ value: model, label: model }));
+                    this.ensureCurrentOllamaModelOption();
+                    this.cdr.markForCheck();
                     return;
                 }
                 this.ollamaModelOptions = [{ value: '', label: 'Модели не найдены', disabled: true }];
+                this.ensureCurrentOllamaModelOption();
+                this.cdr.markForCheck();
             },
             error: () => {
                 this.ollamaModelOptions = [{ value: '', label: 'Модели не найдены', disabled: true }];
+                this.ensureCurrentOllamaModelOption();
+                this.cdr.markForCheck();
             },
         });
     }
 
+    private ensureCurrentOllamaModelOption(): void {
+        const current = String(this.providersForm.get('ollama.model')?.value || '').trim();
+        if (!current || this.ollamaModelOptions.some((item) => item.value === current)) {
+            return;
+        }
+        this.ollamaModelOptions = [{ value: current, label: current }, ...this.ollamaModelOptions];
+    }
+
     private toggleFallbackControls(activeProvider: string): void {
+        const provider = this.normalizeProvider(activeProvider);
         const fallbackHeuristicCtrl = this.moralForm.get('fallbackHeuristic');
         const fallbackOllamaCtrl = this.moralForm.get('fallbackOllama');
         const fallbackOpenrouterCtrl = this.moralForm.get('fallbackOpenrouter');
 
-        if (activeProvider === 'heuristic') {
+        if (provider === 'heuristic') {
             fallbackHeuristicCtrl?.disable({ emitEvent: false });
             fallbackHeuristicCtrl?.setValue(false, { emitEvent: false });
             fallbackOllamaCtrl?.enable({ emitEvent: false });
             fallbackOpenrouterCtrl?.enable({ emitEvent: false });
-        } else if (activeProvider === 'ollama') {
+        } else if (provider === 'ollama') {
             fallbackOllamaCtrl?.disable({ emitEvent: false });
             fallbackOllamaCtrl?.setValue(false, { emitEvent: false });
             fallbackHeuristicCtrl?.enable({ emitEvent: false });
             fallbackOpenrouterCtrl?.enable({ emitEvent: false });
-        } else if (activeProvider === 'openrouter') {
+        } else if (provider === 'openrouter') {
             fallbackOpenrouterCtrl?.disable({ emitEvent: false });
             fallbackOpenrouterCtrl?.setValue(false, { emitEvent: false });
             fallbackHeuristicCtrl?.enable({ emitEvent: false });
@@ -194,15 +227,16 @@ export class MoralSettingsComponent implements OnInit {
 
     private buildMoralConfigFromForm(): any {
         const formValue = this.moralForm.getRawValue();
+        const activeProvider = this.normalizeProvider(formValue.activeProvider);
         const fallbackOrder: string[] = [];
 
-        if (formValue.fallbackHeuristic && formValue.activeProvider !== 'heuristic') {
+        if (formValue.fallbackHeuristic && activeProvider !== 'heuristic') {
             fallbackOrder.push('heuristic');
         }
-        if (formValue.fallbackOllama && formValue.activeProvider !== 'ollama') {
+        if (formValue.fallbackOllama && activeProvider !== 'ollama') {
             fallbackOrder.push('ollama');
         }
-        if (formValue.fallbackOpenrouter && formValue.activeProvider !== 'openrouter') {
+        if (formValue.fallbackOpenrouter && activeProvider !== 'openrouter') {
             fallbackOrder.push('openrouter');
         }
 
@@ -212,6 +246,7 @@ export class MoralSettingsComponent implements OnInit {
                 model: formValue.providers.ollama.model,
                 temperature: Number(formValue.providers.ollama.temperature),
                 maxTokens: Number(formValue.providers.ollama.maxTokens),
+                thinking: Boolean(formValue.providers.ollama.thinking),
             },
             openrouter: {
                 apiKey: formValue.providers.openrouter.apiKey,
@@ -223,8 +258,10 @@ export class MoralSettingsComponent implements OnInit {
 
         return {
             enabled: formValue.enabled,
-            activeProvider: formValue.activeProvider,
+            activeProvider,
             fallbackOrder,
+            releaseAfterUse: !!formValue.releaseAfterUse,
+            systemPrompt: String(formValue.systemPrompt || '').trim(),
             providers,
         };
     }
@@ -272,11 +309,27 @@ export class MoralSettingsComponent implements OnInit {
         return this.moralForm.get('providers') as UntypedFormGroup;
     }
 
+    get activeProvider(): string {
+        return this.normalizeProvider(this.moralForm.get('activeProvider')?.value);
+    }
+
+    get isOllamaActive(): boolean {
+        return this.activeProvider === 'ollama';
+    }
+
+    get isOpenrouterActive(): boolean {
+        return this.activeProvider === 'openrouter';
+    }
+
     get activeProviderOptions(): UiSelectOption[] {
         return [
             { value: 'ollama', label: 'Ollama' },
             { value: 'openrouter', label: 'OpenRouter' },
-            { value: 'heuristic', label: 'Heuristic (fallback only)' },
+            { value: 'heuristic', label: this.localizationService.t('moralSettings.heuristicProvider') },
         ];
+    }
+
+    private normalizeProvider(value: any): string {
+        return String(value || '').trim().toLowerCase();
     }
 }

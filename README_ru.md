@@ -1,4 +1,4 @@
-# 💫 Z-Waif / AI Companion System
+# 💫 PAI / AI Companion System
 
 ### Русская адаптация — независимо развиваемый форк
 

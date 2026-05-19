@@ -6,6 +6,7 @@ from .base import (
 )
 from .ollama import OllamaGenerateProvider
 from .openrouter import OpenRouterGenerateProvider
+from .transformers import TransformersGenerateProvider
 
 __all__ = [
     "GenerateProvider",
@@ -14,4 +15,5 @@ __all__ = [
     "StreamingNotSupported",
     "OllamaGenerateProvider",
     "OpenRouterGenerateProvider",
+    "TransformersGenerateProvider",
 ]

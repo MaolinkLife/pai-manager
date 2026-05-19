@@ -12,6 +12,12 @@ from modules.system.runtime_profile import should_release_resources
 
 
 class ZImageTurboProvider(ImageProvider):
+    """Deprecated compatibility provider.
+
+    Z-Image-Turbo is now routed as model_id="z_image_turbo" through the
+    generic Diffusers provider surface. Keep this class only for old imports.
+    """
+
     name = "z_image_turbo"
 
     def __init__(self, model_id: str = "Tongyi-MAI/Z-Image-Turbo") -> None:

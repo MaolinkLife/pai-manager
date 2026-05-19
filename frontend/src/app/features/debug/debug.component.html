@@ -91,7 +91,7 @@
                 [class.open]="expandedLogs.has(i)"
             >
                 <div class="log-details-inner">
-                    <pre>{{ log.details | json }}</pre>
+                    <pre>{{ formatDetails(log.details) }}</pre>
                 </div>
             </div>
 

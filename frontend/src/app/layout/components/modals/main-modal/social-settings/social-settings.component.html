@@ -25,10 +25,7 @@
                     <app-ui-checkbox formControlName="enabled">
                         {{ "socialSettings.communication.telegramEnabled" | translate }}
                     </app-ui-checkbox>
-                    <app-ui-checkbox
-                        formControlName="allow_fallback"
-                        [disabled]="socialForm.get('communication.primary_channel')?.value === 'main_chat'"
-                    >
+                    <app-ui-checkbox formControlName="allow_fallback">
                         {{ "socialSettings.communication.telegramFallback" | translate }}
                     </app-ui-checkbox>
                 </div>
@@ -69,12 +66,42 @@
                 </div>
                 <div class="form-group">
                     <label for="telegram-api-id">{{ "socialSettings.telegram.apiId" | translate }}</label>
-                    <app-ui-input id="telegram-api-id" type="number" formControlName="api_id"></app-ui-input>
+                    <div class="secret-field">
+                        <app-ui-input
+                            id="telegram-api-id"
+                            [type]="showTelegramApiId ? 'text' : 'password'"
+                            formControlName="api_id"
+                        ></app-ui-input>
+                        <button
+                            type="button"
+                            class="secret-field__toggle"
+                            [attr.aria-label]="showTelegramApiId ? 'Hide API ID' : 'Show API ID'"
+                            [attr.title]="showTelegramApiId ? 'Hide API ID' : 'Show API ID'"
+                            (click)="toggleTelegramApiIdVisibility()"
+                        >
+                            <app-custom-svg [name]="showTelegramApiId ? 'eye-off' : 'eye'" [size]="18"></app-custom-svg>
+                        </button>
+                    </div>
                     <p class="hint">{{ "socialSettings.telegram.apiIdHint" | translate }}</p>
                 </div>
                 <div class="form-group">
                     <label for="telegram-api-hash">{{ "socialSettings.telegram.apiHash" | translate }}</label>
-                    <app-ui-input id="telegram-api-hash" type="text" formControlName="api_hash"></app-ui-input>
+                    <div class="secret-field">
+                        <app-ui-input
+                            id="telegram-api-hash"
+                            [type]="showTelegramApiHash ? 'text' : 'password'"
+                            formControlName="api_hash"
+                        ></app-ui-input>
+                        <button
+                            type="button"
+                            class="secret-field__toggle"
+                            [attr.aria-label]="showTelegramApiHash ? 'Hide API hash' : 'Show API hash'"
+                            [attr.title]="showTelegramApiHash ? 'Hide API hash' : 'Show API hash'"
+                            (click)="toggleTelegramApiHashVisibility()"
+                        >
+                            <app-custom-svg [name]="showTelegramApiHash ? 'eye-off' : 'eye'" [size]="18"></app-custom-svg>
+                        </button>
+                    </div>
                 </div>
                 <div class="form-group">
                     <label for="telegram-phone">{{ "socialSettings.telegram.phoneNumber" | translate }}</label>
@@ -165,50 +192,55 @@
                     </app-ui-checkbox>
                 </div>
 
-                <div class="form-group" *ngIf="privateTelegramPeers.length === 0">
-                    <label for="telegram-allowed-private-chat-ids">{{ "socialSettings.writePolicy.allowedPrivateManual" | translate }}</label>
-                    <app-ui-input
-                        id="telegram-allowed-private-chat-ids"
-                        type="text"
-                        [(ngModel)]="allowedPrivateChatIdsInput"
-                        [ngModelOptions]="{ standalone: true }"
-                        [placeholder]="'123, 456'"
-                    ></app-ui-input>
-                </div>
-                <div class="peer-list" *ngIf="privateTelegramPeers.length > 0">
-                    <app-ui-checkbox
-                        class="peer-item-checkbox"
-                        *ngFor="let peer of privateTelegramPeers"
-                        [ngModel]="isAllowedPrivateChatSelected(peer.chat_id)"
-                        [ngModelOptions]="{ standalone: true }"
-                        (ngModelChange)="toggleAllowedPrivateChat(peer.chat_id, $event)"
-                    >
-                        <span class="peer-item__label">{{ formatPeerLabel(peer) }}</span>
-                    </app-ui-checkbox>
+                <div class="peer-block">
+                    <h4 class="peer-block__title">{{ "socialSettings.writePolicy.allowedPrivateManual" | translate }}</h4>
+                    <div class="form-group" *ngIf="privateTelegramPeers.length === 0">
+                        <label for="telegram-allowed-private-chat-ids">{{ "socialSettings.writePolicy.allowedPrivateManual" | translate }}</label>
+                        <app-ui-input
+                            id="telegram-allowed-private-chat-ids"
+                            type="text"
+                            [(ngModel)]="allowedPrivateChatIdsInput"
+                            [ngModelOptions]="{ standalone: true }"
+                            [placeholder]="'123, 456'"
+                        ></app-ui-input>
+                    </div>
+                    <div class="peer-list" *ngIf="privateTelegramPeers.length > 0">
+                        <app-ui-checkbox
+                            class="peer-item-checkbox"
+                            *ngFor="let peer of privateTelegramPeers"
+                            [ngModel]="isAllowedPrivateChatSelected(peer.chat_id)"
+                            [ngModelOptions]="{ standalone: true }"
+                            (ngModelChange)="toggleAllowedPrivateChat(peer.chat_id, $event)"
+                        >
+                            <span class="peer-item__label">{{ formatPeerLabel(peer) }}</span>
+                        </app-ui-checkbox>
+                    </div>
                 </div>
 
-                <div class="form-group" *ngIf="privateTelegramPeers.length === 0">
-                    <label for="telegram-sandbox-chat-ids">{{ "socialSettings.writePolicy.sandboxManual" | translate }}</label>
-                    <app-ui-input
-                        id="telegram-sandbox-chat-ids"
-                        type="text"
-                        [(ngModel)]="sandboxChatIdsInput"
-                        [ngModelOptions]="{ standalone: true }"
-                        [placeholder]="'123, 456'"
-                    ></app-ui-input>
-                </div>
-                <div class="peer-list" *ngIf="privateTelegramPeers.length > 0">
+                <div class="peer-block">
                     <h4>{{ "socialSettings.writePolicy.sandboxTitle" | translate }}</h4>
                     <p class="hint">{{ "socialSettings.writePolicy.sandboxHint" | translate }}</p>
-                    <app-ui-checkbox
-                        class="peer-item-checkbox"
-                        *ngFor="let peer of privateTelegramPeers"
-                        [ngModel]="isSandboxChatSelected(peer.chat_id)"
-                        [ngModelOptions]="{ standalone: true }"
-                        (ngModelChange)="toggleSandboxChat(peer.chat_id, $event)"
-                    >
-                        <span class="peer-item__label">{{ formatPeerLabel(peer) }}</span>
-                    </app-ui-checkbox>
+                    <div class="form-group" *ngIf="privateTelegramPeers.length === 0">
+                        <label for="telegram-sandbox-chat-ids">{{ "socialSettings.writePolicy.sandboxManual" | translate }}</label>
+                        <app-ui-input
+                            id="telegram-sandbox-chat-ids"
+                            type="text"
+                            [(ngModel)]="sandboxChatIdsInput"
+                            [ngModelOptions]="{ standalone: true }"
+                            [placeholder]="'123, 456'"
+                        ></app-ui-input>
+                    </div>
+                    <div class="peer-list" *ngIf="privateTelegramPeers.length > 0">
+                        <app-ui-checkbox
+                            class="peer-item-checkbox"
+                            *ngFor="let peer of privateTelegramPeers"
+                            [ngModel]="isSandboxChatSelected(peer.chat_id)"
+                            [ngModelOptions]="{ standalone: true }"
+                            (ngModelChange)="toggleSandboxChat(peer.chat_id, $event)"
+                        >
+                            <span class="peer-item__label">{{ formatPeerLabel(peer) }}</span>
+                        </app-ui-checkbox>
+                    </div>
                 </div>
             </div>
 

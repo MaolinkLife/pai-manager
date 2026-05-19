@@ -16,14 +16,33 @@ SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 Base = declarative_base()
 
 
+def _log_console(message: str, details: dict | None = None) -> None:
+    prefix = "[Database]"
+    if details:
+        payload = ", ".join(f"{key}={value}" for key, value in details.items())
+        print(f"{prefix} {message} | {payload}", flush=True)
+        return
+    print(f"{prefix} {message}", flush=True)
+
+
 def create_database():
+    db_exists = os.path.exists(DB_PATH)
+    if db_exists:
+        _log_console("База данных найдена, проверяю схему.", {"path": DB_PATH})
+    else:
+        _log_console("Создаем базу данных.", {"path": DB_PATH})
+
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     Base.metadata.create_all(bind=engine)
+    _log_console("Синхронизируем базу данных.")
     _ensure_conversation_state_logs_table()
     _ensure_daily_activity_diary_table()
     _ensure_history_runtime_meta_column()
+    _ensure_history_variant_columns()
+    _ensure_telegram_sync_tables()
     _ensure_users_auth_columns()
     _ensure_user_settings_active_character_column()
+    _log_console("Схема базы данных готова.")
 
 
 def _ensure_conversation_state_logs_table() -> None:
@@ -67,6 +86,140 @@ def _ensure_history_runtime_meta_column() -> None:
         columns = {row[1] for row in table_info} if table_info else set()
         if "runtime_meta" not in columns:
             conn.execute(text("ALTER TABLE history ADD COLUMN runtime_meta TEXT DEFAULT '{}'"))
+
+
+def _ensure_history_variant_columns() -> None:
+    with engine.begin() as conn:
+        table_info = conn.execute(text("PRAGMA table_info(history)")).fetchall()
+        columns = {row[1] for row in table_info} if table_info else set()
+        additions = [
+            ("parent_message_id", "TEXT"),
+            ("variant_group_id", "TEXT"),
+            ("variant_index", "INTEGER DEFAULT 1"),
+            ("active_variant", "BOOLEAN DEFAULT 1"),
+        ]
+        for column_name, column_sql in additions:
+            if column_name not in columns:
+                conn.execute(text(f"ALTER TABLE history ADD COLUMN {column_name} {column_sql}"))
+
+        conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_history_parent_message_id "
+                "ON history(parent_message_id)"
+            )
+        )
+        conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_history_variant_group_id "
+                "ON history(variant_group_id)"
+            )
+        )
+
+
+def _ensure_telegram_sync_tables() -> None:
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS telegram_chats (
+                    id TEXT PRIMARY KEY,
+                    telegram_chat_id INTEGER NOT NULL UNIQUE,
+                    chat_kind TEXT NOT NULL DEFAULT 'unknown',
+                    title TEXT,
+                    username TEXT,
+                    is_owner_chat BOOLEAN DEFAULT 0,
+                    last_synced_message_id INTEGER,
+                    last_synced_at DATETIME,
+                    meta TEXT DEFAULT '{}',
+                    created_at DATETIME,
+                    updated_at DATETIME
+                )
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS telegram_users (
+                    id TEXT PRIMARY KEY,
+                    telegram_user_id INTEGER NOT NULL UNIQUE,
+                    telegram_user_uuid TEXT NOT NULL UNIQUE,
+                    username TEXT,
+                    display_name TEXT,
+                    is_owner BOOLEAN DEFAULT 0,
+                    trust_level INTEGER DEFAULT 0,
+                    last_seen_at DATETIME,
+                    meta TEXT DEFAULT '{}',
+                    created_at DATETIME,
+                    updated_at DATETIME
+                )
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS telegram_messages (
+                    id TEXT PRIMARY KEY,
+                    history_id TEXT,
+                    character_id TEXT NOT NULL,
+                    chat_id TEXT NOT NULL,
+                    sender_user_id TEXT,
+                    telegram_chat_id INTEGER NOT NULL,
+                    telegram_message_id INTEGER NOT NULL,
+                    role TEXT NOT NULL DEFAULT 'user',
+                    event TEXT NOT NULL DEFAULT 'incoming_message',
+                    text TEXT NOT NULL DEFAULT '',
+                    message_date DATETIME,
+                    edit_date DATETIME,
+                    deleted_at DATETIME,
+                    sync_state TEXT NOT NULL DEFAULT 'active',
+                    meta TEXT DEFAULT '{}',
+                    created_at DATETIME,
+                    updated_at DATETIME
+                )
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS telegram_sync_jobs (
+                    id TEXT PRIMARY KEY,
+                    job_type TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'pending',
+                    character_id TEXT,
+                    telegram_chat_id INTEGER,
+                    cursor_message_id INTEGER,
+                    payload TEXT DEFAULT '{}',
+                    error TEXT,
+                    created_at DATETIME,
+                    started_at DATETIME,
+                    completed_at DATETIME,
+                    updated_at DATETIME
+                )
+                """
+            )
+        )
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_telegram_chats_telegram_chat_id ON telegram_chats(telegram_chat_id)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_telegram_users_telegram_user_id ON telegram_users(telegram_user_id)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_telegram_users_telegram_user_uuid ON telegram_users(telegram_user_uuid)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_telegram_messages_history_id ON telegram_messages(history_id)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_telegram_messages_character_id ON telegram_messages(character_id)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_telegram_messages_chat_id ON telegram_messages(chat_id)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_telegram_messages_sender_user_id ON telegram_messages(sender_user_id)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_telegram_messages_telegram_chat_id ON telegram_messages(telegram_chat_id)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_telegram_messages_telegram_message_id ON telegram_messages(telegram_message_id)"))
+        conn.execute(
+            text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS ix_telegram_messages_unique_projection "
+                "ON telegram_messages(character_id, telegram_chat_id, telegram_message_id, role, event)"
+            )
+        )
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_telegram_sync_jobs_job_type ON telegram_sync_jobs(job_type)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_telegram_sync_jobs_status ON telegram_sync_jobs(status)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_telegram_sync_jobs_character_id ON telegram_sync_jobs(character_id)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_telegram_sync_jobs_telegram_chat_id ON telegram_sync_jobs(telegram_chat_id)"))
 
 
 def _ensure_users_auth_columns() -> None:

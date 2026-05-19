@@ -47,6 +47,10 @@ class MoralMatrixResult:
     recommendations: List[str] = field(default_factory=list)
     hard_directives: List[str] = field(default_factory=list)
     narrative: Optional[str] = None
+    trigger: Optional[str] = None
+    associated_events: List[str] = field(default_factory=list)
+    influence: Dict[str, Any] = field(default_factory=dict)
+    affective_state: Dict[str, Any] = field(default_factory=dict)
     meta: Dict[str, Any] = field(default_factory=dict)
 
     def to_payload(self) -> Dict[str, Any]:
@@ -59,6 +63,9 @@ class MoralMatrixResult:
             "recommendations": list(self.recommendations),
             "hard_directives": list(self.hard_directives),
             "narrative": self.narrative,
+            "trigger": self.trigger,
+            "associated_events": list(self.associated_events),
+            "influence": self.influence,
+            "affective_state": self.affective_state,
             "meta": self.meta,
         }
-

@@ -1,0 +1,140 @@
+<section class="library-page">
+    <input #uploadInput type="file" hidden multiple (change)="uploadFiles($event)" />
+
+    <header class="library-header">
+        <h1>Библиотека</h1>
+        <div class="library-actions">
+            <app-ui-input
+                type="text"
+                placeholder="Поиск в библиотеке"
+                [(ngModel)]="query"
+                (ngModelChange)="load()"
+            ></app-ui-input>
+            <app-ui-button [loading]="uploading" (pressed)="triggerUpload()">Загрузить</app-ui-button>
+        </div>
+    </header>
+
+    <div class="library-toolbar">
+        <div class="category-tabs">
+            <button
+                *ngFor="let item of categories"
+                type="button"
+                [class.active]="category === item.value"
+                (click)="category = item.value; load()"
+            >
+                {{ item.label }}
+            </button>
+        </div>
+
+        <div class="toolbar-right">
+            <span>Выбрано {{ selected.size }}</span>
+            <button
+                type="button"
+                class="view-btn"
+                [class.active]="selectionMode"
+                (click)="toggleSelectionMode()"
+                aria-label="Режим выбора"
+                title="Режим выбора"
+            >
+                <app-custom-svg name="check" [size]="18"></app-custom-svg>
+            </button>
+            <button type="button" class="view-btn" [class.active]="viewMode === 'grid'" (click)="viewMode = 'grid'">
+                <app-custom-svg name="cards" [size]="18"></app-custom-svg>
+            </button>
+            <button type="button" class="view-btn" [class.active]="viewMode === 'list'" (click)="viewMode = 'list'">
+                <app-custom-svg name="view-list" [size]="18"></app-custom-svg>
+            </button>
+        </div>
+    </div>
+
+    <div class="library-empty" *ngIf="!loading && items.length === 0">
+        Файлов пока нет.
+    </div>
+
+    <div class="library-grid" [class.list-mode]="viewMode === 'list'" *ngIf="items.length">
+        <article
+            class="library-card"
+            *ngFor="let item of items; trackBy: trackByItem"
+            [class.selected]="selected.has(item.id)"
+            [class.document]="!isImage(item)"
+            [class.selection-mode]="selectionMode"
+            (click)="selectionMode ? toggleSelected(item, $event) : openItem(item)"
+        >
+            <button
+                *ngIf="selectionMode || selected.has(item.id)"
+                type="button"
+                class="select-dot"
+                [class.checked]="selected.has(item.id)"
+                (click)="toggleSelected(item, $event)"
+                aria-label="Выбрать файл"
+            >
+                <app-custom-svg *ngIf="selected.has(item.id)" name="check" [size]="16"></app-custom-svg>
+            </button>
+
+            <div class="thumb image-thumb" *ngIf="isImage(item); else fileThumb" [style.backgroundImage]="'url(' + getItemUrl(item) + ')'"></div>
+            <ng-template #fileThumb>
+                <div class="thumb file-thumb">
+                    <app-custom-svg name="file" [size]="42"></app-custom-svg>
+                </div>
+            </ng-template>
+
+            <div class="card-title">{{ item.name }}</div>
+            <div class="card-meta">{{ extension(item) }} · {{ formatSize(item.size) }}</div>
+
+            <div class="card-hover">
+                <div>{{ item.mimeType }}</div>
+                <div>Создано: {{ formatDate(item.createdAt) }}</div>
+                <div>Изменено: {{ formatDate(item.updatedAt) }}</div>
+                <div>{{ formatSize(item.size) }}</div>
+                <div class="hover-actions">
+                    <button type="button" (click)="download(item, $event)">
+                        <app-custom-svg name="arrow-down" [size]="15"></app-custom-svg>
+                    </button>
+                    <button type="button" (click)="deleteItem(item, $event)">
+                        <app-custom-svg name="trash" [size]="15"></app-custom-svg>
+                    </button>
+                </div>
+            </div>
+        </article>
+    </div>
+
+    <div class="viewer-overlay" *ngIf="activeItem" (click)="closeViewer()">
+        <section class="viewer" [class.document-viewer]="isDocument(activeItem)" (click)="$event.stopPropagation()">
+            <header class="viewer-header">
+                <app-custom-svg name="file" [size]="22"></app-custom-svg>
+                <strong>{{ activeItem.name }}</strong>
+                <button type="button" class="viewer-close" (click)="closeViewer()" aria-label="Закрыть" title="Закрыть">
+                    <app-custom-svg name="close" [size]="18"></app-custom-svg>
+                </button>
+            </header>
+
+            <div class="viewer-body custom-scrollbar">
+                <img *ngIf="isImage(activeItem)" [src]="getItemUrl(activeItem)" [alt]="activeItem.name" />
+
+                <div class="document-content" *ngIf="isDocument(activeItem)">
+                    <div class="document-loading" *ngIf="contentLoading">Загрузка...</div>
+                    <app-message-renderer
+                        *ngIf="!contentLoading && isMarkdown(activeItem)"
+                        [content]="activeContent"
+                    ></app-message-renderer>
+                    <pre *ngIf="!contentLoading && !isMarkdown(activeItem)">{{ activeContent }}</pre>
+                </div>
+
+                <div class="unsupported" *ngIf="!isImage(activeItem) && !isDocument(activeItem)">
+                    Предпросмотр недоступен для этого типа файла.
+                </div>
+            </div>
+
+            <aside class="viewer-meta" *ngIf="!isDocument(activeItem)">
+                <div><span>Имя</span><strong>{{ activeItem.name }}</strong></div>
+                <div><span>Тип</span><strong>{{ activeItem.mimeType }}</strong></div>
+                <div><span>Размер</span><strong>{{ formatSize(activeItem.size) }}</strong></div>
+                <div><span>Создано</span><strong>{{ formatDate(activeItem.createdAt) }}</strong></div>
+                <div><span>Изменено</span><strong>{{ formatDate(activeItem.updatedAt) }}</strong></div>
+                <button type="button" class="viewer-download" (click)="download(activeItem, $event)" aria-label="Скачать" title="Скачать">
+                    <app-custom-svg name="arrow-down" [size]="18"></app-custom-svg>
+                </button>
+            </aside>
+        </section>
+    </div>
+</section>

@@ -240,6 +240,14 @@
             </section>
 
             <section *ngIf="activeTab === 'all'" class="all-history-wrap">
+                <div
+                    class="all-empty-state"
+                    *ngIf="!allLoadingMore && !allMessages.length; else allHistoryList"
+                >
+                    Нет записей
+                </div>
+
+                <ng-template #allHistoryList>
                 <div class="all-history-scroll ui-scrollbar" (scroll)="onAllMessagesScroll($event)">
                     <div class="all-pair" *ngFor="let pair of allPairs; trackBy: trackByAllPair">
                         <div class="all-message" *ngFor="let item of pair.items">
@@ -259,6 +267,7 @@
                         {{ "memory.all.end" | translate }}
                     </div>
                 </div>
+                </ng-template>
             </section>
 
             <ng-template #emptyStateAi>

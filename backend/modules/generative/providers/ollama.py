@@ -67,6 +67,14 @@ class OllamaGenerateProvider(GenerateProvider):
         except (TypeError, ValueError):
             base_limit = None
 
+        request_mode = str((request.metadata or {}).get("mode") or "").strip()
+        if "empty_content_recovery" in request_mode or "repeat_recovery" in request_mode:
+            recovery_limit = min(max(int(base_limit or 512), 128), 512)
+            options["num_predict"] = recovery_limit
+            options["max_tokens"] = recovery_limit
+            options["__think"] = False
+            return options, None
+
         enable_unbounded = bool(
             config_service.get_config_value(
                 "generate_settings.unbounded_reasoning_if_supported",
@@ -78,12 +86,12 @@ class OllamaGenerateProvider(GenerateProvider):
 
         headroom_raw = config_service.get_config_value(
             "generate_settings.reasoning_headroom_tokens",
-            max(512, base_limit),
+            512,
         )
         try:
-            headroom = max(0, int(headroom_raw))
+            headroom = max(0, min(int(headroom_raw), 2048))
         except (TypeError, ValueError):
-            headroom = max(512, base_limit)
+            headroom = 512
 
         expanded_limit = base_limit + headroom
         options["num_predict"] = expanded_limit
@@ -114,6 +122,9 @@ class OllamaGenerateProvider(GenerateProvider):
                 "role": role,
                 "content": item.get("content") if item.get("content") is not None else "",
             }
+            images = item.get("images")
+            if role == "user" and isinstance(images, list) and images:
+                payload["images"] = [str(image) for image in images if str(image).strip()]
             if role == "assistant" and isinstance(item.get("tool_calls"), list):
                 payload["tool_calls"] = OllamaGenerateProvider._normalize_tool_calls(
                     item.get("tool_calls")
@@ -166,7 +177,7 @@ class OllamaGenerateProvider(GenerateProvider):
 
     def generate(self, request: GenerateRequest) -> GenerateResult:
         cfg = self._get_provider_config()
-        model = cfg.get("model")
+        model = (request.metadata or {}).get("model") or cfg.get("model")
         if not model:
             raise ProviderError("Ollama provider: не задана модель")
 
@@ -230,7 +241,7 @@ class OllamaGenerateProvider(GenerateProvider):
         self, request: GenerateRequest
     ) -> AsyncIterator[GenerateStreamChunk]:
         cfg = self._get_provider_config()
-        model = cfg.get("model")
+        model = (request.metadata or {}).get("model") or cfg.get("model")
         if not model:
             raise ProviderError("Ollama provider: не задана модель")
 

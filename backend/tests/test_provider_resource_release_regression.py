@@ -8,6 +8,7 @@ from modules.analyzer.providers.manager import AnalyzerProviderManager
 from modules.analyzer.providers.base import AnalyzerProvider
 from modules.moral_matrix.service import MoralMatrixProviderManager
 from modules.moral_matrix.providers.base import MoralMatrixProvider
+from modules.system.runtime_profile import should_release_resources
 
 
 pytestmark = pytest.mark.regression
@@ -55,7 +56,24 @@ class _Moral(MoralMatrixProvider):
         self.released += 1
 
 
-def test_generation_manager_releases_provider_after_generate():
+class _FailingMoral(MoralMatrixProvider):
+    name = "failing"
+
+    def __init__(self):
+        self.released = 0
+
+    async def run(self, payload):
+        raise ValueError("bad provider output")
+
+    def release_resources(self) -> None:
+        self.released += 1
+
+
+def test_generation_manager_releases_provider_after_generate(monkeypatch):
+    monkeypatch.setattr(
+        "modules.generative.manager.should_release_resources",
+        lambda *_args, **_kwargs: True,
+    )
     manager = GenerationManager()
     provider = _GenProvider()
     manager._providers = {"dummy": provider}
@@ -66,7 +84,11 @@ def test_generation_manager_releases_provider_after_generate():
     assert provider.released == 1
 
 
-def test_analyzer_manager_releases_provider_after_call():
+def test_analyzer_manager_releases_provider_after_call(monkeypatch):
+    monkeypatch.setattr(
+        "modules.analyzer.providers.manager.should_release_resources",
+        lambda *_args, **_kwargs: True,
+    )
     manager = AnalyzerProviderManager()
     provider = _Analyzer()
     manager._registry = {"dummy": provider}
@@ -87,6 +109,25 @@ def test_moral_manager_releases_provider_after_call():
     result = asyncio.run(manager.run({"x": 1}))
     assert result.payload is not None and result.provider == "dummy"
     assert provider.released == 1
+
+
+def test_moral_manager_falls_back_after_provider_exception(monkeypatch):
+    monkeypatch.setattr(
+        "modules.moral_matrix.service.should_release_resources",
+        lambda *_args, **_kwargs: True,
+    )
+    manager = MoralMatrixProviderManager()
+    failing = _FailingMoral()
+    fallback = _Moral()
+    manager._registry = {"failing": failing, "dummy": fallback}
+    manager._resolve_providers = lambda: [failing, fallback]  # type: ignore[assignment]
+
+    result = asyncio.run(manager.run({"x": 1}))
+
+    assert result.payload == {"summary": "ok", "hard_directives": []}
+    assert result.provider == "dummy"
+    assert failing.released == 1
+    assert fallback.released == 1
 
 
 def test_generation_manager_skips_release_in_max_speed(monkeypatch):
@@ -133,3 +174,31 @@ def test_moral_manager_skips_release_in_max_speed(monkeypatch):
     result = asyncio.run(manager.run({"x": 1}))
     assert result.payload is not None and result.provider == "dummy"
     assert provider.released == 0
+
+
+def test_module_release_after_use_overrides_global_profile(monkeypatch):
+    values = {
+        "analyzer.release_after_use": True,
+        "system.runtime.model_memory_profile": "max_speed",
+    }
+
+    monkeypatch.setattr(
+        "modules.system.runtime_profile.config_service.get_config_value",
+        lambda path, default=None: values.get(path, default),
+    )
+
+    assert should_release_resources("analyzer") is True
+
+
+def test_module_release_after_use_can_keep_generator_warm(monkeypatch):
+    values = {
+        "api.release_after_use": False,
+        "system.runtime.model_memory_profile": "low_memory_strict",
+    }
+
+    monkeypatch.setattr(
+        "modules.system.runtime_profile.config_service.get_config_value",
+        lambda path, default=None: values.get(path, default),
+    )
+
+    assert should_release_resources("generative") is False

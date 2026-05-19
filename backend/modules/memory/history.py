@@ -25,6 +25,10 @@ def add_history(
     media_items: Optional[list] = None,
     tags: Optional[Sequence[str]] = None,
     runtime_meta: Optional[dict] = None,
+    parent_message_id: Optional[str] = None,
+    variant_group_id: Optional[str] = None,
+    variant_index: Optional[int] = None,
+    active_variant: bool = True,
 ):
     own_session = False
     if session is None:
@@ -35,6 +39,17 @@ def add_history(
         if timestamp is None:
             timestamp = datetime.now(timezone.utc)
 
+        if role == "assistant" and variant_group_id and active_variant:
+            (
+                session.query(History)
+                .filter(
+                    History.character_id == character_id,
+                    History.role == "assistant",
+                    History.variant_group_id == variant_group_id,
+                )
+                .update({"active_variant": False}, synchronize_session=False)
+            )
+
         entry = History(
             id=str(uuid.uuid4()),
             character_id=character_id,
@@ -43,6 +58,10 @@ def add_history(
             timestamp=timestamp,
             tags=json.dumps(list(tags or []), ensure_ascii=False),
             runtime_meta=json.dumps(runtime_meta or {}, ensure_ascii=False),
+            parent_message_id=parent_message_id,
+            variant_group_id=variant_group_id,
+            variant_index=int(variant_index or 1),
+            active_variant=bool(active_variant),
         )
         session.add(entry)
         session.commit()
@@ -138,6 +157,144 @@ def add_reasoning_entry(
             session.close()
 
 
+def append_to_history_message(
+    message_id: str,
+    content_delta: str,
+    *,
+    reasoning_delta: Optional[str] = None,
+    media_items: Optional[list] = None,
+    runtime_meta: Optional[dict] = None,
+):
+    session: Session = SessionLocal()
+    try:
+        message = (
+            session.query(History)
+            .options(joinedload(History.reasoning), joinedload(History.media))
+            .filter_by(id=message_id)
+            .first()
+        )
+        if not message:
+            raise ValueError("Message not found.")
+        if message.role != "assistant":
+            raise ValueError("Only assistant messages can be continued.")
+
+        delta = str(content_delta or "")
+        if delta:
+            message.content = (message.content or "") + delta
+
+        if runtime_meta is not None:
+            message.runtime_meta = json.dumps(runtime_meta or {}, ensure_ascii=False)
+
+        combined_reasoning = ""
+        existing_reasoning = getattr(message, "reasoning", None)
+        if existing_reasoning and existing_reasoning.content:
+            combined_reasoning = existing_reasoning.content.strip()
+        if reasoning_delta:
+            combined_reasoning = "\n".join(
+                item.strip()
+                for item in [combined_reasoning, str(reasoning_delta or "").strip()]
+                if item.strip()
+            )
+        if combined_reasoning:
+            if existing_reasoning:
+                existing_reasoning.content = combined_reasoning
+            else:
+                session.add(Reasoning(message_id=message.id, content=combined_reasoning))
+
+        session.commit()
+        session.refresh(message)
+
+        media_payload = serialize_media_entries(getattr(message, "media", []) or [])
+        if media_items:
+            storage_entries = save_media_for_message(message.id, media_items)
+            media_payload = serialize_media_entries(storage_entries)
+
+        message.media_payload = media_payload
+        return message
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
+
+
+def activate_history_variant(message_id: str) -> dict:
+    session: Session = SessionLocal()
+    try:
+        message = (
+            session.query(History)
+            .options(joinedload(History.reasoning), joinedload(History.media))
+            .filter_by(id=message_id)
+            .first()
+        )
+        if not message:
+            raise ValueError("Message not found.")
+        if message.role != "assistant":
+            raise ValueError("Only assistant variants can be activated.")
+        group_id = str(getattr(message, "variant_group_id", "") or "").strip()
+        if not group_id:
+            group_id = message.parent_message_id or message.id
+            message.variant_group_id = group_id
+            message.variant_index = int(getattr(message, "variant_index", 1) or 1)
+
+        (
+            session.query(History)
+            .filter(
+                History.character_id == message.character_id,
+                History.role == "assistant",
+                History.variant_group_id == group_id,
+            )
+            .update({"active_variant": False}, synchronize_session=False)
+        )
+        message.active_variant = True
+        session.commit()
+        session.refresh(message)
+        siblings = (
+            session.query(History)
+            .filter(
+                History.character_id == message.character_id,
+                History.role == "assistant",
+                History.variant_group_id == group_id,
+            )
+            .order_by(History.variant_index.asc(), History.timestamp.asc())
+            .all()
+        )
+        return {
+            "id": message.id,
+            "role": message.role,
+            "content": (
+                f"<think>\n{message.reasoning.content.strip()}\n</think>\n\n{message.content}"
+                if getattr(message, "reasoning", None) and (message.reasoning.content or "").strip()
+                else message.content
+            ),
+            "timestamp": to_user_tz_iso(message.timestamp),
+            "media": serialize_media_entries(getattr(message, "media", []) or []),
+            "parent_message_id": getattr(message, "parent_message_id", None),
+            "variant_group_id": getattr(message, "variant_group_id", None),
+            "variant_index": getattr(message, "variant_index", None) or 1,
+            "active_variant": bool(getattr(message, "active_variant", True)),
+            "variants": {
+                "group_id": group_id,
+                "count": len(siblings),
+                "active_id": message.id,
+                "active_index": int(getattr(message, "variant_index", 1) or 1),
+                "items": [
+                    {
+                        "id": item.id,
+                        "index": int(getattr(item, "variant_index", 1) or 1),
+                        "active": item.id == message.id,
+                    }
+                    for item in siblings
+                ],
+            },
+        }
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
+
+
 def get_reasoning_by_message_id(message_id: str) -> Optional[str]:
     session: Session = SessionLocal()
     try:
@@ -153,7 +310,10 @@ def get_history(character_id: str, limit: int = 20, offset: int = 0):
         return (
             session.query(History)
             .options(joinedload(History.reasoning), joinedload(History.media))
-            .filter_by(character_id=character_id)
+            .filter(
+                History.character_id == character_id,
+                ((History.role != "assistant") | (History.active_variant.is_(True))),
+            )
             .order_by(History.timestamp.desc())
             .offset(offset)
             .limit(limit)
@@ -184,6 +344,7 @@ def get_history_since(character_id: str, start_time):
             .filter(
                 History.character_id == character_id,
                 History.timestamp >= start_time,
+                ((History.role != "assistant") | (History.active_variant.is_(True))),
             )
             .order_by(History.timestamp.asc())
             .all()
@@ -325,7 +486,10 @@ def get_last_messages(character_id: str, limit: int = 10):
     try:
         messages = (
             session.query(History)
-            .filter_by(character_id=character_id)
+            .filter(
+                History.character_id == character_id,
+                ((History.role != "assistant") | (History.active_variant.is_(True))),
+            )
             .order_by(History.timestamp.desc())
             .limit(limit)
             .all()
@@ -362,7 +526,7 @@ def get_messages_by_ids(message_ids: Sequence[str]):
 def delete_telegram_history_entries(
     character_id: str,
     *,
-    chat_id: int,
+    chat_id: Optional[int],
     telegram_message_ids: Sequence[int],
 ) -> int:
     ids = {int(item) for item in (telegram_message_ids or []) if isinstance(item, int) or str(item).strip().isdigit()}
@@ -396,11 +560,39 @@ def delete_telegram_history_entries(
                 row_message_id = int(transport.get("message_id"))
             except Exception:
                 continue
-            if row_chat_id != int(chat_id):
+            if chat_id is not None and row_chat_id != int(chat_id):
                 continue
             if row_message_id not in ids:
                 continue
             to_delete.append(row)
+
+        if chat_id is None and to_delete:
+            chats_by_message_id: dict[int, set[int]] = {}
+            for row in to_delete:
+                try:
+                    runtime_meta = json.loads(getattr(row, "runtime_meta", "{}") or "{}")
+                    transport = runtime_meta.get("transport") if isinstance(runtime_meta, dict) else {}
+                    row_chat_id = int((transport or {}).get("chat_id"))
+                    row_message_id = int((transport or {}).get("message_id"))
+                except Exception:
+                    continue
+                chats_by_message_id.setdefault(row_message_id, set()).add(row_chat_id)
+            unambiguous_message_ids = {
+                message_id
+                for message_id, chat_ids in chats_by_message_id.items()
+                if len(chat_ids) == 1
+            }
+            to_delete = [
+                row
+                for row in to_delete
+                if int(
+                    (
+                        json.loads(getattr(row, "runtime_meta", "{}") or "{}").get("transport")
+                        or {}
+                    ).get("message_id")
+                )
+                in unambiguous_message_ids
+            ]
 
         if not to_delete:
             return 0
@@ -424,6 +616,12 @@ def prepare_reroll_payload(message_id: str) -> dict:
             before_timestamp=assistant_msg.timestamp,
         )
 
+        variant_info = prepare_assistant_variant_reroll(
+            session,
+            assistant_msg=assistant_msg,
+            user_msg=user_msg,
+        )
+
         payload = {
             "id": user_msg.id,
             "role": "user",
@@ -432,11 +630,50 @@ def prepare_reroll_payload(message_id: str) -> dict:
                 user_msg.timestamp if hasattr(user_msg, "timestamp") else None
             ),
             "media": serialize_media_entries(getattr(user_msg, "media", []) or []),
+            "variant_parent_message_id": user_msg.id,
+            "variant_group_id": variant_info["variant_group_id"],
+            "variant_index": variant_info["next_variant_index"],
+            "reroll_target_message_id": assistant_msg.id,
         }
 
-        # Keep original user message in DB; reroll must only replace assistant response.
-        delete_messages_from_database(session, [assistant_msg])
         return payload
+    finally:
+        session.close()
+
+
+def prepare_continue_payload(message_id: str) -> dict:
+    session: Session = SessionLocal()
+    try:
+        assistant_msg = get_message_from_database(
+            session, filters={"id": message_id}, expected_role="assistant"
+        )
+        user_msg = get_last_user_message_before(
+            session,
+            character_id=assistant_msg.character_id,
+            before_timestamp=assistant_msg.timestamp,
+        )
+        history = build_history_up_to_assistant_message(
+            session,
+            character_id=assistant_msg.character_id,
+            assistant_msg=assistant_msg,
+            limit=32,
+        )
+
+        return {
+            "id": str(uuid.uuid4()),
+            "role": "user",
+            "content": (
+                "Продолжи предыдущий ответ с того места, где он остановился. "
+                "Не повторяй уже сказанное, не начинай заново и сохрани тот же стиль речи."
+            ),
+            "display_content": "",
+            "suppress_user_echo": True,
+            "append_to_message_id": assistant_msg.id,
+            "preserve_history": True,
+            "history": history,
+            "timestamp": to_user_tz_iso(None),
+            "media": serialize_media_entries(getattr(user_msg, "media", []) or []),
+        }
     finally:
         session.close()
 
@@ -554,6 +791,61 @@ def build_history_up_to_user_message(session, character_id, user_msg, limit=32):
     )
 
     return history
+
+
+def build_history_up_to_assistant_message(session, character_id, assistant_msg, limit=32):
+    assistant_timestamp = assistant_msg.timestamp
+
+    history_before_assistant = (
+        session.query(History)
+        .filter(
+            History.character_id == character_id,
+            History.timestamp <= assistant_timestamp,
+        )
+        .order_by(History.timestamp.desc())
+        .limit(limit)
+        .all()
+    )
+
+    return [
+        {
+            "id": msg.id,
+            "role": msg.role,
+            "content": msg.content,
+            "timestamp": msg.timestamp.isoformat(),
+        }
+        for msg in reversed(history_before_assistant)
+    ]
+
+
+def prepare_assistant_variant_reroll(session, *, assistant_msg, user_msg) -> dict:
+    group_id = (
+        str(getattr(assistant_msg, "variant_group_id", "") or "").strip()
+        or user_msg.id
+    )
+    if not getattr(assistant_msg, "parent_message_id", None):
+        assistant_msg.parent_message_id = user_msg.id
+    if not getattr(assistant_msg, "variant_group_id", None):
+        assistant_msg.variant_group_id = group_id
+    if not getattr(assistant_msg, "variant_index", None):
+        assistant_msg.variant_index = 1
+    if getattr(assistant_msg, "active_variant", None) is None:
+        assistant_msg.active_variant = True
+
+    siblings = (
+        session.query(History)
+        .filter(
+            History.character_id == assistant_msg.character_id,
+            History.role == "assistant",
+            History.variant_group_id == group_id,
+        )
+        .all()
+    )
+    max_index = max(
+        [int(getattr(item, "variant_index", 1) or 1) for item in siblings] or [1]
+    )
+    session.commit()
+    return {"variant_group_id": group_id, "next_variant_index": max_index + 1}
 
 
 async def reroll_assistant_message(message_id: str) -> dict:

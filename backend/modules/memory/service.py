@@ -21,6 +21,7 @@ from modules.memory.short_term import (
     find_matching_record,
     load_recent_records,
 )
+from modules.generative.sanitizer import sanitize_generation_text
 
 DEFAULT_RECENT_LIMIT = 32
 DEFAULT_THRESHOLD = 0.7
@@ -106,6 +107,18 @@ def _cosine_similarity(vec_a: Sequence[float], vec_b: Sequence[float]) -> float:
 class MemoryModule:
     """High-level orchestration for conversational memory retrieval."""
 
+    @staticmethod
+    def _clean_memory_content(value: Any) -> str:
+        return sanitize_generation_text(str(value or ""))
+
+    @classmethod
+    def _sanitize_memory_payload(cls, payload: Dict[str, Any]) -> Dict[str, Any]:
+        if not isinstance(payload, dict):
+            return {}
+        cleaned = dict(payload)
+        cleaned["content"] = cls._clean_memory_content(cleaned.get("content"))
+        return cleaned
+
     async def collect_context(
         self, input_text: str, message_payload: Dict[str, Any]
     ) -> MemoryContextResult:
@@ -121,8 +134,19 @@ class MemoryModule:
         meta["scope"] = scope
 
         history_limit = self._resolve_history_limit()
-        history_preview = self._load_history_preview(char_name, history_limit, scope=scope)
-        conversation_state = self._build_conversation_state(history_preview)
+        relation_history_preview = self._load_history_preview(
+            char_name,
+            history_limit,
+            scope=scope,
+        )
+        history_preview = self._load_session_history_preview(
+            char_name,
+            history_limit,
+            message_payload.get("timestamp"),
+            settings["session"],
+            scope=scope,
+        )
+        conversation_state = self._build_conversation_state(relation_history_preview)
         self._persist_conversation_state(
             char_name,
             conversation_state,
@@ -131,6 +155,9 @@ class MemoryModule:
         meta["history_preview"] = {
             "limit": history_limit,
             "count": len(history_preview),
+            "relation_count": len(relation_history_preview),
+            "session_scoped": bool(settings["session"].get("enabled", True)),
+            "idle_gap_minutes": settings["session"].get("idle_gap_minutes"),
         }
         meta["conversation_state"] = conversation_state
 
@@ -940,7 +967,7 @@ class MemoryModule:
         return {
             "id": getattr(row, "id", ""),
             "role": getattr(row, "role", "assistant"),
-            "content": getattr(row, "content", ""),
+            "content": self._clean_memory_content(getattr(row, "content", "")),
             "timestamp": timestamp,
         }
 
@@ -979,11 +1006,11 @@ class MemoryModule:
         mapping: List[Dict[str, Any]] = []
         for msg in messages:
             msg_id = msg.get("id")
-            content = (msg.get("content") or "").strip()
+            content = self._clean_memory_content(msg.get("content")).strip()
             if not content or (msg_id and msg_id in seen_ids):
                 continue
             texts.append(content)
-            mapping.append(msg)
+            mapping.append({**msg, "content": content})
             if msg_id:
                 seen_ids.add(msg_id)
 
@@ -1008,7 +1035,7 @@ class MemoryModule:
                 best = MemoryMatch(
                     message_id=msg.get("id", ""),
                     role=msg.get("role", "assistant"),
-                    content=msg.get("content", ""),
+                    content=self._clean_memory_content(msg.get("content")),
                     timestamp=msg.get("timestamp", ""),
                     score=score,
                     source=source,
@@ -1070,7 +1097,9 @@ class MemoryModule:
             return []
 
         filtered = self._apply_scope_filter(recent, scope)
-        return list(reversed(filtered))
+        sanitized = [self._sanitize_memory_payload(item) for item in filtered]
+        sanitized = [item for item in sanitized if item.get("content")]
+        return list(reversed(sanitized))
 
     def _resolve_history_limit(self) -> int:
         raw_limit = config_service.get_config_value("rag.history_limit", DEFAULT_HISTORY_LIMIT)
@@ -1103,9 +1132,11 @@ class MemoryModule:
             entry: Dict[str, Any] = {
                 "id": item.get("id"),
                 "role": item.get("role"),
-                "content": item.get("content"),
+                "content": self._clean_memory_content(item.get("content")),
                 "timestamp": item.get("timestamp"),
             }
+            if not entry["content"]:
+                continue
             media_items = item.get("media")
             if isinstance(media_items, list) and media_items:
                 sanitized_media: List[Dict[str, Any]] = []
@@ -1124,6 +1155,68 @@ class MemoryModule:
             preview.append(entry)
 
         return preview
+
+    def _load_session_history_preview(
+        self,
+        char_name: Optional[str],
+        limit: int,
+        timestamp: Optional[str],
+        session_cfg: Dict[str, Any],
+        *,
+        scope: Optional[Dict[str, Any]] = None,
+    ) -> List[Dict[str, Any]]:
+        if not char_name or limit <= 0:
+            return []
+        if not session_cfg.get("enabled", True):
+            return self._load_history_preview(char_name, limit, scope=scope)
+
+        max_messages = int(session_cfg.get("max_messages", DEFAULT_SESSION_MAX_MESSAGES) or DEFAULT_SESSION_MAX_MESSAGES)
+        max_messages = max(limit, min(max_messages, 4000))
+        fetch_limit = max(limit * 4, limit, 32)
+        fetch_limit = min(fetch_limit, max_messages)
+        idle_gap_minutes = float(
+            session_cfg.get("idle_gap_minutes", DEFAULT_SESSION_IDLE_GAP_MINUTES)
+            or DEFAULT_SESSION_IDLE_GAP_MINUTES
+        )
+        idle_gap_minutes = max(5.0, min(idle_gap_minutes, 720.0))
+        reference_dt = self._parse_timestamp(timestamp) or datetime.now(timezone.utc)
+
+        rows = self._load_history_preview(char_name, fetch_limit, scope=scope)
+        if not rows:
+            return []
+
+        timed_rows: List[Tuple[Dict[str, Any], datetime]] = []
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            role = str(row.get("role") or "").strip().lower()
+            if role not in {"user", "assistant"}:
+                continue
+            ts = self._parse_timestamp(row.get("timestamp"))
+            if ts is None or ts > reference_dt + timedelta(seconds=2):
+                continue
+            timed_rows.append((row, ts))
+
+        if not timed_rows:
+            return []
+
+        anchor_row, anchor_ts = timed_rows[-1]
+        if (reference_dt - anchor_ts).total_seconds() / 60.0 > idle_gap_minutes:
+            return []
+
+        collected: List[Dict[str, Any]] = [anchor_row]
+        newer_ts = anchor_ts
+        for row, older_ts in reversed(timed_rows[:-1]):
+            gap_min = (newer_ts - older_ts).total_seconds() / 60.0
+            if gap_min > idle_gap_minutes:
+                break
+            collected.append(row)
+            newer_ts = older_ts
+            if len(collected) >= limit:
+                break
+
+        collected.reverse()
+        return collected[-limit:]
 
     def _load_session_messages(
         self,
@@ -1249,7 +1342,7 @@ class MemoryModule:
                 {
                     "id": getattr(row, "id", ""),
                     "role": getattr(row, "role", "assistant"),
-                    "content": getattr(row, "content", ""),
+                    "content": self._clean_memory_content(getattr(row, "content", "")),
                     "timestamp": getattr(row, "timestamp", ""),
                     "runtime_meta": {},
                 }
@@ -1273,7 +1366,7 @@ class MemoryModule:
                 MemoryMatch(
                     message_id=f"anchor:{anchor.get('id')}",
                     role="assistant",
-                    content=str(anchor.get("content") or ""),
+                    content=self._clean_memory_content(anchor.get("content")),
                     timestamp=str(anchor.get("updated_at") or ""),
                     score=score,
                     source="anchor_fact",
@@ -1331,7 +1424,7 @@ class MemoryModule:
                 {
                     "id": getattr(row, "id", ""),
                     "role": getattr(row, "role", "assistant"),
-                    "content": getattr(row, "content", ""),
+                    "content": self._clean_memory_content(getattr(row, "content", "")),
                     "timestamp": getattr(row, "timestamp", ""),
                     "runtime_meta": {},
                 }
@@ -1393,7 +1486,7 @@ class MemoryModule:
                     except Exception:
                         continue
                 filtered.append(row)
-            return filtered
+            return MemoryModule._dedupe_telegram_payloads(filtered)
 
         # Main chat scope: hide external transports (telegram and others).
         filtered = []
@@ -1409,6 +1502,42 @@ class MemoryModule:
             name = str(transport.get("name") or "").strip().lower()
             if name in {"", "main_chat"}:
                 filtered.append(row)
+        return filtered
+
+    @staticmethod
+    def _dedupe_telegram_payloads(
+        payloads: Sequence[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        filtered: List[Dict[str, Any]] = []
+        seen_transport_keys: Set[Tuple[int, int, str]] = set()
+        for row in payloads or []:
+            if not isinstance(row, dict):
+                continue
+            runtime_meta = row.get("runtime_meta")
+            transport = runtime_meta.get("transport") if isinstance(runtime_meta, dict) else None
+            if not isinstance(transport, dict):
+                filtered.append(row)
+                continue
+            if str(transport.get("name") or "").strip().lower() != "telegram":
+                filtered.append(row)
+                continue
+            try:
+                chat_id = int(transport.get("chat_id"))
+                message_id = int(transport.get("message_id"))
+            except Exception:
+                filtered.append(row)
+                continue
+            if message_id <= 0:
+                filtered.append(row)
+                continue
+            role = str(row.get("role") or "").strip().lower()
+            event = str(runtime_meta.get("event") or "").strip().lower() if isinstance(runtime_meta, dict) else ""
+            key_role = f"{role}:{event}" if event else role
+            transport_key = (chat_id, message_id, key_role)
+            if transport_key in seen_transport_keys:
+                continue
+            seen_transport_keys.add(transport_key)
+            filtered.append(row)
         return filtered
 
     def _merge_payloads(
@@ -1447,9 +1576,11 @@ class MemoryModule:
 
         scored: List[Tuple[Dict[str, Any], float, Dict[str, Any]]] = []
         for payload in candidate_payloads:
-            text = (payload.get("content") or "").strip()
+            text = self._clean_memory_content(payload.get("content")).strip()
             if not text:
                 continue
+            if text != payload.get("content"):
+                payload = {**payload, "content": text}
             payload_tokens = self._tokenize(text, stopwords)
             score, overlap_ratio = self._keyword_match_score(
                 query_tokens,
@@ -1504,9 +1635,11 @@ class MemoryModule:
         texts: List[str] = []
         mapping: List[Dict[str, Any]] = []
         for payload in candidate_payloads:
-            text = (payload.get("content") or "").strip()
+            text = self._clean_memory_content(payload.get("content")).strip()
             if not text:
                 continue
+            if text != payload.get("content"):
+                payload = {**payload, "content": text}
             texts.append(text)
             mapping.append(payload)
 
@@ -1625,7 +1758,7 @@ class MemoryModule:
             ]
             if missing_entries:
                 texts = [
-                    (entry.payload.get("content") or "").strip()
+                    self._clean_memory_content(entry.payload.get("content")).strip()
                     for entry in missing_entries
                 ]
                 embeddings = get_embeddings(
@@ -1690,7 +1823,7 @@ class MemoryModule:
             match = MemoryMatch(
                 message_id=payload.get("id", ""),
                 role=payload.get("role", "assistant"),
-                content=payload.get("content", ""),
+                content=self._clean_memory_content(payload.get("content")),
                 timestamp=payload.get("timestamp", ""),
                 score=score,
                 source="|".join(sorted(entry.sources)) or "hybrid",

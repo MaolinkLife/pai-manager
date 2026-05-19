@@ -14,6 +14,7 @@ import { UiSelectOption } from '../../../../../shared/ui/components/ui-select/ui
 export class SocialSettingsComponent implements OnInit {
     socialForm: UntypedFormGroup;
     originalConfig: any = {};
+    originalModules: any = {};
     telegramBaseConfig: any = {};
     telegramStatus: TelegramBridgeStatus | null = null;
     isTelegramBusy = false;
@@ -24,6 +25,8 @@ export class SocialSettingsComponent implements OnInit {
     allowedPrivateChatIdsInput = '';
     sandboxChatIdsInput = '';
     reflectionSourceChatIdsInput = '';
+    showTelegramApiId = false;
+    showTelegramApiHash = false;
     telegramPeers: TelegramChatPeer[] = [];
     ownerChatOptions: UiSelectOption[] = [];
     reflectionTargetOptions: UiSelectOption[] = [];
@@ -222,6 +225,7 @@ export class SocialSettingsComponent implements OnInit {
                     telegram: config?.telegram || {},
                     communication: this.mapCommunicationToForm(config?.communication),
                 };
+                this.originalModules = this.normalizeModulesPayload(config?.modules);
                 this.socialForm.patchValue(next);
                 this.telegramBaseConfig = this.deepClone(config?.telegram || {});
                 this.originalConfig = this.buildConfigFromForm();
@@ -240,22 +244,14 @@ export class SocialSettingsComponent implements OnInit {
         this.syncWritePolicyFormFromText();
         this.syncReflectionSourceChatIdsFormFromText();
         const current = this.buildConfigFromForm();
-        const updateData: any = {};
-        if (JSON.stringify(current.modules) !== JSON.stringify(this.originalConfig.modules)) {
-            updateData.modules = current.modules;
-        }
-        if (JSON.stringify(current.telegram) !== JSON.stringify(this.originalConfig.telegram)) {
-            updateData.telegram = current.telegram;
-        }
-        if (JSON.stringify(current.communication) !== JSON.stringify(this.originalConfig.communication)) {
-            updateData.communication = current.communication;
-        }
+        const updateData = this.buildChangedConfigPayload(current);
         if (Object.keys(updateData).length === 0) {
             return;
         }
         this.configService.updateConfig$(updateData).subscribe({
             next: () => {
                 this.originalConfig = current;
+                this.originalModules = current.modules;
                 this.telegramBaseConfig = this.deepClone(current.telegram || {});
                 this.uiNotificationService.success(
                     this.t('socialSettings.notifications.updated'),
@@ -265,7 +261,7 @@ export class SocialSettingsComponent implements OnInit {
             error: (error) => {
                 console.error('Social settings update error:', error);
                 this.uiNotificationService.error(
-                    this.t('socialSettings.notifications.updateFailed'),
+                    this.extractErrorMessage(error, this.t('socialSettings.notifications.updateFailed')),
                     this.t('socialSettings.title')
                 );
             },
@@ -279,11 +275,66 @@ export class SocialSettingsComponent implements OnInit {
 
     private buildConfigFromForm(): any {
         const value = this.socialForm.value;
+        const telegram = this.normalizeTelegramSecrets(value.telegram || {});
         return {
             modules: value.modules,
-            telegram: this.deepMerge(this.deepClone(this.telegramBaseConfig || {}), value.telegram || {}),
+            telegram: this.deepMerge(this.deepClone(this.telegramBaseConfig || {}), telegram),
             communication: this.mapCommunicationFromForm(value.communication),
         };
+    }
+
+    private buildChangedConfigPayload(current: any): any {
+        const updateData: any = {};
+        if (JSON.stringify(current.modules) !== JSON.stringify(this.originalConfig.modules)) {
+            updateData.modules = current.modules;
+        }
+        if (JSON.stringify(current.telegram) !== JSON.stringify(this.originalConfig.telegram)) {
+            updateData.telegram = current.telegram;
+        }
+        if (JSON.stringify(current.communication) !== JSON.stringify(this.originalConfig.communication)) {
+            updateData.communication = current.communication;
+        }
+        return updateData;
+    }
+
+    private normalizeModulesPayload(modules: any): any {
+        const source = modules || {};
+        return {
+            vtubeStudio: !!(source.vtubeStudio ?? source.vtube_studio),
+            whisper: !!source.whisper,
+            minecraft: !!source.minecraft,
+            gaming: !!source.gaming,
+            alarm: !!source.alarm,
+            discord: !!source.discord,
+            telegram: !!source.telegram,
+            rag: !!source.rag,
+            visual: !!source.visual,
+        };
+    }
+
+    private buildModulesPayload(modules: any): any {
+        const source = modules || {};
+        return {
+            ...this.originalModules,
+            discord: !!source.discord,
+            telegram: !!source.telegram,
+        };
+    }
+
+    toggleTelegramApiIdVisibility(): void {
+        this.showTelegramApiId = !this.showTelegramApiId;
+    }
+
+    toggleTelegramApiHashVisibility(): void {
+        this.showTelegramApiHash = !this.showTelegramApiHash;
+    }
+
+    private normalizeTelegramSecrets(telegram: any): any {
+        const next = this.deepClone(telegram || {});
+        const apiId = Number(next.api_id);
+        next.api_id = Number.isFinite(apiId) ? apiId : 0;
+        next.api_hash = String(next.api_hash || '');
+        return next;
     }
 
     refreshTelegramStatus(silent = false, refreshPeers = true): void {
@@ -323,7 +374,35 @@ export class SocialSettingsComponent implements OnInit {
     }
 
     startTelegram(): void {
+        const current = this.prepareCurrentConfigForSave();
+        const updateData = this.buildChangedConfigPayload(current);
         this.isTelegramBusy = true;
+        if (Object.keys(updateData).length > 0) {
+            this.configService.updateConfig$(updateData).subscribe({
+                next: () => {
+                    this.originalConfig = current;
+                    this.originalModules = current.modules;
+                    this.telegramBaseConfig = this.deepClone(current.telegram || {});
+                    this.startTelegramBridge();
+                },
+                error: (error) => {
+                    console.error('Telegram config save before start error:', error);
+                    this.uiUpdate(() => {
+                        this.isTelegramBusy = false;
+                        this.uiNotificationService.error(
+                            this.extractErrorMessage(error, this.t('socialSettings.notifications.bridgeStartFailed')),
+                            this.t('socialSettings.telegram.bridge')
+                        );
+                        this.refreshTelegramStatus(true, false);
+                    });
+                },
+            });
+            return;
+        }
+        this.startTelegramBridge();
+    }
+
+    private startTelegramBridge(): void {
         this.telegramService.start$().subscribe({
             next: (response) => {
                 this.uiUpdate(() => {
@@ -336,15 +415,17 @@ export class SocialSettingsComponent implements OnInit {
                     this.telegramPeers = [];
                     this.rebuildOwnerChatOptions();
                 });
+                this.scheduleTelegramStatusRefresh();
             },
             error: (error) => {
                 console.error('Telegram start error:', error);
                 this.uiUpdate(() => {
                     this.isTelegramBusy = false;
                     this.uiNotificationService.error(
-                        this.t('socialSettings.notifications.bridgeStartFailed'),
+                        this.extractErrorMessage(error, this.t('socialSettings.notifications.bridgeStartFailed')),
                         this.t('socialSettings.telegram.bridge')
                     );
+                    this.refreshTelegramStatus(true, false);
                 });
             },
         });
@@ -623,6 +704,7 @@ export class SocialSettingsComponent implements OnInit {
         const mainEnabledControl = this.socialForm.get('communication.channels.main_chat.enabled');
         const telegramEnabledControl = this.socialForm.get('communication.channels.telegram.enabled');
 
+        this.syncTelegramFallbackControlState();
         primaryControl?.valueChanges.subscribe(() => this.enforceCommunicationRules(true));
         mainEnabledControl?.valueChanges.subscribe(() => this.enforceCommunicationRules(true));
         telegramEnabledControl?.valueChanges.subscribe(() => this.enforceCommunicationRules(true));
@@ -651,6 +733,48 @@ export class SocialSettingsComponent implements OnInit {
         if (primary === 'main_chat') {
             this.socialForm.get(telegramFallbackPath)?.setValue(false, { emitEvent: false });
         }
+        this.syncTelegramFallbackControlState();
+    }
+
+    private syncTelegramFallbackControlState(): void {
+        const primary = String(this.socialForm.get('communication.primary_channel')?.value || 'main_chat');
+        const fallbackControl = this.socialForm.get('communication.channels.telegram.allow_fallback');
+        if (!fallbackControl) {
+            return;
+        }
+
+        if (primary === 'main_chat') {
+            fallbackControl.disable({ emitEvent: false });
+            fallbackControl.setValue(false, { emitEvent: false });
+            return;
+        }
+
+        fallbackControl.enable({ emitEvent: false });
+    }
+
+    private prepareCurrentConfigForSave(): any {
+        this.enforceCommunicationRules(false);
+        this.syncAllowedChatIdsFormFromText();
+        this.syncWritePolicyFormFromText();
+        this.syncReflectionSourceChatIdsFormFromText();
+        return this.buildConfigFromForm();
+    }
+
+    private scheduleTelegramStatusRefresh(): void {
+        [1200, 3500, 7000].forEach((delay) => {
+            window.setTimeout(() => this.refreshTelegramStatus(true), delay);
+        });
+    }
+
+    private extractErrorMessage(error: any, fallback: string): string {
+        const detail = error?.error?.detail ?? error?.detail ?? error?.message;
+        if (Array.isArray(detail)) {
+            return detail.map((item) => String(item)).join('\n');
+        }
+        if (detail !== undefined && detail !== null) {
+            return String(detail);
+        }
+        return fallback;
     }
 
     private mapCommunicationToForm(communication: any): any {

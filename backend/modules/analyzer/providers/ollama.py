@@ -18,12 +18,27 @@ from .base import AnalyzerProvider
 class OllamaAnalyzerProvider(AnalyzerProvider):
     name = "ollama"
 
+    @staticmethod
+    def _as_bool(value: Any, default: bool = False) -> bool:
+        if isinstance(value, bool):
+            return value
+        if value is None:
+            return default
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {"1", "true", "yes", "on"}:
+                return True
+            if normalized in {"0", "false", "no", "off"}:
+                return False
+        return bool(value)
+
     def _get_settings(self) -> Dict[str, Any]:
         cfg = config_service.get_config_value("analyzer.providers.ollama", {}) or {}
         return {
             "model": cfg.get("model") or config_service.get_config_value("api.model", "llama3.2"),
             "temperature": float(cfg.get("temperature", DEFAULT_TEMPERATURE)),
             "max_tokens": int(cfg.get("max_tokens", DEFAULT_MAX_TOKENS)),
+            "thinking": self._as_bool(cfg.get("thinking", cfg.get("think")), False),
         }
 
     def is_available(self) -> bool:
@@ -43,7 +58,7 @@ class OllamaAnalyzerProvider(AnalyzerProvider):
                 "analyzer_ollama_start",
                 "[Analyzer] Starting analysis.",
                 AuditStatus.INFO,
-                details={"model": settings["model"]},
+                details={"model": settings["model"], "thinking": settings["thinking"]},
             )
             result = await asyncio.to_thread(
                 self._call_ollama,
@@ -72,18 +87,25 @@ class OllamaAnalyzerProvider(AnalyzerProvider):
         context: Dict[str, Any],
         settings: Dict[str, Any],
     ) -> Dict[str, Any]:
-        user_prompt_content = f'User message: "{content}"'
-        if context:
-            user_prompt_content += (
-                f"\n\nContext:\n{json.dumps(context, ensure_ascii=False, indent=2)}"
+        analyzer_prompt = str(
+            config_service.get_config_value(
+                "analyzer.system_prompt", COGNITIVE_ANALYSIS_PROMPT
             )
+            or COGNITIVE_ANALYSIS_PROMPT
+        ).strip()
+        input_payload = {
+            "inputText": content,
+            "hasMedia": int((context or {}).get("media_count") or 0) > 0,
+        }
+        user_prompt_content = json.dumps(input_payload, ensure_ascii=False, indent=2)
         history = [
-            {"role": "system", "content": COGNITIVE_ANALYSIS_PROMPT},
+            {"role": "system", "content": analyzer_prompt},
             {"role": "user", "content": user_prompt_content},
         ]
         options = {
             "temperature": settings["temperature"],
             "max_tokens": settings["max_tokens"],
+            "__think": settings["thinking"],
         }
         response = ollama_client.chat(
             history,

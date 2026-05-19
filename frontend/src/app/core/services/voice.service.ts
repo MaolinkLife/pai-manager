@@ -159,6 +159,14 @@ export class VoiceService {
         );
     }
 
+    importRvcModel$(file: File): Observable<{ status: string; model: { name: string; path: string } }> {
+        const encodedName = encodeURIComponent(file.name || 'rvc_voice.pth');
+        return this.http.post<{ status: string; model: { name: string; path: string } }>(
+            `${this.apiUrl}/rvc/import?filename=${encodedName}`,
+            file,
+        );
+    }
+
     preview$(text: string): Observable<any>;
     preview$(text: string, voice: any): Observable<Blob>;
     preview$(text: string, voice?: any): Observable<any> {

@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit } from '@angular/core';
 import { UntypedFormBuilder, UntypedFormGroup, Validators } from '@angular/forms';
 import { ConfigService } from '../../../../../core/services/config.service';
 import { ApiService } from '../../../../../core/services/api.service';
@@ -19,12 +19,14 @@ export class AnalyzerSettingsComponent implements OnInit {
     ollamaModelOptions: UiSelectOption[] = [
         { value: '', label: 'Модели не найдены', disabled: true },
     ];
+    private readonly defaultAnalyzerSystemPrompt = `You are a cognitive filter of an AI system. Your task is to analyze incoming messages and return STRICTLY structured JSON with metadata. NEVER generate text responses for the user.`;
 
     constructor(
         private fb: UntypedFormBuilder,
         private configService: ConfigService,
         private apiService: ApiService,
-        private notificationService: NotificationService
+        private notificationService: NotificationService,
+        private cdr: ChangeDetectorRef,
     ) {
         this.analyzerForm = this.createForm();
     }
@@ -41,10 +43,25 @@ export class AnalyzerSettingsComponent implements OnInit {
 
     private createForm(): UntypedFormGroup {
         return this.fb.group({
+            enabled: [true],
             activeProvider: ['openrouter', Validators.required],
             fallbackOpenrouter: [false],
             fallbackOllama: [true],
-            providers: this.fb.group({})
+            releaseAfterUse: [true],
+            systemPrompt: [this.defaultAnalyzerSystemPrompt, Validators.required],
+            providers: this.fb.group({
+                openrouter: this.createProviderGroup({}),
+                ollama: this.createProviderGroup({}),
+            })
+        });
+    }
+
+    private createProviderGroup(providerConfig: any): UntypedFormGroup {
+        return this.fb.group({
+            apiKey: [providerConfig.apiKey || ''],
+            model: [providerConfig.model || '', Validators.required],
+            temperature: [providerConfig.temperature ?? 0.7, [Validators.min(0), Validators.max(2)]],
+            maxTokens: [providerConfig.maxTokens ?? 1024, [Validators.min(1), Validators.max(4096)]],
         });
     }
 
@@ -61,29 +78,35 @@ export class AnalyzerSettingsComponent implements OnInit {
 
                 // Загружаем основные настройки
                 this.analyzerForm.patchValue({
+                    enabled: analyzer.enabled ?? true,
                     activeProvider: analyzer.activeProvider || 'openrouter',
                     fallbackOpenrouter: (analyzer.fallbackOrder || []).includes('openrouter'),
                     fallbackOllama: (analyzer.fallbackOrder || []).includes('ollama'),
+                    releaseAfterUse: analyzer.releaseAfterUse ?? true,
+                    systemPrompt: analyzer.systemPrompt || this.defaultAnalyzerSystemPrompt,
                 });
 
                 // Загружаем провайдеров в динамическую форму
                 const providersGroup = this.analyzerForm.get('providers') as UntypedFormGroup;
                 Object.keys(providers).forEach(providerName => {
                     const providerConfig = providers[providerName];
-
-                    // Создаём FormGroup для провайдера в camelCase
-                    const providerGroup = this.fb.group({
-                        apiKey: [providerConfig.apiKey || ''],
-                        model: [providerConfig.model || '', Validators.required],
-                        temperature: [providerConfig.temperature || 0.7, [Validators.min(0), Validators.max(2)]],
-                        maxTokens: [providerConfig.maxTokens || 1024, [Validators.min(1), Validators.max(4096)]],
-                    });
-
-                    providersGroup.addControl(providerName, providerGroup);
+                    const providerGroup = providersGroup.get(providerName) as UntypedFormGroup | null;
+                    if (providerGroup) {
+                        providerGroup.patchValue({
+                            apiKey: providerConfig.apiKey || '',
+                            model: providerConfig.model || '',
+                            temperature: providerConfig.temperature ?? 0.7,
+                            maxTokens: providerConfig.maxTokens ?? 1024,
+                        });
+                    } else {
+                        providersGroup.addControl(providerName, this.createProviderGroup(providerConfig));
+                    }
                 });
 
                 this.originalConfig = this.buildAnalyzerConfigFromForm();
                 this.toggleFallbackControls(this.analyzerForm.get('activeProvider')?.value);
+                this.ensureCurrentOllamaModelOption();
+                this.cdr.markForCheck();
             },
             error: (error) => {
                 console.error('Error loading analyzer config:', error);
@@ -93,6 +116,7 @@ export class AnalyzerSettingsComponent implements OnInit {
                     message: 'Failed to load analyzer configuration',
                     autoClose: true
                 });
+                this.cdr.markForCheck();
             }
         });
     }
@@ -105,14 +129,28 @@ export class AnalyzerSettingsComponent implements OnInit {
                     .filter((item) => item.length > 0);
                 if (cleaned.length > 0) {
                     this.ollamaModelOptions = cleaned.map((model) => ({ value: model, label: model }));
+                    this.ensureCurrentOllamaModelOption();
+                    this.cdr.markForCheck();
                     return;
                 }
                 this.ollamaModelOptions = [{ value: '', label: 'Модели не найдены', disabled: true }];
+                this.ensureCurrentOllamaModelOption();
+                this.cdr.markForCheck();
             },
             error: () => {
                 this.ollamaModelOptions = [{ value: '', label: 'Модели не найдены', disabled: true }];
+                this.ensureCurrentOllamaModelOption();
+                this.cdr.markForCheck();
             },
         });
+    }
+
+    private ensureCurrentOllamaModelOption(): void {
+        const current = String(this.providersForm.get('ollama.model')?.value || '').trim();
+        if (!current || this.ollamaModelOptions.some((item) => item.value === current)) {
+            return;
+        }
+        this.ollamaModelOptions = [{ value: current, label: current }, ...this.ollamaModelOptions];
     }
 
     private toggleFallbackControls(activeProvider: string): void {
@@ -183,8 +221,11 @@ export class AnalyzerSettingsComponent implements OnInit {
         });
 
         return {
+            enabled: !!formValue.enabled,
             activeProvider: formValue.activeProvider,
             fallbackOrder: fallbackOrder,
+            releaseAfterUse: !!formValue.releaseAfterUse,
+            systemPrompt: String(formValue.systemPrompt || '').trim(),
             providers: providers
         };
     }

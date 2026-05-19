@@ -52,6 +52,7 @@ backend/__pycache__/
 backend/**/__pycache__/
 backend/*.py[cod]
 backend/*.so
+__pycache__/
 
 # Virtual environment
 backend/venv/
@@ -96,6 +97,7 @@ backend/storage/files/*
 backend/storage/database/*
 backend/storage/vector_store
 backend/storage/models/*
+backend/storage/outputs/images/*
 
 backend/temp/audio/*
 backend/temp/logs/*
@@ -110,3 +112,5 @@ backend/data/telegram/*.session
 backend/data/telegram/*.session-journal
 backend/**/z-waif.session
 backend/**/z-waif.session-journal
+
+CLAUDE.md

@@ -41,11 +41,16 @@ import {
 import { mapSystemDtoToModel, mapSystemModelToDto } from './system-config-mapper';
 import { mapMemoryDtoToModel, mapMemoryModelToDto } from './memory-config-mapper';
 import { mapConnectorDtoToModel, mapConnectorModelToDto } from './connector-config-mapper';
+import {
+    mapDecisionLayerDtoToModel,
+    mapDecisionLayerModelToDto
+} from './decision-layer-config-mapper';
 
 
 export const mapProjectConfigDtoToModel = (dto: ProjectConfigDto): ProjectConfig => ({
     voice: mapVoiceDtoToModel(dto.voice),
     modules: mapModulesDtoToModel(dto.modules),
+    decisionLayer: mapDecisionLayerDtoToModel(dto.decision_layer),
     connector: mapConnectorDtoToModel(dto.connector),
     telegram: dto.telegram,
     communication: dto.communication,
@@ -64,6 +69,7 @@ export const mapProjectConfigDtoToModel = (dto: ProjectConfigDto): ProjectConfig
 export const mapProjectConfigModelToDto = (model: ProjectConfig): ProjectConfigDto => ({
     voice: mapVoiceModelToDto(model.voice),
     modules: mapModulesModelToDto(model.modules),
+    decision_layer: mapDecisionLayerModelToDto(model.decisionLayer),
     connector: mapConnectorModelToDto(model.connector),
     telegram: model.telegram,
     communication: model.communication,
@@ -113,6 +119,9 @@ export const mapPartialModelToDto = (
                 break;
             case 'modules':
                 dto.modules = mapModulesModelToDto(model.modules!);
+                break;
+            case 'decisionLayer':
+                dto.decision_layer = mapDecisionLayerModelToDto(model.decisionLayer!);
                 break;
             case 'connector':
                 dto.connector = mapConnectorModelToDto(model.connector!);

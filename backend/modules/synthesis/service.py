@@ -13,6 +13,7 @@ from constants.prompts import (
     SYNTHESIS_PROMPT_ENGINEERING_USER_TEMPLATE,
 )
 from modules.synthesis.model_registry import SynthesisModelRegistry
+from modules.synthesis.providers.comfyui import ComfyUIProvider
 from modules.synthesis.providers.diffusers_generic import DiffusersGenericProvider
 from modules.synthesis.providers.stable_diffusion_webui import StableDiffusionWebUIProvider
 from modules.synthesis.providers.base import ImageProviderError
@@ -40,17 +41,114 @@ class SynthesisService:
         self._registry = SynthesisModelRegistry()
         self._provider = DiffusersGenericProvider()
         self._sd_webui_provider = StableDiffusionWebUIProvider()
+        self._comfyui_provider = ComfyUIProvider()
 
     def list_models(self, refresh: bool = False) -> List[SynthesisModelInfo]:
         if refresh:
             self._registry.reload()
         return self._registry.list_models()
 
+    def import_checkpoint_model(
+        self,
+        *,
+        source_path: str,
+        label: str = "",
+        family: str = "auto",
+        model_id: str = "",
+        vae_path: str = "",
+    ) -> SynthesisModelInfo:
+        return self._registry.import_checkpoint(
+            source_path,
+            label=label,
+            family=family,
+            model_id=model_id,
+            vae_path=vae_path,
+        )
+
     def get_image_providers(self) -> list[str]:
-        return sorted({model.model_id for model in self._registry.list_models()})
+        providers = {"core"}
+        if any(model.family == "stable-diffusion-webui" for model in self._registry.list_models()):
+            providers.add("stable_diffusion_webui")
+        if any(model.family == "comfyui" for model in self._registry.list_models()):
+            providers.add("comfyui")
+        return sorted(providers)
+
+    def get_comfyui_status(self) -> dict:
+        return self._comfyui_provider.inspect()
+
+    @staticmethod
+    def _provider_name_for_model(model: SynthesisModelInfo) -> str:
+        if model.family == "stable-diffusion-webui":
+            return "stable_diffusion_webui"
+        if model.family == "comfyui":
+            return "comfyui"
+        return "core"
+
+    @staticmethod
+    def _diffusers_capabilities() -> dict:
+        try:
+            import diffusers
+        except Exception as exc:
+            return {
+                "available": False,
+                "version": None,
+                "z_image_pipeline": False,
+                "error": str(exc),
+            }
+        return {
+            "available": True,
+            "version": getattr(diffusers, "__version__", None),
+            "z_image_pipeline": hasattr(diffusers, "ZImagePipeline"),
+            "error": "",
+        }
+
+    def _model_capabilities(self, model: SynthesisModelInfo) -> dict:
+        if model.family == "z-image":
+            diffusers_capabilities = self._diffusers_capabilities()
+            return {
+                "provider": "core",
+                "required_pipeline": "ZImagePipeline",
+                "pipeline_available": bool(diffusers_capabilities.get("z_image_pipeline")),
+                "diffusers": diffusers_capabilities,
+            }
+        if model.family == "stable-diffusion-webui":
+            return {
+                "provider": "stable_diffusion_webui",
+                "required_pipeline": "remote_webui_api",
+                "pipeline_available": True,
+            }
+        if model.family == "comfyui":
+            enabled = bool(get_config_value("synthesis.comfyui.enabled", False))
+            checkpoint = str(get_config_value("synthesis.comfyui.default_model", "") or "").strip()
+            return {
+                "provider": "comfyui",
+                "required_pipeline": "remote_comfyui_api",
+                "pipeline_available": enabled and bool(checkpoint),
+                "enabled": enabled,
+                "checkpoint_configured": bool(checkpoint),
+            }
+        if model.family in {"stable-diffusion-checkpoint", "sdxl-checkpoint"}:
+            return {
+                "provider": "core",
+                "required_pipeline": "from_single_file",
+                "pipeline_available": bool(self._diffusers_capabilities().get("available")),
+            }
+        return {
+            "provider": "core",
+            "required_pipeline": "AutoPipelineForText2Image",
+            "pipeline_available": bool(self._diffusers_capabilities().get("available")),
+        }
 
     def _resolve_target_model(self, request: ImageGenerationRequest) -> SynthesisModelInfo:
-        model_id = (request.model or request.provider or "").strip().lower()
+        provider = (request.provider or "").strip().lower()
+        model_id = (request.model or "").strip().lower()
+        if provider == "core":
+            provider = "diffusers"
+        if provider in {"diffusers", "huggingface", "hf", "stable_diffusion_webui", "comfyui"}:
+            model_id = model_id or ""
+        elif not model_id:
+            # Backwards compatibility: old UI/API sent model ids in the provider field.
+            model_id = provider
         if not model_id:
             default_model_id = self._registry.get_default_model_id()
             if not default_model_id:
@@ -63,6 +161,22 @@ class SynthesisService:
             raise ImageProviderError(
                 f"Unknown image model '{model_id}'. Available: {available}"
             )
+        if provider == "comfyui" and model.family != "comfyui":
+            comfyui_model = next(
+                (candidate for candidate in self._registry.list_models() if candidate.family == "comfyui"),
+                None,
+            )
+            if comfyui_model is None:
+                raise ImageProviderError("ComfyUI image model is not registered.")
+            return comfyui_model
+        if provider == "stable_diffusion_webui" and model.family != "stable-diffusion-webui":
+            sd_webui_model = next(
+                (candidate for candidate in self._registry.list_models() if candidate.family == "stable-diffusion-webui"),
+                None,
+            )
+            if sd_webui_model is None:
+                raise ImageProviderError("Stable Diffusion WebUI image model is not registered.")
+            return sd_webui_model
         return model
 
     def _resolve_fallback_models(
@@ -71,6 +185,7 @@ class SynthesisService:
     ) -> List[SynthesisModelInfo]:
         fallback_families = {
             "stable-diffusion-webui",
+            "comfyui",
             "stable-diffusion",
             "sdxl",
             "diffusion",
@@ -409,17 +524,31 @@ class SynthesisService:
     ) -> ImageGenerationResult:
         if model.family == "stable-diffusion-webui":
             return self._sd_webui_provider.generate(request, model)
+        if model.family == "comfyui":
+            return self._comfyui_provider.generate(request, model)
         try:
             return self._provider.generate(request, model)
         except ImageProviderError as exc:
-            if model.family != "z-image":
+            log_audit_entry(
+                "synthesis_primary_model_failed",
+                "[Synthesis] Primary image model failed.",
+                AuditStatus.WARNING,
+                details={
+                    "model_id": model.model_id,
+                    "family": model.family,
+                    "provider": provider_name,
+                    "allow_fallback": bool(request.allow_fallback),
+                    "error": str(exc),
+                },
+            )
+            if not request.allow_fallback:
                 raise
             fallback_models = self._resolve_fallback_models(model)
             if not fallback_models:
                 raise
             last_error = exc
             for fallback_model in fallback_models:
-                fallback_provider = fallback_model.family.replace("-", "_")
+                fallback_provider = self._provider_name_for_model(fallback_model)
                 fallback_request = ImageGenerationRequest(
                     prompt=request.prompt,
                     provider=fallback_provider,
@@ -430,13 +559,42 @@ class SynthesisService:
                     num_inference_steps=request.num_inference_steps,
                     guidance_scale=request.guidance_scale,
                     seed=request.seed,
+                    sampler=request.sampler,
+                    scheduler=request.scheduler,
+                    comfyui_checkpoint=request.comfyui_checkpoint,
+                    persist_output=request.persist_output,
                     use_prompt_engineering=request.use_prompt_engineering,
+                    allow_fallback=False,
                 )
                 try:
+                    log_audit_entry(
+                        "synthesis_fallback_attempt",
+                        "[Synthesis] Trying fallback image model.",
+                        AuditStatus.WARNING,
+                        details={
+                            "primary_model_id": model.model_id,
+                            "fallback_model_id": fallback_model.model_id,
+                            "fallback_family": fallback_model.family,
+                            "fallback_provider": fallback_provider,
+                            "primary_error": str(exc),
+                        },
+                    )
                     if fallback_model.family == "stable-diffusion-webui":
                         return self._sd_webui_provider.generate(fallback_request, fallback_model)
+                    if fallback_model.family == "comfyui":
+                        return self._comfyui_provider.generate(fallback_request, fallback_model)
                     return self._provider.generate(fallback_request, fallback_model)
                 except ImageProviderError as nested_exc:
+                    log_audit_entry(
+                        "synthesis_fallback_failed",
+                        "[Synthesis] Fallback image model failed.",
+                        AuditStatus.WARNING,
+                        details={
+                            "primary_model_id": model.model_id,
+                            "fallback_model_id": fallback_model.model_id,
+                            "error": str(nested_exc),
+                        },
+                    )
                     last_error = nested_exc
                     continue
             raise last_error
@@ -445,7 +603,7 @@ class SynthesisService:
         try:
             request, _visual_profile = self._prepare_visual_intent_prompt(request)
             model = self._resolve_target_model(request)
-            provider_name = model.family.replace("-", "_")
+            provider_name = self._provider_name_for_model(model)
             request.provider = provider_name
             request.model = model.model_id
 
@@ -456,8 +614,18 @@ class SynthesisService:
                 details={
                     "provider": provider_name,
                     "model_id": model.model_id,
+                    "prompt": request.prompt,
+                    "negative_prompt": request.negative_prompt,
                     "width": request.width,
                     "height": request.height,
+                    "num_inference_steps": request.num_inference_steps,
+                    "guidance_scale": request.guidance_scale,
+                    "seed": request.seed,
+                    "sampler": request.sampler,
+                    "scheduler": request.scheduler,
+                    "comfyui_checkpoint": request.comfyui_checkpoint,
+                    "use_prompt_engineering": request.use_prompt_engineering,
+                    "allow_fallback": request.allow_fallback,
                 },
             )
             prompting = self._prompting_cfg()
@@ -469,7 +637,8 @@ class SynthesisService:
             if not prompt_engineering_enabled:
                 return self._generate_once(request=request, model=model, provider_name=provider_name)
 
-            max_attempts = int(prompting.get("max_attempts", 3) or 3)
+            retry_enabled = bool(prompting.get("retry_enabled", True))
+            max_attempts = int(prompting.get("max_attempts", 3) or 3) if retry_enabled else 1
             max_attempts = max(1, min(max_attempts, 6))
             threshold = float(prompting.get("quality_threshold", 0.72) or 0.72)
             threshold = max(0.0, min(1.0, threshold))
@@ -496,6 +665,11 @@ class SynthesisService:
                     num_inference_steps=request.num_inference_steps,
                     guidance_scale=request.guidance_scale,
                     seed=request.seed,
+                    sampler=request.sampler,
+                    scheduler=request.scheduler,
+                    comfyui_checkpoint=request.comfyui_checkpoint,
+                    persist_output=request.persist_output,
+                    allow_fallback=request.allow_fallback,
                 )
                 log_audit_entry(
                     "synthesis_prompt_iteration",
@@ -543,7 +717,7 @@ class SynthesisService:
             raise ImageProviderError("Image generation failed: no result produced.")
         finally:
             if should_release_resources("synthesis"):
-                for provider in (self._provider, self._sd_webui_provider):
+                for provider in (self._provider, self._sd_webui_provider, self._comfyui_provider):
                     release_fn = getattr(provider, "release_resources", None)
                     if callable(release_fn):
                         try:
@@ -557,7 +731,13 @@ class SynthesisService:
                             )
 
     def dump_models_payload(self, refresh: bool = False) -> list[dict]:
-        return [asdict(model) for model in self.list_models(refresh=refresh)]
+        payload = []
+        for model in self.list_models(refresh=refresh):
+            item = asdict(model)
+            item["provider"] = self._provider_name_for_model(model)
+            item["capabilities"] = self._model_capabilities(model)
+            payload.append(item)
+        return payload
 
 
 synthesis_service = SynthesisService()

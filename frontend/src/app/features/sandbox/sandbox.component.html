@@ -1,0 +1,333 @@
+<div class="sandbox-shell">
+    <section class="sandbox-panel">
+        <header class="sandbox-header">
+            <div>
+                <h1>{{ "sandbox.title" | translate }}</h1>
+                <p>{{ "sandbox.subtitle" | translate }}</p>
+            </div>
+            <div class="sandbox-actions">
+                <app-ui-button variant="secondary" (pressed)="clear()" [disabled]="loading || !messages.length">
+                    {{ "sandbox.clear" | translate }}
+                </app-ui-button>
+                <app-ui-button variant="secondary" (pressed)="copyLast()" [disabled]="!lastResponse?.content">
+                    {{ "sandbox.copy" | translate }}
+                </app-ui-button>
+            </div>
+        </header>
+
+        <div class="sandbox-grid">
+            <aside class="sandbox-controls">
+                <div class="control-group">
+                    <label>{{ "sandbox.mode" | translate }}</label>
+                    <app-ui-select [options]="modeOptions" [(ngModel)]="mode"></app-ui-select>
+                </div>
+
+                <div class="control-group">
+                    <label>{{ "sandbox.pipeline" | translate }}</label>
+                    <app-ui-select [options]="pipelineModeOptions" [(ngModel)]="pipelineMode"></app-ui-select>
+                </div>
+
+                <div class="control-group" *ngIf="testCases.length">
+                    <label>{{ "sandbox.testCase" | translate }}</label>
+                    <app-ui-select
+                        [options]="caseOptions"
+                        [ngModel]="selectedCaseId"
+                        (ngModelChange)="applyCase($event)"
+                    ></app-ui-select>
+                </div>
+
+                <div class="control-row">
+                    <div class="control-group">
+                        <label>{{ "sandbox.provider" | translate }}</label>
+                        <app-ui-select
+                            [options]="providerOptions"
+                            [ngModel]="provider"
+                            (ngModelChange)="onProviderChange($event)"
+                        ></app-ui-select>
+                    </div>
+                    <div class="control-group">
+                        <label>{{ "sandbox.model" | translate }}</label>
+                        <ng-container *ngIf="provider === 'ollama' && modelOptions.length; else modelInput">
+                            <app-ui-select [options]="modelOptions" [(ngModel)]="model"></app-ui-select>
+                        </ng-container>
+                        <ng-template #modelInput>
+                            <app-ui-input type="text" [(ngModel)]="model" [placeholder]="'sandbox.modelPlaceholder' | translate"></app-ui-input>
+                        </ng-template>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <label>{{ "sandbox.systemPrompt" | translate }}</label>
+                    <textarea class="sandbox-textarea custom-scrollbar" [(ngModel)]="systemPrompt" rows="8"></textarea>
+                </div>
+
+                <div class="image-pipeline-controls" *ngIf="mode === 'image'">
+                    <div class="control-row">
+                        <div class="control-group">
+                            <label>{{ "sandbox.imageProvider" | translate }}</label>
+                            <app-ui-select
+                                [options]="imageProviderOptions"
+                                [ngModel]="imageProvider"
+                                (ngModelChange)="onImageProviderChange($event)"
+                            ></app-ui-select>
+                        </div>
+                        <div class="control-group">
+                            <label>{{ "sandbox.imageModel" | translate }}</label>
+                            <app-ui-select
+                                *ngIf="imageModelOptions.length; else imageModelInput"
+                                [options]="imageModelOptions"
+                                [ngModel]="imageModel"
+                                (ngModelChange)="onImageModelChange($event)"
+                            ></app-ui-select>
+                            <ng-template #imageModelInput>
+                                <app-ui-input type="text" [(ngModel)]="imageModel" [placeholder]="'sandbox.modelPlaceholder' | translate"></app-ui-input>
+                            </ng-template>
+                        </div>
+                    </div>
+
+                    <div class="control-group" *ngIf="imageProvider === 'comfyui'">
+                        <label>{{ "sandbox.comfyCheckpoint" | translate }}</label>
+                        <app-ui-select
+                            *ngIf="comfyuiCheckpointOptions.length; else comfyCheckpointInput"
+                            [options]="comfyuiCheckpointOptions"
+                            [(ngModel)]="comfyuiCheckpoint"
+                        ></app-ui-select>
+                        <ng-template #comfyCheckpointInput>
+                            <app-ui-input type="text" [(ngModel)]="comfyuiCheckpoint" placeholder="checkpoint.safetensors"></app-ui-input>
+                        </ng-template>
+                    </div>
+
+                    <div class="control-group">
+                        <label>{{ "sandbox.negativePrompt" | translate }}</label>
+                        <textarea class="sandbox-textarea custom-scrollbar" [(ngModel)]="imageNegativePrompt" rows="3"></textarea>
+                    </div>
+
+                    <div class="control-group">
+                        <label>{{ "sandbox.stylePrompt" | translate }}</label>
+                        <textarea class="sandbox-textarea custom-scrollbar" [(ngModel)]="imageStylePrompt" rows="3"></textarea>
+                    </div>
+
+                    <div class="control-group">
+                        <label>{{ "sandbox.promptPolicy" | translate }}</label>
+                        <textarea class="sandbox-textarea custom-scrollbar" [(ngModel)]="imagePromptPolicy" rows="4"></textarea>
+                    </div>
+
+                    <div class="control-row numeric">
+                        <div class="control-group">
+                            <label>{{ "sandbox.width" | translate }}</label>
+                            <app-ui-input type="number" [(ngModel)]="imageWidth"></app-ui-input>
+                        </div>
+                        <div class="control-group">
+                            <label>{{ "sandbox.height" | translate }}</label>
+                            <app-ui-input type="number" [(ngModel)]="imageHeight"></app-ui-input>
+                        </div>
+                    </div>
+
+                    <div class="control-row numeric">
+                        <div class="control-group">
+                            <label>{{ "sandbox.steps" | translate }} {{ imageSteps }}</label>
+                            <app-ui-range [min]="1" [max]="80" [step]="1" [(ngModel)]="imageSteps"></app-ui-range>
+                        </div>
+                        <div class="control-group">
+                            <label>{{ "sandbox.guidanceScale" | translate }} {{ imageGuidanceScale | number: '1.1-2' }}</label>
+                            <app-ui-range [min]="0" [max]="20" [step]="0.1" [(ngModel)]="imageGuidanceScale"></app-ui-range>
+                        </div>
+                    </div>
+
+                    <div class="control-row numeric">
+                        <div class="control-group">
+                            <label>{{ "sandbox.scheduler" | translate }}</label>
+                            <app-ui-select [options]="schedulerOptions" [(ngModel)]="imageScheduler"></app-ui-select>
+                        </div>
+                        <div class="control-group">
+                            <label>{{ "sandbox.seed" | translate }}</label>
+                            <app-ui-input type="number" [(ngModel)]="imageSeed" placeholder="random"></app-ui-input>
+                        </div>
+                    </div>
+
+                    <label class="inline-toggle">
+                        <input type="checkbox" [(ngModel)]="useUnifiedRouter" />
+                        <span>{{ "sandbox.unifiedRouter" | translate }}</span>
+                    </label>
+                    <app-ui-checkbox [(ngModel)]="usePromptBuilder">
+                        {{ "sandbox.usePromptBuilder" | translate }}
+                    </app-ui-checkbox>
+                    <app-ui-checkbox [(ngModel)]="persistOutput">
+                        Сохранять временный результат
+                    </app-ui-checkbox>
+                </div>
+
+                <div class="control-group">
+                    <label>{{ "sandbox.inputAssets" | translate }}</label>
+                    <div class="file-actions">
+                        <label class="file-button">
+                            {{ "sandbox.imageDocument" | translate }}
+                            <input type="file" accept="image/*,.txt,.md,.pdf" (change)="onImageFileSelected($event)" />
+                        </label>
+                        <label class="file-button">
+                            {{ "sandbox.voiceFile" | translate }}
+                            <input type="file" accept=".wav,.mp3,.flac,.ogg,.m4a,audio/*" (change)="onAudioFileSelected($event)" />
+                        </label>
+                        <app-ui-button variant="secondary" (pressed)="clearMedia()" [disabled]="!mediaAttachments.length">
+                            {{ "sandbox.clearMedia" | translate }}
+                        </app-ui-button>
+                    </div>
+                    <div class="asset-list" *ngIf="mediaAttachments.length">
+                        <span *ngFor="let item of mediaAttachments">{{ item.name }} • {{ item.category }}</span>
+                    </div>
+                </div>
+
+                <div class="control-row numeric">
+                    <div class="control-group">
+                        <label>{{ "sandbox.temperature" | translate }} {{ temperature | number: '1.2-2' }}</label>
+                        <app-ui-range [min]="0" [max]="2" [step]="0.01" [(ngModel)]="temperature"></app-ui-range>
+                    </div>
+                    <div class="control-group">
+                        <label>{{ "sandbox.topP" | translate }} {{ topP | number: '1.2-2' }}</label>
+                        <app-ui-range [min]="0.05" [max]="1" [step]="0.01" [(ngModel)]="topP"></app-ui-range>
+                    </div>
+                </div>
+
+                <div class="control-row numeric">
+                    <div class="control-group">
+                        <label>{{ "sandbox.topK" | translate }} {{ topK }}</label>
+                        <app-ui-range [min]="1" [max]="100" [step]="1" [(ngModel)]="topK"></app-ui-range>
+                    </div>
+                    <div class="control-group">
+                        <label>{{ "sandbox.maxTokens" | translate }}</label>
+                        <app-ui-input type="number" [(ngModel)]="maxTokens"></app-ui-input>
+                    </div>
+                </div>
+            </aside>
+
+            <main class="sandbox-chat">
+                <div class="sandbox-messages custom-scrollbar">
+                    <div
+                        class="sandbox-message"
+                        *ngFor="let message of messages; let i = index; trackBy: trackByMessage"
+                        [ngClass]="message.role"
+                    >
+                        <div class="message-meta">
+                            <span>{{ message.role }}</span>
+                            <span>{{ formatTimestamp(message.timestamp) }}</span>
+                            <span *ngIf="message.provider">{{ message.provider }} / {{ message.model || 'model' }}</span>
+                            <span *ngIf="message.elapsedMs">{{ message.elapsedMs }}ms</span>
+                        </div>
+                        <div class="generated-media" *ngIf="message.media?.length">
+                            <ng-container *ngFor="let item of message.media">
+                                <img
+                                    *ngIf="item.category === 'image' && item.data"
+                                    [src]="'data:' + (item.mimeType || 'image/png') + ';base64,' + item.data"
+                                    [alt]="item.name || 'generated image'"
+                                />
+                            </ng-container>
+                        </div>
+                        <app-message-renderer
+                            [content]="message.reasoning ? '<think>' + message.reasoning + '</think>' + message.content : message.content"
+                            [isStreaming]="false"
+                        ></app-message-renderer>
+                    </div>
+
+                    <div class="sandbox-empty" *ngIf="!messages.length && !loading">
+                        {{ "sandbox.empty" | translate }}
+                    </div>
+
+                    <div class="sandbox-message assistant pending" *ngIf="loading">
+                        <div class="message-meta"><span>assistant</span><span>{{ "sandbox.running" | translate }}</span></div>
+                        <div class="typing-line"><span></span><span></span><span></span></div>
+                    </div>
+                </div>
+
+                <div class="sandbox-composer">
+                    <textarea
+                        class="composer-input custom-scrollbar"
+                        [(ngModel)]="userPrompt"
+                        rows="4"
+                        [placeholder]="'sandbox.promptPlaceholder' | translate"
+                        [disabled]="loading"
+                    ></textarea>
+                    <app-ui-button (pressed)="run()" [disabled]="getRunDisabled()" [loading]="loading">
+                        {{ "sandbox.run" | translate }}
+                    </app-ui-button>
+                </div>
+            </main>
+
+            <aside class="sandbox-process">
+                <header class="process-header">
+                    <div>
+                        <h2>{{ "sandbox.process" | translate }}</h2>
+                        <p>{{ "sandbox.processSubtitle" | translate }}</p>
+                    </div>
+                    <span *ngIf="lastResponse?.elapsed_ms">{{ lastResponse?.elapsed_ms }}ms</span>
+                </header>
+
+                <div class="process-scroll custom-scrollbar">
+                    <div class="process-empty" *ngIf="!lastResponse && !traces.length && !loading">
+                        {{ "sandbox.processEmpty" | translate }}
+                    </div>
+
+                    <div class="process-card" *ngIf="loading">
+                        <div class="process-card-title">{{ "sandbox.processRunning" | translate }}</div>
+                        <div class="typing-line"><span></span><span></span><span></span></div>
+                    </div>
+
+                    <section class="process-card" *ngIf="traces.length">
+                        <div class="process-card-title">{{ "sandbox.trace" | translate }}</div>
+                        <div
+                            class="process-step"
+                            *ngFor="let trace of traces; let i = index; trackBy: trackByTrace"
+                            [class.done]="trace.state === 'end'"
+                            [class.active]="trace.state === 'start'"
+                            [class.error]="trace.state === 'error'"
+                        >
+                            <div class="process-step-main">
+                                <span class="process-step-name">{{ trace.stage }}</span>
+                                <span class="process-step-state">{{ trace.state }}</span>
+                            </div>
+                            <div class="process-step-meta">
+                                <span *ngIf="trace.meta">{{ trace.meta }}</span>
+                                <span *ngIf="trace.elapsedMs !== undefined">{{ trace.elapsedMs }}ms</span>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="process-card" *ngIf="getToolContext().length">
+                        <div class="process-card-title">{{ "sandbox.toolContext" | translate }}</div>
+                        <div class="tool-row" *ngFor="let tool of getToolContext()">
+                            <span>{{ tool.name }}</span>
+                            <p>{{ tool.content }}</p>
+                        </div>
+                    </section>
+
+                    <section class="process-card" *ngIf="lastResponse?.image_prompt">
+                        <div class="process-card-title">{{ "sandbox.generatedPrompt" | translate }}</div>
+                        <pre>{{ lastResponse?.image_prompt }}</pre>
+                    </section>
+
+                    <section class="process-card warning" *ngIf="getPromptBuilderRaw()">
+                        <div class="process-card-title">Prompt builder raw</div>
+                        <pre>{{ getPromptBuilderRaw() }}</pre>
+                    </section>
+
+                    <section class="process-card" *ngIf="lastResponse?.negative_prompt">
+                        <div class="process-card-title">{{ "sandbox.generatedNegative" | translate }}</div>
+                        <pre>{{ lastResponse?.negative_prompt }}</pre>
+                    </section>
+
+                    <section class="process-card" *ngIf="getImageParameters().length">
+                        <div class="process-card-title">{{ "sandbox.generationRoute" | translate }}</div>
+                        <div class="param-row" *ngFor="let param of getImageParameters()">
+                            <span>{{ param.key }}</span>
+                            <strong>{{ param.value }}</strong>
+                        </div>
+                    </section>
+
+                    <section class="process-card" *ngIf="getResultImageUrl()">
+                        <div class="process-card-title">{{ "sandbox.result" | translate }}</div>
+                        <img class="process-result-image" [src]="getResultImageUrl()" alt="generated image" />
+                    </section>
+                </div>
+            </aside>
+        </div>
+    </section>
+</div>

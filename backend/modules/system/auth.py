@@ -16,11 +16,11 @@ from sqlalchemy.orm import Session
 
 from models.models import AuthSession, User, UserSettings
 from modules.database.core import SessionLocal
-from modules.system.logger import AuditStatus, log_audit_entry
+from modules.system.logger import AuditStatus, log_audit_entry, log_console
 
 PBKDF2_ITERATIONS = 210_000
-DEFAULT_ACCESS_TTL_MINUTES = 60
-DEFAULT_REFRESH_TTL_DAYS = 30
+DEFAULT_ACCESS_TTL_MINUTES = 60 * 24 * 365 * 10
+DEFAULT_REFRESH_TTL_DAYS = 365 * 10
 DEFAULT_ACCESS_TOKEN_SKEW_SECONDS = 30
 
 _dotenv_loaded = False
@@ -275,6 +275,11 @@ def register_user(
 ) -> AuthResult:
     normalized_email = _normalize_email(email)
     normalized_login = _normalize_login(login or "")
+    log_console(
+        "Auth",
+        "Производим регистрацию нового пользователя.",
+        {"email": normalized_email, "login": normalized_login or None},
+    )
     if "@" not in normalized_email:
         raise ValueError("Email is invalid")
     if normalized_login and len(normalized_login) < 3:
@@ -283,14 +288,25 @@ def register_user(
     session: Session = SessionLocal()
     try:
         existing_auth_users = session.query(User).filter(User.password_hash.isnot(None)).count()
+        log_console(
+            "Auth",
+            "Проверка пользователя.",
+            {
+                "auth_users_count": int(existing_auth_users),
+                "first_registration": existing_auth_users == 0,
+            },
+        )
         if session.query(User).filter(User.email == normalized_email).first():
+            log_console("Auth", "Пользователь уже существует.", {"email": normalized_email})
             raise ValueError("Email is already registered")
         if normalized_login and session.query(User).filter(User.login == normalized_login).first():
+            log_console("Auth", "Логин уже занят.", {"login": normalized_login})
             raise ValueError("Login is already registered")
 
         requested_role = (role or "user").strip().lower()
         if existing_auth_users == 0:
             resolved_role = "owner"
+            log_console("Auth", "Новый пользователь будет установлен как владелец.")
         else:
             resolved_role = requested_role if requested_role in {"user", "anonymous"} else "user"
 
@@ -308,6 +324,11 @@ def register_user(
         )
         session.add(user)
         session.flush()
+        log_console(
+            "Auth",
+            "Пользователь создан.",
+            {"user_uuid": user.uuid, "role": resolved_role},
+        )
 
         user_settings = UserSettings(
             user_uuid=user.uuid,
@@ -316,6 +337,7 @@ def register_user(
             ui_prefs="{}",
         )
         session.add(user_settings)
+        log_console("Auth", "Создаем настройки пользователя по умолчанию.", {"user_uuid": user.uuid})
 
         refresh_token, refresh_session = _create_refresh_session(
             session,
@@ -328,8 +350,29 @@ def register_user(
         refresh_expires_at = _as_utc(refresh_session.expires_at)
 
         session.commit()
+        try:
+            from modules.system import config as config_service
+
+            log_console(
+                "Auth",
+                "Создаем конфигурационный файл под нового пользователя.",
+                {"user_uuid": user.uuid},
+            )
+            config_service.ensure_user_config_exists(user.uuid)
+            log_console("Auth", "Конфигурация пользователя создана.", {"user_uuid": user.uuid})
+        except Exception as exc:
+            log_console(
+                "Auth",
+                "Не удалось создать конфигурацию пользователя.",
+                {"user_uuid": user.uuid, "error": str(exc)},
+            )
+            raise
+
         session.refresh(user)
         _ = user.settings
+        if resolved_role == "owner":
+            log_console("Auth", "Новый пользователь установлен как владелец.", {"user_uuid": user.uuid})
+        log_console("Auth", "Регистрация пользователя завершена.", {"user_uuid": user.uuid})
         log_audit_entry(
             "auth_register_success",
             "[Auth] User registered.",
@@ -527,6 +570,7 @@ def get_user_by_uuid(user_uuid: str) -> Optional[User]:
 
 
 def get_auth_bootstrap_state() -> dict:
+    log_console("Auth", "Проверка пользователя.")
     session: Session = SessionLocal()
     try:
         auth_users_count = (
@@ -551,6 +595,15 @@ def get_auth_bootstrap_state() -> dict:
         session.close()
 
     requires_setup = not has_owner
+    log_console(
+        "Auth",
+        "Проверка пользователя -> найдено" if has_owner else "Проверка пользователя -> не найдено",
+        {
+            "has_owner": has_owner,
+            "auth_users_count": int(auth_users_count),
+            "requires_setup": requires_setup,
+        },
+    )
     return {
         "has_owner": has_owner,
         "requires_setup": requires_setup,

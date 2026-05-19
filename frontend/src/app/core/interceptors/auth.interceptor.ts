@@ -6,13 +6,14 @@ import {
     HttpInterceptor,
     HttpRequest,
 } from '@angular/common/http';
+import { Router } from '@angular/router';
 import { Observable, throwError } from 'rxjs';
 import { catchError, switchMap } from 'rxjs/operators';
 import { AuthService } from '../services/auth.service';
 
 @Injectable()
 export class AuthInterceptor implements HttpInterceptor {
-    constructor(private authService: AuthService) { }
+    constructor(private authService: AuthService, private router: Router) { }
 
     intercept(req: HttpRequest<unknown>, next: HttpHandler): Observable<HttpEvent<unknown>> {
         const token = this.authService.getAccessToken();
@@ -41,20 +42,19 @@ export class AuthInterceptor implements HttpInterceptor {
         return next.handle(requestToSend).pipe(
             catchError((error: HttpErrorResponse) => {
                 const authRelated401 = this.isAuthRelated401(error);
-                if (
-                    error.status !== 401 ||
-                    !isApiRequest ||
-                    isAuthEndpoint ||
-                    alreadyRetried ||
-                    !authRelated401
-                ) {
+                if (error.status === 401 && isApiRequest && authRelated401 && (isAuthEndpoint || alreadyRetried)) {
+                    this.handleAuthFailure();
+                    return throwError(() => error);
+                }
+
+                if (error.status !== 401 || !isApiRequest || isAuthEndpoint || alreadyRetried || !authRelated401) {
                     return throwError(() => error);
                 }
 
                 return this.authService.refresh$().pipe(
                     switchMap((refreshResponse) => {
                         if (!refreshResponse?.access_token) {
-                            this.authService.clearSession();
+                            this.handleAuthFailure();
                             return throwError(() => error);
                         }
 
@@ -69,7 +69,7 @@ export class AuthInterceptor implements HttpInterceptor {
                     }),
                     catchError((refreshError: HttpErrorResponse) => {
                         if ([400, 401].includes(refreshError?.status)) {
-                            this.authService.clearSession();
+                            this.handleAuthFailure();
                         }
                         return throwError(() => refreshError);
                     })
@@ -125,5 +125,11 @@ export class AuthInterceptor implements HttpInterceptor {
             return error.message;
         }
         return '';
+    }
+
+    private handleAuthFailure(): void {
+        this.authService.clearSession();
+        this.authService.exitAnonymousMode();
+        void this.router.navigateByUrl('/auth');
     }
 }

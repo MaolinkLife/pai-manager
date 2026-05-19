@@ -3,32 +3,40 @@
     <aside class="sidebar">
         <div class="top-buttons">
             <!-- Chat Icon -->
-            <button class="icon-button" [routerLink]="['chat']" routerLinkActive="active" data-tooltip="Чат" aria-label="Чат">
+            <button class="icon-button" [routerLink]="['chat']" routerLinkActive="active" [attr.data-tooltip]="t('navigation.chat')" [attr.aria-label]="t('navigation.chat')">
                 <app-custom-svg name="chat-bubble" [size]="20"></app-custom-svg>
             </button>
 
-            <button *ngIf="!anonymousMode" class="icon-button" [routerLink]="['memory']" routerLinkActive="active" data-tooltip="Память" aria-label="Память">
+            <button *ngIf="!anonymousMode" class="icon-button" [routerLink]="['memory']" routerLinkActive="active" [attr.data-tooltip]="t('navigation.memory')" [attr.aria-label]="t('navigation.memory')">
                 <app-custom-svg name="file" [size]="20"></app-custom-svg>
             </button>
 
-            <button *ngIf="!anonymousMode" class="icon-button" [routerLink]="['matrix']" routerLinkActive="active" data-tooltip="Матрица" aria-label="Матрица">
+            <button *ngIf="!anonymousMode" class="icon-button" [routerLink]="['library']" routerLinkActive="active" [attr.data-tooltip]="t('navigation.library')" [attr.aria-label]="t('navigation.library')">
+                <app-custom-svg name="books" [size]="20"></app-custom-svg>
+            </button>
+
+            <button *ngIf="!anonymousMode" class="icon-button" [routerLink]="['sandbox']" routerLinkActive="active" [attr.data-tooltip]="t('navigation.sandbox')" [attr.aria-label]="t('navigation.sandbox')">
+                <app-custom-svg name="settings" [size]="20"></app-custom-svg>
+            </button>
+
+            <button *ngIf="!anonymousMode" class="icon-button" [routerLink]="['matrix']" routerLinkActive="active" [attr.data-tooltip]="t('navigation.matrix')" [attr.aria-label]="t('navigation.matrix')">
                 <app-custom-svg name="history" [size]="20"></app-custom-svg>
             </button>
 
-            <button *ngIf="!anonymousMode" class="icon-button" [routerLink]="['synthesis']" routerLinkActive="active" data-tooltip="Синтез" aria-label="Синтез">
+            <button *ngIf="!anonymousMode" class="icon-button" [routerLink]="['synthesis']" routerLinkActive="active" [attr.data-tooltip]="t('navigation.synthesis')" [attr.aria-label]="t('navigation.synthesis')">
                 <app-custom-svg name="synthesis" [size]="20"></app-custom-svg>
             </button>
 
-            <button *ngIf="!anonymousMode && uiFlags.diary" class="icon-button" [routerLink]="['diary']" routerLinkActive="active" data-tooltip="Дневник" aria-label="Дневник">
+            <button *ngIf="!anonymousMode && uiFlags.diary" class="icon-button" [routerLink]="['diary']" routerLinkActive="active" [attr.data-tooltip]="t('navigation.diary')" [attr.aria-label]="t('navigation.diary')">
                 <app-custom-svg name="diary" [size]="20"></app-custom-svg>
             </button>
 
-            <button *ngIf="!anonymousMode && uiFlags.audit" class="icon-button" [routerLink]="['audit']" routerLinkActive="active" data-tooltip="Аудит" aria-label="Аудит">
+            <button *ngIf="!anonymousMode && uiFlags.audit" class="icon-button" [routerLink]="['audit']" routerLinkActive="active" [attr.data-tooltip]="t('navigation.audit')" [attr.aria-label]="t('navigation.audit')">
                 <app-custom-svg name="audit" [size]="20"></app-custom-svg>
             </button>
 
             <!-- Debug/Bug Icon -->
-            <button *ngIf="!anonymousMode" class="icon-button" [routerLink]="['debug']" routerLinkActive="active" data-tooltip="Дебаг" aria-label="Дебаг">
+            <button *ngIf="!anonymousMode" class="icon-button" [routerLink]="['debug']" routerLinkActive="active" [attr.data-tooltip]="t('navigation.debug')" [attr.aria-label]="t('navigation.debug')">
                 <app-custom-svg name="bug" [size]="20"></app-custom-svg>
             </button>
         </div>
@@ -39,8 +47,8 @@
                 class="icon-button secondary"
                 [class.active]="entityPanelOpen"
                 (click)="toggleEntityPanel()"
-                data-tooltip="Состояние"
-                aria-label="Состояние"
+                [attr.data-tooltip]="t('navigation.state')"
+                [attr.aria-label]="t('navigation.state')"
             >
                 <app-custom-svg name="neuralink" [size]="20"></app-custom-svg>
             </button>
@@ -48,8 +56,8 @@
             <div class="profile-wrap">
                 <button
                     class="icon-button"
-                    data-tooltip="Профиль"
-                    aria-label="Профиль"
+                    [attr.data-tooltip]="t('navigation.profile')"
+                    [attr.aria-label]="t('navigation.profile')"
                     (click)="toggleProfileMenu()"
                 >
                     <span class="profile-initials">{{ getProfileInitials() }}</span>
@@ -60,14 +68,14 @@
                         <div class="profile-line profile-name">{{ currentUser?.name || currentUser?.login || currentUser?.email }}</div>
                         <div class="profile-line profile-meta">{{ currentUser?.role }} · {{ currentUser?.email }}</div>
                         <app-ui-button variant="secondary" size="sm" [fullWidth]="true" (pressed)="logout()">
-                            Выйти
+                            {{ "auth.logout" | translate }}
                         </app-ui-button>
                     </ng-container>
                     <ng-template #anonymousProfile>
-                        <div class="profile-line profile-name">Анонимный режим</div>
-                        <div class="profile-line profile-meta">Без персональных настроек и API ключей</div>
+                        <div class="profile-line profile-name">{{ "auth.anonymousMode" | translate }}</div>
+                        <div class="profile-line profile-meta">{{ "auth.anonymousModeHint" | translate }}</div>
                         <app-ui-button variant="secondary" size="sm" [fullWidth]="true" (pressed)="goToAuth()">
-                            Авторизоваться
+                            {{ "auth.signIn" | translate }}
                         </app-ui-button>
                     </ng-template>
                 </div>
@@ -122,15 +130,55 @@
 
             <div class="chat-settings-body">
                 <div class="setting-block">
-                    <label for="quick-model">Model</label>
+                    <label for="quick-provider">Provider</label>
+                    <app-ui-select
+                        id="quick-provider"
+                        [disabled]="generationPanelLoading || generationPanelSaving"
+                        [options]="generationProviderOptions"
+                        [ngModel]="generationProvider"
+                        (ngModelChange)="onQuickGenerationProviderChange($event)"
+                        placeholder="Select provider"
+                    ></app-ui-select>
+                </div>
+
+                <div class="setting-block">
+                    <div class="setting-label-row">
+                        <label for="quick-model">Model</label>
+                        <span
+                            *ngIf="generationProvider === 'ollama'"
+                            class="model-runtime-status"
+                            [class.loading]="ollamaRuntimeState === 'loading'"
+                            [class.loaded]="ollamaRuntimeState === 'loaded'"
+                            [class.idle]="ollamaRuntimeState === 'idle'"
+                            [class.unknown]="ollamaRuntimeState === 'unknown'"
+                            [title]="ollamaRuntimeLabel"
+                            [attr.aria-label]="ollamaRuntimeLabel"
+                        >
+                            <span class="model-runtime-lamp"></span>
+                            <span class="model-runtime-text">{{ ollamaRuntimeBadgeText }}</span>
+                        </span>
+                    </div>
                     <ng-container *ngIf="generationProvider === 'ollama'; else textModelInput">
-                        <app-ui-select
-                            id="quick-model"
-                            [disabled]="generationPanelLoading || generationPanelSaving"
-                            [options]="generationModels"
-                            [(ngModel)]="generationModel"
-                            placeholder="Select model"
-                        ></app-ui-select>
+                        <div class="model-control-row">
+                            <app-ui-select
+                                id="quick-model"
+                                [disabled]="generationPanelLoading || generationPanelSaving"
+                                [options]="generationModels"
+                                [ngModel]="generationModel"
+                                (ngModelChange)="onQuickGenerationModelChange($event)"
+                                placeholder="Select model"
+                            ></app-ui-select>
+                            <button
+                                type="button"
+                                class="model-unload-button"
+                                [disabled]="generationPanelLoading || generationPanelSaving || generationRuntimeUnloading || !generationModel || !isSelectedOllamaModelLoaded"
+                                (click)="unloadSelectedOllamaModel()"
+                                title="Unload model from memory"
+                                aria-label="Unload model from memory"
+                            >
+                                <app-custom-svg name="unload" [size]="17"></app-custom-svg>
+                            </button>
+                        </div>
                     </ng-container>
                     <ng-template #textModelInput>
                         <app-ui-input
@@ -191,6 +239,18 @@
                         [disabled]="generationPanelLoading || generationPanelSaving"
                         [(ngModel)]="generationMaxTokens"
                     ></app-ui-input>
+                </div>
+
+                <div class="setting-block source-filter-block">
+                    <app-ui-checkbox
+                        [disabled]="generationPanelLoading || generationPanelSaving"
+                        [(ngModel)]="showAllChatSources"
+                    >
+                        Показывать сообщения из всех источников
+                    </app-ui-checkbox>
+                    <div class="setting-hint">
+                        Telegram, main chat, Discord, Twitch и другие источники будут показаны в общей истории с метками.
+                    </div>
                 </div>
 
                 <app-ui-button

@@ -154,6 +154,8 @@ class OpenRouterGenerateProvider(GenerateProvider):
 
     def generate(self, request: GenerateRequest) -> GenerateResult:
         cfg = self._get_provider_config()
+        if (request.metadata or {}).get("model"):
+            cfg["model"] = (request.metadata or {}).get("model")
         client = self._build_client(cfg)
         messages = self._ensure_list(request.messages)
         settings = self._compose_settings(request, cfg)
@@ -216,6 +218,8 @@ class OpenRouterGenerateProvider(GenerateProvider):
         self, request: GenerateRequest
     ) -> AsyncIterator[GenerateStreamChunk]:
         cfg = self._get_provider_config()
+        if (request.metadata or {}).get("model"):
+            cfg["model"] = (request.metadata or {}).get("model")
         client = self._build_client(cfg)
         messages = self._ensure_list(request.messages)
         settings = self._compose_settings(request, cfg)

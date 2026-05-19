@@ -10,6 +10,7 @@ import {
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { MoralDashboardState, MoralStateService } from '../../../core/services/moral-state.service';
+import { LocalizationService } from '../../../shared/pipes/translation/localization.service';
 
 @Component({
     selector: 'app-ai-entity-visualizer',
@@ -51,12 +52,7 @@ export class AiEntityVisualizerComponent implements OnInit, OnDestroy {
     });
 
     readonly entityColor = computed(() => {
-        const s = this.state().emotion_vector || {};
-        if ((s.anger || 0) > 0.4) return '#ff6b6b';
-        if ((s.joy || 0) > 0.4 || (s.happiness || 0) > 0.4) return '#d9c070';
-        if ((s.sadness || 0) > 0.4 || (s.sorrow || 0) > 0.4) return '#8fb8ff';
-        if ((s.irritation || 0) > 0.4) return '#ff9a4d';
-        return '#9a8cff';
+        return this.resolveMoodColor();
     });
 
     readonly entityGlow = computed(() => {
@@ -75,16 +71,20 @@ export class AiEntityVisualizerComponent implements OnInit, OnDestroy {
         return 'M100,70 L125,100 L100,130 L75,100 Z';
     });
 
-    readonly moodLabel = computed(() => this.state().current_emotion || 'neutral');
+    readonly moodLabel = computed(() => this.t(`matrix.emotions.${this.state().current_emotion || 'neutral'}`));
     readonly stabilityPercent = computed(() =>
         Math.round(Math.max(0, Math.min(1, this.state().stability ?? 0.7)) * 100)
     );
 
     private animationId: number | null = null;
 
-    constructor(private moralStateService: MoralStateService) {}
+    constructor(
+        private moralStateService: MoralStateService,
+        private localizationService: LocalizationService
+    ) {}
 
     ngOnInit(): void {
+        this.localizationService.init();
         this.fetchState();
         this.moralStateService.state$
             .pipe(takeUntilDestroyed(this.destroyRef))
@@ -114,5 +114,38 @@ export class AiEntityVisualizerComponent implements OnInit, OnDestroy {
                 this.state.set(response.state);
             }
         });
+    }
+
+    t(key: string): string {
+        return this.localizationService.t(key);
+    }
+
+    private resolveMoodColor(): string {
+        const current = String(this.state().current_emotion || '').toLowerCase();
+        const vector = this.state().emotion_vector || {};
+        const resentment = Number(this.state().resentment || 0);
+
+        const candidates: Array<{ keys: string[]; color: string; threshold: number }> = [
+            { keys: ['anger', 'angry', 'rage'], color: '#ff5b62', threshold: 0.25 },
+            { keys: ['playful', 'flirty', 'seductive', 'teasing', 'excited'], color: '#b56cff', threshold: 0.25 },
+            { keys: ['sadness', 'sad', 'sorrow', 'grief', 'melancholy'], color: '#6aa8ff', threshold: 0.25 },
+            { keys: ['joy', 'happiness', 'happy', 'delight'], color: '#ffd24d', threshold: 0.25 },
+            { keys: ['resentment', 'offended', 'hurt'], color: '#62d184', threshold: 0.2 },
+            { keys: ['irritation', 'annoyed'], color: '#ff9a4d', threshold: 0.25 },
+        ];
+
+        for (const candidate of candidates) {
+            if (candidate.keys.includes(current)) {
+                return candidate.color;
+            }
+            if (candidate.keys.some((key) => Number(vector[key] || 0) >= candidate.threshold)) {
+                return candidate.color;
+            }
+        }
+
+        if (resentment >= 0.25) {
+            return '#62d184';
+        }
+        return '#d7bd66';
     }
 }

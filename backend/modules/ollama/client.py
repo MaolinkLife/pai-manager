@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import time
+import asyncio
 from typing import Any, AsyncIterator, Dict, Iterable, Optional
 
 import aiohttp
@@ -14,6 +15,7 @@ from modules.system.logger import AuditStatus, log_audit_entry, log_error
 from modules.system.localization import get_text
 
 OLLAMA_API_URL = "http://localhost:11434/api"
+OLLAMA_STREAM_READ_TIMEOUT_SEC = 900
 
 
 # ---------------------------------------------------------------------------
@@ -114,18 +116,58 @@ def _messages_to_prompts(messages: Iterable[Dict[str, Any]]) -> tuple[str, str]:
     return system_prompt, prompt
 
 
+def _response_error_message(response: requests.Response) -> str:
+    try:
+        data = response.json()
+    except Exception:
+        data = None
+
+    if isinstance(data, dict):
+        error = data.get("error")
+        if error:
+            return str(error)
+
+    text = (response.text or "").strip()
+    return text or response.reason or f"HTTP {response.status_code}"
+
+
+def _is_model_not_found(response: requests.Response) -> bool:
+    if response.status_code != 404:
+        return False
+    error_text = _response_error_message(response).lower()
+    return "model" in error_text and "not found" in error_text
+
+
+def _raise_ollama_response_error(
+    response: requests.Response,
+    *,
+    endpoint: str,
+    model: str,
+) -> None:
+    error = _response_error_message(response)
+    if _is_model_not_found(response):
+        raise RuntimeError(
+            f"Ollama model '{model}' is not installed. Pull it in Ollama or select another model."
+        )
+    raise RuntimeError(f"Ollama {endpoint} HTTP {response.status_code}: {error}")
+
+
 def _chat_via_generate(
     messages: Iterable[Dict[str, Any]],
     options: Dict[str, Any],
     model: str,
 ) -> Dict[str, Any]:
     system_prompt, prompt = _messages_to_prompts(messages)
+    request_options = dict(options or {})
+    think_override = request_options.pop("__think", None)
     payload: Dict[str, Any] = {
         "model": model,
         "prompt": prompt or "",
         "stream": False,
-        "options": options,
+        "options": request_options,
     }
+    if think_override is not None:
+        payload["think"] = bool(think_override)
     if system_prompt:
         payload["system"] = system_prompt
 
@@ -134,7 +176,8 @@ def _chat_via_generate(
         json=payload,
         timeout=300,
     )
-    response.raise_for_status()
+    if response.status_code >= 400:
+        _raise_ollama_response_error(response, endpoint="/api/generate", model=model)
     data = response.json()
     text = data.get("response", "")
     return {
@@ -172,12 +215,16 @@ def chat_with_tools(
     ollama_model = _resolve_text_model(model)
     message_list = list(messages)
     force_plain_after_tool_round = bool(tools) and _has_tool_round(message_list)
+    request_options = dict(options or {})
+    think_override = request_options.pop("__think", None)
     payload = {
         "model": ollama_model,
         "messages": message_list,
-        "options": options,
+        "options": request_options,
         "stream": False,
     }
+    if think_override is not None:
+        payload["think"] = bool(think_override)
     if tools and not force_plain_after_tool_round:
         payload["tools"] = list(tools)
     if tool_choice is not None and not force_plain_after_tool_round:
@@ -198,7 +245,9 @@ def chat_with_tools(
             retry_backoff_sec=0.8,
         )
         if response.status_code == 404:
-            return _chat_via_generate(messages, options, ollama_model)
+            if _is_model_not_found(response):
+                _raise_ollama_response_error(response, endpoint="/api/chat", model=ollama_model)
+            return _chat_via_generate(message_list, request_options, ollama_model)
         if response.status_code == 400 and not tools:
             # Some Ollama/model combos sporadically reject chat payload format.
             # Gracefully fallback to /generate when no tool-calls are requested.
@@ -222,7 +271,13 @@ def chat_with_tools(
                 retry_backoff_sec=0.0,
             )
             if degraded_response.status_code == 404:
-                return _chat_via_generate(message_list, options, ollama_model)
+                if _is_model_not_found(degraded_response):
+                    _raise_ollama_response_error(
+                        degraded_response,
+                        endpoint="/api/chat",
+                        model=ollama_model,
+                    )
+                return _chat_via_generate(message_list, request_options, ollama_model)
             if degraded_response.status_code == 400:
                 log_audit_entry(
                     event_type="ollama_chat_400_degrade_failed",
@@ -241,7 +296,8 @@ def chat_with_tools(
             else:
                 response = degraded_response
 
-        response.raise_for_status()
+        if response.status_code >= 400:
+            _raise_ollama_response_error(response, endpoint="/api/chat", model=ollama_model)
         data = response.json()
 
         if "error" in data:
@@ -277,12 +333,16 @@ async def stream_chat(
     url = f"{OLLAMA_API_URL}/chat"
     message_list = list(messages)
     force_plain_after_tool_round = bool(tools) and _has_tool_round(message_list)
+    request_options = dict(options or {})
+    think_override = request_options.pop("__think", None)
     payload = {
         "model": ollama_model,
         "messages": message_list,
-        "options": options,
+        "options": request_options,
         "stream": True,
     }
+    if think_override is not None:
+        payload["think"] = bool(think_override)
     if tools and not force_plain_after_tool_round:
         payload["tools"] = list(tools)
     if tool_choice is not None and not force_plain_after_tool_round:
@@ -307,7 +367,8 @@ async def stream_chat(
         },
     )
 
-    async with aiohttp.ClientSession() as session:
+    timeout = aiohttp.ClientTimeout(total=None, connect=30, sock_connect=30, sock_read=OLLAMA_STREAM_READ_TIMEOUT_SEC)
+    async with aiohttp.ClientSession(timeout=timeout) as session:
         async with session.post(url, json=payload) as resp:
             log_audit_entry(
                 event_type="ollama_http_response",
@@ -321,19 +382,33 @@ async def stream_chat(
                     "payload": payload,
                 },
             )
-            async for line in resp.content:
-                if not line.strip():
-                    continue
-                try:
-                    data = line.decode("utf-8").strip()
-                    obj = json.loads(data)
-                    if "error" in obj:
-                        yield {"error": obj["error"]}
+            try:
+                async for line in resp.content:
+                    if not line.strip():
+                        continue
+                    try:
+                        data = line.decode("utf-8").strip()
+                        obj = json.loads(data)
+                        if "error" in obj:
+                            yield {"error": obj["error"]}
+                            return
+                        yield obj
+                    except Exception as exc:
+                        log_error(f"[Ollama stream parse error]: {exc}")
                         return
-                    yield obj
-                except Exception as exc:
-                    log_error(f"[Ollama stream parse error]: {exc}")
-                    return
+            except asyncio.TimeoutError:
+                message = (
+                    "Ollama stream read timeout: no chunks received for "
+                    f"{OLLAMA_STREAM_READ_TIMEOUT_SEC}s"
+                )
+                log_audit_entry(
+                    event_type="ollama_stream_read_timeout",
+                    msg="[Ollama] Stream read timed out.",
+                    status=AuditStatus.ERROR,
+                    details={"model": ollama_model, "timeout_sec": OLLAMA_STREAM_READ_TIMEOUT_SEC},
+                )
+                yield {"error": message}
+                return
 
 
 # ---------------------------------------------------------------------------
@@ -448,10 +523,172 @@ def list_models() -> Dict[str, Any]:
         return {"status": "error", "message": f"Ollama error: {exc}"}
 
 
-def release_model(model: str | None = None) -> None:
+def list_runtime_models() -> Dict[str, Any]:
+    if not is_available():
+        return {
+            "status": "error",
+            "message": "Ollama not installed, not running or not accessible",
+            "models": [],
+        }
+
+    try:
+        installed_response = requests.get(f"{OLLAMA_API_URL}/tags", timeout=10)
+        installed_response.raise_for_status()
+        installed_data = installed_response.json()
+        installed_models = installed_data.get("models", []) or []
+
+        runtime_response = requests.get(f"{OLLAMA_API_URL}/ps", timeout=10)
+        runtime_response.raise_for_status()
+        runtime_data = runtime_response.json()
+        loaded_models = runtime_data.get("models", []) or []
+        loaded_by_name = {
+            str(item.get("name") or item.get("model") or "").strip(): item
+            for item in loaded_models
+            if item.get("name") or item.get("model")
+        }
+
+        models = []
+        for item in installed_models:
+            name = str(item.get("name") or item.get("model") or "").strip()
+            if not name:
+                continue
+            loaded = loaded_by_name.get(name)
+            models.append(
+                {
+                    "name": name,
+                    "model": name,
+                    "loaded": loaded is not None,
+                    "size": item.get("size"),
+                    "digest": item.get("digest"),
+                    "modified_at": item.get("modified_at"),
+                    "details": item.get("details") or {},
+                    "runtime": loaded or None,
+                    "expires_at": (loaded or {}).get("expires_at") if loaded else None,
+                    "size_vram": (loaded or {}).get("size_vram") if loaded else None,
+                    "processor": ((loaded or {}).get("details") or {}).get("parameter_size") if loaded else None,
+                }
+            )
+
+        installed_names = {item["name"] for item in models}
+        for name, loaded in loaded_by_name.items():
+            if name in installed_names:
+                continue
+            models.append(
+                {
+                    "name": name,
+                    "model": name,
+                    "loaded": True,
+                    "size": loaded.get("size"),
+                    "digest": loaded.get("digest"),
+                    "modified_at": None,
+                    "details": loaded.get("details") or {},
+                    "runtime": loaded,
+                    "expires_at": loaded.get("expires_at"),
+                    "size_vram": loaded.get("size_vram"),
+                    "processor": (loaded.get("details") or {}).get("parameter_size"),
+                }
+            )
+
+        return {"status": "ok", "models": models}
+    except Exception as exc:
+        return {"status": "error", "message": f"Ollama runtime error: {exc}", "models": []}
+
+
+def show_model(model: str) -> Dict[str, Any]:
+    model_name = str(model or "").strip()
+    if not model_name:
+        return {"status": "error", "message": "model is required"}
+    if not is_available():
+        return {
+            "status": "error",
+            "message": "Ollama not installed, not running or not accessible",
+        }
+
+    try:
+        response = requests.post(f"{OLLAMA_API_URL}/show", json={"model": model_name}, timeout=10)
+        response.raise_for_status()
+        return {"status": "ok", "model": model_name, "data": response.json()}
+    except Exception as exc:
+        return {"status": "error", "model": model_name, "message": f"Ollama error: {exc}"}
+
+
+def model_supports_vision(model: str) -> Dict[str, Any]:
+    model_name = str(model or "").strip()
+    normalized_name = model_name.lower()
+    if not model_name:
+        return {"supported": False, "source": "empty_model", "reason": "model is required"}
+
+    non_vision_markers = (
+        "gpt-oss",
+        "gptoss",
+    )
+    if any(marker in normalized_name for marker in non_vision_markers):
+        return {"supported": False, "source": "name_denylist", "reason": "known text-only model"}
+
+    metadata = show_model(model_name)
+    if metadata.get("status") == "ok":
+        data = metadata.get("data") or {}
+        capabilities = data.get("capabilities")
+        if isinstance(capabilities, list):
+            normalized_caps = {str(item).strip().lower() for item in capabilities}
+            return {
+                "supported": "vision" in normalized_caps,
+                "source": "ollama_show.capabilities",
+                "capabilities": sorted(normalized_caps),
+            }
+
+        details = data.get("details") or {}
+        families = details.get("families")
+        if not isinstance(families, list):
+            family = details.get("family")
+            families = [family] if family else []
+        normalized_families = {str(item).strip().lower() for item in families if item}
+        if any("vision" in family or "clip" in family or "mmproj" in family for family in normalized_families):
+            return {
+                "supported": True,
+                "source": "ollama_show.details.families",
+                "families": sorted(normalized_families),
+            }
+
+        model_info = data.get("model_info") or {}
+        info_keys = {str(key).lower() for key in model_info.keys()}
+        if any("vision" in key or "clip" in key or "mmproj" in key for key in info_keys):
+            return {
+                "supported": True,
+                "source": "ollama_show.model_info",
+            }
+
+    vision_name_markers = (
+        "llava",
+        "bakllava",
+        "moondream",
+        "minicpm-v",
+        "minicpm_v",
+        "llama3.2-vision",
+        "llama3.2_vision",
+        "qwen2-vl",
+        "qwen2.5-vl",
+        "qwen2_5-vl",
+        "qwen-vl",
+        "gemma3",
+    )
+    if any(marker in normalized_name for marker in vision_name_markers):
+        return {"supported": True, "source": "name_allowlist"}
+
+    if metadata.get("status") == "error":
+        return {
+            "supported": False,
+            "source": "ollama_show_error",
+            "reason": metadata.get("message") or "model metadata unavailable",
+        }
+
+    return {"supported": False, "source": "metadata_default", "reason": "no vision capability found"}
+
+
+def release_model(model: str | None = None) -> Dict[str, Any]:
     target_model = _resolve_text_model(model)
     if not target_model:
-        return
+        return {"status": "error", "message": "model is required"}
     payload = {
         "model": target_model,
         "prompt": "",
@@ -465,6 +702,7 @@ def release_model(model: str | None = None) -> None:
             timeout=30,
         )
         if response.status_code >= 400:
+            message = response.text[:300] or response.reason
             log_audit_entry(
                 event_type="ollama_release_model_failed",
                 msg="[Ollama] Failed to release model memory.",
@@ -473,16 +711,22 @@ def release_model(model: str | None = None) -> None:
                     "model": target_model,
                     "status_code": response.status_code,
                     "reason": response.reason,
-                    "body": response.text[:300],
+                    "body": message,
                 },
             )
-            return
+            return {
+                "status": "error",
+                "model": target_model,
+                "message": message,
+                "status_code": response.status_code,
+            }
         log_audit_entry(
             event_type="ollama_release_model_success",
             msg="[Ollama] Model memory released.",
             status=AuditStatus.INFO,
             details={"model": target_model},
         )
+        return {"status": "ok", "model": target_model}
     except Exception as exc:
         log_audit_entry(
             event_type="ollama_release_model_error",
@@ -490,3 +734,4 @@ def release_model(model: str | None = None) -> None:
             status=AuditStatus.WARNING,
             details={"model": target_model, "error": str(exc)},
         )
+        return {"status": "error", "model": target_model, "message": str(exc)}

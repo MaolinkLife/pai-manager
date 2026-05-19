@@ -102,9 +102,13 @@ async def get_moral_state(
                 "stability": 0.5,
                 "sociability": 0.5,
                 "resentment": 0.0,
-                "current_emotion": "neutral",
+                "current_emotion": "peace",
                 "emotion_intensity": 0.0,
                 "emotion_vector": {},
+                "trigger": "moral state unavailable",
+                "associated_events": [],
+                "influence": {},
+                "affective_state": {},
                 "updated_at": None,
             },
             "latest_snapshot": {},
@@ -143,10 +147,25 @@ async def get_moral_state(
             latest_trace.get("intensity"), _safe_float(daily_summary.get("average_intensity"), 0.0)
         ),
         "emotion_vector": emotion_vector,
+        "trigger": (latest_trace.get("notes") or {}).get("affective_state", {}).get("trigger")
+        if isinstance(latest_trace.get("notes"), dict)
+        else None,
+        "associated_events": (latest_trace.get("notes") or {}).get("affective_state", {}).get("associated_events", [])
+        if isinstance(latest_trace.get("notes"), dict)
+        else [],
+        "influence": (latest_trace.get("notes") or {}).get("affective_state", {}).get("influence", {})
+        if isinstance(latest_trace.get("notes"), dict)
+        else {},
+        "affective_state": (latest_trace.get("notes") or {}).get("affective_state")
+        if isinstance(latest_trace.get("notes"), dict)
+        else (snapshot.get("meta") or {}).get("affective_state")
+        if isinstance(snapshot.get("meta"), dict)
+        else {},
         "updated_at": _normalize_to_tz_iso(
-            snapshot.get("created_at")
+            latest_trace.get("created_at")
+            or snapshot.get("created_at")
             or daily_summary.get("updated_at")
-            or latest_trace.get("created_at"),
+            or daily_summary.get("created_at"),
             user_timezone,
         ),
     }

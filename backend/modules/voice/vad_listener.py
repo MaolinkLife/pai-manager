@@ -569,7 +569,12 @@ class VADListener:
                 formatted_history = await instructor.format_for_api(
                     processing_result["system_prompt"],
                     processing_result["user_message"],
+                    analysis=processing_result.get("analysis"),
+                    decisions=processing_result.get("decisions"),
+                    moral_state=processing_result.get("moral_state"),
                     memory_context=processing_result.get("memory_context"),
+                    visual_context=processing_result.get("visual_context"),
+                    module_tasks=processing_result.get("module_tasks"),
                 )
 
                 async def broadcast_send(payload: dict) -> bool:

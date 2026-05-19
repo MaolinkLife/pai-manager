@@ -75,6 +75,60 @@
                     <div class="coherence-label">{{ "matrix.coherence" | translate }}</div>
                 </div>
             </div>
+
+            <div class="matrix-data-grid">
+                <section class="data-card">
+                    <h4>{{ "matrix.affectiveState" | translate }}</h4>
+                    <div class="data-row" *ngIf="affectiveTrigger">
+                        <span>{{ "matrix.trigger" | translate }}</span>
+                        <strong>{{ affectiveTrigger }}</strong>
+                    </div>
+                    <div class="data-row" *ngFor="let item of influenceEntries">
+                        <span>{{ ('matrix.influence.' + item.key) | translate }}</span>
+                        <strong>{{ item.value }}</strong>
+                    </div>
+                    <div class="data-row" *ngIf="associatedEvents.length">
+                        <span>{{ "matrix.associatedEvents" | translate }}</span>
+                        <strong>{{ associatedEvents.length }}</strong>
+                    </div>
+                </section>
+
+                <section class="data-card">
+                    <h4>{{ "matrix.latestTrace" | translate }}</h4>
+                    <div class="data-row">
+                        <span>{{ "matrix.tracesLoaded" | translate }}</span>
+                        <strong>{{ traceCount }}</strong>
+                    </div>
+                    <div class="data-row" *ngIf="latestTrace">
+                        <span>{{ "matrix.primaryEmotion" | translate }}</span>
+                        <strong>{{ ('matrix.emotions.' + (latestTrace.primary_emotion || 'neutral')) | translate }}</strong>
+                    </div>
+                    <div class="data-row" *ngIf="latestTrace?.intensity !== undefined">
+                        <span>{{ "matrix.intensity" | translate }}</span>
+                        <strong>{{ (latestTrace.intensity * 100) | number:'1.0-0' }}%</strong>
+                    </div>
+                    <div class="data-row" *ngIf="latestTrace?.created_at">
+                        <span>{{ "matrix.updated" | translate }}</span>
+                        <strong>{{ formatUpdatedAt(latestTrace.created_at) }}</strong>
+                    </div>
+                    <div class="data-row data-row--stacked" *ngIf="latestTraceCause">
+                        <span>{{ "matrix.trigger" | translate }}</span>
+                        <strong>{{ latestTraceCause }}</strong>
+                    </div>
+                    <div class="data-row" *ngIf="latestTraceOutcomes.length">
+                        <span>{{ "matrix.outcomes" | translate }}</span>
+                        <strong>{{ latestTraceOutcomes.length }}</strong>
+                    </div>
+                </section>
+
+                <section class="data-card">
+                    <h4>{{ "matrix.latestSnapshot" | translate }}</h4>
+                    <div class="data-row" *ngFor="let metric of stateMetrics">
+                        <span>{{ ('matrix.metrics.' + metric.key) | translate }}</span>
+                        <strong>{{ (getMetricValue(metric.key) * 100) | number:'1.0-0' }}%</strong>
+                    </div>
+                </section>
+            </div>
         </ng-template>
     </div>
 </div>

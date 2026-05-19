@@ -2,6 +2,7 @@ import { AfterViewInit, Component, ElementRef, HostListener, OnInit, ViewChild }
 import { LoggerService } from '../../core/services/logger.service';
 
 const TAG_RE = /\[([^\]]+)\]/g;
+const JSON_LIKE_RE = /^\s*[\[{]/;
 
 @Component({
     selector: 'app-debug',
@@ -199,6 +200,10 @@ export class DebugComponent implements OnInit, AfterViewInit {
         return true;
     }
 
+    formatDetails(details: any): string {
+        return JSON.stringify(this.expandNestedJson(details), null, 2);
+    }
+
     toggleDetails(index: number): void {
         if (this.expandedLogs.has(index)) this.expandedLogs.delete(index);
         else this.expandedLogs.add(index);
@@ -264,5 +269,40 @@ export class DebugComponent implements OnInit, AfterViewInit {
         event.stopPropagation();
         this.activeStatuses = this.activeStatuses.filter((s) => s !== status);
         this.applyFilters();
+    }
+
+    private expandNestedJson(value: any, depth = 0): any {
+        if (depth > 6 || value === null || value === undefined) {
+            return value;
+        }
+        if (typeof value === 'string') {
+            return this.parseJsonString(value, depth);
+        }
+        if (Array.isArray(value)) {
+            return value.map((item) => this.expandNestedJson(item, depth + 1));
+        }
+        if (typeof value === 'object') {
+            const expanded: Record<string, any> = {};
+            Object.entries(value).forEach(([key, item]) => {
+                expanded[key] = this.expandNestedJson(item, depth + 1);
+            });
+            return expanded;
+        }
+        return value;
+    }
+
+    private parseJsonString(value: string, depth: number): any {
+        if (!JSON_LIKE_RE.test(value)) {
+            return value;
+        }
+        try {
+            const parsed = JSON.parse(value);
+            if (parsed && typeof parsed === 'object') {
+                return this.expandNestedJson(parsed, depth + 1);
+            }
+        } catch {
+            return value;
+        }
+        return value;
     }
 }

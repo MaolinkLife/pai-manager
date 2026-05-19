@@ -35,6 +35,77 @@ os.makedirs(STT_MODELS_DIR, exist_ok=True)
 _MODEL: Any = None
 
 
+class AudioInputUnavailableError(RuntimeError):
+    pass
+
+
+class NoAudioCapturedError(RuntimeError):
+    pass
+
+
+class TranscriptionRejectedError(RuntimeError):
+    pass
+
+
+def _resolve_input_device_id() -> int:
+    raw_device_id = config_service.get_config_value("audio.input_device_id", 0)
+    try:
+        device_id = int(raw_device_id)
+    except (TypeError, ValueError) as exc:
+        raise AudioInputUnavailableError(
+            f"Audio input device id is invalid: {raw_device_id!r}"
+        ) from exc
+
+    try:
+        devices = sd.query_devices()
+    except Exception as exc:
+        raise AudioInputUnavailableError(f"Audio input is unavailable: {exc}") from exc
+
+    input_ids = [
+        index
+        for index, device in enumerate(devices)
+        if int(device.get("max_input_channels", 0) or 0) > 0
+    ]
+    if not input_ids:
+        raise AudioInputUnavailableError("Audio input is unavailable: no input devices found.")
+    if device_id not in input_ids:
+        raise AudioInputUnavailableError(
+            f"Audio input device {device_id} is unavailable."
+        )
+    return device_id
+
+
+def _is_audio_too_quiet(audio: np.ndarray) -> bool:
+    if audio.size == 0:
+        return True
+    min_length = float(config_service.get_config_value("audio.min_audio_length", 0.5) or 0.5)
+    duration = audio.shape[0] / float(SAMPLE_RATE)
+    if duration < min_length:
+        return True
+
+    normalized = audio.astype(np.float32)
+    peak = float(np.max(np.abs(normalized)))
+    rms = float(np.sqrt(np.mean(np.square(normalized))))
+    peak_threshold = float(
+        config_service.get_config_value("audio.min_recording_peak", 150) or 150
+    )
+    rms_threshold = float(
+        config_service.get_config_value("audio.min_recording_rms", 35) or 35
+    )
+    return peak < peak_threshold and rms < rms_threshold
+
+
+def _is_rejected_transcript(text: str) -> bool:
+    normalized = " ".join((text or "").split()).strip().lower()
+    if not normalized:
+        return True
+    rejected_phrases = {
+        "редактор субтитров а.синецкая корректор а.егорова",
+        "редактор субтитров а синецкая корректор а егорова",
+    }
+    return normalized in rejected_phrases
+
+
 def _get_model() -> Any:
     global _MODEL
     if _MODEL is not None:
@@ -62,13 +133,17 @@ def _get_model() -> Any:
 
 
 def record_audio(filename: str, duration: int = 5):
+    device_id = _resolve_input_device_id()
     audio = sd.rec(
         int(duration * SAMPLE_RATE),
         samplerate=SAMPLE_RATE,
         channels=CHANNELS,
         dtype="int16",
+        device=device_id,
     )
     sd.wait()
+    if _is_audio_too_quiet(audio):
+        raise NoAudioCapturedError("No audio input detected.")
     _save_wave(filename, audio)
 
 
@@ -83,7 +158,9 @@ def transcribe_audio(filename: str) -> str:
         lang_code = stt_lang.split("-")[0]
         segments, _ = model.transcribe(filename, language=lang_code)
 
-    result = " ".join(segment.text for segment in segments)
+    result = " ".join(segment.text for segment in segments).strip()
+    if _is_rejected_transcript(result):
+        raise TranscriptionRejectedError("No valid speech detected.")
     return result
 
 
@@ -103,18 +180,30 @@ def start_recording_background(filename: str):
         return
 
     os.makedirs(os.path.dirname(filename), exist_ok=True)
+    device_id = _resolve_input_device_id()
 
     _buffer = []
-    _is_recording = True
 
     def callback(indata, frames, time, status):
         if _is_recording:
             _buffer.append(indata.copy())
 
-    _stream = sd.InputStream(
-        samplerate=SAMPLE_RATE, channels=CHANNELS, dtype="int16", callback=callback
-    )
-    _stream.start()
+    try:
+        _stream = sd.InputStream(
+            device=device_id,
+            samplerate=SAMPLE_RATE,
+            channels=CHANNELS,
+            dtype="int16",
+            callback=callback,
+        )
+        _stream.start()
+    except Exception as exc:
+        _stream = None
+        _buffer = []
+        _is_recording = False
+        raise AudioInputUnavailableError(f"Audio input is unavailable: {exc}") from exc
+
+    _is_recording = True
 
 
 def stop_recording_and_save(filename: str):
@@ -131,11 +220,14 @@ def stop_recording_and_save(filename: str):
         _stream = None
 
     if not _buffer:
-        raise RuntimeError("The buffer is empty. Nothing written.")
+        raise NoAudioCapturedError("No audio input detected.")
 
     audio = np.concatenate(_buffer, axis=0)
-    _save_wave(filename, audio)
     _buffer.clear()
+    if _is_audio_too_quiet(audio):
+        raise NoAudioCapturedError("No speech detected.")
+
+    _save_wave(filename, audio)
 
 
 def _save_wave(filename: str, audio: np.ndarray):

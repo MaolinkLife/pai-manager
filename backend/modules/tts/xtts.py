@@ -7,6 +7,7 @@ from typing import Any
 import requests
 
 from constants.paths import TTS_MODELS_DIR
+from modules.system.logger import AuditStatus, log_audit_entry
 
 XTTS_REPO_ID = "coqui/XTTS-v2"
 OFFICIAL_XTTS_MODELS: list[dict[str, Any]] = [
@@ -215,6 +216,12 @@ def _download_xtts_model_worker(model_name: str, revision: str) -> None:
         downloaded_bytes=0,
         total_bytes=total_bytes,
     )
+    log_audit_entry(
+        "xtts_model_download_started",
+        f"[XTTS] Model download started: {model_name}",
+        AuditStatus.INFO,
+        details={"model": model_name, "revision": revision, "total_bytes": total_bytes},
+    )
 
     try:
         for url, destination in file_urls:
@@ -236,6 +243,18 @@ def _download_xtts_model_worker(model_name: str, revision: str) -> None:
                 total_files=total_files,
                 message=f"Downloaded {destination.name}",
             )
+            log_audit_entry(
+                "xtts_model_download_file_completed",
+                f"[XTTS] Downloaded {destination.name}",
+                AuditStatus.INFO,
+                details={
+                    "model": model_name,
+                    "file": destination.name,
+                    "completed_files": completed_files,
+                    "total_files": total_files,
+                    "progress": _get_download_state(model_name).get("progress"),
+                },
+            )
 
         try:
             from TTS.utils.manage import ModelManager
@@ -252,6 +271,12 @@ def _download_xtts_model_worker(model_name: str, revision: str) -> None:
             downloaded_bytes=downloaded_bytes,
             total_bytes=total_bytes,
         )
+        log_audit_entry(
+            "xtts_model_download_completed",
+            f"[XTTS] Model download completed: {model_name}",
+            AuditStatus.SUCCESS,
+            details={"model": model_name, "downloaded_bytes": downloaded_bytes, "total_bytes": total_bytes},
+        )
     except Exception as exc:
         _set_download_state(
             model_name,
@@ -260,6 +285,12 @@ def _download_xtts_model_worker(model_name: str, revision: str) -> None:
             message=str(exc),
             downloaded_bytes=downloaded_bytes,
             total_bytes=total_bytes,
+        )
+        log_audit_entry(
+            "xtts_model_download_failed",
+            f"[XTTS] Model download failed: {model_name}",
+            AuditStatus.ERROR,
+            details={"model": model_name, "error": str(exc), "downloaded_bytes": downloaded_bytes, "total_bytes": total_bytes},
         )
 
 

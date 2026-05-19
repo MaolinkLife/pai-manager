@@ -164,8 +164,6 @@ def _normalize_to_xtts_wav(source_path: Path, destination_path: Path, *, source_
                 "-i",
                 str(source_path),
                 "-vn",
-                "-af",
-                "pan=mono|c0=0.5*c0+0.5*c1",
                 "-ar",
                 str(XTTS_TARGET_SAMPLE_RATE),
                 "-ac",

@@ -1,5 +1,5 @@
-<div class="entity-wrap">
-    <div class="panel-title">Neural State</div>
+<div class="entity-wrap" [style.--entity-color]="entityColor()">
+    <div class="panel-title">{{ "entityVisualizer.title" | translate }}</div>
     <div class="ambient" [style.background]="entityGlow()"></div>
 
     <div class="ring ring-one"></div>
@@ -48,11 +48,11 @@
 
     <div class="hud-line">
         <div class="hud-item">
-            <p class="hud-label">Cognitive State</p>
+            <p class="hud-label">{{ "entityVisualizer.cognitiveState" | translate }}</p>
             <p class="hud-value">{{ moodLabel() }}</p>
         </div>
         <div class="hud-item align-right">
-            <p class="hud-label">Stability</p>
+            <p class="hud-label">{{ "entityVisualizer.stability" | translate }}</p>
             <p class="hud-value stable">{{ stabilityPercent() }}%</p>
         </div>
     </div>

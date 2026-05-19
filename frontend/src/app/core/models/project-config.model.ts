@@ -1,6 +1,7 @@
 export interface ProjectConfig {
     voice: VoiceConfig;
     modules: ModuleConfig;
+    decisionLayer: DecisionLayerConfig;
     connector: ConnectorConfig;
     telegram?: any;
     communication?: any;
@@ -14,6 +15,33 @@ export interface ProjectConfig {
     memory: MemoryConfig;
     generateSettings: GenerationConfig;
     system: SystemConfig;
+}
+
+export interface DecisionLayerConfig {
+    mode: 'system' | 'llm';
+    activeProvider: string;
+    maxSteps: number;
+    releaseAfterUse?: boolean;
+    capabilities: {
+        tool: boolean;
+        vision: boolean;
+        thinking: boolean;
+    };
+    providers: {
+        ollama: {
+            model: string;
+            temperature: number;
+            maxTokens: number;
+            thinking?: boolean;
+        };
+        [key: string]: any;
+    };
+    instructor?: {
+        buildSchema: string;
+        includeDatetime: boolean;
+        includeGeolocation: boolean;
+        excludeDisabledModules: boolean;
+    };
 }
 
 export interface TunnelingConfig {
@@ -109,8 +137,11 @@ export interface AnalyzerProviderConfig {
 }
 
 export interface AnalyzerConfig {
+    enabled?: boolean;
     activeProvider: string;
     fallbackOrder: string[];
+    releaseAfterUse?: boolean;
+    systemPrompt?: string;
     providers: {
         [key: string]: AnalyzerProviderConfig;
     };
@@ -121,6 +152,7 @@ export interface MoralProviderConfig {
     temperature?: number;
     maxTokens?: number;
     apiKey?: string;
+    thinking?: boolean;
 }
 
 export interface MoralProvidersConfig {
@@ -133,6 +165,8 @@ export interface MoralConfig {
     enabled: boolean;
     activeProvider: string;
     fallbackOrder: string[];
+    releaseAfterUse?: boolean;
+    systemPrompt?: string;
     providers: MoralProvidersConfig;
 }
 
@@ -164,6 +198,13 @@ export interface SynthesisComfyUIConfig {
     timeout_sec: number;
     default_workflow: string;
     default_model: string;
+    sampler?: string;
+    scheduler?: string;
+    steps?: number;
+    cfg?: number;
+    width?: number;
+    height?: number;
+    aspect_ratio?: string;
 }
 
 export interface SynthesisDiffusersConfig {
@@ -179,6 +220,7 @@ export interface SynthesisPromptingConfig {
     enabled: boolean;
     max_attempts: number;
     assess_enabled: boolean;
+    retry_enabled?: boolean;
     quality_threshold: number;
     appearance_prompt: string;
     default_negative_prompt: string;
@@ -205,9 +247,32 @@ export interface SynthesisPromptingConfig {
         allow_environment_images?: boolean;
         allow_symbolic_images?: boolean;
     };
+    per_character_visual_profiles?: Record<string, SynthesisPromptingConfig['visual_profile']>;
+    scenarios?: Record<string, {
+        title?: string;
+        enabled?: boolean;
+        image_provider?: string;
+        image_model?: string;
+        width?: number | null;
+        height?: number | null;
+        steps?: number | null;
+        num_inference_steps?: number | null;
+        cfg?: number | null;
+        guidance_scale?: number | null;
+        sampler?: string;
+        scheduler?: string;
+        use_prompt_builder?: boolean;
+        review_generated_image?: boolean;
+        use_visual_intent?: boolean;
+        prompt_policy?: string;
+        style_prompt?: string;
+        negative_prompt?: string;
+        system_prompt?: string;
+    }>;
 }
 
 export interface SynthesisConfig {
+    active_provider?: string;
     sd_webui: SynthesisSdWebUIConfig;
     comfyui: SynthesisComfyUIConfig;
     diffusers: SynthesisDiffusersConfig;
@@ -325,6 +390,7 @@ export interface ApiConfig {
     streaming: boolean;
     model: string;
     visualModel: string;
+    visualModelOptions?: string[];
     tokenLimit: number;
     messagePairLimit: number;
     activeProvider: string;
@@ -340,6 +406,7 @@ export interface GenerationConfig {
     repeatPenalty: number;
     stop: string[] | null;
     numPredict: number;
+    normalizeMessages: boolean;
     name?: string;
     description?: string;
 }
@@ -351,4 +418,5 @@ export interface GeneratorProviderConfig {
     streaming?: boolean;
     apiKey?: string;
     baseUrl?: string;
+    [key: string]: any;
 }

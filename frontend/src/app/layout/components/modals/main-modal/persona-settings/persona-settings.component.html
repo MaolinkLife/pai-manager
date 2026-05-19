@@ -1,0 +1,272 @@
+<div class="settings-wrapper">
+    <ng-container *ngIf="isLoading$ | async; else formContent">
+        <div class="settings-form">
+            <h2><app-skeleton height="2rem" width="180px"></app-skeleton></h2>
+            <div class="section">
+                <h3><app-skeleton height="1.5rem" width="160px"></app-skeleton></h3>
+                <app-skeleton height="2.5rem" width="100%"></app-skeleton>
+                <app-skeleton height="9rem" width="100%"></app-skeleton>
+            </div>
+            <div class="section">
+                <h3><app-skeleton height="1.5rem" width="160px"></app-skeleton></h3>
+                <app-skeleton height="12rem" width="100%"></app-skeleton>
+            </div>
+        </div>
+    </ng-container>
+
+    <ng-template #formContent>
+        <form [formGroup]="personaForm" (ngSubmit)="saveChanges()" class="settings-form">
+            <h2>{{ 'personaSettings.title' | translate }}</h2>
+
+            <div class="section">
+                <h3>{{ 'personaSettings.identityTitle' | translate }}</h3>
+
+                <div class="form-group">
+                    <label for="persona-active-character">{{ 'settings.charName' | translate }}</label>
+                    <app-ui-select
+                        id="persona-active-character"
+                        formControlName="active_character_id"
+                        [options]="characterOptions"
+                        [placeholder]="'settings.charName' | translate"
+                        (change)="onCharacterChange($event)"
+                    ></app-ui-select>
+                    <div class="character-actions">
+                        <input
+                            id="persona-character-import-file"
+                            type="file"
+                            accept=".yaml,.yml"
+                            (change)="onCharacterFileSelected($event)"
+                        />
+                        <button
+                            type="button"
+                            [disabled]="isCharacterImportBusy || !selectedCharacterFile"
+                            (click)="importCharacterYaml()"
+                        >
+                            {{ isCharacterImportBusy ? ('general.loading' | translate) : ('personaSettings.importYaml' | translate) }}
+                        </button>
+                        <button type="button" [disabled]="isCharacterCreateBusy" (click)="openCreateCharacterModal()">
+                            {{ 'personaSettings.create' | translate }}
+                        </button>
+                        <button
+                            type="button"
+                            class="danger-button"
+                            [disabled]="isCharacterDeleteBusy || !personaForm.get('active_character_id')?.value"
+                            (click)="deleteSelectedCharacter()"
+                        >
+                            {{ 'personaSettings.delete' | translate }}
+                        </button>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="persona-system-prompt">{{ 'settings.systemPrompt' | translate }}</label>
+                    <app-ui-textarea
+                        id="persona-system-prompt"
+                        [rows]="5"
+                        [autoResize]="false"
+                        height="320px"
+                        formControlName="system_prompt"
+                        [placeholder]="'settings.defineCharacterBehavior' | translate"
+                    ></app-ui-textarea>
+                </div>
+            </div>
+
+            <div class="section" formGroupName="visual_profile">
+                <h3>{{ 'personaSettings.visualTitle' | translate }}</h3>
+
+                <div class="grid">
+                    <div class="form-group">
+                        <label for="persona-character-name">{{ 'mediaSettings.characterName' | translate }}</label>
+                        <app-ui-input id="persona-character-name" type="text" formControlName="character_name"></app-ui-input>
+                    </div>
+                    <div class="form-group">
+                        <label for="persona-style-preset">{{ 'mediaSettings.stylePreset' | translate }}</label>
+                        <app-ui-select
+                            id="persona-style-preset"
+                            formControlName="style_preset"
+                            [options]="stylePresetOptions"
+                        ></app-ui-select>
+                    </div>
+                    <div class="form-group">
+                        <label for="persona-render-profile">{{ 'mediaSettings.renderProfile' | translate }}</label>
+                        <app-ui-select
+                            id="persona-render-profile"
+                            formControlName="render_profile"
+                            [options]="renderProfileOptions"
+                        ></app-ui-select>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="persona-appearance-root">{{ 'mediaSettings.appearanceRoot' | translate }}</label>
+                    <app-ui-textarea
+                        id="persona-appearance-root"
+                        [rows]="6"
+                        [autoResize]="true"
+                        formControlName="appearance_textarea"
+                        [placeholder]="'mediaSettings.appearanceRootPlaceholder' | translate"
+                    ></app-ui-textarea>
+                </div>
+
+                <div class="grid textarea-grid">
+                    <div class="form-group">
+                        <label for="persona-default-outfit">{{ 'mediaSettings.defaultOutfit' | translate }}</label>
+                        <app-ui-textarea
+                            id="persona-default-outfit"
+                            [rows]="4"
+                            [autoResize]="true"
+                            formControlName="default_outfit"
+                        ></app-ui-textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="persona-default-environment">{{ 'mediaSettings.defaultEnvironment' | translate }}</label>
+                        <app-ui-textarea
+                            id="persona-default-environment"
+                            [rows]="4"
+                            [autoResize]="true"
+                            formControlName="default_environment"
+                        ></app-ui-textarea>
+                    </div>
+                </div>
+
+                <div class="grid">
+                    <div class="form-group">
+                        <label for="persona-selfie-bias">{{ 'mediaSettings.selfieBias' | translate }}</label>
+                        <app-ui-input id="persona-selfie-bias" type="number" formControlName="selfie_bias"></app-ui-input>
+                    </div>
+                    <div class="form-group">
+                        <label for="persona-environment-bias">{{ 'mediaSettings.environmentBias' | translate }}</label>
+                        <app-ui-input id="persona-environment-bias" type="number" formControlName="environment_bias"></app-ui-input>
+                    </div>
+                    <div class="form-group">
+                        <label for="persona-symbolic-bias">{{ 'mediaSettings.symbolicBias' | translate }}</label>
+                        <app-ui-input id="persona-symbolic-bias" type="number" formControlName="symbolic_bias"></app-ui-input>
+                    </div>
+                    <div class="form-group">
+                        <label for="persona-anti-repeat">{{ 'mediaSettings.antiRepetitionStrength' | translate }}</label>
+                        <app-ui-input id="persona-anti-repeat" type="number" formControlName="anti_repetition_strength"></app-ui-input>
+                    </div>
+                </div>
+
+                <div class="form-group checkbox-group">
+                    <app-ui-checkbox formControlName="allow_self_images">
+                        {{ 'mediaSettings.allowSelfImages' | translate }}
+                    </app-ui-checkbox>
+                    <app-ui-checkbox formControlName="allow_environment_images">
+                        {{ 'mediaSettings.allowEnvironmentImages' | translate }}
+                    </app-ui-checkbox>
+                    <app-ui-checkbox formControlName="allow_symbolic_images">
+                        {{ 'mediaSettings.allowSymbolicImages' | translate }}
+                    </app-ui-checkbox>
+                    <app-ui-checkbox formControlName="use_time_of_day">
+                        {{ 'mediaSettings.useTimeOfDay' | translate }}
+                    </app-ui-checkbox>
+                    <app-ui-checkbox formControlName="use_season">
+                        {{ 'mediaSettings.useSeason' | translate }}
+                    </app-ui-checkbox>
+                    <app-ui-checkbox formControlName="use_weather">
+                        {{ 'mediaSettings.useWeather' | translate }}
+                    </app-ui-checkbox>
+                    <app-ui-checkbox formControlName="use_relation_state">
+                        {{ 'mediaSettings.useRelationState' | translate }}
+                    </app-ui-checkbox>
+                    <app-ui-checkbox formControlName="use_recent_topics">
+                        {{ 'mediaSettings.useRecentTopics' | translate }}
+                    </app-ui-checkbox>
+                </div>
+
+                <div class="form-group">
+                    <label for="persona-selfie-base">{{ 'mediaSettings.selfieCompositionBase' | translate }}</label>
+                    <app-ui-textarea
+                        id="persona-selfie-base"
+                        [rows]="4"
+                        [autoResize]="true"
+                        formControlName="selfie_composition_base"
+                    ></app-ui-textarea>
+                </div>
+
+                <div class="grid textarea-grid">
+                    <div class="form-group">
+                        <label for="persona-selfie-pool">{{ 'mediaSettings.selfieCompositionPool' | translate }}</label>
+                        <app-ui-textarea
+                            id="persona-selfie-pool"
+                            [rows]="6"
+                            [autoResize]="true"
+                            formControlName="selfie_composition_pool_override"
+                        ></app-ui-textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="persona-env-pool">{{ 'mediaSettings.environmentCompositionPool' | translate }}</label>
+                        <app-ui-textarea
+                            id="persona-env-pool"
+                            [rows]="6"
+                            [autoResize]="true"
+                            formControlName="environment_composition_pool_override"
+                        ></app-ui-textarea>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section">
+                <h3>{{ 'personaSettings.telegramBindingsTitle' | translate }}</h3>
+                <p class="hint">{{ 'personaSettings.telegramBindingsHint' | translate }}</p>
+
+                <div class="chat-bindings" formArrayName="chat_bindings">
+                    <div
+                        class="chat-binding-row"
+                        *ngFor="let binding of chatBindingControls.controls; let i = index"
+                        [formGroupName]="i"
+                    >
+                        <div class="chat-meta">
+                            <strong>{{ binding.get('title')?.value }}</strong>
+                            <span>
+                                {{ binding.get('chat_kind')?.value }} · {{ binding.get('chat_id')?.value }}
+                            </span>
+                        </div>
+                        <app-ui-select
+                            formControlName="character_id"
+                            [options]="characterBindingOptions"
+                        ></app-ui-select>
+                    </div>
+                </div>
+
+                <p class="hint" *ngIf="isChatsLoading">{{ 'general.loading' | translate }}</p>
+                <p class="hint" *ngIf="!isChatsLoading && chatBindingControls.length === 0">
+                    {{ 'personaSettings.telegramBindingsEmpty' | translate }}
+                </p>
+            </div>
+
+            <div class="button-row">
+                <button type="submit" [disabled]="!hasChanges()">{{ 'personaSettings.save' | translate }}</button>
+            </div>
+        </form>
+    </ng-template>
+
+    <div class="character-create-backdrop" *ngIf="showCreateCharacterModal" (click)="closeCreateCharacterModal()">
+        <div class="character-create-modal" (click)="$event.stopPropagation()">
+            <h3>{{ 'personaSettings.createTitle' | translate }}</h3>
+            <div class="form-group">
+                <label for="new-persona-name">{{ 'personaSettings.name' | translate }}</label>
+                <app-ui-input
+                    id="new-persona-name"
+                    type="text"
+                    [(ngModel)]="newCharacterName"
+                    [ngModelOptions]="{ standalone: true }"
+                    [placeholder]="'personaSettings.namePlaceholder' | translate"
+                ></app-ui-input>
+            </div>
+            <div class="button-row">
+                <button type="button" (click)="closeCreateCharacterModal()">
+                    {{ 'general.cancel' | translate }}
+                </button>
+                <button
+                    type="button"
+                    [disabled]="isCharacterCreateBusy || !newCharacterName.trim()"
+                    (click)="createCharacter()"
+                >
+                    {{ isCharacterCreateBusy ? ('general.loading' | translate) : ('personaSettings.create' | translate) }}
+                </button>
+            </div>
+        </div>
+    </div>
+</div>

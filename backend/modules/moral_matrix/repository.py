@@ -7,6 +7,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date
 from pprint import pformat
+import re
 from typing import Any, Dict, Iterable, List, Optional, Sequence
 
 from sqlalchemy.orm import Session
@@ -72,6 +73,50 @@ class MoralMatrixRepository:
                 .all()
             )
             return [self._serialize_trace(row) for row in rows]
+
+    def fetch_similar_traces(
+        self,
+        character_id: str,
+        query_text: str,
+        *,
+        limit: int = 5,
+        scan_limit: int = 160,
+    ) -> List[Dict[str, Any]]:
+        terms = self._tokenize(query_text)
+        if not character_id or not terms:
+            return []
+        with self._session() as session:
+            rows = (
+                session.query(EmotionalTrace)
+                .filter(EmotionalTrace.character_id == character_id)
+                .order_by(EmotionalTrace.created_at.desc())
+                .limit(scan_limit)
+                .all()
+            )
+            scored: list[tuple[float, Dict[str, Any]]] = []
+            for row in rows:
+                item = self._serialize_trace(row)
+                haystack = " ".join(
+                    str(part or "")
+                    for part in [
+                        item.get("cause"),
+                        item.get("primary_emotion"),
+                        item.get("secondary_emotion"),
+                        item.get("user_tone"),
+                        item.get("notes"),
+                    ]
+                )
+                hay_terms = self._tokenize(haystack)
+                if not hay_terms:
+                    continue
+                overlap = terms.intersection(hay_terms)
+                if not overlap:
+                    continue
+                score = len(overlap) / max(len(terms), 1)
+                item["similarity_score"] = round(score, 4)
+                scored.append((score, item))
+            scored.sort(key=lambda pair: pair[0], reverse=True)
+            return [item for _, item in scored[:limit]]
 
     def fetch_latest_snapshot(self, character_id: str) -> Optional[Dict[str, Any]]:
         with self._session() as session:
@@ -166,7 +211,11 @@ class MoralMatrixRepository:
                 ),
                 user_tone=payload.get("user_tone"),
                 cause=payload.get("cause"),
-                notes=payload.get("notes"),
+                notes=(
+                    json.dumps(payload.get("notes"), ensure_ascii=False)
+                    if isinstance(payload.get("notes"), (dict, list))
+                    else payload.get("notes")
+                ),
             )
             session.add(trace)
             session.commit()
@@ -185,6 +234,47 @@ class MoralMatrixRepository:
             )
             print(
                 f"[MoralMatrix] Trace saved id: {trace.id} ",
+            )
+            return trace.id
+
+    def annotate_previous_trace_outcome(
+        self,
+        character_id: str,
+        *,
+        current_message_id: Optional[str],
+        payload: Dict[str, Any],
+    ) -> Optional[str]:
+        if not character_id:
+            return None
+        with self._session() as session:
+            query = session.query(EmotionalTrace).filter(
+                EmotionalTrace.character_id == character_id
+            )
+            if current_message_id:
+                query = query.filter(EmotionalTrace.message_id != current_message_id)
+            trace = query.order_by(EmotionalTrace.created_at.desc()).first()
+            if not trace:
+                return None
+            notes = self._parse_json_or_text(trace.notes)
+            if not isinstance(notes, dict):
+                notes = {"raw": notes} if notes else {}
+            outcomes = notes.get("outcomes")
+            if not isinstance(outcomes, list):
+                outcomes = []
+            outcomes.append(payload)
+            notes["outcomes"] = outcomes[-6:]
+            trace.notes = json.dumps(notes, ensure_ascii=False)
+            session.commit()
+            log_audit_entry(
+                "moral_matrix_trace_outcome_saved",
+                "[MoralMatrix] Previous emotional trace outcome updated.",
+                AuditStatus.SUCCESS,
+                details={
+                    "trace_id": trace.id,
+                    "character_id": character_id,
+                    "current_message_id": current_message_id,
+                    "outcome": payload,
+                },
             )
             return trace.id
 
@@ -208,7 +298,7 @@ class MoralMatrixRepository:
             "emotion_vector": vector,
             "user_tone": row.user_tone,
             "cause": row.cause,
-            "notes": row.notes,
+            "notes": MoralMatrixRepository._parse_json_or_text(row.notes),
             "created_at": (
                 row.created_at.isoformat()
                 if hasattr(row.created_at, "isoformat")
@@ -245,6 +335,25 @@ class MoralMatrixRepository:
                 if hasattr(row.created_at, "isoformat")
                 else None
             ),
+        }
+
+    @staticmethod
+    def _parse_json_or_text(value: Any) -> Any:
+        if not isinstance(value, str) or not value.strip():
+            return value
+
+        try:
+            return json.loads(value)
+        except json.JSONDecodeError:
+            return value
+
+    @staticmethod
+    def _tokenize(value: str) -> set[str]:
+        text = str(value or "").lower()
+        return {
+            token
+            for token in re.findall(r"[\wа-яё]{3,}", text, flags=re.IGNORECASE)
+            if token
         }
 
     @staticmethod

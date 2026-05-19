@@ -185,6 +185,15 @@ def search_entries(
         if not query.strip():
             return get_entries()
 
+        if not _has_searchable_entries(session):
+            log_audit_entry(
+                "lorebook_empty_skip",
+                "[Lorebook] Search skipped: no active lorebook entries",
+                AuditStatus.INFO,
+                details={"query": query},
+            )
+            return []
+
         try:
             embedding_768 = embeddings.get_embedding_ollama(query)
             if embedding_768:
@@ -256,6 +265,20 @@ def search_entries(
         return _keyword_fallback(session, query, top_k) if use_keyword_fallback else []
     finally:
         session.close()
+
+
+def _has_searchable_entries(session: Session) -> bool:
+    return (
+        session.query(LorebookEntry.id)
+        .filter(LorebookEntry.active == True)  # noqa: E712
+        .filter(
+            (LorebookEntry.title.isnot(None) & (LorebookEntry.title != ""))
+            | (LorebookEntry.content.isnot(None) & (LorebookEntry.content != ""))
+            | (LorebookEntry.keywords.isnot(None) & (LorebookEntry.keywords != ""))
+        )
+        .first()
+        is not None
+    )
 
 
 def _process_search_results(

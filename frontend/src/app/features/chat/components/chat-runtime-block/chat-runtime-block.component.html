@@ -1,0 +1,38 @@
+<div class="runtime-block" *ngIf="runtime">
+    <div class="runtime-live" *ngIf="isLive">
+        <span class="wave-loader" aria-hidden="true">
+            <span></span><span></span><span></span>
+        </span>
+        <span class="runtime-live-text">{{ activeLabel }}</span>
+        <button
+            type="button"
+            class="runtime-skip"
+            *ngIf="canSkipThinking"
+            (click)="skipThinking.emit()"
+            title="Пропустить размышление"
+        >
+            Skip
+        </button>
+    </div>
+
+    <button
+        type="button"
+        class="runtime-toggle"
+        (click)="toggleDetails.emit()"
+    >
+        <span class="runtime-summary">{{ summary }}</span>
+        <app-custom-svg *ngIf="runtime.status === 'completed'" name="check-circle" [size]="14"></app-custom-svg>
+        <span class="runtime-caret" [class.open]="runtime.detailsOpen">▾</span>
+    </button>
+
+    <div class="runtime-details" [class.open]="runtime.detailsOpen">
+        <div class="runtime-trace" *ngFor="let trace of stages">
+            <span class="trace-stage">{{ trace.label }}</span>
+            <span class="trace-state" [ngClass]="trace.state">
+                {{ trace.state === 'done' ? 'готово' : (trace.state === 'active' ? 'выполняется' : 'ожидание') }}
+            </span>
+            <span class="trace-elapsed" *ngIf="trace.metaText">{{ trace.metaText }}</span>
+            <span class="trace-elapsed" *ngIf="trace.elapsedMs !== undefined">{{ trace.elapsedMs }}ms</span>
+        </div>
+    </div>
+</div>

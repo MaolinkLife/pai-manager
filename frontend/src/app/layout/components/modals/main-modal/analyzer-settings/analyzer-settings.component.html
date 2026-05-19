@@ -9,12 +9,7 @@
                 </h3>
 
                 <div class="form-group">
-                    <label
-                        ><app-skeleton
-                            height="1rem"
-                            width="120px"
-                        ></app-skeleton
-                    ></label>
+                    <label><app-skeleton height="1rem" width="120px"></app-skeleton></label>
                     <app-skeleton height="2.5rem" width="100%"></app-skeleton>
                 </div>
 
@@ -30,42 +25,22 @@
                 </h3>
 
                 <div class="form-group">
-                    <label
-                        ><app-skeleton
-                            height="1rem"
-                            width="120px"
-                        ></app-skeleton
-                    ></label>
+                    <label><app-skeleton height="1rem" width="120px"></app-skeleton></label>
                     <app-skeleton height="2.5rem" width="100%"></app-skeleton>
                 </div>
 
                 <div class="form-group">
-                    <label
-                        ><app-skeleton
-                            height="1rem"
-                            width="120px"
-                        ></app-skeleton
-                    ></label>
+                    <label><app-skeleton height="1rem" width="120px"></app-skeleton></label>
                     <app-skeleton height="2.5rem" width="100%"></app-skeleton>
                 </div>
 
                 <div class="form-group">
-                    <label
-                        ><app-skeleton
-                            height="1rem"
-                            width="120px"
-                        ></app-skeleton
-                    ></label>
+                    <label><app-skeleton height="1rem" width="120px"></app-skeleton></label>
                     <app-skeleton height="2.5rem" width="100%"></app-skeleton>
                 </div>
 
                 <div class="form-group">
-                    <label
-                        ><app-skeleton
-                            height="1rem"
-                            width="120px"
-                        ></app-skeleton
-                    ></label>
+                    <label><app-skeleton height="1rem" width="120px"></app-skeleton></label>
                     <app-skeleton height="2.5rem" width="100%"></app-skeleton>
                 </div>
             </div>
@@ -79,134 +54,101 @@
 
 <ng-template #content>
     <div class="settings-wrapper">
-        <form
-            [formGroup]="analyzerForm"
-            (ngSubmit)="saveChanges()"
-            class="settings-form"
-        >
+        <form [formGroup]="analyzerForm" (ngSubmit)="saveChanges()" class="settings-form">
             <h2>🧠 Analyzer Settings</h2>
 
             <!-- Основные настройки -->
             <div class="section">
                 <h3>General</h3>
 
+                <div class="form-group checkbox-group">
+                    <app-ui-checkbox formControlName="enabled">
+                        Enable Analyzer
+                    </app-ui-checkbox>
+                </div>
+
+                <div class="form-group checkbox-group">
+                    <app-ui-checkbox formControlName="releaseAfterUse">
+                        {{ "settings.releaseAfterUse" | translate }}
+                    </app-ui-checkbox>
+                </div>
+
                 <div class="form-group">
                     <label for="activeProvider">Active Provider</label>
-                    <app-ui-select
-                        id="activeProvider"
-                        formControlName="activeProvider"
-                        [options]="activeProviderOptions"
-                    ></app-ui-select>
+                    <app-ui-select id="activeProvider" formControlName="activeProvider" [options]="activeProviderOptions"></app-ui-select>
                 </div>
 
                 <div class="form-group checkbox-group">
                     <label class="checkbox">
-                        <input
-                            type="checkbox"
-                            formControlName="fallbackOpenrouter"
-                        />
+                        <input type="checkbox" formControlName="fallbackOpenrouter" />
                         Use OpenRouter as fallback
                     </label>
                 </div>
 
                 <div class="form-group checkbox-group">
                     <label class="checkbox">
-                        <input
-                            type="checkbox"
-                            formControlName="fallbackOllama"
-                        />
+                        <input type="checkbox" formControlName="fallbackOllama" />
                         Use Ollama as fallback
                     </label>
+                </div>
+
+                <div class="form-group">
+                    <label for="analyzerSystemPrompt">System Prompt</label>
+                    <app-ui-textarea
+                        id="analyzerSystemPrompt"
+                        formControlName="systemPrompt"
+                        [rows]="12"
+                        height="300px"
+                        [autoResize]="false"
+                    ></app-ui-textarea>
                 </div>
             </div>
 
             <!-- OpenRouter Provider -->
-            <div
-                class="section"
-                *ngIf="activeProvider === 'openrouter'"
-                [formGroup]="providersForm"
-            >
+            <div class="section" *ngIf="activeProvider === 'openrouter'" [formGroup]="providersForm">
                 <h3>OpenRouter Provider</h3>
 
                 <div formGroupName="openrouter">
                     <div class="form-group">
                         <label for="apiKey">API Key</label>
-                        <app-ui-input
-                            id="apiKey"
-                            type="password"
-                            formControlName="apiKey"
-                        ></app-ui-input>
+                        <app-ui-input id="apiKey" type="password" formControlName="apiKey"></app-ui-input>
                     </div>
 
                     <div class="form-group">
                         <label for="model">Model</label>
-                        <app-ui-input id="model" type="text" formControlName="model" ></app-ui-input>
+                        <app-ui-input id="model" type="text" formControlName="model"></app-ui-input>
                     </div>
 
                     <div class="form-group">
                         <label for="temperature">Temperature</label>
-                        <app-ui-input
-                            id="temperature"
-                            type="number"
-                            step="0.1"
-                            min="0"
-                            max="2"
-                            formControlName="temperature"
-                        ></app-ui-input>
+                        <app-ui-input id="temperature" type="number" step="0.1" min="0" max="2" formControlName="temperature"></app-ui-input>
                     </div>
 
                     <div class="form-group">
                         <label for="maxTokens">Max Tokens</label>
-                        <app-ui-input
-                            id="maxTokens"
-                            type="number"
-                            min="1"
-                            max="4096"
-                            formControlName="maxTokens"
-                        ></app-ui-input>
+                        <app-ui-input id="maxTokens" type="number" min="1" max="4096" formControlName="maxTokens"></app-ui-input>
                     </div>
                 </div>
             </div>
 
             <!-- Ollama Provider -->
-            <div
-                class="section"
-                *ngIf="activeProvider === 'ollama'"
-                [formGroup]="providersForm"
-            >
+            <div class="section" *ngIf="activeProvider === 'ollama'" [formGroup]="providersForm">
                 <h3>Ollama Provider</h3>
 
                 <div formGroupName="ollama">
                     <div class="form-group">
                         <label for="ollamaModel">Model</label>
-                        <app-ui-select
-                            id="ollamaModel"
-                            [options]="ollamaModelOptions"
-                            formControlName="model"
-                        ></app-ui-select>
+                        <app-ui-select id="ollamaModel" [options]="ollamaModelOptions" formControlName="model"></app-ui-select>
                     </div>
 
                     <div class="form-group">
                         <label for="ollamaTemperature">Temperature</label>
-                        <app-ui-input
-                            id="ollamaTemperature"
-                            type="number"
-                            step="0.1"
-                            min="0"
-                            max="2"
-                            formControlName="temperature"
-                        ></app-ui-input>
+                        <app-ui-input id="ollamaTemperature" type="number" step="0.1" min="0" max="2" formControlName="temperature"></app-ui-input>
                     </div>
 
                     <div class="form-group">
                         <label for="ollamaMaxTokens">Max Tokens</label>
-                        <app-ui-input
-                            id="ollamaMaxTokens"
-                            type="number"
-                            min="1"
-                            max="4096"
-                            formControlName="maxTokens"
-                        ></app-ui-input>
+                        <app-ui-input id="ollamaMaxTokens" type="number" min="1" max="4096" formControlName="maxTokens"></app-ui-input>
                     </div>
                 </div>
             </div>
@@ -219,5 +161,3 @@
         </form>
     </div>
 </ng-template>
-
-

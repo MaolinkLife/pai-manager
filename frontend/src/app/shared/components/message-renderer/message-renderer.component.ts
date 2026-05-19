@@ -1,4 +1,4 @@
-import { Component, Input, OnChanges, OnDestroy, SimpleChanges, signal } from '@angular/core';
+import { Component, ElementRef, Input, OnChanges, OnDestroy, SimpleChanges, signal } from '@angular/core';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { MessageBlock, MessageParserService } from './services/message-parser.service';
 
@@ -126,16 +126,19 @@ export class MessageRendererComponent implements OnChanges, OnDestroy {
     @Input() content: string = '';
     @Input() isStreaming: boolean = false;
     @Input() thinkingDurationMs?: number;
+    @Input() collapseThinking = false;
 
     readonly blocks = signal<SafeMessageBlock[]>([]);
 
     private previousBlocks: MessageBlock[] = [];
     private expandedState = new Map<string, boolean>();
+    private pendingThinkingScrollState = new Map<number, { scrollTop: number; wasNearBottom: boolean }>();
     private wasStreaming = false;
 
     constructor(
         private parser: MessageParserService,
-        private sanitizer: DomSanitizer
+        private sanitizer: DomSanitizer,
+        private hostRef: ElementRef<HTMLElement>
     ) { }
 
     ngOnChanges(changes: SimpleChanges): void {
@@ -147,6 +150,9 @@ export class MessageRendererComponent implements OnChanges, OnDestroy {
         }
 
         if (changes['content'] || changes['isStreaming']) {
+            if (!this.isStreaming) {
+                this.captureThinkingScrollState();
+            }
             this.parseContent();
         }
     }
@@ -156,12 +162,13 @@ export class MessageRendererComponent implements OnChanges, OnDestroy {
             this.blocks.set([]);
             this.previousBlocks = [];
             this.expandedState.clear();
+            this.pendingThinkingScrollState.clear();
             return;
         }
 
         let parsedBlocks: MessageBlock[];
         if (this.isStreaming) {
-            parsedBlocks = this.parser.parseStreaming(this.content);
+            parsedBlocks = this.parseStreamingLightweight(this.content);
         } else {
             parsedBlocks = this.parser.parseComplete(this.content);
         }
@@ -174,7 +181,7 @@ export class MessageRendererComponent implements OnChanges, OnDestroy {
 
             if (block.type === 'thinking') {
                 if (this.isStreaming) {
-                    isExpanded = true;
+                    isExpanded = !this.collapseThinking;
                 } else {
                     isExpanded = this.expandedState.get(key) ?? false;
                     this.expandedState.set(key, isExpanded);
@@ -183,30 +190,46 @@ export class MessageRendererComponent implements OnChanges, OnDestroy {
 
             switch (block.type) {
                 case 'text':
-                    html = this.renderRichText(block.content);
+                    html = this.isStreaming
+                        ? this.renderStreamingPlainText(block.content)
+                        : this.renderRichText(block.content);
                     break;
                 case 'thinking':
-                    html = this.renderRichText(block.content);
+                    html = this.isStreaming
+                        ? this.renderStreamingPlainText(block.content)
+                        : this.renderRichText(block.content);
                     break;
                 case 'header':
-                    html = this.renderHeader(block.content);
+                    html = this.isStreaming
+                        ? this.renderStreamingPlainText(block.content)
+                        : this.renderHeader(block.content);
                     break;
                 case 'list':
-                    html = this.renderList(block.items || [], block.ordered, block.isComplete);
+                    html = this.isStreaming
+                        ? this.renderStreamingPlainText((block.items || []).join('\n'))
+                        : this.renderList(block.items || [], block.ordered, block.isComplete);
                     rawContent = (block.items || []).join('\n');
                     break;
                 case 'table':
-                    html = this.renderTable(block.rows || []);
+                    html = this.isStreaming
+                        ? this.renderStreamingPlainText((block.rows || []).map((row) => row.join(' | ')).join('\n'))
+                        : this.renderTable(block.rows || []);
                     rawContent = JSON.stringify(block.rows || []);
                     break;
                 case 'quote':
-                    html = this.renderQuote(block.content);
+                    html = this.isStreaming
+                        ? this.renderStreamingPlainText(block.content)
+                        : this.renderQuote(block.content);
                     break;
                 case 'code':
-                    html = this.highlightCode(block.content, block.language);
+                    html = this.isStreaming
+                        ? this.escapeHtml(block.content)
+                        : this.highlightCode(block.content, block.language);
                     break;
                 default:
-                    html = this.renderRichText(block.content);
+                    html = this.isStreaming
+                        ? this.renderStreamingPlainText(block.content)
+                        : this.renderRichText(block.content);
                     break;
             }
 
@@ -220,6 +243,56 @@ export class MessageRendererComponent implements OnChanges, OnDestroy {
 
         this.blocks.set(safeBlocks);
         this.previousBlocks = [...parsedBlocks];
+        this.scheduleThinkingScrollToBottom();
+    }
+
+    private parseStreamingLightweight(content: string): MessageBlock[] {
+        const raw = String(content || '');
+        if (!raw.trim()) {
+            return [];
+        }
+
+        const lower = raw.toLowerCase();
+        const thinkOpen = lower.indexOf('<think>');
+        if (thinkOpen === -1) {
+            return [this.createStreamingBlock('text', raw, false, 'stream-text')];
+        }
+
+        const thinkClose = lower.indexOf('</think>', thinkOpen + '<think>'.length);
+        if (thinkClose === -1) {
+            const reasoningText = raw
+                .slice(thinkOpen + '<think>'.length)
+                .replace(/<[^>]*$/g, '')
+                .trim();
+            return [
+                this.createStreamingBlock(
+                    'thinking',
+                    reasoningText || 'Думаю...',
+                    false,
+                    'stream-thinking'
+                )
+            ];
+        }
+
+        const reasoning = raw.slice(thinkOpen + '<think>'.length, thinkClose).trim();
+        const answer = raw.slice(thinkClose + '</think>'.length);
+        const blocks: MessageBlock[] = [];
+        if (reasoning) {
+            blocks.push(this.createStreamingBlock('thinking', reasoning, true, 'stream-thinking'));
+        }
+        if (answer.trim()) {
+            blocks.push(this.createStreamingBlock('text', answer, false, 'stream-answer'));
+        }
+        return blocks;
+    }
+
+    private createStreamingBlock(
+        type: MessageBlock['type'],
+        content: string,
+        isComplete: boolean,
+        id: string
+    ): MessageBlock {
+        return { id, type, content, isComplete };
     }
 
     ngOnDestroy(): void {
@@ -242,6 +315,9 @@ export class MessageRendererComponent implements OnChanges, OnDestroy {
     }
 
     getThinkingLabel(): string {
+        if (this.isStreaming) {
+            return 'Размышляю';
+        }
         const ms = this.thinkingDurationMs;
         if (typeof ms !== 'number' || Number.isNaN(ms) || ms <= 0) {
             return 'Рассуждение';
@@ -264,6 +340,54 @@ export class MessageRendererComponent implements OnChanges, OnDestroy {
         return `${block.type}:${block.rawContent}`;
     }
 
+    private captureThinkingScrollState(): void {
+        const bodies = this.hostRef.nativeElement.querySelectorAll<HTMLElement>('.thinking-body');
+        this.pendingThinkingScrollState.clear();
+        bodies.forEach((body, index) => {
+            const blockIndexRaw = body.dataset['thinkingIndex'];
+            const blockIndex = blockIndexRaw !== undefined ? Number(blockIndexRaw) : index;
+            const distanceToBottom = body.scrollHeight - body.clientHeight - body.scrollTop;
+            this.pendingThinkingScrollState.set(blockIndex, {
+                scrollTop: body.scrollTop,
+                wasNearBottom: distanceToBottom <= 12,
+            });
+        });
+    }
+
+    private restoreThinkingScrollState(): void {
+        if (!this.pendingThinkingScrollState.size && !this.isStreaming) {
+            return;
+        }
+
+        const restore = () => {
+            const bodies = this.hostRef.nativeElement.querySelectorAll<HTMLElement>('.thinking-body');
+            bodies.forEach((body, index) => {
+                const blockIndexRaw = body.dataset['thinkingIndex'];
+                const blockIndex = blockIndexRaw !== undefined ? Number(blockIndexRaw) : index;
+                const state = this.pendingThinkingScrollState.get(blockIndex);
+                if (this.isStreaming) {
+                    body.scrollTop = body.scrollHeight;
+                    return;
+                }
+                if (!state) {
+                    return;
+                }
+
+                body.scrollTop = state.wasNearBottom
+                    ? body.scrollHeight
+                    : Math.min(state.scrollTop, body.scrollHeight);
+            });
+        };
+
+        requestAnimationFrame(() => {
+            restore();
+            setTimeout(() => {
+                restore();
+                this.pendingThinkingScrollState.clear();
+            }, 0);
+        });
+    }
+
     private renderRichText(content: string): string {
         if (!content) {
             return '';
@@ -277,6 +401,13 @@ export class MessageRendererComponent implements OnChanges, OnDestroy {
                 return `<p>${lines.join('<br>')}</p>`;
             });
         return paragraphs.join('');
+    }
+
+    private renderStreamingPlainText(content: string): string {
+        if (!content) {
+            return '';
+        }
+        return this.escapeHtml(content).replace(/\r?\n/g, '<br>');
     }
 
     private renderHeader(content: string): string {
@@ -598,11 +729,16 @@ export class MessageRendererComponent implements OnChanges, OnDestroy {
             .replace(/"/g, '&quot;')
             .replace(/'/g, '&#39;');
     }
+
+    private scheduleThinkingScrollToBottom(): void {
+        if (!this.isStreaming) {
+            return;
+        }
+        requestAnimationFrame(() => {
+            const bodies = this.hostRef.nativeElement.querySelectorAll<HTMLElement>('.thinking-body.expanded');
+            bodies.forEach((body) => {
+                body.scrollTop = body.scrollHeight;
+            });
+        });
+    }
 }
-
-
-
-
-
-
-

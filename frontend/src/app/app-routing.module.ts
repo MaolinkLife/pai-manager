@@ -19,6 +19,8 @@ const routes: Routes = [
             { path: '', redirectTo: 'chat', pathMatch: 'full' },
             { path: 'chat', loadChildren: () => import('./features/chat/chat.module').then(m => m.ChatModule) },
             { path: 'memory', loadChildren: () => import('./features/memory/memory.module').then(m => m.MemoryModule) },
+            { path: 'library', loadChildren: () => import('./features/library/library.module').then(m => m.LibraryModule) },
+            { path: 'sandbox', loadChildren: () => import('./features/sandbox/sandbox.module').then(m => m.SandboxModule) },
             { path: 'matrix', loadChildren: () => import('./features/matrix/matrix.module').then(m => m.MatrixModule) },
             { path: 'synthesis', loadChildren: () => import('./features/synthesis/synthesis.module').then(m => m.SynthesisModule) },
             { path: 'diary', loadChildren: () => import('./features/diary/diary.module').then(m => m.DiaryModule) },

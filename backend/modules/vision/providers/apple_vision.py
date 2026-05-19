@@ -63,13 +63,38 @@ class AppleVisionProvider:
             self.tokenizer = AutoTokenizer.from_pretrained(
                 self.model_id, trust_remote_code=True
             )
-            self.model = AutoModelForCausalLM.from_pretrained(
-                self.model_id,
-                torch_dtype=self._torch_dtype,
-                device_map=None,
-                trust_remote_code=True,
-                low_cpu_mem_usage=True,
-            ).to(self.device)
+            try:
+                self.model = AutoModelForCausalLM.from_pretrained(
+                    self.model_id,
+                    torch_dtype=self._torch_dtype,
+                    device_map=None,
+                    trust_remote_code=True,
+                    low_cpu_mem_usage=True,
+                ).to(self.device)
+            except AttributeError as attr_exc:
+                # Some custom remote-code models (e.g. ConvFFN blocks) fail with
+                # low_cpu_mem_usage init path on newer transformers.
+                if "_initialize_weights" not in str(attr_exc):
+                    raise
+                retry_message = get_text(
+                    "logger.visual_provider_retry_without_low_cpu_mem_usage",
+                    default="[AppleVisionProvider] Retrying model load without low_cpu_mem_usage due custom weights init error.",
+                )
+                print(retry_message)
+                log_audit_entry(
+                    "visual_provider_retry_without_low_cpu_mem_usage",
+                    retry_message,
+                    AuditStatus.WARNING,
+                    details={"error": str(attr_exc)},
+                    message_key="logger.visual_provider_retry_without_low_cpu_mem_usage",
+                )
+                self.model = AutoModelForCausalLM.from_pretrained(
+                    self.model_id,
+                    torch_dtype=self._torch_dtype,
+                    device_map=None,
+                    trust_remote_code=True,
+                    low_cpu_mem_usage=False,
+                ).to(self.device)
             self._load_error = ""
 
             loaded_message = get_text(

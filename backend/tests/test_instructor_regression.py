@@ -8,7 +8,7 @@ from core.instructor import Instructor
 pytestmark = pytest.mark.regression
 
 
-def test_format_for_api_injects_dynamic_tool_context_and_keeps_tool_history(monkeypatch):
+def test_format_for_api_injects_dynamic_context_and_filters_operational_history(monkeypatch):
     instructor = Instructor()
 
     monkeypatch.setattr(
@@ -90,7 +90,15 @@ def test_format_for_api_injects_dynamic_tool_context_and_keeps_tool_history(monk
             "emotional_tone": {"primary": "neutral"},
         }
     }
-    moral_state = {"current_emotion": "excited", "intensity": 0.7}
+    moral_state = {
+        "current_emotion": "excited",
+        "emotion_intensity": 0.7,
+        "relationship_status": "close",
+        "metrics": {"trust": 0.9, "stability": 0.8},
+        "recommendations": ["Be warm and playful."],
+        "hard_directives": ["Do not sound generic."],
+        "narrative": "I want to answer warmly and vividly.",
+    }
     tool_hints = {"instructions": "[TOOLS]\nUse tools carefully."}
 
     messages = asyncio.run(
@@ -106,29 +114,88 @@ def test_format_for_api_injects_dynamic_tool_context_and_keeps_tool_history(monk
 
     assert messages[0]["role"] == "system"
     names = [m.get("name") for m in messages if m.get("role") == "tool"]
-    assert "context.analysis" in names
+    assert "context.analysis" not in names
     assert "memory.lookup" in names
     assert "knowledge.lorebook" in names
     assert "state.emotion" in names
     assert "system.clock" in names
     assert "context.relationship" in names
-    assert "orchestration.hints" in names
+    # Tool hints are orchestration data for Decision Layer/UI flows.
+    # The final generator prompt must receive only contextual tool messages.
+    assert "orchestration.hints" not in names
     assert "telegram.runtime" in names
     assert "repeat.guard" in names
     assert "memory.hint" in names
-    assert "image.generate" in names
+    assert "image.generate" not in names
     memory_messages = [
         m for m in messages if m.get("role") == "tool" and m.get("name") == "memory.lookup"
     ]
     assert memory_messages
     assert "[STAGES]" in str(memory_messages[0].get("content") or "")
+    emotion_messages = [
+        m for m in messages if m.get("role") == "tool" and m.get("name") == "state.emotion"
+    ]
+    assert emotion_messages
+    emotion_content = str(emotion_messages[0].get("content") or "")
+    assert "I want to answer warmly" in emotion_content
+    assert "Do not sound generic" in emotion_content
 
     # Ensure system entries from history are stripped.
     assert all(
         not (m.get("role") == "system" and m.get("content") == "legacy system note")
         for m in messages[1:]
     )
+    # Historical tool outputs are operational traces, not dialogue context.
+    assert all(
+        not (m.get("role") == "tool" and m.get("name") == "image.generate")
+        for m in messages
+    )
 
     # User message remains the final message.
     assert messages[-1]["role"] == "user"
     assert messages[-1]["id"] == "u1"
+
+
+def test_format_for_api_skips_empty_lorebook_tool(monkeypatch):
+    instructor = Instructor()
+    monkeypatch.setattr(
+        instructor,
+        "_build_environment_tool_content",
+        lambda: "Date: 01 January 2026\nTime: 12:00:00",
+    )
+
+    messages = asyncio.run(
+        instructor.format_for_api(
+            system_prompt="base",
+            user_message={"id": "u1", "content": "hello", "history": []},
+            memory_context={
+                "memory_status": "ready",
+                "key_facts": ["Visible fact."],
+                "lore_matches": [],
+            },
+            moral_state={},
+        )
+    )
+
+    names = [m.get("name") for m in messages if m.get("role") == "tool"]
+    assert "knowledge.lorebook" not in names
+
+
+def test_build_system_prompt_does_not_emit_section_markers(monkeypatch):
+    instructor = Instructor()
+    monkeypatch.setattr("core.instructor.load_system_prompt", lambda: "Base persona")
+    monkeypatch.setattr("core.instructor.SYSTEM_RULES", ["Rule one", "Rule two"])
+
+    prompt = asyncio.run(
+        instructor.build_system_prompt(
+            analysis={},
+            decisions={},
+            memory_context={},
+            moral_state={},
+        )
+    )
+
+    assert "[CORE]" not in prompt
+    assert "[RULES]" not in prompt
+    assert "Base persona" in prompt
+    assert "Rule one" in prompt

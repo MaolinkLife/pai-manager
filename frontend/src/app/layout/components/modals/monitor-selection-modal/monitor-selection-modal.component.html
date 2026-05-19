@@ -1,70 +1,55 @@
-<div class="monitor-modal">
-    <div class="modal-header">
-        <h2>🖥️ Select Monitor</h2>
-        <button class="close-btn" (click)="close()">×</button>
+<section class="monitor-picker">
+    <div class="monitor-picker__status" *ngIf="statusText || error">
+        <span class="monitor-picker__status-dot" [class.monitor-picker__status-dot--error]="error"></span>
+        <span>{{ error || statusText }}</span>
     </div>
 
-    <div class="debug-info">{{ debugInfo }}</div>
+    <ng-container *ngIf="monitors$ | async as monitors; else loadingState">
+        <div class="monitor-picker__empty" *ngIf="!monitors.length && !error">
+            No monitors found
+        </div>
 
-    <div class="error" *ngIf="error">Error loading monitors: {{ error }}</div>
-
-    <ng-container *ngIf="monitors$ | async as monitors">
-        <div class="monitors-grid">
-            <div
-                *ngFor="
-                    let monitor of monitors;
-                    let i = index;
-                    trackBy: trackByIndex
-                "
-                class="monitor-item"
-                [class.selected]="i === selectedMonitor"
+        <div class="monitor-grid" *ngIf="monitors.length">
+            <button
+                type="button"
+                *ngFor="let monitor of monitors; let i = index; trackBy: trackByIndex"
+                class="monitor-card"
+                [class.monitor-card--selected]="i === selectedMonitor"
                 (click)="selectMonitor(i)"
             >
-                <div class="monitor-preview">
-                    <div *ngIf="monitor.preview; else noPreview">
-                        <img
-                            [src]="'data:image/jpeg;base64,' + monitor.preview"
-                            [alt]="'Monitor ' + i"
-                            class="preview-image"
-                            (error)="onImageError(i, $event)"
-                            (load)="onImageLoad(i)"
-                        />
-                    </div>
+                <div class="monitor-card__preview">
+                    <img
+                        *ngIf="monitor.preview; else noPreview"
+                        [src]="'data:image/jpeg;base64,' + monitor.preview"
+                        [alt]="'Monitor ' + i + ' preview'"
+                        class="monitor-card__image"
+                        (error)="onImageError(i, $event)"
+                    />
                     <ng-template #noPreview>
-                        <div class="no-preview">No Preview Available</div>
+                        <span class="monitor-card__no-preview">No preview</span>
                     </ng-template>
                 </div>
-                <div class="monitor-info">
-                    <span class="monitor-index">Monitor {{ i }}</span>
-                    <span class="monitor-dimensions"
-                        >{{ monitor.width }}×{{ monitor.height }}</span
-                    >
-                    <span class="monitor-position"
-                        >({{ monitor.left }}, {{ monitor.top }})</span
-                    >
-                    <!-- Добавим индикатор выбранного монитора -->
-                    <span
-                        class="selected-indicator"
-                        *ngIf="i === selectedMonitor"
-                        >✓ Selected</span
-                    >
-                </div>
-            </div>
-        </div>
 
-        <div class="modal-footer" *ngIf="monitors.length > 0">
-            <button class="cancel-btn" (click)="close()">Cancel</button>
-            <button
-                class="select-btn"
-                (click)="selectMonitor(selectedMonitor)"
-                [disabled]="selectedMonitor === undefined"
-            >
-                Confirm Selection
+                <div class="monitor-card__body">
+                    <div class="monitor-card__title-row">
+                        <span class="monitor-card__title">Monitor {{ monitor.index }}</span>
+                        <span class="monitor-card__badge" *ngIf="i === selectedMonitor">Selected</span>
+                    </div>
+                    <div class="monitor-card__meta">
+                        <span>{{ monitor.width }} x {{ monitor.height }}</span>
+                        <span>{{ monitor.left }}, {{ monitor.top }}</span>
+                    </div>
+                </div>
             </button>
         </div>
+
+        <footer class="monitor-picker__footer" *ngIf="monitors.length">
+            <app-ui-button variant="secondary" (pressed)="close()">Cancel</app-ui-button>
+            <app-ui-button (pressed)="confirmSelection()">Confirm Selection</app-ui-button>
+        </footer>
     </ng-container>
 
-    <div class="loading" *ngIf="(monitors$ | async) === null">
-        Loading monitor previews...
-    </div>
-</div>
+    <ng-template #loadingState>
+        <div class="monitor-picker__loading">Loading monitor previews...</div>
+    </ng-template>
+</section>

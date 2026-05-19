@@ -43,6 +43,10 @@ class History(Base):
     timestamp = Column(DateTime, default=datetime.now(timezone.utc))
     tags = Column(Text, default='[]')
     runtime_meta = Column(Text, default='{}')
+    parent_message_id = Column(String, nullable=True, index=True)
+    variant_group_id = Column(String, nullable=True, index=True)
+    variant_index = Column(Integer, default=1)
+    active_variant = Column(Boolean, default=True)
 
     character = relationship("Character", back_populates="history")
     reasoning = relationship(
@@ -56,6 +60,100 @@ class History(Base):
         back_populates="message",
         cascade="all, delete-orphan",
     )
+
+
+class TelegramChat(Base):
+    __tablename__ = "telegram_chats"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    telegram_chat_id = Column(Integer, nullable=False, unique=True, index=True)
+    chat_kind = Column(String, nullable=False, default="unknown")
+    title = Column(String, nullable=True)
+    username = Column(String, nullable=True)
+    is_owner_chat = Column(Boolean, default=False)
+    last_synced_message_id = Column(Integer, nullable=True)
+    last_synced_at = Column(DateTime, nullable=True)
+    meta = Column(Text, default="{}")
+    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+    updated_at = Column(
+        DateTime,
+        default=datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+
+class TelegramUser(Base):
+    __tablename__ = "telegram_users"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    telegram_user_id = Column(Integer, nullable=False, unique=True, index=True)
+    telegram_user_uuid = Column(String, nullable=False, unique=True, index=True)
+    username = Column(String, nullable=True)
+    display_name = Column(String, nullable=True)
+    is_owner = Column(Boolean, default=False)
+    trust_level = Column(Integer, default=0)
+    last_seen_at = Column(DateTime, nullable=True)
+    meta = Column(Text, default="{}")
+    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+    updated_at = Column(
+        DateTime,
+        default=datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+
+class TelegramMessage(Base):
+    __tablename__ = "telegram_messages"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    history_id = Column(String, ForeignKey("history.id", ondelete="SET NULL"), nullable=True, index=True)
+    character_id = Column(String, ForeignKey("characters.id"), nullable=False, index=True)
+    chat_id = Column(String, ForeignKey("telegram_chats.id", ondelete="CASCADE"), nullable=False, index=True)
+    sender_user_id = Column(String, ForeignKey("telegram_users.id", ondelete="SET NULL"), nullable=True, index=True)
+    telegram_chat_id = Column(Integer, nullable=False, index=True)
+    telegram_message_id = Column(Integer, nullable=False, index=True)
+    role = Column(String, nullable=False, default="user")
+    event = Column(String, nullable=False, default="incoming_message")
+    text = Column(Text, nullable=False, default="")
+    message_date = Column(DateTime, nullable=True)
+    edit_date = Column(DateTime, nullable=True)
+    deleted_at = Column(DateTime, nullable=True)
+    sync_state = Column(String, nullable=False, default="active")
+    meta = Column(Text, default="{}")
+    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+    updated_at = Column(
+        DateTime,
+        default=datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    character = relationship("Character")
+    message = relationship("History")
+    chat = relationship("TelegramChat")
+    sender = relationship("TelegramUser")
+
+
+class TelegramSyncJob(Base):
+    __tablename__ = "telegram_sync_jobs"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    job_type = Column(String, nullable=False, index=True)
+    status = Column(String, nullable=False, default="pending", index=True)
+    character_id = Column(String, ForeignKey("characters.id", ondelete="SET NULL"), nullable=True, index=True)
+    telegram_chat_id = Column(Integer, nullable=True, index=True)
+    cursor_message_id = Column(Integer, nullable=True)
+    payload = Column(Text, default="{}")
+    error = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+    started_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+    updated_at = Column(
+        DateTime,
+        default=datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    character = relationship("Character")
 
 
 # =======================

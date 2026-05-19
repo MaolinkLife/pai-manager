@@ -507,6 +507,24 @@ class Provider:
     AUTO: str = "auto"
 
 
+def _normalize_provider_name(provider: Optional[str]) -> str:
+    value = str(provider or Provider.AUTO).strip().lower()
+    aliases = {
+        "sentence-transformers": Provider.ST,
+        "sentence_transformers": Provider.ST,
+        "sentence_transformer": Provider.ST,
+        "transformers": Provider.ST,
+        "local": Provider.ST,
+        "hf": Provider.ST,
+        "huggingface": Provider.ST,
+        "hugging-face": Provider.ST,
+        "ollama_embeddings": Provider.OLLAMA,
+        "ollama-embeddings": Provider.OLLAMA,
+        "default": Provider.AUTO,
+    }
+    return aliases.get(value, value)
+
+
 def _as_text_list(text_or_texts: Union[str, Sequence[str]]) -> List[str]:
     if isinstance(text_or_texts, str):
         return [text_or_texts]
@@ -521,7 +539,7 @@ def get_embedding(
     settings: Optional[Dict[str, Any]] = None,
     profile: Optional[str] = None,
 ) -> Optional[List[float]]:
-    p = (provider or Provider.AUTO).lower()
+    p = _normalize_provider_name(provider)
     cfg = _prepare_settings(settings, profile)
 
     if p == Provider.OLLAMA:
@@ -547,7 +565,7 @@ def get_embeddings(
     settings: Optional[Dict[str, Any]] = None,
     profile: Optional[str] = None,
 ) -> List[Optional[List[float]]]:
-    p = (provider or Provider.AUTO).lower()
+    p = _normalize_provider_name(provider)
     items = _as_text_list(texts)
     cfg = _prepare_settings(settings, profile)
 

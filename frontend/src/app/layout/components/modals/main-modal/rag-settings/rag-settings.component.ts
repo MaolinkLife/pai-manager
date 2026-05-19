@@ -13,6 +13,7 @@ import { UiSelectOption } from '../../../../../shared/ui/components/ui-select/ui
 export class RagSettingsComponent implements OnInit {
     ragForm: UntypedFormGroup;
     originalConfig: any = {};
+    originalModules: any = {};
     private readonly defaultVectorProfiles: Record<string, RagVectorProfile> = {
         embed768: {
             label: '768d • nomic-embed-text',
@@ -141,6 +142,7 @@ export class RagSettingsComponent implements OnInit {
 
     private loadConfig(): void {
         this.configService.getConfig$().subscribe(config => {
+            this.originalModules = this.normalizeModulesPayload(config?.modules);
             if (config && config.rag) {
                 this.patchFormWithRagConfig(config.rag as RagConfig);
             }
@@ -467,14 +469,22 @@ export class RagSettingsComponent implements OnInit {
 
     saveChanges(): void {
         const changes = this.getChanges();
+        const modules = this.buildModulesPayload();
+        const updateData: any = {};
         if (Object.keys(changes).length > 0) {
-            const updateData = { rag: this.expandPathMap(changes) };
+            updateData.rag = this.expandPathMap(changes);
+        }
+        if (JSON.stringify(modules) !== JSON.stringify(this.originalModules)) {
+            updateData.modules = modules;
+        }
+        if (Object.keys(updateData).length > 0) {
             this.configService.updateConfig$(updateData).subscribe({
                 next: (response) => {
                     console.log('RAG settings updated:', response);
                     this.originalConfig = JSON.parse(
                         JSON.stringify(this.buildRagConfigFromForm())
                     );
+                    this.originalModules = modules;
                 },
                 error: (error) => {
                     console.error('Error updating RAG settings:', error);
@@ -506,7 +516,33 @@ export class RagSettingsComponent implements OnInit {
     }
 
     hasChanges(): boolean {
-        return Object.keys(this.getChanges()).length > 0;
+        const modules = this.buildModulesPayload();
+        return (
+            Object.keys(this.getChanges()).length > 0 ||
+            JSON.stringify(modules) !== JSON.stringify(this.originalModules)
+        );
+    }
+
+    private normalizeModulesPayload(modules: any): any {
+        const source = modules || {};
+        return {
+            vtubeStudio: !!(source.vtubeStudio ?? source.vtube_studio),
+            whisper: !!source.whisper,
+            minecraft: !!source.minecraft,
+            gaming: !!source.gaming,
+            alarm: !!source.alarm,
+            discord: !!source.discord,
+            telegram: !!source.telegram,
+            rag: !!source.rag,
+            visual: !!source.visual,
+        };
+    }
+
+    private buildModulesPayload(): any {
+        return {
+            ...this.originalModules,
+            rag: !!this.ragForm.get('enabled')?.value,
+        };
     }
 
     private expandPathMap(changes: Record<string, any>): Record<string, any> {

@@ -1,8 +1,8 @@
-# 💫 Z-Waif / AI Companion System
+# 💫 PAI / AI Companion System
 
 ### RU Adaptation — independently evolved fork
 
-**System Version:** 0.6  
+**System Version:** 0.6 
 **Status:** Beta  
 **License:** Maolink Noncommercial License 1.0.0  
 **Original source project:** Z-Waif by SugarcaneDefender

@@ -10,6 +10,10 @@ from constants.rules import SYSTEM_RULES
 from constants.messages import DEFAULT_CONTEXT, NO_MEMORY, NO_KNOWLEDGE
 
 
+def _normalize_message_text(value: Any) -> str:
+    return " ".join(str(value or "").split()).strip()
+
+
 class Instructor:
     """Assembles the final structured system prompt."""
 
@@ -61,8 +65,9 @@ class Instructor:
             sections: List[str] = []
             section_map: Dict[str, Dict[str, Any]] = {}
 
-            # [CORE] base persona prompt
-            core_section = f"[CORE]\n{base_prompt}"
+            # Base persona prompt. Keep the generator-facing system message plain;
+            # section tags are internal structure, not behavioral content.
+            core_section = base_prompt.strip()
             sections.append(core_section)
             section_map["core"] = {
                 "reason": "Base persona prompt",
@@ -80,7 +85,7 @@ class Instructor:
                 }
 
             # [RULES] hard constraints
-            sections.append(f"[RULES]\n" + "\n".join(SYSTEM_RULES))
+            sections.append("\n".join(SYSTEM_RULES))
             section_map["rules"] = {
                 "reason": "Hard system rules",
                 "rules_count": len(SYSTEM_RULES),
@@ -126,7 +131,7 @@ class Instructor:
                 message_key="instructor.build_error",
                 message_args={"error": error_text},
             )
-            return "[CORE]\nSystem prompt unavailable due to error."
+            return "System prompt unavailable due to error."
 
     # ------------------------------------------------------------------
     # Section builders
@@ -291,14 +296,74 @@ class Instructor:
             ).strip()
             if lines:
                 return f"[OK]: lorebook matches found:\n{lines}"
-        return "[OK]: no relevant lorebook entries found."
+        return "[ERROR] Not Found"
 
     def _build_emotion_tool_content(self, moral_state: Dict[str, Any]) -> str:
-        emotion = str((moral_state or {}).get("current_emotion") or "neutral").strip() or "neutral"
-        intensity = (moral_state or {}).get("intensity")
+        state = moral_state or {}
+        emotion = str(state.get("current_emotion") or "neutral").strip() or "neutral"
+        intensity = state.get("emotion_intensity", state.get("intensity"))
+        relationship_status = str(state.get("relationship_status") or "").strip()
+        narrative = str(state.get("narrative") or "").strip()
+        affective_state = state.get("affective_state") if isinstance(state.get("affective_state"), dict) else {}
+        trigger = str(state.get("trigger") or affective_state.get("trigger") or "").strip()
+        influence = state.get("influence") if isinstance(state.get("influence"), dict) else {}
+        if not influence and isinstance(affective_state.get("influence"), dict):
+            influence = affective_state.get("influence") or {}
+        associated_events = (
+            state.get("associated_events")
+            if isinstance(state.get("associated_events"), list)
+            else affective_state.get("associated_events")
+            if isinstance(affective_state.get("associated_events"), list)
+            else []
+        )
+        metrics = state.get("metrics") if isinstance(state.get("metrics"), dict) else {}
+        recommendations = [
+            str(item or "").strip()
+            for item in (state.get("recommendations") or [])
+            if str(item or "").strip()
+        ]
+        directives = [
+            str(item or "").strip()
+            for item in (state.get("hard_directives") or [])
+            if str(item or "").strip()
+        ]
+
+        label = str(affective_state.get("label") or emotion).strip()
+        parts: List[str] = [f"Current emotional state: {label} ({emotion})"]
         if isinstance(intensity, (int, float)):
-            return f"Current emotional state: {emotion}; intensity={round(float(intensity), 3)}"
-        return f"Current emotional state: {emotion}"
+            parts.append(f"intensity={round(float(intensity), 3)}")
+        if relationship_status:
+            parts.append(f"relationship={relationship_status}")
+        if metrics:
+            metric_text = ", ".join(
+                f"{key}={round(float(value), 3)}"
+                for key, value in metrics.items()
+                if isinstance(value, (int, float))
+            )
+            if metric_text:
+                parts.append(f"metrics: {metric_text}")
+
+        lines = ["; ".join(parts)]
+        if trigger:
+            lines.append(f"Why this state changed: {trigger[:700]}")
+        if influence:
+            influence_text = ", ".join(
+                f"{key}={value}" for key, value in influence.items() if value not in (None, "")
+            )
+            if influence_text:
+                lines.append(f"Behavior influence: {influence_text}")
+        if associated_events:
+            lines.append(
+                "Associated events:\n"
+                + "\n".join(f"- {str(item)[:220]}" for item in associated_events[:5])
+            )
+        if narrative:
+            lines.append(f"Self-expression guidance: {narrative[:800]}")
+        if recommendations:
+            lines.append("Recommendations:\n" + "\n".join(f"- {item}" for item in recommendations[:6]))
+        if directives:
+            lines.append("Hard directives:\n" + "\n".join(f"- {item}" for item in directives[:6]))
+        return "\n".join(lines)
 
     def _build_persona_section(self, analysis: Dict[str, Any]) -> str:
         persona_constraints = (
@@ -375,19 +440,15 @@ class Instructor:
         decisions: Optional[Dict[str, bool]] = None,
         moral_state: Optional[Dict[str, Any]] = None,
         memory_context: Optional[Dict[str, Any]] = None,
+        visual_context: Optional[Dict[str, Any]] = None,
+        generated_image_context: Optional[Dict[str, Any]] = None,
+        module_tasks: Optional[List[Dict[str, Any]]] = None,
         tool_hints: Optional[Dict[str, Any]] = None,
     ) -> List[Dict[str, Any]]:
         dynamic_messages: List[Dict[str, Any]] = []
 
-        context_info = self._build_context_tool_content(analysis or {}).strip()
-        if context_info:
-            dynamic_messages.append(
-                {
-                    "role": "tool",
-                    "name": "context.analysis",
-                    "content": context_info,
-                }
-            )
+        # Analyzer output is operational routing metadata for Decision Layer.
+        # It should not be exposed as final-answer context to the generator.
 
         memory_info = self._build_memory_tool_content(memory_context or {}).strip()
         if memory_info and not memory_info.lower().startswith("[ok]: memory module is disabled"):
@@ -400,7 +461,12 @@ class Instructor:
             )
 
         knowledge_info = self._build_knowledge_tool_content(memory_context or {}).strip()
-        if knowledge_info:
+        memory_status = str((memory_context or {}).get("memory_status") or "").strip().lower()
+        if (
+            knowledge_info
+            and not knowledge_info.startswith("[ERROR]")
+            and memory_status not in {"", "disabled"}
+        ):
             dynamic_messages.append(
                 {
                     "role": "tool",
@@ -410,7 +476,8 @@ class Instructor:
             )
 
         emotion_info = self._build_emotion_tool_content(moral_state or {}).strip()
-        if emotion_info:
+        moral_disabled = bool((moral_state or {}).get("meta", {}).get("disabled")) or not bool(moral_state)
+        if emotion_info and not moral_disabled:
             dynamic_messages.append(
                 {
                     "role": "tool",
@@ -432,7 +499,7 @@ class Instructor:
         relation_info = self._build_conversation_state_tool_content(
             memory_context or {}
         ).strip()
-        if relation_info:
+        if relation_info and memory_status not in {"", "disabled"}:
             dynamic_messages.append(
                 {
                     "role": "tool",
@@ -441,16 +508,38 @@ class Instructor:
                 }
             )
 
-        if isinstance(tool_hints, dict):
-            hints_text = str(tool_hints.get("instructions") or "").strip()
-            if hints_text:
+        visual_info = self._render_visual_context(visual_context or {}).strip()
+        if visual_info:
+            dynamic_messages.append(
+                {
+                    "role": "tool",
+                    "name": "vision.context",
+                    "content": visual_info,
+                }
+            )
+
+        if isinstance(generated_image_context, dict) and generated_image_context:
+            image_lines: List[str] = []
+            prompt = str(generated_image_context.get("prompt") or "").strip()
+            description = str(generated_image_context.get("description") or "").strip()
+            model = str(generated_image_context.get("model") or "").strip()
+            if prompt:
+                image_lines.append(f"Prompt used: {prompt[:1200]}")
+            if description:
+                image_lines.append(f"Generated image description: {description[:1200]}")
+            if model:
+                image_lines.append(f"Image model: {model}")
+            if image_lines:
                 dynamic_messages.append(
                     {
                         "role": "tool",
-                        "name": "orchestration.hints",
-                        "content": hints_text,
+                        "name": "image_generation.result",
+                        "content": "\n".join(image_lines),
                     }
                 )
+
+        # module_tasks and tool_hints are operational data for Decision Layer/UI logs.
+        # They are intentionally not exposed as final-answer tool context.
 
         runtime_meta = user_message.get("runtime_meta")
         if isinstance(runtime_meta, dict):
@@ -551,6 +640,9 @@ class Instructor:
         decisions: Optional[Dict[str, bool]] = None,
         moral_state: Optional[Dict[str, Any]] = None,
         memory_context: Optional[Dict[str, Any]] = None,
+        visual_context: Optional[Dict[str, Any]] = None,
+        generated_image_context: Optional[Dict[str, Any]] = None,
+        module_tasks: Optional[List[Dict[str, Any]]] = None,
         tool_hints: Optional[Dict[str, Any]] = None,
         history_limit_override: Optional[int] = None,
         include_dynamic_context_tools: bool = True,
@@ -591,48 +683,65 @@ class Instructor:
             history_limit = 10
         history_limit = max(history_limit, 0)
         recent_history = history[-history_limit:] if history_limit else []
+        recent_history = self._dedupe_recent_history(recent_history)
+        raw_recent_history_count = len(recent_history)
+        pair_limit = self._get_recent_dialogue_pair_limit()
+        recent_history = self._select_recent_dialogue_pairs(recent_history, pair_limit)
 
         messages = [{"role": "system", "content": system_prompt}]
         dynamic_tool_messages: List[Dict[str, Any]] = []
+        memory_context_for_tools = self._remove_recent_history_memory_duplicates(
+            memory_context or {},
+            recent_history,
+            user_message,
+        )
         if include_dynamic_context_tools:
             dynamic_tool_messages = self._build_dynamic_tool_messages(
                 user_message=user_message,
                 analysis=analysis,
                 decisions=decisions,
                 moral_state=moral_state,
-                memory_context=memory_context,
+                memory_context=memory_context_for_tools,
+                visual_context=visual_context,
+                generated_image_context=generated_image_context,
+                module_tasks=module_tasks,
                 tool_hints=tool_hints,
             )
         messages.extend(dynamic_tool_messages)
+
+        user_already_in_history = self._history_contains_current_user(
+            recent_history,
+            user_message,
+        )
 
         for msg in recent_history:
             if msg.get("role") == "system":
                 continue
             role = str(msg.get("role") or "user")
+            if role not in {"user", "assistant"}:
+                continue
             enriched_msg = {
                 "role": role,
                 "content": msg.get("content"),
                 "id": msg.get("id"),
             }
-            if role == "tool":
-                tool_name = str(msg.get("name") or "").strip()
-                tool_call_id = str(msg.get("tool_call_id") or "").strip()
-                if tool_name:
-                    enriched_msg["name"] = tool_name
-                if tool_call_id:
-                    enriched_msg["tool_call_id"] = tool_call_id
+            if msg.get("timestamp"):
+                enriched_msg["timestamp"] = msg.get("timestamp")
             if "media" in msg:
                 enriched_msg["media"] = msg.get("media")
             messages.append(enriched_msg)
 
-        enriched_user = {
-            "role": "user",
-            "content": user_message.get("content", ""),
-            "id": user_message.get("id"),
-        }
-        if "media" in user_message:
-            enriched_user["media"] = user_message.get("media")
-        messages.append(enriched_user)
+        if not user_already_in_history:
+            enriched_user = {
+                "role": "user",
+                "content": user_message.get("content", ""),
+                "id": user_message.get("id"),
+            }
+            if user_message.get("timestamp"):
+                enriched_user["timestamp"] = user_message.get("timestamp")
+            if "media" in user_message:
+                enriched_user["media"] = user_message.get("media")
+            messages.append(enriched_user)
 
         log_audit_entry(
             "instructor_format_for_api_result",
@@ -646,9 +755,12 @@ class Instructor:
                 "user_message_id": user_message.get("id"),
                 "message_roles": [msg.get("role") for msg in messages],
                 "history_messages_used": len(recent_history),
+                "history_messages_raw": raw_recent_history_count,
                 "history_limit": history_limit,
+                "history_pair_limit": pair_limit,
                 "has_tool_hints": bool(tool_hints),
                 "dynamic_tool_messages": len(dynamic_tool_messages),
+                "current_user_already_in_history": user_already_in_history,
             },
             message_key="instructor.format_success",
         )
@@ -661,3 +773,178 @@ class Instructor:
 
         return messages
 
+    @staticmethod
+    def _get_recent_dialogue_pair_limit() -> int:
+        raw = config_service.get_config_value("api.message_pair_limit", 4)
+        try:
+            return max(0, int(raw))
+        except (TypeError, ValueError):
+            return 4
+
+    def _select_recent_dialogue_pairs(
+        self,
+        history: List[Dict[str, Any]],
+        pair_limit: int,
+    ) -> List[Dict[str, Any]]:
+        if pair_limit <= 0 or not history:
+            return []
+
+        dialogue = [
+            item for item in history
+            if isinstance(item, dict) and str(item.get("role") or "").strip() in {"user", "assistant"}
+        ]
+        selected: List[Dict[str, Any]] = []
+        selected_keys: set[tuple[str, str, str]] = set()
+        pairs = 0
+        index = len(dialogue) - 1
+
+        def key_for(item: Dict[str, Any]) -> tuple[str, str, str]:
+            return (
+                str(item.get("id") or "").strip(),
+                str(item.get("role") or "").strip(),
+                _normalize_message_text(item.get("content")),
+            )
+
+        def add(item: Dict[str, Any]) -> None:
+            key = key_for(item)
+            if key not in selected_keys:
+                selected.append(item)
+                selected_keys.add(key)
+
+        while index >= 0 and pairs < pair_limit:
+            item = dialogue[index]
+            role = str(item.get("role") or "").strip()
+            if role != "assistant":
+                index -= 1
+                continue
+
+            add(item)
+            user_index = index - 1
+            while user_index >= 0:
+                candidate = dialogue[user_index]
+                if str(candidate.get("role") or "").strip() == "user":
+                    add(candidate)
+                    break
+                user_index -= 1
+
+            pairs += 1
+            index = user_index - 1
+
+        selected.reverse()
+        return selected
+
+    def _remove_recent_history_memory_duplicates(
+        self,
+        memory_context: Dict[str, Any],
+        recent_history: List[Dict[str, Any]],
+        current_user_message: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        if not isinstance(memory_context, dict) or not memory_context:
+            return memory_context or {}
+
+        recent_ids = {
+            str(item.get("id") or "").strip()
+            for item in (recent_history or [])
+            if isinstance(item, dict) and str(item.get("id") or "").strip()
+        }
+        current_id = str((current_user_message or {}).get("id") or "").strip()
+        if current_id:
+            recent_ids.add(current_id)
+        if not recent_ids:
+            return memory_context
+
+        matches = memory_context.get("matches")
+        if not isinstance(matches, list) or not matches:
+            return memory_context
+
+        kept_matches: List[Dict[str, Any]] = []
+        removed_ids: set[str] = set()
+        for match in matches:
+            if not isinstance(match, dict):
+                kept_matches.append(match)
+                continue
+            message_id = str(match.get("message_id") or "").strip()
+            if message_id and message_id in recent_ids:
+                removed_ids.add(message_id)
+                continue
+            kept_matches.append(match)
+
+        if not removed_ids:
+            return memory_context
+
+        cleaned = dict(memory_context)
+        cleaned["matches"] = kept_matches
+        cleaned["session_length"] = len(kept_matches)
+        if isinstance(cleaned.get("key_facts"), list):
+            cleaned["key_facts"] = [
+                self._format_memory_match_fact(match)
+                for match in kept_matches
+                if isinstance(match, dict) and self._format_memory_match_fact(match)
+            ]
+        cleaned["deduped_recent_message_ids"] = sorted(removed_ids)
+        if not kept_matches and not cleaned.get("key_facts"):
+            cleaned["memory_status"] = "ready"
+        return cleaned
+
+    @staticmethod
+    def _format_memory_match_fact(match: Dict[str, Any]) -> str:
+        content = str(match.get("content") or "").strip()
+        if not content:
+            return ""
+        role = str(match.get("role") or "").strip().lower()
+        label = "User" if role == "user" else "Assistant"
+        timestamp = str(match.get("timestamp") or "").strip()
+        return f"{label} ({timestamp}): {content}" if timestamp else f"{label}: {content}"
+
+    def _dedupe_recent_history(self, history: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        deduped: List[Dict[str, Any]] = []
+        seen_ids: set[str] = set()
+        previous_key: tuple[str, str] | None = None
+        for msg in history or []:
+            if not isinstance(msg, dict):
+                continue
+            role = str(msg.get("role") or "").strip().lower()
+            content = _normalize_message_text(msg.get("content"))
+            msg_id = str(msg.get("id") or "").strip()
+            if msg_id:
+                if msg_id in seen_ids:
+                    continue
+                seen_ids.add(msg_id)
+            current_key = (role, content)
+            if content and current_key == previous_key:
+                continue
+            deduped.append(msg)
+            previous_key = current_key
+        return deduped
+
+    def _history_contains_current_user(
+        self,
+        history: List[Dict[str, Any]],
+        user_message: Dict[str, Any],
+    ) -> bool:
+        current_id = str(user_message.get("id") or "").strip()
+        current_content = _normalize_message_text(user_message.get("content"))
+        current_timestamp = str(user_message.get("timestamp") or "").strip()
+        for msg in history or []:
+            if not isinstance(msg, dict):
+                continue
+            if str(msg.get("role") or "").strip().lower() != "user":
+                continue
+            msg_id = str(msg.get("id") or "").strip()
+            if current_id and msg_id == current_id:
+                return True
+            if (
+                current_timestamp
+                and current_content
+                and str(msg.get("timestamp") or "").strip() == current_timestamp
+                and _normalize_message_text(msg.get("content")) == current_content
+            ):
+                return True
+        if not current_content or not history:
+            return False
+        last_msg = history[-1] if isinstance(history[-1], dict) else {}
+        if str(last_msg.get("role") or "").strip().lower() != "user":
+            return False
+        if _normalize_message_text(last_msg.get("content")) == current_content:
+            return True
+        return False

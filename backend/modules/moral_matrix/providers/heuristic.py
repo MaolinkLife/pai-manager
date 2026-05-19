@@ -25,6 +25,7 @@ class HeuristicMoralProvider(MoralMatrixProvider):
         tone_parts.append(f"resentment={resentment:.2f}")
 
         narrative = " | ".join(tone_parts)
+        affective_state = dict(payload.get("affective_state") or payload.get("current_state") or {})
 
         hard_directives: list[str] = []
         if resentment > 0.7:
@@ -34,6 +35,9 @@ class HeuristicMoralProvider(MoralMatrixProvider):
 
         return {
             "summary": narrative,
+            "current_state": affective_state,
+            "emotion_vector_delta": {},
+            "metrics_delta": {},
             "hard_directives": hard_directives,
+            "soft_recommendations": [],
         }
-

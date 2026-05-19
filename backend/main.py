@@ -11,13 +11,14 @@
 
 import asyncio
 import os
+import time
 import traceback
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from core.initialize import run_startup_checks, start_async_warmups
-from modules.system.logger import log_error, log_traceback
+from modules.system.logger import log_console, log_error, log_traceback
 
 # Windows: ProactorEventLoop may emit noisy ConnectionResetError traces
 # on abrupt client disconnects (WinError 10054). Selector loop is more stable
@@ -27,6 +28,34 @@ if os.name == "nt":
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
     except Exception:
         pass
+
+
+def _is_windows_connection_reset(exc: BaseException | None) -> bool:
+    return (
+        os.name == "nt"
+        and isinstance(exc, ConnectionResetError)
+        and getattr(exc, "winerror", None) == 10054
+    )
+
+
+def _install_asyncio_exception_filter() -> None:
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return
+
+    previous_handler = loop.get_exception_handler()
+
+    def _handler(current_loop, context):
+        exc = context.get("exception")
+        if _is_windows_connection_reset(exc):
+            return
+        if previous_handler:
+            previous_handler(current_loop, context)
+            return
+        current_loop.default_exception_handler(context)
+
+    loop.set_exception_handler(_handler)
 
 # Запускаем инициализацию ДО импортов маршрутов
 try:
@@ -58,6 +87,8 @@ from routes.auth_routes import router as auth_router
 from routes.tunnel_routes import router as tunnel_router
 from routes.telegram_routes import router as telegram_router
 from routes.synthesis_routes import router as synthesis_router
+from routes.sandbox_routes import router as sandbox_router
+from routes.web_runtime_routes import router as web_runtime_router
 
 from loops.loop_core import run_loop
 from modules.system import tunnel as tunnel_service
@@ -65,9 +96,47 @@ from modules.telegram.runtime import autostart_telegram_bridge, stop_telegram_br
 
 app = FastAPI()
 
+
+@app.middleware("http")
+async def console_api_request_logger(request, call_next):
+    started = time.perf_counter()
+    path = request.url.path
+    should_log = path.startswith("/api") and path != "/api/ping"
+    if should_log:
+        log_console("API", "Запрос получен.", {"method": request.method, "path": path})
+    try:
+        response = await call_next(request)
+    except Exception as exc:
+        if should_log:
+            elapsed_ms = round((time.perf_counter() - started) * 1000, 1)
+            log_console(
+                "API",
+                "Запрос завершился ошибкой.",
+                {
+                    "method": request.method,
+                    "path": path,
+                    "elapsed_ms": elapsed_ms,
+                    "error": str(exc),
+                },
+            )
+        raise
+    if should_log:
+        elapsed_ms = round((time.perf_counter() - started) * 1000, 1)
+        log_console(
+            "API",
+            "Запрос обработан.",
+            {
+                "method": request.method,
+                "path": path,
+                "status": response.status_code,
+                "elapsed_ms": elapsed_ms,
+            },
+        )
+    return response
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # or http://localhost:4200
+    allow_origins=["*"],  # or http://localhost:3880
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -90,6 +159,8 @@ app.include_router(auth_router)
 app.include_router(tunnel_router)
 app.include_router(telegram_router)
 app.include_router(synthesis_router)
+app.include_router(sandbox_router)
+app.include_router(web_runtime_router)
 
 # Start background loops
 run_loop()
@@ -97,6 +168,7 @@ run_loop()
 
 @app.on_event("startup")
 def app_startup() -> None:
+    _install_asyncio_exception_filter()
     start_async_warmups()
     tunnel_service.autostart_owner_tunnel()
     autostart_telegram_bridge()

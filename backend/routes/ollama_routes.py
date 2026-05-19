@@ -62,6 +62,165 @@ async def get_available_models():
     return ollama_client.list_models()
 
 
+@router.get("/runtime/models")
+async def get_runtime_models():
+    return ollama_client.list_runtime_models()
+
+
+@router.post("/runtime/unload")
+async def unload_runtime_model(payload: dict):
+    model = str(payload.get("model") or "").strip()
+    if not model:
+        raise HTTPException(status_code=400, detail="model is required")
+    result = ollama_client.release_model(model)
+    if result.get("status") != "ok":
+        return JSONResponse(status_code=500, content=result)
+    return result
+
+
+@router.post("/capabilities/check")
+async def check_model_capabilities(payload: dict):
+    model = str(payload.get("model") or "").strip()
+    if not model:
+        raise HTTPException(status_code=400, detail="model is required")
+
+    checks = payload.get("checks")
+    if not isinstance(checks, dict):
+        checks = {"tool": True, "vision": True, "thinking": True}
+
+    result = {
+        "status": "ok",
+        "model": model,
+        "capabilities": {
+            "tool": False,
+            "vision": False,
+            "thinking": False,
+        },
+        "details": {},
+    }
+
+    if checks.get("tool"):
+        tool_result = await _probe_tool_support(model)
+        result["capabilities"]["tool"] = bool(tool_result.get("supported"))
+        result["details"]["tool"] = tool_result
+
+    if checks.get("vision"):
+        vision_result = await _probe_vision_support(model)
+        result["capabilities"]["vision"] = bool(vision_result.get("supported"))
+        result["details"]["vision"] = vision_result
+
+    if checks.get("thinking"):
+        thinking_result = await _probe_thinking_support(model)
+        result["capabilities"]["thinking"] = bool(thinking_result.get("supported"))
+        result["details"]["thinking"] = thinking_result
+
+    return result
+
+
+async def _probe_tool_support(model: str) -> dict:
+    import asyncio
+
+    tool = {
+        "type": "function",
+        "function": {
+            "name": "mark_capability",
+            "description": "Mark that tool calling is supported.",
+            "parameters": {
+                "type": "object",
+                "properties": {"supported": {"type": "boolean"}},
+                "required": ["supported"],
+            },
+        },
+    }
+    try:
+        raw = await asyncio.to_thread(
+            ollama_client.chat_with_tools,
+            [
+                {
+                    "role": "system",
+                    "content": "Call the mark_capability tool with supported=true.",
+                },
+                {"role": "user", "content": "Run the capability check."},
+            ],
+            {"temperature": 0, "num_predict": 64},
+            model,
+            tools=[tool],
+            tool_choice={"type": "function", "function": {"name": "mark_capability"}},
+        )
+        calls = ((raw or {}).get("message") or {}).get("tool_calls") or []
+        supported = any(
+            ((call or {}).get("function") or {}).get("name") == "mark_capability"
+            for call in calls
+        )
+        return {"supported": supported}
+    except Exception as exc:
+        return {"supported": False, "error": str(exc)}
+
+
+async def _probe_vision_support(model: str) -> dict:
+    import asyncio
+
+    metadata_support = ollama_client.model_supports_vision(model)
+    if not metadata_support.get("supported"):
+        return {
+            "supported": False,
+            "metadata": metadata_support,
+            "error": metadata_support.get("reason") or "model metadata does not declare vision support",
+        }
+
+    # 1x1 red PNG.
+    image_b64 = (
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADUlEQVR4nGP4z8DwHwAF"
+        "gAL+QnZ9TAAAAABJRU5ErkJggg=="
+    )
+    try:
+        text = await asyncio.to_thread(
+            ollama_client.chat_image,
+            [
+                {
+                    "role": "user",
+                    "content": "Describe this image in one short phrase.",
+                    "images": [image_b64],
+                }
+            ],
+            model,
+            options={"temperature": 0, "num_predict": 64},
+        )
+        normalized = (text or "").strip().lower()
+        supported = bool(normalized) and not normalized.startswith("[error]")
+        return {"supported": supported, "sample": text[:200], "metadata": metadata_support}
+    except Exception as exc:
+        return {"supported": False, "error": str(exc), "metadata": metadata_support}
+
+
+async def _probe_thinking_support(model: str) -> dict:
+    import asyncio
+
+    try:
+        raw = await asyncio.to_thread(
+            ollama_client.chat_with_tools,
+            [
+                {
+                    "role": "user",
+                    "content": "Answer with the single word OK. Use internal reasoning if your model supports it.",
+                }
+            ],
+            {"temperature": 0, "num_predict": 96},
+            model,
+        )
+        message = (raw or {}).get("message") or {}
+        content = str(message.get("content") or "")
+        thinking = str(message.get("thinking") or raw.get("thinking") or "")
+        model_hint = any(
+            marker in model.lower()
+            for marker in ("r1", "qwq", "reason", "thinking")
+        )
+        supported = bool(thinking.strip()) or "<think>" in content.lower() or model_hint
+        return {"supported": supported, "has_thinking_field": bool(thinking.strip())}
+    except Exception as exc:
+        return {"supported": False, "error": str(exc)}
+
+
 @router.get("/history")
 async def fetch_history(request: Request, limit: int = 32):
     actor_user_uuid = resolve_actor_uuid_from_auth_header(

@@ -1,10 +1,28 @@
 <div class="synthesis-page custom-scrollbar">
     <div class="synthesis-shell">
+        <input
+            #checkpointInput
+            type="file"
+            hidden
+            accept=".safetensors,.ckpt"
+            (change)="importCheckpoint($event)"
+        />
+
         <header class="page-header">
             <div>
                 <h2>{{ 'synthesis.title' | translate }}</h2>
                 <p>{{ 'synthesis.subtitle' | translate }}</p>
             </div>
+            <app-ui-button
+                *ngIf="activeTab === 'image'"
+                type="button"
+                variant="secondary"
+                [loading]="importingCheckpoint"
+                [disabled]="importingCheckpoint"
+                (pressed)="triggerCheckpointImport()"
+            >
+                Import model
+            </app-ui-button>
         </header>
 
         <div class="tabbar">
@@ -26,7 +44,16 @@
                     <app-ui-textarea
                         [(ngModel)]="prompt"
                         [placeholder]="'synthesis.promptPlaceholder' | translate"
-                        [rows]="8"
+                        [rows]="6"
+                    ></app-ui-textarea>
+                </div>
+
+                <div class="field-block" *ngIf="activeTab === 'image'">
+                    <label>Negative prompt</label>
+                    <app-ui-textarea
+                        [(ngModel)]="negativePrompt"
+                        placeholder="low quality, blurry, distorted"
+                        [rows]="3"
                     ></app-ui-textarea>
                 </div>
 
@@ -36,6 +63,24 @@
                         <app-ui-select
                             [options]="providerOptions[activeTab]"
                             [(ngModel)]="provider"
+                            (ngModelChange)="activeTab === 'image' && onImageProviderChange($event)"
+                        ></app-ui-select>
+                    </div>
+
+                    <div class="field-block" *ngIf="activeTab === 'image'">
+                        <label>Model</label>
+                        <app-ui-select
+                            [options]="imageModelOptions"
+                            [(ngModel)]="imageModel"
+                            (ngModelChange)="onImageModelChange($event)"
+                        ></app-ui-select>
+                    </div>
+
+                    <div class="field-block" *ngIf="activeTab === 'image' && provider === 'comfyui'">
+                        <label>ComfyUI checkpoint</label>
+                        <app-ui-select
+                            [options]="comfyuiCheckpointOptions"
+                            [(ngModel)]="comfyuiCheckpoint"
                         ></app-ui-select>
                     </div>
 
@@ -44,7 +89,156 @@
                         <app-ui-select
                             [options]="aspectRatioOptions"
                             [(ngModel)]="aspectRatio"
+                            (ngModelChange)="onAspectRatioChange($event)"
                         ></app-ui-select>
+                    </div>
+                </div>
+
+                <div class="inline-grid" *ngIf="activeTab === 'image'">
+                    <div class="field-block">
+                        <label>Width</label>
+                        <app-ui-input type="number" [(ngModel)]="width" [min]="256" [max]="2048" [step]="8"></app-ui-input>
+                    </div>
+                    <div class="field-block">
+                        <label>Height</label>
+                        <app-ui-input type="number" [(ngModel)]="height" [min]="256" [max]="2048" [step]="8"></app-ui-input>
+                    </div>
+                    <div class="field-block">
+                        <label>Steps</label>
+                        <app-ui-input type="number" [(ngModel)]="steps" [min]="1" [max]="80" [step]="1"></app-ui-input>
+                    </div>
+                    <div class="field-block">
+                        <label>CFG scale</label>
+                        <app-ui-input type="number" [(ngModel)]="guidanceScale" [min]="0" [max]="30" [step]="0.5"></app-ui-input>
+                    </div>
+                    <div class="field-block">
+                        <label>Sampler</label>
+                        <app-ui-select [options]="samplerOptions" [(ngModel)]="sampler"></app-ui-select>
+                    </div>
+                    <div class="field-block">
+                        <label>Scheduler</label>
+                        <app-ui-select [options]="schedulerOptions" [(ngModel)]="scheduler"></app-ui-select>
+                    </div>
+                    <div class="field-block">
+                        <label>Seed</label>
+                        <app-ui-input type="number" [(ngModel)]="seed" placeholder="Random"></app-ui-input>
+                    </div>
+                    <div class="field-block">
+                        <label>&nbsp;</label>
+                        <app-ui-checkbox [(ngModel)]="persistOutput">
+                            Сохранять временный результат
+                        </app-ui-checkbox>
+                    </div>
+                </div>
+
+                <div class="ai-lab-panel" *ngIf="activeTab === 'image' && provider === 'core'">
+                    <div class="ai-lab-panel__header">
+                        <div>
+                            <strong>Local AI Lab</strong>
+                            <span>{{ localModelsRoot || 'storage/models/image-generation' }}</span>
+                        </div>
+                        <button type="button" (click)="refreshImageModels()">
+                            Refresh
+                        </button>
+                    </div>
+
+                    <div class="ai-lab-nodes">
+                        <article class="ai-lab-node">
+                            <header>
+                                <span>Node</span>
+                                <strong>Load checkpoint</strong>
+                            </header>
+                            <div class="inline-grid">
+                                <div class="field-block">
+                                    <label>Model file path</label>
+                                    <app-ui-input
+                                        type="text"
+                                        [(ngModel)]="importSourcePath"
+                                        placeholder="E:\models\my-model.safetensors"
+                                    ></app-ui-input>
+                                </div>
+                                <div class="field-block">
+                                    <label>VAE path</label>
+                                    <app-ui-input
+                                        type="text"
+                                        [(ngModel)]="importVaePath"
+                                        placeholder="Optional .safetensors or diffusers folder"
+                                    ></app-ui-input>
+                                </div>
+                            </div>
+                            <div class="inline-grid">
+                                <div class="field-block">
+                                    <label>Label</label>
+                                    <app-ui-input type="text" [(ngModel)]="importModelLabel" placeholder="Optional display name"></app-ui-input>
+                                </div>
+                                <div class="field-block">
+                                    <label>Family</label>
+                                    <app-ui-select [options]="importFamilyOptions" [(ngModel)]="importFamily"></app-ui-select>
+                                </div>
+                            </div>
+                            <div class="inline-grid">
+                                <div class="field-block">
+                                    <label>Model id</label>
+                                    <app-ui-input type="text" [(ngModel)]="importModelId" placeholder="Optional stable id"></app-ui-input>
+                                </div>
+                                <div class="field-block ai-lab-action-field">
+                                    <label>&nbsp;</label>
+                                    <app-ui-button
+                                        type="button"
+                                        variant="secondary"
+                                        [loading]="importingCheckpointPath"
+                                        [disabled]="importingCheckpointPath || !importSourcePath.trim()"
+                                        (pressed)="importCheckpointFromPath()"
+                                    >
+                                        Import path
+                                    </app-ui-button>
+                                </div>
+                            </div>
+                            <p class="ai-lab-hint">
+                                Supported now: .safetensors and .ckpt checkpoints. GGUF is visible as a future format, but current Diffusers image runner cannot load it directly.
+                            </p>
+                        </article>
+
+                        <article class="ai-lab-node">
+                            <header>
+                                <span>Node</span>
+                                <strong>Generation settings</strong>
+                            </header>
+                            <div class="ai-lab-chip-row">
+                                <span>{{ width }}x{{ height }}</span>
+                                <span>{{ steps }} steps</span>
+                                <span>CFG {{ guidanceScale }}</span>
+                                <span>{{ sampler }}</span>
+                                <span>{{ scheduler }}</span>
+                                <span>{{ persistOutput ? 'persist output' : 'memory only' }}</span>
+                            </div>
+                        </article>
+                    </div>
+                </div>
+
+                <div class="comfyui-panel" *ngIf="activeTab === 'image' && provider === 'comfyui'">
+                    <div class="comfyui-panel__header">
+                        <div>
+                            <strong>ComfyUI</strong>
+                            <span>{{ comfyuiStatus?.base_url || 'http://127.0.0.1:8188' }}</span>
+                        </div>
+                        <button type="button" [disabled]="comfyuiLoading" (click)="loadComfyUIStatus()">
+                            {{ comfyuiLoading ? 'Refreshing' : 'Refresh' }}
+                        </button>
+                    </div>
+                    <div class="comfyui-stats">
+                        <span [class.is-ok]="comfyuiStatus?.available">API {{ comfyuiStatus?.available ? 'online' : 'offline' }}</span>
+                        <span>{{ comfyuiStatus?.resources?.checkpoints?.length || 0 }} checkpoints</span>
+                        <span>{{ comfyuiStatus?.resources?.loras?.length || 0 }} loras</span>
+                        <span>{{ comfyuiStatus?.resources?.controlnets?.length || 0 }} controlnets</span>
+                        <span>{{ comfyuiStatus?.nodes_count || 0 }} nodes</span>
+                    </div>
+                    <div class="endpoint-list" *ngIf="comfyuiEndpointRows.length">
+                        <div class="endpoint-row" *ngFor="let endpoint of comfyuiEndpointRows">
+                            <span class="endpoint-method">{{ endpoint.method }}</span>
+                            <span class="endpoint-path">{{ endpoint.path }}</span>
+                            <span class="endpoint-status" [class.is-ok]="endpoint.ok">{{ endpoint.status }}</span>
+                        </div>
                     </div>
                 </div>
 

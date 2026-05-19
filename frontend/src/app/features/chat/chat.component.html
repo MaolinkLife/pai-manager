@@ -13,157 +13,59 @@
                     </button>
                 </div>
 
+                <app-chat-message
+                    *ngFor="let item of chatMessageViews(); trackBy: trackByMessageView"
+                    [msg]="item.msg"
+                    [index]="item.index"
+                    [charName]="config.charName"
+                    [formattedTimestamp]="item.formattedTimestamp"
+                    [messageSource]="item.messageSource"
+                    [isEditing]="editingMessageId === item.msg.id"
+                    [editMessageControl]="editMessageControl"
+                    [loading]="loading"
+                    [activeGenerationRunId]="activeGenerationRunId"
+                    [currentPlayingMessage]="currentPlayingMessage"
+                    [isLatestUserMessage]="item.isLatestUserMessage"
+                    [isLatestAssistantMessage]="item.isLatestAssistantMessage"
+                    [canContinue]="item.canContinue"
+                    [hasRuntime]="item.hasRuntime"
+                    [runtimeSummary]="item.runtimeSummary"
+                    [runtimeActiveLabel]="item.runtimeActiveLabel"
+                    [runtimeStages]="item.runtimeStages"
+                    [renderContent]="item.renderContent"
+                    [isStreaming]="item.isStreaming"
+                    [thinkingDurationMs]="item.thinkingDurationMs"
+                    [collapseThinking]="item.collapseThinking"
+                    [userContentExpandable]="item.userContentExpandable"
+                    [userContentExpanded]="item.userContentExpanded"
+                    [hasUsageMeta]="item.hasUsageMeta"
+                    [usageOpen]="activeUsageMessageId === item.msg.id"
+                    [usageLines]="item.usageLines"
+                    (toggleRuntimeDetails)="toggleRuntimeDetails($event)"
+                    (saveEdit)="saveEditMessage($event)"
+                    (cancelEdit)="cancelEditMessage()"
+                    (previewMedia)="previewMedia($event)"
+                    (downloadMedia)="downloadMedia($event)"
+                    (copy)="copyMessage($event)"
+                    (edit)="editMessage($event)"
+                    (delete)="deleteMessage($event, false)"
+                    (toggleVoice)="toggleVoice($event)"
+                    (continueResponse)="continueMessage($event)"
+                    (reroll)="rerollMessage($event)"
+                    (activateVariant)="activateMessageVariant($event)"
+                    (skipThinking)="skipThinking()"
+                    (toggleUserContent)="toggleUserMessageContent($event)"
+                    (toggleUsageDetails)="toggleUsageDetails($event.message, $event.event)"
+                ></app-chat-message>
+
                 <div
-                    class="message"
-                    *ngFor="let msg of chatHistory; let i = index; trackBy: trackByMessage"
-                    [ngClass]="msg.role"
+                    class="chat-empty-state"
+                    *ngIf="historyLoaded && !chatHistory.length && !loading && !isLoadingHistory"
                 >
-                    <div class="message-bubble">
-                        <div class="timestamp">{{ formatTimestamp(msg.timestamp) }}</div>
-
-                        <div class="sender" *ngIf="msg.role === 'assistant'">{{ config.charName }}:</div>
-
-                        <div class="content">
-                            <div class="runtime-block" *ngIf="msg.role === 'assistant' && hasRuntime(msg)">
-                                <div class="runtime-live" *ngIf="msg.runtime?.status === 'running' || msg.runtime?.status === 'started' || msg.runtime?.status === 'stopping'">
-                                    <span class="wave-loader" aria-hidden="true">
-                                        <span></span><span></span><span></span>
-                                    </span>
-                                    <span class="runtime-live-text">{{ getRuntimeActiveLabel(msg) }}</span>
-                                </div>
-                                <button
-                                    type="button"
-                                    class="runtime-toggle"
-                                    (click)="toggleRuntimeDetails(msg)"
-                                >
-                                    <span class="runtime-summary">{{ getRuntimeSummary(msg) }}</span>
-                                    <app-custom-svg *ngIf="msg.runtime?.status === 'completed'" name="check-circle" [size]="14"></app-custom-svg>
-                                    <span class="runtime-caret" [class.open]="msg.runtime?.detailsOpen">▾</span>
-                                </button>
-                                <div class="runtime-details" [class.open]="msg.runtime?.detailsOpen">
-                                    <div class="runtime-trace" *ngFor="let trace of getRuntimeStages(msg)">
-                                        <span class="trace-stage">{{ trace.label }}</span>
-                                        <span class="trace-state" [ngClass]="trace.state">{{ trace.state === 'done' ? 'готово' : (trace.state === 'active' ? 'выполняется' : 'ожидание') }}</span>
-                                        <span class="trace-elapsed" *ngIf="trace.elapsedMs !== undefined">{{ trace.elapsedMs }}ms</span>
-                                    </div>
-                                </div>
-                            </div>
-                            <ng-container *ngIf="!isEditingMessage(msg); else editMode">
-                                <app-message-renderer
-                                    [content]="msg.content"
-                                    [isStreaming]="isMessageStreaming(msg)"
-                                    [thinkingDurationMs]="getThinkingDurationMs(msg)"
-                                ></app-message-renderer>
-                            </ng-container>
-                            <ng-template #editMode>
-                                <div class="message-edit">
-                                    <textarea
-                                        class="message-edit__textarea custom-scrollbar"
-                                        [formControl]="editMessageControl"
-                                        rows="3"
-                                    ></textarea>
-                                    <div class="message-edit__actions">
-                                        <button
-                                            type="button"
-                                            class="btn-icon"
-                                            (click)="saveEditMessage(msg)"
-                                            [disabled]="loading && !!activeGenerationRunId"
-                                            title="Сохранить и перегенерировать"
-                                        >
-                                            <app-custom-svg name="check-circle" [size]="18"></app-custom-svg>
-                                        </button>
-                                        <button
-                                            type="button"
-                                            class="btn-icon"
-                                            (click)="cancelEditMessage()"
-                                            title="Отменить"
-                                        >
-                                            <app-custom-svg name="close" [size]="18"></app-custom-svg>
-                                        </button>
-                                    </div>
-                                </div>
-                            </ng-template>
-                        </div>
-
-                            <div
-                                class="message-media"
-                                *ngIf="msg.media?.length"
-                            >
-                                <div
-                                    class="message-media__item"
-                                    *ngFor="let media of msg.media; trackBy: trackByMedia"
-                                    [ngSwitch]="media.category"
-                                >
-                                    <div
-                                        class="message-media__image"
-                                        *ngSwitchCase="'image'"
-                                        [style.backgroundImage]="getMediaSource(media) ? 'url(' + getMediaSource(media) + ')' : null"
-                                        (click)="previewMedia(media)"
-                                        [attr.title]="media.description || media.name"
-                                    ></div>
-                                    <div class="message-media__audio" *ngSwitchCase="'audio'">
-                                        <audio controls [src]="getMediaSource(media)"></audio>
-                                        <span class="media-name">{{ media.name }}</span>
-                                    </div>
-                                    <div class="message-media__video" *ngSwitchCase="'video'">
-                                        <video controls [src]="getMediaSource(media)"></video>
-                                        <span class="media-name">{{ media.name }}</span>
-                                    </div>
-                                    <div
-                                        class="message-media__file"
-                                        *ngSwitchDefault
-                                        (click)="downloadMedia(media)"
-                                        [attr.title]="media.description || media.name"
-                                    >
-                                        <app-custom-svg name="file" [size]="20"></app-custom-svg>
-                                        <span class="media-name">{{ media.name }}</span>
-                                    </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="actions" *ngIf="shouldShowActions(msg)">
-                        <button class="btn-icon" (click)="copyMessage(msg)">
-                            <app-custom-svg name="copy" [size]="18"></app-custom-svg>
-                        </button>
-                        <button
-                            class="btn-icon"
-                            (click)="editMessage(msg)"
-                            *ngIf="msg.role === 'user' && isLatestUserMessage(i)"
-                            [disabled]="loading && !!activeGenerationRunId"
-                        >
-                            <app-custom-svg name="edit" [size]="18"></app-custom-svg>
-                        </button>
-                        <button class="btn-icon" (click)="deleteMessage(msg, false)">
-                            <app-custom-svg name="trash" [size]="18"></app-custom-svg>
-                        </button>
-                        <button
-                            class="btn-icon"
-                            (click)="toggleVoice(msg.id)"
-                            *ngIf="msg.role === 'assistant' && msg.id"
-                        >
-                            <app-custom-svg [name]="currentPlayingMessage === msg.id ? 'volume-x' : 'volume-2'" [size]="20"></app-custom-svg>
-                        </button>
-                        <button
-                            class="btn-icon"
-                            (click)="rerollMessage(msg.id)"
-                            *ngIf="msg.role === 'assistant' && i === chatHistory.length - 1"
-                            [disabled]="loading && !!activeGenerationRunId"
-                            [attr.title]="loading && activeGenerationRunId ? 'Дождитесь завершения текущей генерации' : 'Перегенерировать ответ'"
-                        >
-                            <app-custom-svg name="reroll" [size]="18"></app-custom-svg>
-                        </button>
-                        <button
-                            class="btn-icon"
-                            *ngIf="msg.role === 'assistant' && hasUsageMeta(msg)"
-                            [attr.title]="getUsageTooltip(msg)"
-                        >
-                            <app-custom-svg name="info" [size]="16"></app-custom-svg>
-                        </button>
-                    </div>
+                    Пока нет ни одного сообщения
                 </div>
 
-                <div *ngIf="loading" class="message assistant">
+                <div *ngIf="shouldShowGlobalLoadingIndicator()" class="message assistant">
                     <div class="runtime-live loading-live">
                         <span class="wave-loader" aria-hidden="true">
                             <span></span><span></span><span></span>
@@ -176,133 +78,111 @@
             </div>
         </main>
 
-        <footer class="chat-footer">
-            <div class="chat-footer-inner">
-                <form (submit)="sendMessage()" class="input-area">
-                    <input
-                        #fileInput
-                        type="file"
-                        hidden
-                        multiple
-                        (change)="onFilesSelected($event)"
-                    />
+        <div class="chat-bottom-fade" aria-hidden="true"></div>
 
-                    <div class="attachments-preview" *ngIf="attachments.length">
-                        <div
-                            class="attachment-item"
-                            *ngFor="let attachment of attachments; trackBy: trackByAttachment"
-                            [attr.title]="attachment.description || attachment.name"
-                        >
-                            <button
-                                type="button"
-                                class="attachment-remove"
-                                (click)="removeAttachment(attachment.id)"
-                                aria-label="Удалить вложение"
-                            >
-                                <app-custom-svg name="close" [size]="14"></app-custom-svg>
-                            </button>
-                            <div
-                                class="attachment-thumb"
-                                [ngClass]="{ 'is-file': attachment.category !== 'image' }"
-                                [style.backgroundImage]="attachment.category === 'image' && attachment.dataUrl ? 'url(' + attachment.dataUrl + ')' : null"
-                            >
-                                <app-custom-svg
-                                    *ngIf="attachment.category !== 'image'"
-                                    name="file"
-                                    [size]="24"
-                                    title="File"
-                                ></app-custom-svg>
-                            </div>
-                        </div>
-                    </div>
+        <app-chat-composer
+            [chatInput]="chatInput"
+            [attachments]="attachments"
+            [isProcessingAttachments]="isProcessingAttachments"
+            [activeDropdown]="activeDropdown"
+            [recording]="recording"
+            [voiceModeEnabled]="voiceModeEnabled"
+            [voiceModeLoading]="voiceModeLoading"
+            [loading]="loading"
+            [activeGenerationRunId]="activeGenerationRunId"
+            [imageGenerationEnabled]="imageGenerationEnabled"
+            [codeInterpreterEnabled]="codeInterpreterEnabled"
+            [contextAttachments]="contextAttachments"
+            [showEmojiPicker]="showEmojiPicker"
+            [emojiPickerMode]="emojiPickerMode"
+            [emojiDropdownPosition]="emojiDropdownPosition"
+            [emojiPickerSide]="emojiPickerSide"
+            (submitMessage)="sendMessage()"
+            (filesSelected)="onFilesSelected($event)"
+            (removeAttachment)="removeAttachment($event)"
+            (removeContextAttachment)="removeContextAttachment($event)"
+            (toggleAttach)="toggleAttachDropdown()"
+            (toggleTools)="toggleToolsDropdown()"
+            (toggleImageGeneration)="toggleImageGeneration()"
+            (toggleCodeInterpreter)="toggleCodeInterpreter()"
+            (openFile)="openFilePicker($event)"
+            (openLibrary)="openLibraryPicker($event)"
+            (captureScreen)="captureScreen($event)"
+            (attachWebpage)="openWebpageModal($event)"
+            (attachNotes)="attachNotes($event)"
+            (toggleEmoji)="toggleEmojiDropdown($event)"
+            (emojiSelect)="addEmoji($event)"
+            (emojiClose)="closeEmojiPicker()"
+            (toggleRecord)="toggleRecording()"
+            (toggleVoice)="toggleVoiceMode()"
+            (stopGeneration)="stopGeneration()"
+            (expandComposer)="onComposerExpandClick($event)"
+        ></app-chat-composer>
 
-                    <div class="input-body">
-                        <textarea
-                            #chatTextarea
-                            class="chat-input custom-scrollbar"
-                            [formControl]="chatInput"
-                            placeholder="Скажи что-нибудь..."
-                            (input)="onTextareaInput()"
-                            (keydown)="onKeyDown($event)"
-                        ></textarea>
+        <div class="large-message-modal-overlay" *ngIf="largeMessagePromptOpen" (click)="closeLargeMessagePrompt()">
+            <section class="large-message-modal" (click)="$event.stopPropagation()">
+                <header class="large-message-modal__header">
+                    <strong>Длинное сообщение</strong>
+                    <button type="button" (click)="closeLargeMessagePrompt()" aria-label="Закрыть">
+                        <app-custom-svg name="close" [size]="18"></app-custom-svg>
+                    </button>
+                </header>
+                <p>
+                    В тексте больше 1000 символов. Можно отправить его как вложенный .txt документ,
+                    чтобы чат оставался компактным.
+                </p>
+                <footer class="large-message-modal__footer">
+                    <button type="button" class="secondary" (click)="sendLargeMessageInline()">Отправить текстом</button>
+                    <button type="button" (click)="sendLargeMessageAsAttachment()">Сделать вложением</button>
+                </footer>
+            </section>
+        </div>
 
-                        <div class="composer-toolbar">
-                            <div class="composer-group">
-                                <button
-                                    type="button"
-                                    class="icon-btn"
-                                    (click)="toggleAttachDropdown()"
-                                    title="Вложение"
-                                >
-                                    <app-custom-svg name="plus" [size]="20"></app-custom-svg>
-                                </button>
-
-                                <button
-                                    type="button"
-                                    class="icon-btn"
-                                    (click)="toggleEmojiDropdown($event)"
-                                    title="Смайлики"
-                                >
-                                    <app-custom-svg name="emoji" [size]="20"></app-custom-svg>
-                                </button>
-
-                                <button
-                                    type="button"
-                                    class="icon-btn"
-                                    (click)="toggleRecording()"
-                                    [ngClass]="{ recording: recording }"
-                                    title="Голосовой ввод"
-                                >
-                                    <app-custom-svg name="mic-bars" [size]="18"></app-custom-svg>
-                                </button>
-
-                                <button
-                                    type="button"
-                                    class="icon-btn"
-                                    [ngClass]="{ active: voiceModeEnabled, loading: voiceModeLoading }"
-                                    (click)="toggleVoiceMode()"
-                                    [disabled]="voiceModeLoading"
-                                    [attr.title]="voiceModeEnabled ? 'Отключить VoiceMode' : 'Включить VoiceMode'"
-                                >
-                                    <app-custom-svg name="microphone" [size]="20"></app-custom-svg>
-                                </button>
-
-                            </div>
-
-                            <div class="composer-group">
-                                <button
-                                    *ngIf="loading && activeGenerationRunId"
-                                    type="button"
-                                    class="send-btn stop-btn"
-                                    (click)="stopGeneration()"
-                                    title="Остановить генерацию"
-                                >
-                                    <app-custom-svg name="stop" [size]="16"></app-custom-svg>
-                                </button>
-                                <button
-                                    *ngIf="!loading || !activeGenerationRunId"
-                                    type="submit"
-                                    class="send-btn"
-                                    [disabled]="isProcessingAttachments"
-                                    title="Отправить"
-                                >
-                                    <app-custom-svg name="arrow-up" [size]="20"></app-custom-svg>
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-
-                    <app-emoji-picker
-                        *ngIf="showEmojiPicker"
-                        [position]="emojiPickerMode === 'dropdown' ? emojiDropdownPosition : null"
-                        [displayMode]="emojiPickerMode"
-                        [sidePanelPosition]="emojiPickerSide"
-                        (emojiSelect)="addEmoji($event)"
-                        (requestClose)="showEmojiPicker = false"
-                    ></app-emoji-picker>
-                </form>
-            </div>
-        </footer>
+        <div class="webpage-modal-overlay" *ngIf="webpageModalOpen" (click)="closeWebpageModal()">
+            <section class="webpage-modal" (click)="$event.stopPropagation()">
+                <header class="webpage-modal__header">
+                    <strong>Прикрепить веб-страницу</strong>
+                    <button type="button" (click)="closeWebpageModal()" aria-label="Закрыть">
+                        <app-custom-svg name="close" [size]="18"></app-custom-svg>
+                    </button>
+                </header>
+                <label class="webpage-modal__field">
+                    <span>URL веб-страницы</span>
+                    <textarea
+                        class="custom-scrollbar"
+                        [formControl]="webpageUrlControl"
+                        placeholder="https://example.com"
+                        rows="3"
+                        (keydown.enter)="submitWebpageUrl($event)"
+                    ></textarea>
+                </label>
+                <div class="webpage-mode">
+                    <button
+                        type="button"
+                        [class.active]="webpageProcessingMode === 'extract'"
+                        (click)="webpageProcessingMode = 'extract'"
+                    >
+                        Извлечь текст
+                    </button>
+                    <button
+                        type="button"
+                        [class.active]="webpageProcessingMode === 'link'"
+                        (click)="webpageProcessingMode = 'link'"
+                    >
+                        Только ссылка
+                    </button>
+                </div>
+                <div class="webpage-modal__hint">
+                    {{ webpageProcessingMode === 'extract'
+                        ? 'PAI загрузит страницу на backend, очистит HTML и добавит текст в контекст.'
+                        : 'PAI передаст модели только URL. Быстрее, но без содержимого страницы.' }}
+                </div>
+                <div class="webpage-modal__error" *ngIf="webpageUrlError">{{ webpageUrlError }}</div>
+                <footer class="webpage-modal__footer">
+                    <button type="button" (click)="submitWebpageUrl()">Добавить</button>
+                </footer>
+            </section>
+        </div>
 
         <div class="media-preview-overlay" *ngIf="selectedMedia" (click)="closeMediaPreview()">
             <div class="media-preview" (click)="$event.stopPropagation()">
@@ -321,6 +201,44 @@
                 />
                 <div class="media-preview__name">{{ selectedMedia.name }}</div>
             </div>
+        </div>
+
+        <div class="library-picker-overlay" *ngIf="libraryPickerOpen" (click)="closeLibraryPicker()">
+            <section class="library-picker" (click)="$event.stopPropagation()">
+                <header class="library-picker__header">
+                    <strong>Добавить из библиотеки</strong>
+                    <button type="button" (click)="closeLibraryPicker()" aria-label="Закрыть">
+                        <app-custom-svg name="close" [size]="18"></app-custom-svg>
+                    </button>
+                </header>
+                <app-ui-input
+                    type="text"
+                    placeholder="Поиск"
+                    [(ngModel)]="libraryPickerQuery"
+                    (ngModelChange)="loadLibraryPicker()"
+                ></app-ui-input>
+                <div class="library-picker__grid custom-scrollbar">
+                    <button
+                        type="button"
+                        class="library-picker__item"
+                        *ngFor="let item of libraryItems; trackBy: trackByLibraryItem"
+                        (click)="attachLibraryItem(item)"
+                    >
+                        <span
+                            class="library-picker__thumb"
+                            [class.file]="item.category !== 'image'"
+                            [style.backgroundImage]="item.category === 'image' ? 'url(' + getLibraryItemUrl(item) + ')' : null"
+                        >
+                            <app-custom-svg *ngIf="item.category !== 'image'" name="file" [size]="24"></app-custom-svg>
+                        </span>
+                        <span class="library-picker__name">{{ item.name }}</span>
+                        <span class="library-picker__meta">{{ item.category }} · {{ formatMediaSize(item.size) }}</span>
+                    </button>
+                    <div class="library-picker__empty" *ngIf="!libraryPickerLoading && libraryItems.length === 0">
+                        Файлы не найдены.
+                    </div>
+                </div>
+            </section>
         </div>
     </div>
 </ng-container>

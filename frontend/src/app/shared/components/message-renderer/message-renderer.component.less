@@ -218,6 +218,9 @@
             max-height: 0;
             opacity: 0;
             overflow: hidden;
+            white-space: pre-wrap;
+            overflow-wrap: anywhere;
+            word-break: break-word;
             transition: max-height 0.45s cubic-bezier(0.4, 0, 0.2, 1),
                 opacity 0.3s ease-in-out;
 
@@ -242,7 +245,7 @@
             }
 
             &.expanded {
-                max-height: 360px;
+                max-height: min(70vh, 720px);
                 opacity: 1;
                 overflow-y: auto;
                 padding-right: 8px;

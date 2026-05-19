@@ -30,6 +30,23 @@ RVC_F0_METHODS = ["fcpe", "rmvpe", "crepe", "pm", "dio"]
 RVC_EMBEDDER_MODELS = ["hubert", "contentvec"]
 
 
+def _safe_stem(filename: str) -> str:
+    stem = Path(str(filename or "rvc_voice")).stem
+    safe = "".join(ch if ch.isalnum() or ch in ("-", "_") else "_" for ch in stem).strip("._")
+    return safe or "rvc_voice"
+
+
+def _unique_rvc_voice_path(filename: str) -> Path:
+    ensure_rvc_paths()
+    stem = _safe_stem(filename)
+    candidate = LOCAL_RVC_VOICES / f"{stem}.pth"
+    index = 1
+    while candidate.exists():
+        candidate = LOCAL_RVC_VOICES / f"{stem}_{index}.pth"
+        index += 1
+    return candidate
+
+
 def ensure_rvc_paths() -> None:
     LOCAL_RVC_EMBEDDERS.mkdir(parents=True, exist_ok=True)
     LOCAL_RVC_BASE.mkdir(parents=True, exist_ok=True)
@@ -123,6 +140,25 @@ def list_local_rvc_models() -> list[dict[str, str]]:
 
     files.sort(key=lambda item: item["path"])
     return files
+
+
+def import_rvc_model(filename: str, file_bytes: bytes) -> dict[str, str]:
+    ensure_rvc_bootstrap()
+    if not str(filename or "").lower().endswith(".pth"):
+        raise ValueError("RVC model must be a .pth file")
+    if not file_bytes:
+        raise ValueError("RVC model file is empty")
+
+    target_path = _unique_rvc_voice_path(filename)
+    target_path.write_bytes(file_bytes)
+    rel_path = target_path.relative_to(LOCAL_RVC_ROOT).as_posix()
+    log_audit_entry(
+        "rvc_model_imported",
+        "[RVC] Voice model imported.",
+        AuditStatus.SUCCESS,
+        details={"name": target_path.name, "path": rel_path, "size_bytes": len(file_bytes)},
+    )
+    return {"name": target_path.name, "path": rel_path}
 
 
 def resolve_rvc_model_path(model_file: str | None) -> Path | None:

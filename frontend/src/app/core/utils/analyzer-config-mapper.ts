@@ -44,14 +44,34 @@ const deepCamelToSnake = (obj: any): any => {
 export const mapAnalyzerDtoToModel = (dto?: any): AnalyzerConfig => {
     const model: Partial<AnalyzerConfig> = {};
 
+    if (dto?.enabled !== undefined) {
+        model.enabled = !!dto.enabled;
+    } else {
+        model.enabled = true;
+    }
+
     if (dto?.active_provider !== undefined) {
         model.activeProvider = dto.active_provider;
+    } else {
+        model.activeProvider = 'ollama';
     }
 
     if (dto?.fallback_order !== undefined) {
         model.fallbackOrder = Array.isArray(dto.fallback_order)
             ? dto.fallback_order.filter((name: string): name is string => typeof name === 'string')
             : ['ollama'];
+    } else {
+        model.fallbackOrder = [];
+    }
+
+    if (dto?.release_after_use !== undefined) {
+        model.releaseAfterUse = !!dto.release_after_use;
+    } else {
+        model.releaseAfterUse = true;
+    }
+
+    if (dto?.system_prompt !== undefined) {
+        model.systemPrompt = String(dto.system_prompt || '');
     }
 
     if (dto?.providers) {
@@ -75,12 +95,24 @@ export const mapAnalyzerDtoToModel = (dto?: any): AnalyzerConfig => {
 export const mapAnalyzerModelToDto = (model: Partial<AnalyzerConfig>): AnalyzerConfigDto => {
     const dto: Partial<AnalyzerConfigDto> = {};
 
+    if (model.enabled !== undefined) {
+        dto.enabled = model.enabled;
+    }
+
     if (model.activeProvider !== undefined) {
         dto.active_provider = model.activeProvider;
     }
 
     if (model.fallbackOrder !== undefined) {
         dto.fallback_order = model.fallbackOrder;
+    }
+
+    if (model.releaseAfterUse !== undefined) {
+        dto.release_after_use = model.releaseAfterUse;
+    }
+
+    if (model.systemPrompt !== undefined) {
+        dto.system_prompt = model.systemPrompt;
     }
 
     if (model.providers) {

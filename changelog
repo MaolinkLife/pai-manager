@@ -1,3 +1,41 @@
+version: 0.7.1
+- Unified Media/Image Pipeline
+  - Added a shared media image pipeline used by Sandbox, Synthesis, main chat image generation, and Telegram image flows.
+  - Added LLM prompt-builder tracing for image generation: tool context, generated prompt, negative prompt, provider route, parameters, result media, and review/vision metadata.
+  - Improved image prompt building so raw system strings such as dates, clock labels, and emotion labels are converted into visual composition cues instead of being copied into prompts.
+  - Removed fixed `systemOutfit` from image prompt context so generated scenes can improvise clothing from intent, setting, time, and mood.
+  - `emotionMood` is now included only when Moral Matrix is enabled and has an actual emotion state.
+- ComfyUI & Synthesis
+  - Added ComfyUI provider integration with checkpoint discovery, endpoint/resource inspection, and txt2img generation.
+  - Added ComfyUI-aware generation parameters: width, height, steps, CFG, sampler, scheduler, checkpoint, seed.
+  - Split `sampler` and `scheduler` in Synthesis and Sandbox UI/API payloads so values such as `euler` are sent as sampler, not scheduler.
+  - Synthesis and Sandbox now use provider-level ComfyUI defaults instead of overwriting them with stale local UI defaults.
+  - Added temporary-output persistence control for Sandbox and Synthesis; generated image output storage is ignored by git.
+- Sandbox
+  - Added an image pipeline mode that shows the generated prompt, input tool context, generation route, parameters, traces, and output image.
+  - Added a dedicated Vision mode for describing input images/screen context without accidentally launching image generation.
+  - Fixed Sandbox layout so panels remain pinned and scrolling is contained inside the controls/chat/process areas.
+  - Added provider/model loading for image generation, including ComfyUI checkpoint selection.
+- Telegram
+  - Telegram generation is forced through synchronous generation paths outside main chat streaming behavior.
+  - Routed Telegram image command, `take_photo`, and test-image flows through the shared media pipeline.
+  - Telegram test images now generate meaningful captions from image review/vision context instead of sending generic test text.
+  - Added fast repeat-recovery path that reuses already built context/tool outputs, disables thinking, and avoids rerunning the full Decision Layer pipeline when repeat guard blocks a reply.
+  - Fixed duplicate current-user messages in Telegram payloads by deduplicating recent history before formatting model input.
+  - Added adjacent duplicate suppression for repeated assistant/user history rows before sending context to the model.
+- Chat Runtime & Streaming
+  - Fixed duplicate live-status rendering in main chat by hiding the global loading indicator once a streaming assistant message has its own runtime status.
+  - Fixed reasoning/status overlap by hiding closed `<think>` blocks during live final-answer streaming while preserving completed reasoning display afterward.
+  - Added longer Ollama stream read timeout handling and converted stream stalls into structured provider errors instead of raw aiohttp tracebacks.
+  - WebSocket generation errors now emit `run_status=error` and `typing_end` so the UI does not remain stuck in a running state.
+- UI & Library Polish
+  - Replaced several ad-hoc checkbox controls with project UI checkboxes.
+  - Updated Library and Sidebar icon/preview controls, including books/library icon treatment and file preview action cleanup.
+  - Added empty-state text for chat history and memory storage blocks.
+- Reliability & Regression Safety
+  - Added/updated regression coverage around Telegram generation mode, empty-content recovery, streaming reasoning state, Ollama client behavior, input envelope handling, synthesis routes, and Sandbox/media flows.
+  - Hardened config/auth/runtime cleanup behavior and provider error reporting across the affected generation paths.
+
 version: 0.7
 - Telegram Notification-Driven Runtime
   - Reworked Telegram bridge to notification-first processing (event → normalized notification → sequential worker) for safer autonomous behavior.

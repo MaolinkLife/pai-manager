@@ -8,13 +8,14 @@ import edge_tts
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import FileResponse
 
+from modules.ollama import client as ollama_client
 from modules.tts.paths import voices_root
 from modules.tts.voice_import import summarize_voice_file
 from modules.system import config as config_service
 from modules.vision.monitor import get_monitor_info, get_monitor_screens
 from modules.vision.providers.apple_vision import AppleVisionProvider
 from modules.vision.providers.ollama_vision import OllamaVisionProvider
-from modules.system.resource import get_audio_resources
+from modules.system.resource import get_audio_resources, list_local_model_resources
 from modules.tts.rvc_service import list_local_rvc_models
 from modules.tts.xtts import list_xtts_models
 
@@ -45,6 +46,31 @@ def get_audio_devices():
         return {
             "status": "error",
             "content": f"Error while getting audio devices: {str(e)}",
+        }
+
+
+@router.get("/local-models")
+def get_local_models(
+    limit_per_group: int = Query(default=300, ge=1, le=2000),
+    include_ollama: bool = Query(default=False),
+):
+    try:
+        payload = list_local_model_resources(limit_per_group=limit_per_group)
+        if include_ollama:
+            ollama_payload = ollama_client.list_models()
+            payload["ollama"] = {
+                "status": ollama_payload.get("status", "error"),
+                "models": ollama_payload.get("models", []) or [],
+                "message": ollama_payload.get("message"),
+            }
+        return payload
+    except Exception as exc:
+        return {
+            "status": "error",
+            "message": f"Error getting local models: {exc}",
+            "groups": {},
+            "counts": {},
+            "total_count": 0,
         }
 
 

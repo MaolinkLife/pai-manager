@@ -15,14 +15,15 @@ def start_recording():
 
 
 def stop_recording_and_process(character_name: str) -> dict:
-    stt_service.stop_recording_and_save(TEMP_AUDIO_PATH)
-    transcript = stt_service.transcribe_audio(TEMP_AUDIO_PATH)
+    try:
+        stt_service.stop_recording_and_save(TEMP_AUDIO_PATH)
+        transcript = stt_service.transcribe_audio(TEMP_AUDIO_PATH)
+    finally:
+        if os.path.exists(TEMP_AUDIO_PATH):
+            os.remove(TEMP_AUDIO_PATH)
 
     message_id = str(uuid.uuid4())
     timestamp = datetime.now(timezone.utc)
-
-    if os.path.exists(TEMP_AUDIO_PATH):
-        os.remove(TEMP_AUDIO_PATH)
 
     return {
         "id": message_id,

@@ -3,7 +3,7 @@
     "version": 1,
     "newProjectRoot": "projects",
     "projects": {
-        "z-waif-project": {
+        "pai-manager": {
             "projectType": "application",
             "schematics": {
                 "@schematics/angular:component": {
@@ -20,7 +20,7 @@
                 "build": {
                     "builder": "@angular-devkit/build-angular:browser",
                     "options": {
-                        "outputPath": "dist/z-waif-project",
+                        "outputPath": "dist/pai-manager",
                         "index": "src/index.html",
                         "main": "src/main.ts",
                         "polyfills": "src/polyfills.ts",
@@ -49,13 +49,13 @@
                             "budgets": [
                                 {
                                     "type": "initial",
-                                    "maximumWarning": "500kb",
-                                    "maximumError": "1mb"
+                                    "maximumWarning": "2mb",
+                                    "maximumError": "3mb"
                                 },
                                 {
                                     "type": "anyComponentStyle",
-                                    "maximumWarning": "8kb",
-                                    "maximumError": "16kb"
+                                    "maximumWarning": "24kb",
+                                    "maximumError": "32kb"
                                 }
                             ],
                             "fileReplacements": [
@@ -80,14 +80,15 @@
                 "serve": {
                     "builder": "@angular-devkit/build-angular:dev-server",
                     "options": {
+                        "port": 3880,
                         "proxyConfig": "proxy.conf.json"
                     },
                     "configurations": {
                         "production": {
-                          "buildTarget": "z-waif-project:build:production"
+                          "buildTarget": "pai-manager:build:production"
                         },
                         "development": {
-                          "buildTarget": "z-waif-project:build:development"
+                          "buildTarget": "pai-manager:build:development"
                         }
                     },
                     "defaultConfiguration": "development"
@@ -95,7 +96,7 @@
                 "extract-i18n": {
                     "builder": "@angular-devkit/build-angular:extract-i18n",
                     "options": {
-                      "buildTarget": "z-waif-project:build"
+                      "buildTarget": "pai-manager:build"
                     }
                 },
                 "test": {

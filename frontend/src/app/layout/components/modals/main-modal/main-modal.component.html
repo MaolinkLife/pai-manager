@@ -1,14 +1,14 @@
 <!-- main-modal.component.html -->
 <div class="content">
     <div class="sidebar">
-        <div class="sidebar-title">Settings</div>
+        <div class="sidebar-title">{{ "settingsSidebar.title" | translate }}</div>
         <div class="sidebar-content">
             <button
                 *ngFor="let tab of tabs"
                 [class.active]="activeView === tab.key"
                 (click)="selectView(tab.key)"
             >
-                {{ tab.label }}
+                {{ tab.labelKey | translate }}
             </button>
         </div>
     </div>
@@ -26,6 +26,7 @@
         <app-generation-settings
             *ngIf="activeView === 'generate'"
         ></app-generation-settings>
+        <app-persona-settings *ngIf="activeView === 'persona'"></app-persona-settings>
         <app-media-settings *ngIf="activeView === 'media'"></app-media-settings>
         <app-social-settings *ngIf="activeView === 'social'"></app-social-settings>
         <app-core-settings *ngIf="activeView === 'core'"></app-core-settings>

@@ -1,0 +1,237 @@
+<footer class="chat-footer">
+    <div class="chat-footer-inner">
+        <form (submit)="onSubmit($event)" class="input-area">
+            <input
+                #fileInput
+                type="file"
+                hidden
+                multiple
+                (change)="onFilesSelected($event)"
+            />
+
+            <div class="attachments-preview" *ngIf="attachments.length">
+                <div
+                    class="attachment-item"
+                    *ngFor="let attachment of attachments; trackBy: trackByAttachment"
+                    [attr.title]="attachment.description || attachment.name"
+                >
+                    <button
+                        type="button"
+                        class="attachment-remove"
+                        (click)="removeAttachment.emit(attachment.id)"
+                        aria-label="Удалить вложение"
+                    >
+                        <app-custom-svg name="close" [size]="14"></app-custom-svg>
+                    </button>
+                    <div
+                        class="attachment-thumb"
+                        [ngClass]="{ 'is-file': attachment.category !== 'image' }"
+                        [style.backgroundImage]="attachment.category === 'image' && attachment.dataUrl ? 'url(' + attachment.dataUrl + ')' : null"
+                    >
+                        <app-custom-svg
+                            *ngIf="attachment.category !== 'image'"
+                            name="file"
+                            [size]="24"
+                            title="File"
+                        ></app-custom-svg>
+                    </div>
+                </div>
+            </div>
+
+            <div class="context-attachments" *ngIf="contextAttachments.length">
+                <div
+                    class="context-chip"
+                    *ngFor="let attachment of contextAttachments; trackBy: trackByContextAttachment"
+                    [class.loading]="attachment.status === 'loading'"
+                    [class.error]="attachment.status === 'error'"
+                    [attr.title]="attachment.subtitle || attachment.title"
+                >
+                    <span class="context-spinner" *ngIf="attachment.status === 'loading'"></span>
+                    <app-custom-svg *ngIf="attachment.status !== 'loading'" [name]="attachment.type === 'webpage' ? 'globe' : 'file-text'" [size]="15"></app-custom-svg>
+                    <span class="context-chip__text">{{ attachment.title }}</span>
+                    <span class="context-chip__type">{{ attachment.type === 'webpage' ? 'Text' : 'Note' }}</span>
+                    <button
+                        type="button"
+                        class="context-chip__remove"
+                        (click)="removeContextAttachment.emit(attachment.id)"
+                        aria-label="Удалить контекст"
+                    >
+                        <app-custom-svg name="close" [size]="13"></app-custom-svg>
+                    </button>
+                </div>
+            </div>
+
+            <div class="input-body">
+                <textarea
+                    #chatTextarea
+                    class="chat-input custom-scrollbar"
+                    [class.has-expand]="isComposerScrollable"
+                    [formControl]="chatInput"
+                    placeholder="Скажи что-нибудь..."
+                    rows="1"
+                    (input)="resizeTextarea()"
+                    (keydown)="onKeyDown($event)"
+                ></textarea>
+                <button
+                    *ngIf="isComposerScrollable"
+                    type="button"
+                    class="composer-expand-btn"
+                    (click)="expandComposer.emit($event)"
+                    title="Расширить редактор"
+                >
+                    <app-custom-svg name="expand" [size]="15"></app-custom-svg>
+                </button>
+
+                <div class="composer-toolbar">
+                    <div class="composer-group">
+                        <button
+                            type="button"
+                            class="icon-btn"
+                            (click)="toggleAttach.emit($event); $event.stopPropagation()"
+                            [attr.data-tooltip]="'Вложения'"
+                            aria-label="Вложения"
+                        >
+                            <app-custom-svg name="plus" [size]="20"></app-custom-svg>
+                        </button>
+
+                        <div
+                            class="attach-menu"
+                            *ngIf="activeDropdown === 'attach'"
+                            (click)="$event.stopPropagation()"
+                        >
+                            <button type="button" (click)="openFile.emit($event)">
+                                <app-custom-svg name="attach" [size]="16"></app-custom-svg>
+                                <span>Загрузить файлы</span>
+                            </button>
+                            <button type="button" (click)="captureScreen.emit($event)">
+                                <app-custom-svg name="screen-capture" [size]="16"></app-custom-svg>
+                                <span>Захват экрана</span>
+                            </button>
+                            <button type="button" (click)="attachWebpage.emit($event)">
+                                <app-custom-svg name="globe" [size]="16"></app-custom-svg>
+                                <span>Прикрепить веб-страницу</span>
+                            </button>
+                            <button type="button" (click)="openLibrary.emit($event)">
+                                <app-custom-svg name="attach-library" [size]="16"></app-custom-svg>
+                                <span>Добавить из библиотеки</span>
+                            </button>
+                            <button type="button" (click)="attachNotes.emit($event)">
+                                <app-custom-svg name="file-text" [size]="16"></app-custom-svg>
+                                <span>Прикрепить заметки</span>
+                            </button>
+                            <button type="button" class="disabled">
+                                <app-custom-svg name="books" [size]="16"></app-custom-svg>
+                                <span>Прикрепить знания</span>
+                            </button>
+                            <button type="button" class="disabled">
+                                <app-custom-svg name="history" [size]="16"></app-custom-svg>
+                                <span>Справочные чаты</span>
+                            </button>
+                        </div>
+
+                        <button
+                            type="button"
+                            class="icon-btn"
+                            (click)="toggleTools.emit($event); $event.stopPropagation()"
+                            [class.active]="activeDropdown === 'tools' || imageGenerationEnabled || codeInterpreterEnabled"
+                            [attr.data-tooltip]="'Инструменты'"
+                            aria-label="Инструменты"
+                        >
+                            <app-custom-svg name="tools" [size]="19"></app-custom-svg>
+                        </button>
+
+                        <div
+                            class="tools-menu"
+                            *ngIf="activeDropdown === 'tools'"
+                            (click)="$event.stopPropagation()"
+                        >
+                            <button type="button" class="tools-row" (click)="toggleImageGeneration.emit()">
+                                <span class="tools-row__info">
+                                    <app-custom-svg name="image" [size]="16"></app-custom-svg>
+                                    <span>Изображение</span>
+                                </span>
+                                <span class="tools-switch" [class.active]="imageGenerationEnabled" aria-hidden="true">
+                                    <span class="tools-switch__thumb"></span>
+                                </span>
+                            </button>
+                            <button type="button" class="tools-row" (click)="toggleCodeInterpreter.emit()">
+                                <span class="tools-row__info">
+                                    <app-custom-svg name="terminal" [size]="16"></app-custom-svg>
+                                    <span>Интерпретатор кода</span>
+                                </span>
+                                <span class="tools-switch" [class.active]="codeInterpreterEnabled" aria-hidden="true">
+                                    <span class="tools-switch__thumb"></span>
+                                </span>
+                            </button>
+                        </div>
+
+                        <button
+                            type="button"
+                            class="icon-btn"
+                            (click)="toggleEmoji.emit($event)"
+                            [attr.data-tooltip]="'Смайлики'"
+                            aria-label="Смайлики"
+                        >
+                            <app-custom-svg name="emoji" [size]="20"></app-custom-svg>
+                        </button>
+
+                        <button
+                            type="button"
+                            class="icon-btn"
+                            (click)="toggleRecord.emit()"
+                            [ngClass]="{ recording: recording }"
+                            [attr.data-tooltip]="'Голосовой ввод'"
+                            aria-label="Голосовой ввод"
+                        >
+                            <app-custom-svg name="microphone" [size]="20"></app-custom-svg>
+                        </button>
+
+                        <button
+                            type="button"
+                            class="icon-btn"
+                            [ngClass]="{ active: voiceModeEnabled, loading: voiceModeLoading }"
+                            (click)="toggleVoice.emit()"
+                            [disabled]="voiceModeLoading"
+                            [attr.data-tooltip]="voiceModeEnabled ? 'Отключить VoiceMode' : 'Включить VoiceMode'"
+                            [attr.aria-label]="voiceModeEnabled ? 'Отключить VoiceMode' : 'Включить VoiceMode'"
+                        >
+                            <app-custom-svg name="mic-bars" [size]="18"></app-custom-svg>
+                        </button>
+                    </div>
+
+                    <div class="composer-group">
+                        <button
+                            *ngIf="loading && activeGenerationRunId"
+                            type="button"
+                            class="send-btn stop-btn"
+                            (click)="stopGeneration.emit()"
+                            [attr.data-tooltip]="'Остановить генерацию'"
+                            aria-label="Остановить генерацию"
+                        >
+                            <app-custom-svg name="stop" [size]="16"></app-custom-svg>
+                        </button>
+                        <button
+                            *ngIf="!loading || !activeGenerationRunId"
+                            type="submit"
+                            class="send-btn"
+                            [disabled]="isProcessingAttachments"
+                            [attr.data-tooltip]="'Отправить'"
+                            aria-label="Отправить"
+                        >
+                            <app-custom-svg name="arrow-up" [size]="20"></app-custom-svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <app-emoji-picker
+                *ngIf="showEmojiPicker"
+                [position]="emojiPickerMode === 'dropdown' ? emojiDropdownPosition : null"
+                [displayMode]="emojiPickerMode"
+                [sidePanelPosition]="emojiPickerSide"
+                (emojiSelect)="emojiSelect.emit($event)"
+                (requestClose)="emojiClose.emit()"
+            ></app-emoji-picker>
+        </form>
+    </div>
+</footer>

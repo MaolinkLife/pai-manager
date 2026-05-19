@@ -5,7 +5,7 @@ import io
 import time
 from typing import Any, Dict, Optional
 
-from PIL import Image
+from PIL import Image, ImageDraw
 
 from modules.ollama import client as ollama_client
 from modules.system import config as config_service
@@ -23,32 +23,55 @@ class OllamaVisionProvider:
             or config_service.get_config_value("api.visual_model", "")
             or ""
         ).strip()
-        self.max_tokens = int(cfg.get("max_tokens", 160) or 160)
+        self.max_tokens = int(cfg.get("max_tokens", 512) or 512)
         self.probe_enabled = bool(cfg.get("probe_enabled", True))
         self.probe_cache_seconds = max(5, int(cfg.get("probe_cache_seconds", 300) or 300))
+        self.keep_alive = cfg.get("keep_alive", None)
+        image_format = str(cfg.get("image_format") or "PNG").strip().upper()
+        self.image_format = image_format if image_format in {"PNG", "JPEG"} else "PNG"
 
         self._last_probe_at: float = 0.0
         self._last_probe_ok: Optional[bool] = None
         self._last_probe_error: str = ""
 
     def _build_probe_image_b64(self) -> str:
-        # Tiny deterministic RGB sample for capability probe.
-        image = Image.new("RGB", (16, 16), color=(122, 162, 255))
+        # Use a real, simple image. Some VLMs return empty content for 1x1/tiny probes.
+        image = Image.new("RGB", (256, 256), color="white")
+        draw = ImageDraw.Draw(image)
+        draw.rectangle((28, 40, 118, 168), fill=(220, 48, 48))
+        draw.ellipse((142, 48, 226, 132), fill=(42, 103, 220))
+        draw.text((34, 205), "VISION TEST", fill=(10, 10, 10))
         buffer = io.BytesIO()
-        image.save(buffer, format="JPEG", quality=80)
+        image.save(buffer, format="PNG")
         return base64.b64encode(buffer.getvalue()).decode("ascii")
+
+    @staticmethod
+    def _is_error_content(content: str) -> bool:
+        return str(content or "").strip().lower().startswith("[error]")
 
     def _probe_vision_support(self) -> bool:
         if not self.probe_enabled:
+            metadata_support = ollama_client.model_supports_vision(self.model_id)
+            if not metadata_support.get("supported"):
+                self._last_probe_ok = False
+                self._last_probe_error = str(metadata_support.get("reason") or "model metadata does not declare vision support")
+                return False
             return True
         now = time.time()
         if self._last_probe_ok is not None and (now - self._last_probe_at) < self.probe_cache_seconds:
             return bool(self._last_probe_ok)
 
+        metadata_support = ollama_client.model_supports_vision(self.model_id)
+        if not metadata_support.get("supported"):
+            self._last_probe_ok = False
+            self._last_probe_error = str(metadata_support.get("reason") or "model metadata does not declare vision support")
+            self._last_probe_at = now
+            return False
+
         test_messages = [
             {
                 "role": "user",
-                "content": "Describe this test image in one short sentence.",
+                "content": "List the shapes and text in this image.",
                 "images": [self._build_probe_image_b64()],
             }
         ]
@@ -59,14 +82,14 @@ class OllamaVisionProvider:
                     test_messages,
                     model=self.model_id,
                     options={
-                        "num_predict": 24,
+                        "num_predict": max(self.max_tokens, 256),
                         "temperature": 0.0,
                     },
-                    keep_alive=0,
+                    keep_alive=self.keep_alive,
                 )
                 or ""
             ).strip()
-            ok = bool(content) and not content.startswith("[ERROR]")
+            ok = bool(content) and not self._is_error_content(content)
             self._last_probe_ok = ok
             self._last_probe_error = "" if ok else (content or "empty probe response")
         except Exception as exc:
@@ -99,7 +122,10 @@ class OllamaVisionProvider:
         if image.mode != "RGB":
             image = image.convert("RGB")
         buffer = io.BytesIO()
-        image.save(buffer, format="JPEG", quality=92)
+        if self.image_format == "JPEG":
+            image.save(buffer, format="JPEG", quality=92)
+        else:
+            image.save(buffer, format="PNG")
         encoded = base64.b64encode(buffer.getvalue()).decode("ascii")
         messages = [
             {
@@ -116,11 +142,11 @@ class OllamaVisionProvider:
                     "num_predict": self.max_tokens,
                     "temperature": 0.1,
                 },
-                keep_alive=0,
+                keep_alive=self.keep_alive,
             )
             or ""
         ).strip()
-        if not content or content.startswith("[ERROR]"):
+        if not content or self._is_error_content(content):
             return {
                 "summary": content or "Vision response is empty",
                 "model": self.model_id,

@@ -139,6 +139,16 @@
                         <div *ngIf="showVoiceLanguage()" formGroupName="edge">
                             <div class="form-grid">
                                 <div class="form-group">
+                                    <label for="edge-voiceSearch">Search</label>
+                                    <app-ui-input
+                                        id="edge-voiceSearch"
+                                        type="text"
+                                        [(ngModel)]="edgeVoiceSearch"
+                                        [ngModelOptions]="{ standalone: true }"
+                                        placeholder="Search voice"
+                                    ></app-ui-input>
+                                </div>
+                                <div class="form-group">
                                     <label for="edge-voiceLanguage">{{ "settings.voiceLanguage" | translate }}</label>
                                     <app-ui-select
                                         id="edge-voiceLanguage"
@@ -621,6 +631,23 @@
                                         formControlName="modelFile"
                                         [options]="localRvcModelOptions"
                                     ></app-ui-select>
+                                    <div class="button-row rvc-import-row">
+                                        <app-ui-button
+                                            type="button"
+                                            variant="secondary"
+                                            (pressed)="openRvcImportDialog()"
+                                            [disabled]="isImportingRvcModel"
+                                        >
+                                            {{ isImportingRvcModel ? 'Importing...' : 'Import .pth' }}
+                                        </app-ui-button>
+                                        <input
+                                            #rvcImportInput
+                                            type="file"
+                                            class="hidden-file-input"
+                                            accept=".pth"
+                                            (change)="onRvcImportSelected($event)"
+                                        />
+                                    </div>
                                     <div class="field-hint" *ngIf="getSelectedRvcModelName()">
                                         Selected: {{ getSelectedRvcModelName() }}
                                     </div>

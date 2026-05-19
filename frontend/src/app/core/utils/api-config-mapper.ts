@@ -6,6 +6,7 @@ export const mapApiDtoToModel = (dto: any) => {
     Object.keys(rawProviders).forEach((key: string) => {
         const value = rawProviders[key] ?? {};
         providers[key] = {
+            ...value,
             model: value.model,
             temperature: value.temperature,
             maxTokens: value.max_tokens,
@@ -13,6 +14,9 @@ export const mapApiDtoToModel = (dto: any) => {
             apiKey: value.api_key,
             baseUrl: value.base_url,
         };
+        delete providers[key].max_tokens;
+        delete providers[key].api_key;
+        delete providers[key].base_url;
     });
 
     const activeProvider = dto.active_provider;
@@ -23,6 +27,7 @@ export const mapApiDtoToModel = (dto: any) => {
         streaming: dto.streaming,
         model: syncedModel,
         visualModel: dto.visual_model,
+        visualModelOptions: dto.visual_model_options ?? [],
         tokenLimit: dto.token_limit,
         messagePairLimit: dto.message_pair_limit,
         activeProvider,
@@ -40,6 +45,7 @@ export const mapApiModelToDto = (api: ProjectConfig['api']) => {
         }
         const providerModel = api.activeProvider === key ? api.model : value.model;
         providers[key] = {
+            ...value,
             model: providerModel,
             temperature: value.temperature,
             max_tokens: value.maxTokens,
@@ -47,6 +53,9 @@ export const mapApiModelToDto = (api: ProjectConfig['api']) => {
             api_key: value.apiKey,
             base_url: value.baseUrl,
         };
+        delete providers[key].maxTokens;
+        delete providers[key].apiKey;
+        delete providers[key].baseUrl;
     });
 
     return {
@@ -54,6 +63,7 @@ export const mapApiModelToDto = (api: ProjectConfig['api']) => {
         streaming: api.streaming,
         model: api.model,
         visual_model: api.visualModel,
+        visual_model_options: api.visualModelOptions ?? [],
         token_limit: api.tokenLimit,
         message_pair_limit: api.messagePairLimit,
         active_provider: api.activeProvider,

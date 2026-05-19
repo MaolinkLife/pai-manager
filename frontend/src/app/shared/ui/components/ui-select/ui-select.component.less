@@ -1,5 +1,8 @@
 :host {
     display: block;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
 }
 
 .ui-select-trigger {
@@ -69,6 +72,7 @@
 }
 
 .ui-select-trigger__value {
+    min-width: 0;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;

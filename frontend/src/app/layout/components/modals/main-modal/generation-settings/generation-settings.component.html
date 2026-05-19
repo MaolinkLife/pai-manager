@@ -4,44 +4,32 @@
             <h2><app-skeleton height="2rem" width="150px"></app-skeleton></h2>
 
             <div class="form-group">
-                <label
-                    ><app-skeleton height="1rem" width="120px"></app-skeleton
-                ></label>
+                <label><app-skeleton height="1rem" width="120px"></app-skeleton></label>
                 <app-skeleton height="2.5rem" width="100%"></app-skeleton>
             </div>
 
             <div class="form-group">
-                <label
-                    ><app-skeleton height="1rem" width="120px"></app-skeleton
-                ></label>
+                <label><app-skeleton height="1rem" width="120px"></app-skeleton></label>
                 <app-skeleton height="2.5rem" width="100%"></app-skeleton>
             </div>
 
             <div class="form-group">
-                <label
-                    ><app-skeleton height="1rem" width="120px"></app-skeleton
-                ></label>
+                <label><app-skeleton height="1rem" width="120px"></app-skeleton></label>
                 <app-skeleton height="2.5rem" width="100%"></app-skeleton>
             </div>
 
             <div class="form-group token-limit-block">
-                <label
-                    ><app-skeleton height="1rem" width="120px"></app-skeleton
-                ></label>
+                <label><app-skeleton height="1rem" width="120px"></app-skeleton></label>
                 <app-skeleton height="2.5rem" width="100%"></app-skeleton>
             </div>
 
             <div class="form-group">
-                <label
-                    ><app-skeleton height="1rem" width="120px"></app-skeleton
-                ></label>
+                <label><app-skeleton height="1rem" width="120px"></app-skeleton></label>
                 <app-skeleton height="2.5rem" width="100%"></app-skeleton>
             </div>
 
             <div class="form-group">
-                <label
-                    ><app-skeleton height="1rem" width="120px"></app-skeleton
-                ></label>
+                <label><app-skeleton height="1rem" width="120px"></app-skeleton></label>
                 <app-skeleton height="2.5rem" width="100%"></app-skeleton>
             </div>
 
@@ -55,65 +43,47 @@
         <h2><app-skeleton height="2rem" width="150px"></app-skeleton></h2>
 
         <div class="form-group">
-            <label
-                ><app-skeleton height="1rem" width="120px"></app-skeleton
-            ></label>
+            <label><app-skeleton height="1rem" width="120px"></app-skeleton></label>
             <app-skeleton height="2.5rem" width="100%"></app-skeleton>
         </div>
 
         <div class="form-group">
-            <label
-                ><app-skeleton height="1rem" width="120px"></app-skeleton
-            ></label>
+            <label><app-skeleton height="1rem" width="120px"></app-skeleton></label>
             <app-skeleton height="2.5rem" width="100%"></app-skeleton>
         </div>
 
         <div class="form-group">
-            <label
-                ><app-skeleton height="1rem" width="120px"></app-skeleton
-            ></label>
+            <label><app-skeleton height="1rem" width="120px"></app-skeleton></label>
             <app-skeleton height="2.5rem" width="100%"></app-skeleton>
         </div>
 
         <div class="form-group">
-            <label
-                ><app-skeleton height="1rem" width="120px"></app-skeleton
-            ></label>
+            <label><app-skeleton height="1rem" width="120px"></app-skeleton></label>
             <app-skeleton height="2.5rem" width="100%"></app-skeleton>
         </div>
 
         <div class="form-group">
-            <label
-                ><app-skeleton height="1rem" width="120px"></app-skeleton
-            ></label>
+            <label><app-skeleton height="1rem" width="120px"></app-skeleton></label>
             <app-skeleton height="2.5rem" width="100%"></app-skeleton>
         </div>
 
         <div class="form-group">
-            <label
-                ><app-skeleton height="1rem" width="120px"></app-skeleton
-            ></label>
+            <label><app-skeleton height="1rem" width="120px"></app-skeleton></label>
             <app-skeleton height="2.5rem" width="100%"></app-skeleton>
         </div>
 
         <div class="form-group">
-            <label
-                ><app-skeleton height="1rem" width="120px"></app-skeleton
-            ></label>
+            <label><app-skeleton height="1rem" width="120px"></app-skeleton></label>
             <app-skeleton height="2.5rem" width="100%"></app-skeleton>
         </div>
 
         <div class="form-group">
-            <label
-                ><app-skeleton height="1rem" width="120px"></app-skeleton
-            ></label>
+            <label><app-skeleton height="1rem" width="120px"></app-skeleton></label>
             <app-skeleton height="2.5rem" width="100%"></app-skeleton>
         </div>
 
         <div class="form-group">
-            <label
-                ><app-skeleton height="1rem" width="120px"></app-skeleton
-            ></label>
+            <label><app-skeleton height="1rem" width="120px"></app-skeleton></label>
             <app-skeleton height="6rem" width="100%"></app-skeleton>
         </div>
 
@@ -125,11 +95,7 @@
 
 <ng-template #formContent>
     <div class="settings-wrapper">
-        <form
-            [formGroup]="generationForm"
-            (ngSubmit)="saveChanges()"
-            class="settings-form"
-        >
+        <form [formGroup]="generationForm" (ngSubmit)="saveChanges()" class="settings-form">
             <h2>⚡ {{ "settings.apiSettings" | translate }}</h2>
 
             <div class="section">
@@ -139,82 +105,76 @@
                     <label for="apiType">{{
                         "settings.apiType" | translate
                     }}</label>
-                    <app-ui-select
-                        id="apiType"
-                        formControlName="apiType"
-                        [options]="apiTypeSelectOptions"
-                    ></app-ui-select>
+                    <app-ui-select id="apiType" formControlName="apiType" [options]="apiTypeSelectOptions"></app-ui-select>
                 </div>
 
                 <div class="form-group">
                     <label for="activeProvider">{{
                         "settings.activeProvider" | translate
                     }}</label>
-                    <app-ui-select
-                        id="activeProvider"
-                        formControlName="activeProvider"
-                        [options]="activeProviderOptions"
-                    ></app-ui-select>
+                    <app-ui-select id="activeProvider" formControlName="activeProvider" [options]="activeProviderOptions"></app-ui-select>
                 </div>
 
                 <div class="form-group">
                     <label for="fallbackOrder">{{
                         "settings.fallbackOrder" | translate
                     }}</label>
-                    <app-ui-input
-                        id="fallbackOrder"
-                        type="text"
-                        formControlName="fallbackOrder"
-                        placeholder="provider1, provider2"
-                    ></app-ui-input>
+                    <app-ui-input id="fallbackOrder" type="text" formControlName="fallbackOrder" placeholder="provider1, provider2"></app-ui-input>
                 </div>
 
                 <div class="form-group">
                     <label for="visualModel">{{
                         "settings.visualModel" | translate
                     }}</label>
-                    <app-ui-input
-                        id="visualModel"
-                        type="text"
-                        formControlName="visualModel"
-                    ></app-ui-input>
+                    <div class="visual-model-combo" (focusin)="openVisualModelDropdown()" (focusout)="closeVisualModelDropdown()">
+                        <div class="visual-model-combo__input-row">
+                            <app-ui-input id="visualModel" type="text" formControlName="visualModel" [placeholder]="'settings.visualModelPlaceholder' | translate"></app-ui-input>
+                            <button type="button" class="visual-model-combo__add" (click)="addCurrentVisualModelOption()" [title]="'settings.addVisualModel' | translate">
+                                +
+                            </button>
+                        </div>
+                        <div class="visual-model-combo__menu" *ngIf="visualModelDropdownOpen && hasVisualModelDropdownItems">
+                            <ng-container *ngIf="visualModelManualOptions.length > 0">
+                                <div class="visual-model-combo__caption">
+                                    {{ "settings.savedModels" | translate }}
+                                </div>
+                                <button type="button" class="visual-model-combo__option" *ngFor="let model of visualModelManualOptions" (mousedown)="selectVisualModel(model)">
+                                    <span>{{ model }}</span>
+                                    <span class="visual-model-combo__delete" (mousedown)="removeVisualModelOption(model, $event)" [title]="'general.delete' | translate">
+                                        ×
+                                    </span>
+                                </button>
+                            </ng-container>
+
+                            <div class="visual-model-combo__divider" *ngIf="isOllamaActiveProvider"></div>
+                            <ng-container *ngIf="isOllamaActiveProvider">
+                                <div class="visual-model-combo__caption">
+                                    Ollama
+                                </div>
+                                <button type="button" class="visual-model-combo__option" *ngFor="let model of visualModelOllamaOptions" (mousedown)="selectVisualModel(model)">
+                                    <span>{{ model }}</span>
+                                </button>
+                                <div class="visual-model-combo__empty" *ngIf="visualModelOllamaOptions.length === 0">
+                                    {{ "settings.ollamaUnavailable" | translate }}
+                                </div>
+                            </ng-container>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="form-group token-limit-block">
                     <label for="tokenLimit">{{
                         "settings.tokenLimit" | translate
                     }}</label>
-                    <app-ui-input
-                        id="tokenLimit"
-                        type="number"
-                        min="512"
-                        max="131072"
-                        step="256"
-                        formControlName="tokenLimit"
-                    ></app-ui-input>
-                    <app-ui-range
-                        [value]="generationForm.get('tokenLimit')?.value ?? 2048"
-                        [min]="512"
-                        [max]="131072"
-                        [step]="256"
-                        [showEdgeLabels]="true"
-                        minLabel="512"
-                        maxLabel="128k"
-                        (valueChange)="onTokenLimitRangeChange($event)"
-                    ></app-ui-range>
+                    <app-ui-input id="tokenLimit" type="number" [min]="512" [max]="131072" [step]="256" formControlName="tokenLimit" (valueChange)="onTokenLimitInputCommit()"></app-ui-input>
+                    <app-ui-range [value]="tokenLimitValue" [min]="512" [max]="131072" [step]="256" [showEdgeLabels]="true" minLabel="512" maxLabel="128k" (valueChange)="onTokenLimitRangeChange($event)"></app-ui-range>
                 </div>
 
                 <div class="form-group">
                     <label for="messagePairLimit">{{
                         "settings.messagePairLimit" | translate
                     }}</label>
-                    <app-ui-input
-                        id="messagePairLimit"
-                        type="number"
-                        formControlName="messagePairLimit"
-                        min="1"
-                        max="50"
-                    ></app-ui-input>
+                    <app-ui-input id="messagePairLimit" type="number" formControlName="messagePairLimit" min="1" max="50"></app-ui-input>
                 </div>
 
                 <div class="form-group">
@@ -236,22 +196,14 @@
                         <div class="form-group" *ngIf="field.key !== 'model'">
                             <ng-container [ngSwitch]="field.type">
                                 <label *ngSwitchCase="'checkbox'" class="checkbox">
-                                    <input
-                                        type="checkbox"
-                                        [formControlName]="field.key"
-                                        [id]="'provider-' + field.key"
-                                    />
+                                    <input type="checkbox" [formControlName]="field.key" [id]="'provider-' + field.key" />
                                     {{ formatFieldLabel(field.key) }}
                                 </label>
                                 <ng-container *ngSwitchDefault>
                                     <label [for]="'provider-' + field.key">
                                         {{ formatFieldLabel(field.key) }}
                                     </label>
-                                    <app-ui-input
-                                        [id]="'provider-' + field.key"
-                                        [type]="field.type === 'number' ? 'number' : 'text'"
-                                        [formControlName]="field.key"
-                                    ></app-ui-input>
+                                    <app-ui-input [id]="'provider-' + field.key" [type]="field.type === 'number' ? 'number' : 'text'" [formControlName]="field.key"></app-ui-input>
                                 </ng-container>
                             </ng-container>
                         </div>
@@ -262,18 +214,12 @@
                             "settings.textModel" | translate
                         }}</label>
 
-                        <ng-container *ngIf="generationForm.get('activeProvider')?.value === 'ollama'; else textModelInput">
-                            <app-ui-select
-                                id="provider-model"
-                                [options]="availableModels"
-                                [value]="modelControl.value"
-                                [placeholder]="'settings.selectModel' | translate"
-                                (change)="selectModel($event.target.value)"
-                            ></app-ui-select>
+                        <ng-container *ngIf="isOllamaActiveProvider; else textModelInput">
+                            <app-ui-select id="provider-model" [options]="availableModels" [value]="modelControl.value" [placeholder]="'settings.selectModel' | translate" (change)="selectModel($event.target.value)"></app-ui-select>
                         </ng-container>
 
                         <ng-template #textModelInput>
-                            <app-ui-input id="provider-model" type="text" formControlName="model" ></app-ui-input>
+                            <app-ui-input id="provider-model" type="text" formControlName="model"></app-ui-input>
                         </ng-template>
                     </div>
                 </div>
@@ -297,30 +243,22 @@
                 <label for="presetSelect">{{
                     "settings.selectPreset" | translate
                 }}</label>
-                <app-ui-select
-                    id="presetSelect"
-                    [value]="selectedPresetName"
-                    [options]="presetOptions"
-                    (change)="onPresetChange($event)"
-                ></app-ui-select>
+                <app-ui-select id="presetSelect" [value]="selectedPresetName" [options]="presetOptions" (change)="onPresetChange($event)"></app-ui-select>
             </div>
         </div>
 
-        <form
-            [formGroup]="generationSettingsForm"
-            (ngSubmit)="saveOrUpdatePreset()"
-        >
+        <form [formGroup]="generationSettingsForm" (ngSubmit)="saveOrUpdatePreset()">
             <div class="section">
                 <h3>Parameters</h3>
 
                 <div class="form-group">
                     <label>{{ "settings.presetName" | translate }}</label>
-                    <app-ui-input type="text" formControlName="name" ></app-ui-input>
+                    <app-ui-input type="text" formControlName="name"></app-ui-input>
                 </div>
 
                 <div class="form-group">
                     <label>{{ "settings.description" | translate }}</label>
-                    <app-ui-input type="text" formControlName="description" ></app-ui-input>
+                    <app-ui-input type="text" formControlName="description"></app-ui-input>
                 </div>
 
                 <div class="form-group">
@@ -331,12 +269,7 @@
                                 | number : "1.2-2"
                         }}</span>
                     </label>
-                    <app-ui-range
-                        formControlName="temperature"
-                        [min]="0.1"
-                        [max]="2.0"
-                        [step]="0.01"
-                    ></app-ui-range>
+                    <app-ui-range formControlName="temperature" [min]="0.1" [max]="2.0" [step]="0.01"></app-ui-range>
                 </div>
 
                 <div class="form-group">
@@ -347,12 +280,7 @@
                                 | number : "1.2-2"
                         }}</span>
                     </label>
-                    <app-ui-range
-                        formControlName="topP"
-                        [min]="0.1"
-                        [max]="1.0"
-                        [step]="0.01"
-                    ></app-ui-range>
+                    <app-ui-range formControlName="topP" [min]="0.1" [max]="1.0" [step]="0.01"></app-ui-range>
                 </div>
 
                 <div class="form-group">
@@ -360,12 +288,7 @@
                         {{ "settings.topK" | translate }}:
                         <span>{{ generationSettingsForm.get("topK")?.value }}</span>
                     </label>
-                    <app-ui-range
-                        formControlName="topK"
-                        [min]="1"
-                        [max]="100"
-                        [step]="1"
-                    ></app-ui-range>
+                    <app-ui-range formControlName="topK" [min]="1" [max]="100" [step]="1"></app-ui-range>
                 </div>
 
                 <div class="form-group">
@@ -376,12 +299,7 @@
                                 | number : "1.2-2"
                         }}</span>
                     </label>
-                    <app-ui-range
-                        formControlName="minP"
-                        [min]="0.0"
-                        [max]="1.0"
-                        [step]="0.01"
-                    ></app-ui-range>
+                    <app-ui-range formControlName="minP" [min]="0.0" [max]="1.0" [step]="0.01"></app-ui-range>
                 </div>
 
                 <div class="form-group">
@@ -392,12 +310,7 @@
                                 | number : "1.2-2"
                         }}</span>
                     </label>
-                    <app-ui-range
-                        formControlName="repeatPenalty"
-                        [min]="0.5"
-                        [max]="2.0"
-                        [step]="0.01"
-                    ></app-ui-range>
+                    <app-ui-range formControlName="repeatPenalty" [min]="0.5" [max]="2.0" [step]="0.01"></app-ui-range>
                 </div>
 
                 <div class="form-group">
@@ -407,24 +320,22 @@
                             generationSettingsForm.get("numPredict")?.value
                         }}</span>
                     </label>
-                    <app-ui-range
-                        formControlName="numPredict"
-                        [min]="64"
-                        [max]="4096"
-                        [step]="64"
-                    ></app-ui-range>
+                    <app-ui-range formControlName="numPredict" [min]="64" [max]="4096" [step]="64"></app-ui-range>
+                </div>
+
+                <div class="form-group">
+                    <app-ui-checkbox formControlName="normalizeMessages">
+                        {{ "settings.normalizeMessages" | translate }}
+                    </app-ui-checkbox>
                 </div>
 
                 <div class="form-group">
                     <label>{{ "settings.stopTokens" | translate }}</label>
-                    <textarea
-                        formControlName="stop"
-                        [placeholder]="'settings.stopTokensPlaceholder' | translate"
-                    ></textarea>
+                    <textarea formControlName="stop" [placeholder]="'settings.stopTokensPlaceholder' | translate"></textarea>
                 </div>
             </div>
 
-            <div class="button-row">
+            <div class="button-row preset-button-row">
                 <button type="submit">
                     💾 {{ "settings.savePreset" | translate }}
                 </button>
@@ -432,6 +343,3 @@
         </form>
     </div>
 </ng-template>
-
-
-

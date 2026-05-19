@@ -7,8 +7,12 @@
 # - Returns the entire config via GET request
 # ========================================================
 
+import ast
+
 from fastapi import APIRouter, HTTPException, Request, status
 from modules.system.character import (
+    create_character_record,
+    delete_character_record,
     get_active_character_for_user,
     get_character_prompt,
     import_character_yaml_text,
@@ -62,6 +66,21 @@ def _require_user_uuid(request: Request) -> str:
     return user_uuid
 
 
+def _config_error_detail(error: ValueError) -> str:
+    message = str(error)
+    prefix = "Config validation failed: "
+    if message.startswith(prefix):
+        detail = message[len(prefix):]
+        try:
+            parsed = ast.literal_eval(detail)
+            if isinstance(parsed, list):
+                return "\n".join(str(item) for item in parsed)
+        except Exception:
+            pass
+        return detail
+    return message
+
+
 # Returns the entire config
 @router.get("")
 @router.get("/")
@@ -80,7 +99,13 @@ async def overwrite_config(request: Request):
     user_uuid = _require_user_uuid(request)
     new_config = await request.json()
     save_config_fn = _require_config_fn("save_config")
-    save_config_fn(new_config, user_uuid=user_uuid)
+    try:
+        save_config_fn(new_config, user_uuid=user_uuid)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=_config_error_detail(exc),
+        ) from exc
     return {"status": "ok", "message": "The config has been updated."}
 
 
@@ -91,7 +116,13 @@ async def update_config_bulk_route(request: Request):
     user_uuid = _require_user_uuid(request)
     updates = await request.json()
     update_bulk_fn = _require_config_fn("update_config_bulk")
-    updated, failed = update_bulk_fn(updates, user_uuid=user_uuid)
+    try:
+        updated, failed = update_bulk_fn(updates, user_uuid=user_uuid)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=_config_error_detail(exc),
+        ) from exc
 
     return {
         "status": "partial" if failed else "ok",
@@ -193,6 +224,61 @@ async def import_system_character_yaml(request: Request):
         },
         "active_character_id": (active or {}).get("id"),
         "active_char_name": (active or {}).get("name"),
+    }
+
+
+@router.post("/system/characters")
+async def create_system_character(request: Request):
+    user_uuid = _require_user_uuid(request)
+    body = await request.json()
+    name = str(body.get("name") or "").strip()
+    prompt = body.get("prompt")
+    set_active = bool(body.get("set_active", True))
+
+    if not name:
+        raise HTTPException(status_code=400, detail="name is required")
+
+    try:
+        character = create_character_record(name, prompt if isinstance(prompt, str) else None)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    active = get_active_character_for_user(user_uuid)
+    if set_active:
+        active = set_active_character_for_user(user_uuid, character_id=str(character["id"]))
+
+    return {
+        "status": "ok",
+        "character": character,
+        "active_character_id": (active or {}).get("id"),
+        "active_char_name": (active or {}).get("name"),
+    }
+
+
+@router.delete("/system/characters/{character_id}")
+def delete_system_character(character_id: str, request: Request):
+    user_uuid = _require_user_uuid(request)
+    active_before = get_active_character_for_user(user_uuid)
+
+    try:
+        deleted = delete_character_record(character_id=character_id, user_uuid=user_uuid)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    active = get_active_character_for_user(user_uuid)
+    if not active and (active_before or {}).get("id") == deleted.get("id"):
+        remaining = list_characters(sync_from_yaml=True)
+        if remaining:
+            active = set_active_character_for_user(user_uuid, character_id=str(remaining[0]["id"]))
+
+    return {
+        "status": "ok",
+        "deleted": deleted,
+        "active_character_id": (active or {}).get("id"),
+        "active_char_name": (active or {}).get("name"),
+        "characters": list_characters(sync_from_yaml=True),
     }
 
 

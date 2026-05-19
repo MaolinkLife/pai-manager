@@ -227,12 +227,14 @@ class VisualIntentComposerService:
         recent = payload.recent_context or {}
         recent_topics = " ".join(str(item or "") for item in (recent.get("recent_topics") or []))
         recent_summary = str(recent.get("recent_summary") or "").lower()
-        current_emotion = str((payload.emotion_state or {}).get("current_emotion") or "").lower()
+        current_emotion = self._canonical_emotion(
+            str((payload.emotion_state or {}).get("current_emotion") or "").lower()
+        )
         if "apolog" in recent_summary:
             return "apology"
-        if "news" in recent_topics or "reflection" in recent_summary or current_emotion in {"thoughtful", "reflective"}:
+        if "news" in recent_topics or "reflection" in recent_summary or current_emotion in {"thoughtful", "reflective", "confusion"}:
             return "reflection"
-        if current_emotion in {"sad", "worried", "anxious"}:
+        if current_emotion in {"sad", "worried", "anxious", "sadness", "anxiety", "longing"}:
             return "reassurance"
         if context.get("current_mode") == "initiative":
             return "check_in"
@@ -339,10 +341,11 @@ class VisualIntentComposerService:
 
     def _resolve_tone(self, payload: VisualIntentInput, *, profile: VisualProfile, purpose: str) -> list[str]:
         emotion = payload.emotion_state or {}
-        current_emotion = str(emotion.get("current_emotion") or "").strip().lower()
+        current_emotion = self._canonical_emotion(str(emotion.get("current_emotion") or "").strip().lower())
         mood_vector = emotion.get("mood_vector") or {}
+        emotion_vector = emotion.get("emotion_vector") or {}
         tone: list[str] = []
-        if clamp01(mood_vector.get("warmth"), 0.0) >= 0.52:
+        if clamp01(mood_vector.get("warmth"), 0.0) >= 0.52 or clamp01(emotion_vector.get("tenderness"), 0.0) >= 0.45:
             tone.append("warm")
         if clamp01(mood_vector.get("playfulness"), 0.0) >= 0.45:
             tone.append("playful")
@@ -350,9 +353,9 @@ class VisualIntentComposerService:
             tone.append("slightly_tired")
         if clamp01(mood_vector.get("closeness"), 0.0) >= 0.55:
             tone.append("tender")
-        if current_emotion in {"thoughtful", "reflective"} or purpose in {"reflection", "thought_share"}:
+        if current_emotion in {"thoughtful", "reflective", "confusion", "longing"} or purpose in {"reflection", "thought_share"}:
             tone.append("reflective")
-        if current_emotion in {"calm", "quiet"}:
+        if current_emotion in {"calm", "quiet", "peace"}:
             tone.append("quiet")
         world = payload.world_state or {}
         if str(world.get("location_mode") or "").strip().lower() == "home":
@@ -392,7 +395,7 @@ class VisualIntentComposerService:
         return ["warm_practical_light", "cyan_monitor_glow"]
 
     def _resolve_expression(self, payload: VisualIntentInput, *, purpose: str) -> dict[str, Any]:
-        emotion = str((payload.emotion_state or {}).get("current_emotion") or "").strip().lower()
+        emotion = self._canonical_emotion(str((payload.emotion_state or {}).get("current_emotion") or "").strip().lower())
         face = "soft_smile"
         eyes = "reflective"
         if purpose == "teasing":
@@ -401,10 +404,40 @@ class VisualIntentComposerService:
         elif purpose == "reassurance":
             face = "gentle_smile"
             eyes = "soft"
-        elif emotion in {"tired", "quiet"}:
+        elif emotion in {"tired", "quiet", "longing", "sadness"}:
             face = "subtle_smile"
             eyes = "slightly_tired"
+        elif emotion == "tenderness":
+            face = "gentle_smile"
+            eyes = "soft"
+        elif emotion == "pride":
+            face = "confident_smile"
+            eyes = "bright"
         return {"face": face, "eyes": eyes}
+
+    @staticmethod
+    def _canonical_emotion(value: str) -> str:
+        mapping = {
+            "neutral": "peace",
+            "calm": "peace",
+            "quiet": "peace",
+            "fear": "anxiety",
+            "worried": "anxiety",
+            "anxious": "anxiety",
+            "sad": "sadness",
+            "melancholy": "longing",
+            "thoughtful": "confusion",
+            "reflective": "confusion",
+            "warmth": "tenderness",
+            "affection": "tenderness",
+            "seductive": "tenderness",
+            "flirty": "tenderness",
+            "anger": "frustration",
+            "irritation": "frustration",
+            "offended": "resentment",
+            "hurt": "resentment",
+        }
+        return mapping.get(value, value)
 
     def _resolve_composition(
         self,

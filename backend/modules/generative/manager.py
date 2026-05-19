@@ -7,9 +7,14 @@ from modules.generative.providers.ollama import OllamaGenerateProvider
 from modules.generative.providers.openrouter import OpenRouterGenerateProvider
 from modules.system.runtime_profile import should_release_resources
 from modules.generative.types import GenerateRequest, GenerateResult, GenerateStreamChunk
+from modules.generative.sanitizer import sanitize_generation_messages
+from modules.generative.output_normalizer import (
+    is_output_normalization_enabled,
+    normalize_output_text,
+)
 from modules.system import config as config_service
 from modules.system.logger import AuditStatus, log_audit_entry
-
+from modules.generative.providers.transformers import TransformersGenerateProvider
 
 class NoProviderResolved(ProviderError):
     """Не удалось подобрать рабочий провайдер."""
@@ -20,6 +25,7 @@ class GenerationManager:
         self._providers: Dict[str, GenerateProvider] = {
             "ollama": OllamaGenerateProvider(),
             "openrouter": OpenRouterGenerateProvider(),
+            "transformers": TransformersGenerateProvider(),
         }
 
     def _ordered_provider_names(self) -> List[str]:
@@ -39,7 +45,7 @@ class GenerationManager:
 
     def generate(self, request: GenerateRequest) -> GenerateResult:
         print("[Generator] Поиск провайдера (standard).")
-        normalized_messages = list(request.messages)
+        normalized_messages = sanitize_generation_messages(request.messages)
         effective_request = GenerateRequest(
             messages=normalized_messages,
             options=dict(request.options or {}),
@@ -68,6 +74,14 @@ class GenerationManager:
                 continue
             try:
                 result = provider.generate(effective_request)
+                if is_output_normalization_enabled():
+                    original_content = result.content or ""
+                    result.content = normalize_output_text(original_content, enabled=True)
+                    result.metadata = {
+                        **(result.metadata or {}),
+                        "normalized_messages": True,
+                        "normalization_removed_chars": max(0, len(original_content) - len(result.content or "")),
+                    }
                 log_audit_entry(
                     event_type="generator_provider_resolved",
                     msg="[Generator] Провайдер выбран",
@@ -112,7 +126,7 @@ class GenerationManager:
 
     async def stream(self, request: GenerateRequest) -> AsyncIterator[GenerateStreamChunk]:
         print("[Generator] Поиск провайдера (stream).")
-        normalized_messages = list(request.messages)
+        normalized_messages = sanitize_generation_messages(request.messages)
         effective_request = GenerateRequest(
             messages=normalized_messages,
             options=dict(request.options or {}),

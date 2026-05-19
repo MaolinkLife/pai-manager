@@ -1,5 +1,5 @@
 <div class="message-renderer">
-    <ng-container *ngFor="let block of blocks(); trackBy: trackByBlock">
+    <ng-container *ngFor="let block of blocks(); let blockIndex = index; trackBy: trackByBlock">
         <ng-container [ngSwitch]="block.type">
             <div
                 *ngSwitchCase="'text'"
@@ -48,7 +48,7 @@
                 *ngSwitchCase="'thinking'"
                 class="block thinking-block"
                 [class.streaming]="isStreaming"
-                [class.expanded]="block.isExpanded || isStreaming"
+                [class.expanded]="block.isExpanded || (isStreaming && !collapseThinking)"
             >
                 <button
                     type="button"
@@ -60,13 +60,14 @@
                     <span class="label">{{ getThinkingLabel() }}</span>
                     <span
                         class="chevron"
-                        [class.rotated]="block.isExpanded || isStreaming"
+                        [class.rotated]="block.isExpanded || (isStreaming && !collapseThinking)"
                         >▾</span
                     >
                 </button>
                 <div
                     class="thinking-body"
-                    [class.expanded]="block.isExpanded || isStreaming"
+                    [class.expanded]="block.isExpanded || (isStreaming && !collapseThinking)"
+                    [attr.data-thinking-index]="blockIndex"
                     [innerHTML]="block.safeContent"
                 ></div>
             </div>

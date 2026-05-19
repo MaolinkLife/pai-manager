@@ -18,7 +18,10 @@ export class ModalService {
         private injector: Injector
     ) { }
 
-    open<T>(component: Type<T>, options: { data?: any, title?: string } = {}): ModalRef {
+    open<T>(
+        component: Type<T>,
+        options: { data?: any, title?: string, appearance?: 'fullscreen' | 'default', dismissOnBackdrop?: boolean } = {}
+    ): ModalRef {
         const modalRef = new ModalRef(() => this.destroy(modalComponentRef));
 
         const injector = Injector.create({

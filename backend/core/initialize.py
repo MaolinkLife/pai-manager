@@ -19,7 +19,12 @@ from modules.system.service import (
     migrate_split_settings_if_needed,
 )
 from constants.paths import MODEL_SUBDIRS
-from modules.system.logger import initialize_logger_runtime, log_audit_entry, AuditStatus
+from modules.system.logger import (
+    initialize_logger_runtime,
+    log_audit_entry,
+    AuditStatus,
+    log_console,
+)
 from modules.system.localization import get_text
 from utils.structure_utils import get_label_from_file
 
@@ -39,6 +44,7 @@ def run_startup_checks():
 
 
     label = get_label_from_file(__file__)
+    log_console("Startup", "Запускаем системную инициализацию.", {"label": label})
     print(
         get_text(
             "initialize.print_start",
@@ -60,34 +66,57 @@ def run_startup_checks():
 
     # Legacy hook: runtime config is DB-first.
     # Keep startup tolerant for old/partial clean builds where this helper may be absent.
+    log_console("Startup", "Проверяем конфигурационное хранилище.")
     ensure_config_exists()
+    log_console("Startup", "Проверяем настройки генерации по умолчанию.")
     preset_service.ensure_presets_exist()
 
+    log_console("Startup", "Инициализируем runtime-логи.")
     initialize_logger_runtime()
 
+    log_console("Startup", "Проверяем системные директории моделей.")
     for model_dir in MODEL_SUBDIRS:
         os.makedirs(model_dir, exist_ok=True)
 
-    # Create a database
+    log_console("Startup", "Переходим к подготовке базы данных.")
     database_service.create_database()
+    log_console("Startup", "Синхронизируем персонажей из YAML.")
     try:
         character_service.import_characters_from_yaml_dir(update_existing=False)
+        log_console("Startup", "Синхронизация персонажей завершена.")
     except Exception as exc:
+        log_console("Startup", "Синхронизация персонажей завершилась ошибкой.", {"error": str(exc)})
         log_audit_entry(
             event_type="characters_yaml_sync_failed",
             msg="[Initialize] Failed to sync YAML characters into DB.",
             status=AuditStatus.WARNING,
             details={"error": str(exc)},
         )
-    migrate_owner_config_if_needed()
-    migrate_split_settings_if_needed()
+    log_console("Startup", "Проверяем конфигурацию владельца.")
+    owner_migrated = migrate_owner_config_if_needed()
+    if owner_migrated:
+        log_console("Startup", "Конфигурационный файл владельца создан.")
+    else:
+        log_console("Startup", "Конфигурация владельца не требует миграции.")
+
+    log_console("Startup", "Проверяем разделенные настройки voice/vision.")
+    split_migrated = migrate_split_settings_if_needed()
+    if split_migrated:
+        log_console("Startup", "Разделенные настройки синхронизированы.", {"users": split_migrated})
+    else:
+        log_console("Startup", "Разделенные настройки уже актуальны.")
+
+    log_console("Startup", "Синхронизируем short-term память.")
     ensure_short_term_schema()
+    log_console("Startup", "Синхронизируем knowledge-память.")
     ensure_memory_knowledge_schema()
 
     char_name = get_active_character_name(default="default_waifu")
     character = None
     if char_name:
+        log_console("Startup", "Проверяем активного персонажа.", {"character": char_name})
         character = character_service.get_or_create_character(char_name)
+        log_console("Startup", "Активный персонаж готов.", {"character": char_name, "id": character.id})
         log_audit_entry(
             event_type="character_bootstrap",
             msg=get_text(
@@ -107,6 +136,7 @@ def run_startup_checks():
     vision_enabled = bool(get_config_value("vision.enabled", False))
     if vision_enabled:
         try:
+            log_console("Startup", "Запускаем визуальный сервис.")
             vision_service = VisionService()
             vision_service.start()
             print(
@@ -116,6 +146,7 @@ def run_startup_checks():
                 )
             )
         except Exception as e:
+            log_console("Startup", "Визуальный сервис не запущен.", {"error": str(e)})
             print(
                 get_text(
                     "initialize.print_vision_start_error",
@@ -124,6 +155,7 @@ def run_startup_checks():
                 )
             )
 
+    log_console("Startup", "Настройки созданы, backend готов к запуску WebUI.")
     print(
         get_text(
             "initialize.print_complete",
@@ -145,6 +177,22 @@ def run_startup_checks():
 
 
 def start_async_warmups() -> None:
+    enabled = bool(get_config_value("memory.short_term.startup_refresh_enabled", False))
+    env_enabled = str(os.getenv("STARTUP_SHORT_MEMORY_REFRESH", "")).strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+    if not enabled and not env_enabled:
+        log_audit_entry(
+            event_type="short_memory_refresh_background_skipped",
+            msg="[Initialize] Background short-term memory refresh skipped on startup.",
+            status=AuditStatus.INFO,
+            details={"reason": "disabled"},
+        )
+        return
+
     thread = threading.Thread(
         target=_run_short_memory_refresh_warmup,
         name="short-memory-startup-warmup",

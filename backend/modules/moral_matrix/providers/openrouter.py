@@ -20,7 +20,7 @@ from constants.settings import (
 from modules.system import config as config_service
 from modules.system.logger import AuditStatus, log_audit_entry
 
-from .base import MoralMatrixProvider
+from .base import MoralMatrixProvider, parse_provider_json
 
 
 class OpenRouterMoralProvider(MoralMatrixProvider):
@@ -62,11 +62,12 @@ class OpenRouterMoralProvider(MoralMatrixProvider):
                 payload,
                 settings,
             )
-            log_audit_entry(
-                "moral_matrix_provider_openrouter_success",
-                "[MoralMatrix/OpenRouter] Provider completed.",
-                AuditStatus.SUCCESS,
-            )
+            if result:
+                log_audit_entry(
+                    "moral_matrix_provider_openrouter_success",
+                    "[MoralMatrix/OpenRouter] Provider completed.",
+                    AuditStatus.SUCCESS,
+                )
             return result
         except Exception as exc:  # pragma: no cover
             log_audit_entry(
@@ -79,7 +80,13 @@ class OpenRouterMoralProvider(MoralMatrixProvider):
 
     def _call_openrouter(
         self, payload: Dict[str, Any], settings: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    ) -> Optional[Dict[str, Any]]:
+        moral_prompt = str(
+            config_service.get_config_value(
+                "moral.system_prompt", MORAL_MATRIX_PROVIDER_PROMPT
+            )
+            or MORAL_MATRIX_PROVIDER_PROMPT
+        ).strip()
         client = OpenAI(base_url=OPENROUTER_BASE_URL, api_key=settings["api_key"])
 
         completion = client.chat.completions.create(
@@ -89,7 +96,7 @@ class OpenRouterMoralProvider(MoralMatrixProvider):
             },
             model=settings["model"],
             messages=[
-                {"role": "system", "content": MORAL_MATRIX_PROVIDER_PROMPT},
+                {"role": "system", "content": moral_prompt},
                 {
                     "role": "user",
                     "content": json.dumps(payload, ensure_ascii=False, indent=2),
@@ -101,8 +108,6 @@ class OpenRouterMoralProvider(MoralMatrixProvider):
         )
 
         response_content = completion.choices[0].message.content
-        if not response_content or not response_content.strip():
-            raise ValueError("OpenRouter returned empty response.")
-        return json.loads(response_content)
+        return parse_provider_json(self.name, response_content)
 
 

@@ -12,11 +12,25 @@ from modules.ollama import client as ollama_client
 from modules.system import config as config_service
 from modules.system.logger import AuditStatus, log_audit_entry
 
-from .base import MoralMatrixProvider
+from .base import MoralMatrixProvider, parse_provider_json
 
 
 class OllamaMoralProvider(MoralMatrixProvider):
     name = "ollama"
+
+    @staticmethod
+    def _as_bool(value: Any, default: bool = False) -> bool:
+        if isinstance(value, bool):
+            return value
+        if value is None:
+            return default
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {"1", "true", "yes", "on"}:
+                return True
+            if normalized in {"0", "false", "no", "off"}:
+                return False
+        return bool(value)
 
     def _get_settings(self) -> Dict[str, Any]:
         cfg = config_service.get_config_value("moral.providers.ollama", {}) or {}
@@ -24,6 +38,7 @@ class OllamaMoralProvider(MoralMatrixProvider):
             "model": cfg.get("model") or config_service.get_config_value("api.model", "llama3.2"),
             "temperature": float(cfg.get("temperature", DEFAULT_TEMPERATURE)),
             "max_tokens": int(cfg.get("max_tokens", min(DEFAULT_MAX_TOKENS, 512))),
+            "thinking": self._as_bool(cfg.get("thinking", cfg.get("think")), False),
         }
 
     def release_resources(self) -> None:
@@ -37,18 +52,19 @@ class OllamaMoralProvider(MoralMatrixProvider):
                 "moral_matrix_provider_ollama_start",
                 "[MoralMatrix] Provider start.",
                 AuditStatus.INFO,
-                details={"model": settings["model"]},
+                details={"model": settings["model"], "thinking": settings["thinking"]},
             )
             result = await asyncio.to_thread(
                 self._call_ollama,
                 payload,
                 settings,
             )
-            log_audit_entry(
-                "moral_matrix_provider_ollama_success",
-                "[MoralMatrix] Provider completed.",
-                AuditStatus.SUCCESS,
-            )
+            if result:
+                log_audit_entry(
+                    "moral_matrix_provider_ollama_success",
+                    "[MoralMatrix] Provider completed.",
+                    AuditStatus.SUCCESS,
+                )
             return result
         except Exception as exc:  # pragma: no cover
             log_audit_entry(
@@ -62,9 +78,15 @@ class OllamaMoralProvider(MoralMatrixProvider):
     @staticmethod
     def _call_ollama(
         payload: Dict[str, Any], settings: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    ) -> Optional[Dict[str, Any]]:
+        moral_prompt = str(
+            config_service.get_config_value(
+                "moral.system_prompt", MORAL_MATRIX_PROVIDER_PROMPT
+            )
+            or MORAL_MATRIX_PROVIDER_PROMPT
+        ).strip()
         conversation = [
-            {"role": "system", "content": MORAL_MATRIX_PROVIDER_PROMPT},
+            {"role": "system", "content": moral_prompt},
             {
                 "role": "user",
                 "content": json.dumps(payload, ensure_ascii=False, indent=2),
@@ -73,6 +95,7 @@ class OllamaMoralProvider(MoralMatrixProvider):
         options = {
             "temperature": settings["temperature"],
             "max_tokens": settings["max_tokens"],
+            "__think": settings["thinking"],
         }
         response = ollama_client.chat(
             conversation,
@@ -84,7 +107,5 @@ class OllamaMoralProvider(MoralMatrixProvider):
             if isinstance(response, dict)
             else ""
         )
-        if not assistant_content.strip():
-            raise ValueError("Ollama returned empty response.")
-        return json.loads(assistant_content)
+        return parse_provider_json(OllamaMoralProvider.name, assistant_content)
 

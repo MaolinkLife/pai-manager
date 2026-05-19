@@ -75,20 +75,27 @@
 <ng-template #content>
     <div class="settings-wrapper">
         <form [formGroup]="moralForm" (ngSubmit)="saveChanges()" class="settings-form">
-            <h2>❤️ Moral Matrix Settings</h2>
+            <h2>❤️ {{ "moralSettings.title" | translate }}</h2>
 
             <div class="section">
-                <h3>General</h3>
+                <h3>{{ "settings.general" | translate }}</h3>
 
                 <div class="form-group checkbox-group">
                     <label class="checkbox">
                         <input type="checkbox" formControlName="enabled" />
-                        Enable Moral Matrix pipeline
+                        {{ "moralSettings.enablePipeline" | translate }}
+                    </label>
+                </div>
+
+                <div class="form-group checkbox-group">
+                    <label class="checkbox">
+                        <input type="checkbox" formControlName="releaseAfterUse" />
+                        {{ "settings.releaseAfterUse" | translate }}
                     </label>
                 </div>
 
                 <div class="form-group">
-                    <label for="moralActiveProvider">Active Provider</label>
+                    <label for="moralActiveProvider">{{ "settings.activeProvider" | translate }}</label>
                     <app-ui-select
                         id="moralActiveProvider"
                         formControlName="activeProvider"
@@ -99,28 +106,39 @@
                 <div class="form-group checkbox-group">
                     <label class="checkbox">
                         <input type="checkbox" formControlName="fallbackHeuristic" />
-                        Add Heuristic fallback
+                        {{ "moralSettings.addHeuristicFallback" | translate }}
                     </label>
                     <label class="checkbox">
                         <input type="checkbox" formControlName="fallbackOllama" />
-                        Add Ollama fallback
+                        {{ "moralSettings.addOllamaFallback" | translate }}
                     </label>
                     <label class="checkbox">
                         <input type="checkbox" formControlName="fallbackOpenrouter" />
-                        Add OpenRouter fallback
+                        {{ "moralSettings.addOpenrouterFallback" | translate }}
                     </label>
                 </div>
 
                 <p class="hint">
-                    The execution chain runs active provider first, then fallbacks in the order they are enabled.
+                    {{ "moralSettings.fallbackHint" | translate }}
                 </p>
+
+                <div class="form-group">
+                    <label for="moralSystemPrompt">{{ "settings.systemPrompt" | translate }}</label>
+                    <app-ui-textarea
+                        id="moralSystemPrompt"
+                        formControlName="systemPrompt"
+                        height="300px"
+                        [autoResize]="false"
+                        [rows]="12"
+                    ></app-ui-textarea>
+                </div>
             </div>
 
-            <div class="section" [formGroup]="providersForm">
-                <h3>Ollama Provider</h3>
+            <div class="section" [formGroup]="providersForm" *ngIf="isOllamaActive">
+                <h3>{{ "moralSettings.ollamaProvider" | translate }}</h3>
                 <div formGroupName="ollama">
                     <div class="form-group">
-                        <label for="moralOllamaModel">Model</label>
+                        <label for="moralOllamaModel">{{ "settings.textModel" | translate }}</label>
                         <app-ui-select
                             id="moralOllamaModel"
                             [options]="ollamaModelOptions"
@@ -129,7 +147,7 @@
                     </div>
 
                     <div class="form-group">
-                        <label for="moralOllamaTemperature">Temperature</label>
+                        <label for="moralOllamaTemperature">{{ "settings.temperature" | translate }}</label>
                         <app-ui-input
                             id="moralOllamaTemperature"
                             type="number"
@@ -141,7 +159,7 @@
                     </div>
 
                     <div class="form-group">
-                        <label for="moralOllamaMaxTokens">Max Tokens</label>
+                        <label for="moralOllamaMaxTokens">{{ "settings.maxTokens" | translate }}</label>
                         <app-ui-input
                             id="moralOllamaMaxTokens"
                             type="number"
@@ -150,11 +168,18 @@
                             formControlName="maxTokens"
                         ></app-ui-input>
                     </div>
+
+                    <div class="form-group checkbox-group">
+                        <label class="checkbox">
+                            <input type="checkbox" formControlName="thinking" />
+                            {{ "moralSettings.allowOllamaThinking" | translate }}
+                        </label>
+                    </div>
                 </div>
             </div>
 
-            <div class="section" [formGroup]="providersForm">
-                <h3>OpenRouter Provider</h3>
+            <div class="section" [formGroup]="providersForm" *ngIf="isOpenrouterActive">
+                <h3>{{ "moralSettings.openrouterProvider" | translate }}</h3>
                 <div formGroupName="openrouter">
                     <div class="form-group">
                         <label for="moralOpenrouterKey">API Key</label>
@@ -162,12 +187,12 @@
                     </div>
 
                     <div class="form-group">
-                        <label for="moralOpenrouterModel">Model</label>
+                        <label for="moralOpenrouterModel">{{ "settings.textModel" | translate }}</label>
                         <app-ui-input id="moralOpenrouterModel" type="text" formControlName="model" ></app-ui-input>
                     </div>
 
                     <div class="form-group">
-                        <label for="moralOpenrouterTemp">Temperature</label>
+                        <label for="moralOpenrouterTemp">{{ "settings.temperature" | translate }}</label>
                         <app-ui-input
                             id="moralOpenrouterTemp"
                             type="number"
@@ -179,7 +204,7 @@
                     </div>
 
                     <div class="form-group">
-                        <label for="moralOpenrouterTokens">Max Tokens</label>
+                        <label for="moralOpenrouterTokens">{{ "settings.maxTokens" | translate }}</label>
                         <app-ui-input
                             id="moralOpenrouterTokens"
                             type="number"
@@ -192,7 +217,7 @@
             </div>
 
             <div class="button-row">
-                <button type="submit" [disabled]="!hasChanges()">💾 Save Moral Settings</button>
+                <button type="submit" [disabled]="!hasChanges()">💾 {{ "moralSettings.save" | translate }}</button>
             </div>
         </form>
     </div>

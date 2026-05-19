@@ -131,6 +131,17 @@
         >
             <h2>🎙️ {{ "settings.audioSettings" | translate }}</h2>
 
+            <div class="section">
+                <h3>STT</h3>
+
+                <div class="form-group">
+                    <label class="checkbox">
+                        <input type="checkbox" formControlName="sttEnabled" />
+                        Enable STT (Whisper)
+                    </label>
+                </div>
+            </div>
+
             <!-- Input Device Selection -->
             <div class="section">
                 <h3>{{ "settings.inputDevice" | translate }}</h3>

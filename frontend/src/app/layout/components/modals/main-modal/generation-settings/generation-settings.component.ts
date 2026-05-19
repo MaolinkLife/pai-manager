@@ -15,6 +15,39 @@ import { UiSelectOption } from '../../../../../shared/ui/components/ui-select/ui
     styleUrls: ['./generation-settings.component.less']
 })
 export class GenerationSettingsComponent implements OnInit, OnDestroy {
+    private readonly builtInProviderDefaults: Record<string, any> = {
+        ollama: {
+            model: 'llama3.2',
+            temperature: 0.85,
+            maxTokens: 2048,
+            streaming: true,
+            baseUrl: 'http://localhost:11434',
+        },
+        openrouter: {
+            apiKey: '',
+            model: '',
+            temperature: 0.85,
+            maxTokens: 2048,
+            baseUrl: 'https://openrouter.ai/api/v1',
+        },
+        transformers: {
+            model: '',
+            temperature: 0.85,
+            maxTokens: 2048,
+            streaming: true,
+            device_map: 'auto',
+            torch_dtype: 'auto',
+            trust_remote_code: true,
+            low_cpu_mem_usage: true,
+            do_sample: true,
+            top_p: 0.9,
+            top_k: 50,
+            repetition_penalty: 1.1,
+            keep_loaded: true,
+            source: 'huggingface',
+        },
+    };
+
     generationForm: UntypedFormGroup;
     generationSettingsForm: UntypedFormGroup;
     originalConfig: any;
@@ -26,8 +59,24 @@ export class GenerationSettingsComponent implements OnInit, OnDestroy {
     isLoading$ = new BehaviorSubject<boolean>(true);
     providerKeys: string[] = [];
     apiTypeOptions: string[] = [];
+    visualModelDropdownOpen = false;
+    visualModelManualOptions: string[] = [];
     private ollamaModels: string[] = [];
     private destroy$ = new Subject<void>();
+    private readonly tokenLimitMin = 512;
+    private readonly tokenLimitMax = 131072;
+    private readonly generationDefaults = {
+        name: 'Default',
+        description: 'Basic generation parameters',
+        temperature: 0.85,
+        topP: 0.9,
+        topK: 50,
+        minP: 0.05,
+        repeatPenalty: 1.2,
+        numPredict: 2048,
+        normalizeMessages: false,
+        stop: null as string[] | null,
+    };
 
     constructor(
         private fb: UntypedFormBuilder,
@@ -41,6 +90,7 @@ export class GenerationSettingsComponent implements OnInit, OnDestroy {
     }
 
     ngOnInit(): void {
+        this.setupApiTypeListener();
         this.setupActiveProviderListener();
         this.loadConfigAndPresets();
         this.localizationService.init();
@@ -52,8 +102,9 @@ export class GenerationSettingsComponent implements OnInit, OnDestroy {
             activeProvider: ['ollama'],
             fallbackOrder: [''],
             visualModel: ['apple/FastVLM-1.5B'],
+            visualModelOptions: [[]],
             tokenLimit: [2048],
-            messagePairLimit: [10],
+            messagePairLimit: [4],
             streaming: [true],
             providers: this.fb.group({})
         });
@@ -69,6 +120,7 @@ export class GenerationSettingsComponent implements OnInit, OnDestroy {
             minP: [0.05],
             repeatPenalty: [1.2],
             numPredict: [2048],
+            normalizeMessages: [false],
             stop: [[]]
         });
     }
@@ -87,44 +139,64 @@ export class GenerationSettingsComponent implements OnInit, OnDestroy {
                 this.originalConfig = JSON.parse(JSON.stringify(config));
 
                 this.initializeProviders(config.api?.providers || {});
+                const normalizedActiveProvider = this.normalizeProviderKey(
+                    config.api?.activeProvider || this.providerKeys[0] || 'ollama'
+                );
+                const tokenLimit = this.resolveInitialTokenLimit(config.api, normalizedActiveProvider);
+                const messagePairLimit = this.normalizeNumberInRange(
+                    config.api?.messagePairLimit,
+                    4,
+                    1,
+                    50
+                );
+                const visualModel = String(config.api?.visualModel || '').trim();
+                const visualModelOptions = this.mergeUniqueStrings([
+                    ...this.normalizeStringList(config.api?.visualModelOptions),
+                    visualModel,
+                ]);
+                if (this.originalConfig?.api) {
+                    this.originalConfig.api.visualModelOptions = visualModelOptions;
+                    this.originalConfig.api.tokenLimit = tokenLimit;
+                }
 
                 this.generationForm.patchValue({
-                    apiType: config.api.type,
-                    activeProvider: config.api.activeProvider,
+                    apiType: this.capitalize(config.api.activeProvider || config.api.type || 'ollama'),
+                    activeProvider: normalizedActiveProvider,
                     fallbackOrder: this.stringifyFallbackOrder(
                         config.api.fallbackOrder || []
                     ),
-                    visualModel: config.api.visualModel,
-                    tokenLimit: config.api.tokenLimit,
-                    messagePairLimit: config.api.messagePairLimit,
-                    streaming: config.api.streaming,
+                    visualModel,
+                    visualModelOptions,
+                    tokenLimit,
+                    messagePairLimit,
+                    streaming: config.api?.streaming !== false,
                 }, { emitEvent: false });
+                this.visualModelManualOptions = visualModelOptions;
 
                 this.apiTypeOptions = Array.from(
                     new Set([
                         ...(this.apiTypeOptions || []),
-                        config.api.type,
+                        this.capitalize(config.api.activeProvider || config.api.type || 'ollama'),
                         ...this.providerKeys.map(key => this.capitalize(key)),
                     ].filter(Boolean))
                 );
 
-                this.generationSettingsForm.patchValue(config.generateSettings);
+                const generateSettings = this.normalizeGenerationSettings(config.generateSettings);
+                this.generationSettingsForm.patchValue(generateSettings, { emitEvent: false });
 
-                const activeProvider = config.api.activeProvider;
+                const activeProvider = normalizedActiveProvider;
                 this.selectedModel = this.getProviderModel(activeProvider);
                 this.updateAvailableModels(activeProvider);
             }
 
             // Load presets
             this.presets = presets;
-            const activePreset = presets.find(p => p.name === this.selectedPresetName) || presets[0];
-            if (activePreset) {
-                this.generationSettingsForm.patchValue(activePreset);
-                this.selectedPresetName = activePreset.name;
-            }
+            const currentPresetName = this.generationSettingsForm.get('name')?.value;
+            const activePreset = presets.find(p => p.name === currentPresetName) || presets[0];
+            this.selectedPresetName = currentPresetName || activePreset?.name || this.selectedPresetName;
 
             // Load models
-            this.ollamaModels = models;
+            this.ollamaModels = (models || []).filter(Boolean);
             const activeProvider = this.generationForm.get('activeProvider')?.value;
             this.updateAvailableModels(activeProvider);
         });
@@ -141,7 +213,8 @@ export class GenerationSettingsComponent implements OnInit, OnDestroy {
             providersGroup.removeControl(key);
         });
 
-        this.providerKeys = Object.keys(providers || {});
+        const normalizedProviders = this.withBuiltInProviders(providers || {});
+        this.providerKeys = Object.keys(normalizedProviders);
         this.apiTypeOptions = Array.from(
             new Set(
                 [this.generationForm.get('apiType')?.value, ...this.providerKeys.map(key => this.capitalize(key))]
@@ -150,8 +223,19 @@ export class GenerationSettingsComponent implements OnInit, OnDestroy {
         );
 
         this.providerKeys.forEach(key => {
-            providersGroup.addControl(key, this.buildProviderGroup(providers[key] || {}));
+            providersGroup.addControl(key, this.buildProviderGroup(normalizedProviders[key] || {}));
         });
+    }
+
+    private withBuiltInProviders(providers: Record<string, any>): Record<string, any> {
+        const normalized = { ...(providers || {}) };
+        Object.keys(this.builtInProviderDefaults).forEach((key) => {
+            normalized[key] = {
+                ...this.builtInProviderDefaults[key],
+                ...(normalized[key] || {}),
+            };
+        });
+        return normalized;
     }
 
     private buildProviderGroup(config: Record<string, any>): UntypedFormGroup {
@@ -170,15 +254,36 @@ export class GenerationSettingsComponent implements OnInit, OnDestroy {
             });
     }
 
+    private setupApiTypeListener(): void {
+        this.generationForm.get('apiType')?.valueChanges
+            .pipe(takeUntil(this.destroy$), distinctUntilChanged())
+            .subscribe(value => {
+                const provider = this.providerKeyFromApiType(value);
+                if (!provider) {
+                    return;
+                }
+                this.generationForm.get('activeProvider')?.setValue(provider);
+            });
+    }
+
     private handleActiveProviderChange(provider: string): void {
-        this.selectedModel = this.getProviderModel(provider);
-        this.updateAvailableModels(provider);
+        const normalized = this.normalizeProviderKey(provider);
+        this.selectedModel = this.getProviderModel(normalized);
+        this.generationForm.get('apiType')?.setValue(this.capitalize(normalized), { emitEvent: false });
+        this.updateAvailableModels(normalized);
         this.dropdownOpen = false;
     }
 
     private updateAvailableModels(provider: string): void {
-        if (provider === 'ollama') {
-            this.availableModels = this.ollamaModels;
+        const normalizedProvider = this.normalizeProviderKey(provider);
+        if (normalizedProvider === 'ollama') {
+            const currentModel = this.getProviderModel(normalizedProvider);
+            this.availableModels = Array.from(
+                new Set([
+                    ...(currentModel ? [currentModel] : []),
+                    ...(this.ollamaModels || []),
+                ])
+            );
         } else {
             this.availableModels = [];
         }
@@ -194,15 +299,70 @@ export class GenerationSettingsComponent implements OnInit, OnDestroy {
         if (!providersGroup || !provider) {
             return null;
         }
-        return providersGroup.get(provider) as UntypedFormGroup;
+        const normalizedProvider = this.normalizeProviderKey(provider);
+        const direct = providersGroup.get(normalizedProvider) as UntypedFormGroup;
+        if (direct) {
+            return direct;
+        }
+        const matchedKey = Object.keys(providersGroup.controls).find(
+            key => this.normalizeProviderKey(key) === normalizedProvider
+        );
+        return matchedKey ? (providersGroup.get(matchedKey) as UntypedFormGroup) : null;
     }
 
     onTokenLimitRangeChange(value: number): void {
-        this.generationForm.get('tokenLimit')?.setValue(value);
+        this.generationForm.get('tokenLimit')?.setValue(
+            this.normalizeNumberInRange(value, 2048, this.tokenLimitMin, this.tokenLimitMax)
+        );
+    }
+
+    onTokenLimitInputCommit(): void {
+        const control = this.generationForm.get('tokenLimit');
+        control?.setValue(this.tokenLimitValue);
+    }
+
+    openVisualModelDropdown(): void {
+        this.visualModelDropdownOpen = true;
+    }
+
+    closeVisualModelDropdown(): void {
+        window.setTimeout(() => {
+            this.visualModelDropdownOpen = false;
+        }, 120);
+    }
+
+    selectVisualModel(model: string): void {
+        const value = String(model || '').trim();
+        if (!value) {
+            return;
+        }
+        this.generationForm.get('visualModel')?.setValue(value);
+        this.visualModelDropdownOpen = false;
+    }
+
+    addCurrentVisualModelOption(): void {
+        const value = String(this.generationForm.get('visualModel')?.value || '').trim();
+        if (!value) {
+            return;
+        }
+        const next = this.mergeUniqueStrings([...this.visualModelManualOptions, value]);
+        this.visualModelManualOptions = next;
+        this.generationForm.get('visualModelOptions')?.setValue(next);
+        this.generationForm.get('visualModelOptions')?.markAsDirty();
+    }
+
+    removeVisualModelOption(model: string, event?: MouseEvent): void {
+        event?.preventDefault();
+        event?.stopPropagation();
+        const value = String(model || '').trim();
+        const next = this.visualModelManualOptions.filter((item) => item !== value);
+        this.visualModelManualOptions = next;
+        this.generationForm.get('visualModelOptions')?.setValue(next);
+        this.generationForm.get('visualModelOptions')?.markAsDirty();
     }
 
     toggleDropdown() {
-        if (this.generationForm.get('activeProvider')?.value !== 'ollama') {
+        if (!this.isOllamaActiveProvider) {
             return;
         }
         if (!this.availableModels || this.availableModels.length === 0) {
@@ -214,7 +374,7 @@ export class GenerationSettingsComponent implements OnInit, OnDestroy {
     selectModel(model: string) {
         this.selectedModel = model;
         this.dropdownOpen = false;
-        const activeProvider = this.generationForm.get('activeProvider')?.value;
+        const activeProvider = this.normalizeProviderKey(this.generationForm.get('activeProvider')?.value);
         const providerForm = this.getProviderForm(activeProvider);
         providerForm?.get('model')?.setValue(model);
     }
@@ -222,14 +382,34 @@ export class GenerationSettingsComponent implements OnInit, OnDestroy {
     applyPreset(presetName: string) {
         const preset = this.presets.find(p => p.name === presetName);
         if (preset) {
-            this.generationSettingsForm.patchValue(preset);
+            this.generationSettingsForm.patchValue(this.normalizeGenerationSettings(preset));
             this.selectedPresetName = presetName;
         }
     }
 
     saveOrUpdatePreset() {
         const current = this.generationSettingsForm.value;
-        this.configService.saveGenerationPreset$(current).subscribe();
+        this.configService.saveGenerationPreset$(current).subscribe({
+            next: () => {
+                this.configService.getGenerationPresets$().pipe(takeUntil(this.destroy$)).subscribe((presets) => {
+                    this.presets = presets || [];
+                    this.selectedPresetName = current.name || this.selectedPresetName;
+                });
+                this.notificationService.open({
+                    title: 'Generation preset saved',
+                    type: 'success',
+                    autoClose: true,
+                });
+            },
+            error: (error) => {
+                this.notificationService.open({
+                    title: 'Error saving generation preset',
+                    type: 'error',
+                    autoClose: true,
+                });
+                console.error('Error saving generation preset:', error);
+            },
+        });
     }
 
     saveChanges(): void {
@@ -267,7 +447,6 @@ export class GenerationSettingsComponent implements OnInit, OnDestroy {
                         title: 'Error updating generation settings',
                         type: 'error',
                         autoClose: false,
-                        
                     });
                     console.error('Error updating generation settings:', error);
                 }
@@ -302,15 +481,16 @@ export class GenerationSettingsComponent implements OnInit, OnDestroy {
             providerValues[key] = providersGroup.get(key)?.value;
         });
 
-        const activeProvider = values.activeProvider;
+        const activeProvider = this.normalizeProviderKey(values.activeProvider);
         const fallbackOrder = this.parseFallbackOrder(values.fallbackOrder);
-        const activeModel = providerValues?.[activeProvider]?.model || '';
+        const activeModel = this.getProviderForm(activeProvider)?.get('model')?.value || '';
 
         return {
             type: values.apiType,
             streaming: values.streaming,
             visualModel: values.visualModel,
-            tokenLimit: values.tokenLimit,
+            visualModelOptions: this.normalizeStringList(values.visualModelOptions),
+            tokenLimit: this.normalizeNumberInRange(values.tokenLimit, 2048, this.tokenLimitMin, this.tokenLimitMax),
             messagePairLimit: values.messagePairLimit,
             activeProvider,
             fallbackOrder,
@@ -338,7 +518,7 @@ export class GenerationSettingsComponent implements OnInit, OnDestroy {
     }
 
     get currentProviderForm(): UntypedFormGroup | null {
-        const activeProvider = this.generationForm.get('activeProvider')?.value;
+        const activeProvider = this.normalizeProviderKey(this.generationForm.get('activeProvider')?.value);
         return this.getProviderForm(activeProvider);
     }
 
@@ -372,6 +552,85 @@ export class GenerationSettingsComponent implements OnInit, OnDestroy {
         return value.charAt(0).toUpperCase() + value.slice(1);
     }
 
+    private normalizeProviderKey(value: any): string {
+        return String(value || '')
+            .trim()
+            .toLowerCase();
+    }
+
+    private providerKeyFromApiType(value: any): string {
+        const normalized = this.normalizeProviderKey(value);
+        if (!normalized) {
+            return '';
+        }
+        return (this.providerKeys || []).find(key => this.normalizeProviderKey(key) === normalized)
+            || normalized;
+    }
+
+    private normalizeNumberInRange(value: any, fallback: number, min: number, max: number): number {
+        const parsed = Number(value);
+        if (!Number.isFinite(parsed)) {
+            return fallback;
+        }
+        const rounded = Math.round(parsed);
+        return Math.max(min, Math.min(max, rounded));
+    }
+
+    private normalizeFloatInRange(value: any, fallback: number, min: number, max: number): number {
+        const parsed = Number(value);
+        if (!Number.isFinite(parsed)) {
+            return fallback;
+        }
+        return Math.max(min, Math.min(max, parsed));
+    }
+
+    private normalizeGenerationSettings(value: any): any {
+        const source = value || {};
+        const normalized = {
+            ...this.generationDefaults,
+            ...source,
+            temperature: this.normalizeFloatInRange(source.temperature, this.generationDefaults.temperature, 0.1, 2.0),
+            topP: this.normalizeFloatInRange(source.topP ?? source.top_p, this.generationDefaults.topP, 0.1, 1.0),
+            topK: this.normalizeNumberInRange(source.topK ?? source.top_k, this.generationDefaults.topK, 1, 100),
+            minP: this.normalizeFloatInRange(source.minP ?? source.min_p, this.generationDefaults.minP, 0, 1.0),
+            repeatPenalty: this.normalizeFloatInRange(source.repeatPenalty ?? source.repeat_penalty, this.generationDefaults.repeatPenalty, 0.5, 2.0),
+            numPredict: this.normalizeNumberInRange(source.numPredict ?? source.num_predict, this.generationDefaults.numPredict, 64, 4096),
+            normalizeMessages: (source.normalizeMessages ?? source.normalize_messages) === true,
+            stop: Array.isArray(source.stop) ? source.stop : this.generationDefaults.stop,
+        };
+        return normalized;
+    }
+
+    private resolveInitialTokenLimit(api: any, activeProvider: string): number {
+        const primary = Number(api?.tokenLimit);
+        if (Number.isFinite(primary) && primary >= this.tokenLimitMin) {
+            return this.normalizeNumberInRange(primary, 2048, this.tokenLimitMin, this.tokenLimitMax);
+        }
+
+        const providerKey = this.normalizeProviderKey(activeProvider);
+        const providerLimit = Number(api?.providers?.[providerKey]?.maxTokens);
+        if (Number.isFinite(providerLimit) && providerLimit >= this.tokenLimitMin) {
+            return this.normalizeNumberInRange(providerLimit, 2048, this.tokenLimitMin, this.tokenLimitMax);
+        }
+
+        return 2048;
+    }
+
+    private normalizeStringList(value: any): string[] {
+        if (!Array.isArray(value)) {
+            return [];
+        }
+        return this.mergeUniqueStrings(value);
+    }
+
+    private mergeUniqueStrings(values: any[]): string[] {
+        return Array.from(new Set(
+            (values || [])
+                .map((item) => String(item || '').trim())
+                .filter(Boolean)
+        ));
+    }
+
     get apiTypeSelectOptions(): UiSelectOption[] {
         return (this.apiTypeOptions || []).map(option => ({
             value: option,
@@ -391,6 +650,34 @@ export class GenerationSettingsComponent implements OnInit, OnDestroy {
             value: preset.name,
             label: preset.name,
         }));
+    }
+
+    get visualModelOptions(): UiSelectOption[] {
+        return (this.ollamaModels || []).map((model) => ({
+            value: model,
+            label: model,
+        }));
+    }
+
+    get isOllamaActiveProvider(): boolean {
+        return this.normalizeProviderKey(this.generationForm.get('activeProvider')?.value) === 'ollama';
+    }
+
+    get tokenLimitValue(): number {
+        return this.normalizeNumberInRange(
+            this.generationForm.get('tokenLimit')?.value,
+            2048,
+            this.tokenLimitMin,
+            this.tokenLimitMax
+        );
+    }
+
+    get visualModelOllamaOptions(): string[] {
+        return this.mergeUniqueStrings(this.ollamaModels);
+    }
+
+    get hasVisualModelDropdownItems(): boolean {
+        return this.visualModelManualOptions.length > 0 || this.isOllamaActiveProvider;
     }
 
     trackByProviderField(_index: number, field: { key: string }): string {

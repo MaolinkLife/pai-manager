@@ -1,9 +1,9 @@
-import { Injectable } from '@angular/core';
+import { Injectable, signal } from '@angular/core';
 import { Observable, of } from 'rxjs';
 import { ProjectConfig } from '../models/project-config.model';
 import { HttpClient } from '@angular/common/http';
 import { ProjectConfigDto } from '../models/project-config.dto';
-import { catchError, map, tap } from 'rxjs/operators'
+import { catchError, finalize, map, shareReplay, tap } from 'rxjs/operators'
 import { mapProjectConfigDtoToModel, mapPartialModelToDto } from '../utils/project-config.mapper';
 import { environment } from '../../../environments/environment';
 import { GenerationPreset } from '../models/generation-preset.model';
@@ -29,17 +29,43 @@ export interface SystemPayload {
 })
 export class ConfigService {
     private apiUrl = environment.apiBaseUrl;
+    private readonly configState = signal<ProjectConfig | null>(null);
+    private configLoad$?: Observable<ProjectConfig | null>;
 
     constructor(private http: HttpClient) { }
 
-    getConfig$(): Observable<ProjectConfig | null> {
-        return this.http.get<ProjectConfigDto>(`${this.apiUrl}/config/`).pipe(
+    readonly config = this.configState.asReadonly();
+
+    getConfig$(forceRefresh = false): Observable<ProjectConfig | null> {
+        const cached = this.configState();
+        if (cached && !forceRefresh) {
+            return of(cached);
+        }
+        if (this.configLoad$ && !forceRefresh) {
+            return this.configLoad$;
+        }
+        this.configLoad$ = this.http.get<ProjectConfigDto>(`${this.apiUrl}/config/`).pipe(
             tap((config: any) => {
                 console.log('[Config Service] Load Config From Server:', { config });
             }),
             map(mapProjectConfigDtoToModel),
-            catchError((_err) => of(null))
-        )
+            tap((config) => this.configState.set(config)),
+            catchError((_err) => of(null)),
+            finalize(() => {
+                this.configLoad$ = undefined;
+            }),
+            shareReplay(1)
+        );
+        return this.configLoad$;
+    }
+
+    refreshConfig$(): Observable<ProjectConfig | null> {
+        return this.getConfig$(true);
+    }
+
+    invalidateConfig(): void {
+        this.configState.set(null);
+        this.configLoad$ = undefined;
     }
 
     updateConfig$(body: any): Observable<any> {
@@ -47,6 +73,7 @@ export class ConfigService {
         if (
             body.voice ||
             body.modules ||
+            body.decisionLayer ||
             body.connector ||
             body.telegram ||
             body.communication ||
@@ -61,10 +88,14 @@ export class ConfigService {
             body.memory ||
             body.generateSettings
         ) {
-            return this.http.patch(`${this.apiUrl}/config/`, mapPartialModelToDto(body));
+            return this.http.patch(`${this.apiUrl}/config/`, mapPartialModelToDto(body)).pipe(
+                tap(() => this.invalidateConfig())
+            );
         }
         // Иначе - используем POST для полной замены
-        return this.http.post(`${this.apiUrl}/config/`, mapPartialModelToDto(body));
+        return this.http.post(`${this.apiUrl}/config/`, mapPartialModelToDto(body)).pipe(
+            tap(() => this.invalidateConfig())
+        );
     }
 
     getGenerationPresets$(): Observable<GenerationPreset[]> {
@@ -113,6 +144,17 @@ export class ConfigService {
             content,
             set_active: setActive,
         });
+    }
+
+    createSystemCharacter$(name: string, setActive = true): Observable<any> {
+        return this.http.post(`${this.apiUrl}/config/system/characters`, {
+            name,
+            set_active: setActive,
+        });
+    }
+
+    deleteSystemCharacter$(characterId: string): Observable<any> {
+        return this.http.delete(`${this.apiUrl}/config/system/characters/${encodeURIComponent(characterId)}`);
     }
 
     // Новый метод для получения конкретного значения из конфига (если нужно)
