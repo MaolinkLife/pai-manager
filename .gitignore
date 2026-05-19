@@ -52,7 +52,12 @@ backend/__pycache__/
 backend/**/__pycache__/
 backend/*.py[cod]
 backend/*.so
+
+# Python cache
 __pycache__/
+**/__pycache__/
+*.py[cod]
+*$py.class
 
 # Virtual environment
 backend/venv/
