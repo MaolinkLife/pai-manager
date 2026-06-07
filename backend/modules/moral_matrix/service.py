@@ -23,6 +23,7 @@ from modules.moral_matrix.types import MoralMatrixMetrics, MoralMatrixResult
 from modules.moral_matrix import heuristics
 from modules.moral_matrix.providers import (
     HeuristicMoralProvider,
+    LlamaCppMoralProvider,
     OllamaMoralProvider,
     OpenRouterMoralProvider,
 )
@@ -48,6 +49,7 @@ class MoralMatrixProviderManager:
             "heuristic": HeuristicMoralProvider(),
             "ollama": OllamaMoralProvider(),
             "openrouter": OpenRouterMoralProvider(),
+            "llama_cpp": LlamaCppMoralProvider(),
         }
 
     async def run(self, payload: Dict[str, Any]) -> ProviderRunResult:

@@ -328,9 +328,19 @@ class AnalyzerProviderOllamaConfig(BaseModel):
     thinking: bool = False
 
 
+class AnalyzerProviderLlamaCppConfig(BaseModel):
+    enabled: bool = False
+    base_url: str = "http://127.0.0.1:8080"
+    model: str = ""
+    temperature: float = 0.1
+    max_tokens: int = DEFAULT_MAX_TOKENS
+    request_timeout: int = 120
+
+
 class AnalyzerProvidersConfig(BaseModel):
     openrouter: AnalyzerProviderOpenRouterConfig = AnalyzerProviderOpenRouterConfig()
     ollama: AnalyzerProviderOllamaConfig = AnalyzerProviderOllamaConfig()
+    llama_cpp: AnalyzerProviderLlamaCppConfig = AnalyzerProviderLlamaCppConfig()
 
 
 class AnalyzerConfig(BaseModel):
@@ -356,10 +366,20 @@ class MoralProviderOpenRouterConfig(BaseModel):
     max_tokens: int = 512
 
 
+class MoralProviderLlamaCppConfig(BaseModel):
+    enabled: bool = False
+    base_url: str = "http://127.0.0.1:8080"
+    model: str = ""
+    temperature: float = DEFAULT_TEMPERATURE
+    max_tokens: int = 512
+    request_timeout: int = 120
+
+
 class MoralProvidersConfig(BaseModel):
     heuristic: Dict[str, Any] = Field(default_factory=dict)
     ollama: MoralProviderOllamaConfig = MoralProviderOllamaConfig()
     openrouter: MoralProviderOpenRouterConfig = MoralProviderOpenRouterConfig()
+    llama_cpp: MoralProviderLlamaCppConfig = MoralProviderLlamaCppConfig()
 
 
 class MoralMatrixConfig(BaseModel):
