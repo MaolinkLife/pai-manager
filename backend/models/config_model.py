@@ -247,6 +247,15 @@ class VisionConfig(BaseModel):
             "image_format": "PNG",
             "keep_alive": "5m",
         },
+        "llama_cpp_vision": {
+            "enabled": False,
+            "base_url": "http://127.0.0.1:8080",
+            "model": "",
+            "max_tokens": 512,
+            "request_timeout": 120,
+            "ping_timeout": 3.0,
+            "image_format": "PNG",
+        },
     }
 
 

@@ -7,6 +7,7 @@ from PIL import Image, UnidentifiedImageError
 
 from constants.visual import DEFAULT_VISUAL_MODEL
 from modules.vision.providers.apple_vision import AppleVisionProvider
+from modules.vision.providers.llama_cpp_vision import LlamaCppVisionProvider
 from modules.vision.providers.ollama_vision import OllamaVisionProvider
 from modules.system import config as config_service
 from modules.system.logger import AuditStatus, log_audit_entry
@@ -30,6 +31,8 @@ class VisualModule:
             return AppleVisionProvider()
         if self.provider_name in {"ollama_vision", "llava"}:
             return OllamaVisionProvider(provider_cfg)
+        if self.provider_name == "llama_cpp_vision":
+            return LlamaCppVisionProvider(provider_cfg)
         raise ValueError(f"Unknown vision provider: {self.provider_name}")
 
     def is_ready(self) -> bool:
