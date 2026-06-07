@@ -433,6 +433,22 @@ class MoralMatrixConfig(BaseModel):
     providers: MoralProvidersConfig = MoralProvidersConfig()
 
 
+class MemoryConsolidationJudgeConfig(BaseModel):
+    enabled: bool = False
+    provider: str = "ollama"
+    model: str = ""
+    temperature: float = 0.0
+    max_tokens: int = 512
+    request_timeout: int = 60
+
+
+class MemoryConsolidationConfig(BaseModel):
+    # Diary entries whose importance_score < threshold are flagged
+    # payload.pruned and hidden from default reads. 0.0 disables the filter.
+    importance_threshold: float = 0.2
+    judge: MemoryConsolidationJudgeConfig = MemoryConsolidationJudgeConfig()
+
+
 class MemoryConfig(BaseModel):
     deep_memory_enabled: bool = True
     force_deep_memory: bool = False
@@ -442,6 +458,7 @@ class MemoryConfig(BaseModel):
     session_enabled: bool = True
     embedding_provider: str = "auto"
     embedding_model: str = "nomic-embed-text"
+    consolidation: MemoryConsolidationConfig = MemoryConsolidationConfig()
 
 
 class SynthesisSdWebUIConfig(BaseModel):

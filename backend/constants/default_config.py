@@ -396,6 +396,17 @@ DEFAULT_CONFIG = {
         "session_enabled": True,
         "embedding_provider": "auto",
         "embedding_model": "nomic-embed-text",
+        "consolidation": {
+            "importance_threshold": 0.2,
+            "judge": {
+                "enabled": False,
+                "provider": "ollama",
+                "model": "",
+                "temperature": 0.0,
+                "max_tokens": 512,
+                "request_timeout": 60,
+            },
+        },
     },
     "synthesis": {
         "active_provider": "core",

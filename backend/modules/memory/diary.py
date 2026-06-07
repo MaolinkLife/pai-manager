@@ -18,6 +18,7 @@ from modules.database.core import SessionLocal, engine
 from models.models import History
 from modules.generative.manager import NoProviderResolved, generation_manager
 from modules.generative.types import GenerateRequest
+from modules.system import config as config_service
 from modules.system.logger import AuditStatus, log_audit_entry
 
 
@@ -76,13 +77,34 @@ def generate_daily_activity_entry(
     return {"generated": True, "entry": entry.to_dict()}
 
 
+def _resolve_importance_threshold() -> float:
+    """Lower bound for diary entry importance.
+
+    Anything below this is flagged as ``payload.pruned`` by sleep consolidation
+    and hidden from default reads. 0.0 disables the filter. Negative / invalid
+    values clamp to 0.0.
+    """
+    raw = config_service.get_config_value("memory.consolidation.importance_threshold", 0.2)
+    try:
+        value = float(raw if raw is not None else 0.2)
+    except (TypeError, ValueError):
+        value = 0.2
+    return max(0.0, min(value, 1.0))
+
+
 def run_sleeping_consolidation(
     *,
     character_id: str,
     lookback_days: int = 14,
 ) -> dict[str, Any]:
     days = max(2, min(int(lookback_days or 14), 120))
-    entries = list_daily_activity_entries(character_id=character_id, days=days)
+    # Include pruned here so consolidation can re-evaluate them as the threshold
+    # shifts. Reads after consolidation use the default include_pruned=False.
+    entries = list_daily_activity_entries(
+        character_id=character_id,
+        days=days,
+        include_pruned=True,
+    )
     if not entries:
         return {
             "consolidated": False,
@@ -90,6 +112,8 @@ def run_sleeping_consolidation(
             "reason": "no_diary_entries",
             "lookback_days": days,
         }
+
+    importance_threshold = _resolve_importance_threshold()
 
     sig_map: dict[str, list[str]] = {}
     tag_counter: dict[str, int] = {}
@@ -104,6 +128,8 @@ def run_sleeping_consolidation(
 
     anchor_tags = [tag for tag, count in sorted(tag_counter.items(), key=lambda p: (-p[1], p[0])) if count >= 2][:8]
     updated = 0
+    pruned_count = 0
+    unpruned_count = 0
     for entry in entries:
         signature = _signature_text(entry.summary)
         duplicate_ids = [
@@ -119,7 +145,30 @@ def run_sleeping_consolidation(
             "summary_signature": signature,
             "duplicate_entry_ids": duplicate_ids[:12],
             "anchor_tags": anchor_tags,
+            "importance_threshold": importance_threshold,
         }
+
+        importance_score = _coerce_float((payload or {}).get("importance_score"))
+        existing_pruned = payload.get("pruned") if isinstance(payload.get("pruned"), dict) else None
+
+        if (
+            importance_threshold > 0.0
+            and importance_score is not None
+            and importance_score < importance_threshold
+        ):
+            if not existing_pruned:
+                pruned_count += 1
+            payload["pruned"] = {
+                "reason": "low_importance",
+                "score": importance_score,
+                "threshold": importance_threshold,
+                "at": datetime.now(timezone.utc).isoformat(),
+            }
+        elif existing_pruned and existing_pruned.get("reason") == "low_importance":
+            # Threshold lowered or importance re-rated upward — un-prune.
+            payload.pop("pruned", None)
+            unpruned_count += 1
+
         merged_tags = _merge_tags(entry.tags, anchor_tags)
         target_day = date.fromisoformat(str(entry.day))
         _upsert_diary_entry(
@@ -142,6 +191,9 @@ def run_sleeping_consolidation(
             "lookback_days": days,
             "entries_seen": len(entries),
             "entries_updated": updated,
+            "entries_pruned": pruned_count,
+            "entries_unpruned": unpruned_count,
+            "importance_threshold": importance_threshold,
             "anchor_tags": anchor_tags,
         },
     )
@@ -149,6 +201,9 @@ def run_sleeping_consolidation(
         "consolidated": True,
         "updated_entries": updated,
         "entries_seen": len(entries),
+        "entries_pruned": pruned_count,
+        "entries_unpruned": unpruned_count,
+        "importance_threshold": importance_threshold,
         "lookback_days": days,
         "anchor_tags": anchor_tags,
     }
@@ -158,7 +213,15 @@ def list_daily_activity_entries(
     *,
     character_id: str,
     days: int = 30,
+    include_pruned: bool = False,
 ) -> list[DiaryEntry]:
+    """List diary entries for the character.
+
+    ``include_pruned`` controls whether entries flagged by sleep consolidation
+    as low-importance (see ``payload.pruned``) are returned. Defaults to
+    ``False`` so callers building RAG/diary context get a clean feed without
+    having to filter themselves. Set True for admin / debug views.
+    """
     days = max(1, min(int(days or 30), 365))
     since_day = datetime.now(timezone.utc).date() - timedelta(days=days - 1)
     with engine.begin() as conn:
@@ -174,7 +237,16 @@ def list_daily_activity_entries(
             ),
             {"character_id": character_id, "since_day": since_day.isoformat()},
         ).fetchall()
-    return [_row_to_entry(row) for row in rows]
+    entries = [_row_to_entry(row) for row in rows]
+    if include_pruned:
+        return entries
+    return [entry for entry in entries if not _is_entry_pruned(entry)]
+
+
+def _is_entry_pruned(entry: DiaryEntry) -> bool:
+    payload = entry.payload if isinstance(entry.payload, dict) else {}
+    pruned = payload.get("pruned") if isinstance(payload, dict) else None
+    return isinstance(pruned, dict) and bool(pruned.get("reason"))
 
 
 def get_daily_activity_entry(
