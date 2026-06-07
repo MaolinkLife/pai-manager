@@ -13,6 +13,7 @@ from sqlalchemy.orm import joinedload
 from constants.prompts import (
     DAILY_ACTIVITY_DIARY_SYSTEM_PROMPT,
     DAILY_ACTIVITY_DIARY_USER_PROMPT_TEMPLATE,
+    MEMORY_JUDGE_CONTRADICTION_PROMPT,
 )
 from modules.database.core import SessionLocal, engine
 from models.models import History
@@ -77,6 +78,142 @@ def generate_daily_activity_entry(
     return {"generated": True, "entry": entry.to_dict()}
 
 
+def _judge_settings() -> dict[str, Any]:
+    cfg = config_service.get_config_value("memory.consolidation.judge", {}) or {}
+    if not isinstance(cfg, dict):
+        cfg = {}
+    return {
+        "enabled": bool(cfg.get("enabled", False)),
+        "provider": str(cfg.get("provider") or "ollama").strip().lower(),
+        "model": str(cfg.get("model") or "").strip(),
+        "temperature": float(cfg.get("temperature", 0.0) or 0.0),
+        "max_tokens": int(cfg.get("max_tokens", 512) or 512),
+        "request_timeout": float(cfg.get("request_timeout", 60) or 60),
+    }
+
+
+def _call_judge_llm(*, payload: dict[str, Any], settings: dict[str, Any]) -> str | None:
+    """Send the judge prompt + payload to the configured provider.
+
+    Returns the assistant text or None if the provider is unavailable. The
+    caller decides whether a missing response should skip or fail the
+    consolidation step.
+    """
+    messages = [
+        {"role": "system", "content": MEMORY_JUDGE_CONTRADICTION_PROMPT},
+        {"role": "user", "content": json.dumps(payload, ensure_ascii=False, indent=2)},
+    ]
+    provider = settings["provider"]
+
+    try:
+        if provider == "ollama":
+            from modules.ollama import client as ollama_client
+
+            response = ollama_client.chat(
+                messages,
+                {
+                    "temperature": settings["temperature"],
+                    "max_tokens": settings["max_tokens"],
+                    "__think": False,
+                },
+                model=settings["model"] or None,
+            )
+            return str(
+                (response.get("message", {}) or {}).get("content", "")
+                if isinstance(response, dict) else ""
+            )
+
+        if provider == "llama_cpp":
+            from modules.llama_cpp import client as llama_client
+
+            base_url = str(
+                config_service.get_config_value(
+                    "api.providers.llama_cpp.base_url",
+                    "http://127.0.0.1:8080",
+                )
+                or "http://127.0.0.1:8080"
+            )
+            response = llama_client.chat_completion(
+                base_url=base_url,
+                messages=messages,
+                model=settings["model"] or None,
+                sampler={
+                    "temperature": settings["temperature"],
+                    "max_tokens": settings["max_tokens"],
+                },
+                timeout=settings["request_timeout"],
+                purpose="memory_judge",
+            )
+            choices = response.get("choices") or []
+            first = choices[0] if isinstance(choices, list) and choices else {}
+            return str(
+                (first.get("message", {}) if isinstance(first, dict) else {}).get("content", "")
+            )
+
+    except Exception as exc:
+        log_audit_entry(
+            "memory_judge_provider_error",
+            "[Diary] Memory judge provider failed.",
+            AuditStatus.WARNING,
+            details={"provider": provider, "error": str(exc)},
+        )
+        return None
+
+    log_audit_entry(
+        "memory_judge_provider_unsupported",
+        "[Diary] Memory judge provider not supported.",
+        AuditStatus.WARNING,
+        details={"provider": provider},
+    )
+    return None
+
+
+def _parse_judge_response(raw: str | None) -> list[dict[str, Any]]:
+    if not raw:
+        return []
+    text_raw = str(raw).strip()
+    # Tolerate fenced output.
+    if text_raw.startswith("```"):
+        text_raw = text_raw.split("```", 1)[1]
+        if text_raw.startswith("json"):
+            text_raw = text_raw[4:]
+        text_raw = text_raw.split("```", 1)[0]
+    text_raw = text_raw.strip()
+    try:
+        payload = json.loads(text_raw)
+    except Exception:
+        # Try to recover the JSON object from surrounding prose.
+        start = text_raw.find("{")
+        end = text_raw.rfind("}")
+        if start < 0 or end <= start:
+            return []
+        try:
+            payload = json.loads(text_raw[start : end + 1])
+        except Exception:
+            return []
+    if not isinstance(payload, dict):
+        return []
+    matches = payload.get("matches")
+    if not isinstance(matches, list):
+        return []
+    out: list[dict[str, Any]] = []
+    valid_actions = {"supersede", "merge", "keep_both", "skip"}
+    for item in matches:
+        if not isinstance(item, dict):
+            continue
+        action = str(item.get("action") or "").strip().lower()
+        if action not in valid_actions:
+            continue
+        out.append(
+            {
+                "entry_id": str(item.get("entry_id") or "").strip(),
+                "action": action,
+                "note": str(item.get("note") or "").strip()[:400],
+            }
+        )
+    return out
+
+
 def _resolve_importance_threshold() -> float:
     """Lower bound for diary entry importance.
 
@@ -130,6 +267,13 @@ def run_sleeping_consolidation(
     updated = 0
     pruned_count = 0
     unpruned_count = 0
+    judge_settings = _judge_settings()
+    judge_invocations = 0
+    judge_actions = {"supersede": 0, "merge": 0, "keep_both": 0, "skip": 0}
+    # Build a lookup of all entries by id so the resolver can apply actions
+    # against earlier rows in this same pass.
+    entries_by_id: dict[str, DiaryEntry] = {e.id: e for e in entries}
+    overrides: dict[str, dict[str, Any]] = {}  # entry_id -> patch dict for payload
     for entry in entries:
         signature = _signature_text(entry.summary)
         duplicate_ids = [
@@ -169,6 +313,69 @@ def run_sleeping_consolidation(
             payload.pop("pruned", None)
             unpruned_count += 1
 
+        # Contradiction resolver — only fires when both the user opted in via
+        # config and the summariser flagged contradictions for this entry.
+        raw_contradictions = payload.get("contradictions") if isinstance(payload, dict) else None
+        contradiction_notes = (
+            [str(item).strip() for item in raw_contradictions if str(item).strip()]
+            if isinstance(raw_contradictions, list)
+            else []
+        )
+        if judge_settings["enabled"] and contradiction_notes:
+            # Candidate set: every other (older) entry, capped to keep the prompt cheap.
+            recent_candidates = [
+                {
+                    "id": other.id,
+                    "day": str(other.day),
+                    "summary": str(other.summary or "")[:600],
+                }
+                for other in entries
+                if other.id != entry.id
+            ][:25]
+            judge_payload = {
+                "new_entry": {
+                    "id": entry.id,
+                    "day": str(entry.day),
+                    "summary": str(entry.summary or "")[:1200],
+                    "contradictions": contradiction_notes[:10],
+                },
+                "recent_entries": recent_candidates,
+            }
+            raw_response = _call_judge_llm(payload=judge_payload, settings=judge_settings)
+            matches = _parse_judge_response(raw_response)
+            judge_invocations += 1
+            applied: list[dict[str, Any]] = []
+            for match in matches:
+                action = match["action"]
+                judge_actions[action] = judge_actions.get(action, 0) + 1
+                target_id = match["entry_id"]
+                if action == "skip" or not target_id or target_id not in entries_by_id:
+                    applied.append(match)
+                    continue
+                if action == "supersede":
+                    # Mark the older entry as superseded; the new one wins.
+                    overrides.setdefault(target_id, {})["pruned"] = {
+                        "reason": "superseded_by",
+                        "by_entry_id": entry.id,
+                        "note": match.get("note", ""),
+                        "at": datetime.now(timezone.utc).isoformat(),
+                    }
+                elif action == "merge":
+                    # Record a back-link on the new entry. No deletion.
+                    merged_from = list(payload.get("merged_from") or [])
+                    if target_id not in merged_from:
+                        merged_from.append(target_id)
+                    payload["merged_from"] = merged_from[:20]
+                # keep_both: nothing to do beyond bookkeeping.
+                applied.append(match)
+            if applied:
+                payload["consolidation"]["judge"] = {
+                    "ran_at": datetime.now(timezone.utc).isoformat(),
+                    "provider": judge_settings["provider"],
+                    "model": judge_settings["model"],
+                    "matches": applied,
+                }
+
         merged_tags = _merge_tags(entry.tags, anchor_tags)
         target_day = date.fromisoformat(str(entry.day))
         _upsert_diary_entry(
@@ -181,6 +388,34 @@ def run_sleeping_consolidation(
             payload=payload,
         )
         updated += 1
+
+    # Apply judge-induced overrides (supersede markers) to older entries that
+    # already passed through the main loop. We do this in a second pass so the
+    # first pass can freely build payload.consolidation without racing.
+    superseded_count = 0
+    for target_id, patch in overrides.items():
+        target_entry = entries_by_id.get(target_id)
+        if not target_entry:
+            continue
+        target_payload = dict(target_entry.payload or {})
+        existing_pruned = target_payload.get("pruned") if isinstance(target_payload.get("pruned"), dict) else None
+        if existing_pruned and existing_pruned.get("reason") not in {None, "low_importance"}:
+            # Do not stomp on archival reasons set by users or other workflows.
+            continue
+        target_payload["pruned"] = patch["pruned"]
+        target_day = date.fromisoformat(str(target_entry.day))
+        _upsert_diary_entry(
+            character_id=target_entry.character_id,
+            day=target_day,
+            mood=target_entry.mood,
+            summary=target_entry.summary,
+            tags=list(target_entry.tags or []),
+            stats=dict(target_entry.stats or {}),
+            payload=target_payload,
+        )
+        superseded_count += 1
+        if not existing_pruned:
+            pruned_count += 1
 
     log_audit_entry(
         "daily_activity_diary_consolidation_complete",
@@ -195,6 +430,10 @@ def run_sleeping_consolidation(
             "entries_unpruned": unpruned_count,
             "importance_threshold": importance_threshold,
             "anchor_tags": anchor_tags,
+            "judge_enabled": judge_settings["enabled"],
+            "judge_invocations": judge_invocations,
+            "judge_actions": judge_actions,
+            "entries_superseded": superseded_count,
         },
     )
     return {
@@ -206,6 +445,10 @@ def run_sleeping_consolidation(
         "importance_threshold": importance_threshold,
         "lookback_days": days,
         "anchor_tags": anchor_tags,
+        "judge_enabled": judge_settings["enabled"],
+        "judge_invocations": judge_invocations,
+        "judge_actions": judge_actions,
+        "entries_superseded": superseded_count,
     }
 
 

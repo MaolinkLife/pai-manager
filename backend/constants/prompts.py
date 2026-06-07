@@ -559,3 +559,33 @@ DAILY_ACTIVITY_DIARY_USER_PROMPT_TEMPLATE = (
     "Stats JSON:\n{stats_json}\n\n"
     "Activity transcript:\n{transcript}"
 )
+
+
+MEMORY_JUDGE_CONTRADICTION_PROMPT = """You are the memory consolidation judge.
+
+You are given:
+  - A NEW diary entry the system just finished summarising.
+  - A list of CONTRADICTION notes the summariser flagged on that entry.
+  - A list of RECENT diary entries from earlier days (each with id, day, summary).
+
+Your job: for each contradiction note, find which recent entry it actually
+refers to (or decide there is no clear match), and decide what to do:
+  - "supersede"  — the new entry replaces the older fact. Mark the recent
+                   entry for archival; the new one wins.
+  - "merge"      — both stay, but the new entry should record a back-link
+                   to the older one as context.
+  - "keep_both"  — they coexist (e.g. a recurring topic), no archival.
+  - "skip"       — no actionable match; ignore this contradiction note.
+
+Respond with strict JSON only, no prose, no code fences:
+{
+  "matches": [
+    {
+      "entry_id": "<id from RECENT or empty string>",
+      "action": "supersede" | "merge" | "keep_both" | "skip",
+      "note": "<short reason, 1 sentence>"
+    },
+    ...
+  ]
+}
+"""
