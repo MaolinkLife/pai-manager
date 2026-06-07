@@ -17,7 +17,7 @@ import traceback
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from core.initialize import run_startup_checks, start_async_warmups
+from core.initialize import run_startup_checks, shutdown_services, start_async_warmups
 from core import access_guard
 from modules.system.logger import log_console, log_error, log_traceback
 
@@ -201,8 +201,20 @@ def app_startup() -> None:
 
 @app.on_event("shutdown")
 def app_shutdown() -> None:
-    stop_telegram_bridge()
-    tunnel_service.stop_tunnel()
+    # Stop external bridges first so they cannot send during teardown,
+    # then release model/runtime resources.
+    try:
+        stop_telegram_bridge()
+    except Exception as exc:
+        log_console("Shutdown", "Не удалось остановить Telegram bridge.", {"error": str(exc)})
+    try:
+        tunnel_service.stop_tunnel()
+    except Exception as exc:
+        log_console("Shutdown", "Не удалось остановить tunnel.", {"error": str(exc)})
+    try:
+        shutdown_services()
+    except Exception as exc:
+        log_console("Shutdown", "Ошибка в shutdown_services.", {"error": str(exc)})
 
 
 @app.get("/api/ping")
