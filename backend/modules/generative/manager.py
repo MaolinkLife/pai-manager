@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import AsyncIterator, Dict, Iterable, List
 
 from modules.generative.providers.base import GenerateProvider, ProviderError
+from modules.generative.providers.llama_cpp import LlamaCppGenerateProvider
 from modules.generative.providers.ollama import OllamaGenerateProvider
 from modules.generative.providers.openrouter import OpenRouterGenerateProvider
 from modules.system.runtime_profile import should_release_resources
@@ -26,6 +27,7 @@ class GenerationManager:
             "ollama": OllamaGenerateProvider(),
             "openrouter": OpenRouterGenerateProvider(),
             "transformers": TransformersGenerateProvider(),
+            "llama_cpp": LlamaCppGenerateProvider(),
         }
 
     def _ordered_provider_names(self) -> List[str]:

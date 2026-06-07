@@ -723,10 +723,27 @@ class GeneratorProviderTransformersConfig(GeneratorProviderBaseConfig):
     source: str = "huggingface"
 
 
+class GeneratorProviderLlamaCppConfig(GeneratorProviderBaseConfig):
+    # Off by default — the user must explicitly point at a llama-server before
+    # the manager will route to this provider.
+    enabled: bool = False
+    base_url: str = "http://127.0.0.1:8080"
+    streaming: bool = True
+    request_timeout: int = 300
+    stream_timeout: int = 600
+    # Extra samplers exposed by llama-server's OpenAI endpoint. ``temperature``
+    # and ``max_tokens`` come from the base class.
+    top_p: float = 0.9
+    top_k: int = 50
+    min_p: float = 0.05
+    repeat_penalty: float = 1.1
+
+
 class APIProvidersConfig(BaseModel):
     ollama: GeneratorProviderOllamaConfig = GeneratorProviderOllamaConfig()
     openrouter: GeneratorProviderOpenRouterConfig = GeneratorProviderOpenRouterConfig()
     transformers: GeneratorProviderTransformersConfig = GeneratorProviderTransformersConfig()
+    llama_cpp: GeneratorProviderLlamaCppConfig = GeneratorProviderLlamaCppConfig()
 
 
 class APIConfig(BaseModel):

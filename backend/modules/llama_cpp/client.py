@@ -13,8 +13,9 @@ logs to make it easy to attribute traffic on a busy server.
 from __future__ import annotations
 
 import json
-from typing import Any, Iterator
+from typing import Any, AsyncIterator, Iterator
 
+import httpx
 import requests
 
 
@@ -160,6 +161,58 @@ def stream_chat_completion(
                 continue
             if isinstance(data, dict):
                 yield data
+
+
+async def astream_chat_completion(
+    *,
+    base_url: str,
+    messages: list[dict[str, Any]],
+    model: str | None = None,
+    sampler: dict[str, Any] | None = None,
+    timeout: float,
+    purpose: str = "chat_stream",
+) -> AsyncIterator[dict[str, Any]]:
+    """Async streaming variant for use from FastAPI/asyncio code paths."""
+    payload = _chat_payload(messages=messages, stream=True, model=model, sampler=sampler)
+    print(
+        f"[LLAMA CPP HTTP] purpose={purpose} endpoint=/v1/chat/completions "
+        f"payload_shape={_payload_shape(payload)}",
+        flush=True,
+    )
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        async with client.stream(
+            "POST",
+            f"{base_url.rstrip('/')}/v1/chat/completions",
+            json=payload,
+        ) as response:
+            if response.status_code >= 400:
+                # Drain a short body for diagnostics, mirror sync version.
+                body = ""
+                try:
+                    body = (await response.aread()).decode("utf-8", errors="replace")[:2000]
+                except Exception:
+                    pass
+                raise httpx.HTTPStatusError(
+                    f"{response.status_code} from llama-server; "
+                    f"response_body={body!r}; payload_shape={_payload_shape(payload)!r}",
+                    request=response.request,
+                    response=response,
+                )
+            async for raw_line in response.aiter_lines():
+                line = (raw_line or "").strip()
+                if not line:
+                    continue
+                if line.startswith("data:"):
+                    line = line[5:].strip()
+                if line == "[DONE]":
+                    yield {"done": True}
+                    break
+                try:
+                    data = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(data, dict):
+                    yield data
 
 
 def embeddings(
