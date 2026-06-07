@@ -6,7 +6,12 @@ contract if/when wired into the lifecycle).
 
 DB config sits at ``stt.sherpa_onnx.*`` and points at a directory containing
 the model files. Sherpa publishes many recipes; we don't hard-code one, the
-user provides paths explicitly:
+user provides paths explicitly. Paths may be:
+
+  * relative to ``constants.paths.STT_MODELS_DIR``
+    (``backend/storage/models/stt`` — gitignored, same place faster-whisper
+    weights are cached). Example: ``"sherpa-onnx-en/encoder.onnx"``.
+  * absolute, which are honoured as-is.
 
   stt.sherpa_onnx.model_type        = "transducer" | "paraformer" | "whisper" | "moonshine"
   stt.sherpa_onnx.encoder           = "<path>/encoder.onnx"          (transducer)
@@ -29,13 +34,25 @@ the text. No streaming here — that's a separate feature with its own WS path.
 
 from __future__ import annotations
 
+import os
 import wave
 from typing import Any
 
 import numpy as np
 
+from constants.paths import STT_MODELS_DIR
 from modules.system import config as config_service
 from modules.system.logger import AuditStatus, log_audit_entry
+
+
+def _resolve_model_path(value: str | None) -> str:
+    """Relative paths resolve against ``STT_MODELS_DIR``; absolute paths are kept."""
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    if os.path.isabs(text):
+        return text
+    return os.path.normpath(os.path.join(STT_MODELS_DIR, text))
 
 
 try:
@@ -94,16 +111,16 @@ def _build_recognizer(cfg: dict[str, Any]):
         )
 
     model_type = str(cfg.get("model_type") or "transducer").strip().lower()
-    tokens = str(cfg.get("tokens") or "").strip()
+    tokens = _resolve_model_path(cfg.get("tokens"))
     if not tokens:
         raise SherpaUnavailableError("stt.sherpa_onnx.tokens path is required.")
     num_threads = int(cfg.get("num_threads") or 1)
     provider = str(cfg.get("provider") or "cpu").strip().lower()
 
     if model_type == "transducer":
-        encoder = str(cfg.get("encoder") or "").strip()
-        decoder = str(cfg.get("decoder") or "").strip()
-        joiner = str(cfg.get("joiner") or "").strip()
+        encoder = _resolve_model_path(cfg.get("encoder"))
+        decoder = _resolve_model_path(cfg.get("decoder"))
+        joiner = _resolve_model_path(cfg.get("joiner"))
         if not (encoder and decoder and joiner):
             raise SherpaUnavailableError(
                 "sherpa-onnx transducer requires encoder/decoder/joiner paths."
@@ -118,7 +135,7 @@ def _build_recognizer(cfg: dict[str, Any]):
         )
 
     if model_type == "paraformer":
-        paraformer = str(cfg.get("paraformer") or "").strip()
+        paraformer = _resolve_model_path(cfg.get("paraformer"))
         if not paraformer:
             raise SherpaUnavailableError("sherpa-onnx paraformer requires the model path.")
         return _sherpa.OfflineRecognizer.from_paraformer(
@@ -129,8 +146,8 @@ def _build_recognizer(cfg: dict[str, Any]):
         )
 
     if model_type == "whisper":
-        whisper_encoder = str(cfg.get("whisper_encoder") or "").strip()
-        whisper_decoder = str(cfg.get("whisper_decoder") or "").strip()
+        whisper_encoder = _resolve_model_path(cfg.get("whisper_encoder"))
+        whisper_decoder = _resolve_model_path(cfg.get("whisper_decoder"))
         if not (whisper_encoder and whisper_decoder):
             raise SherpaUnavailableError(
                 "sherpa-onnx whisper requires encoder/decoder paths."
@@ -144,10 +161,10 @@ def _build_recognizer(cfg: dict[str, Any]):
         )
 
     if model_type == "moonshine":
-        preprocessor = str(cfg.get("moonshine_preprocessor") or "").strip()
-        encoder = str(cfg.get("moonshine_encoder") or "").strip()
-        uncached = str(cfg.get("moonshine_uncached_decoder") or "").strip()
-        cached = str(cfg.get("moonshine_cached_decoder") or "").strip()
+        preprocessor = _resolve_model_path(cfg.get("moonshine_preprocessor"))
+        encoder = _resolve_model_path(cfg.get("moonshine_encoder"))
+        uncached = _resolve_model_path(cfg.get("moonshine_uncached_decoder"))
+        cached = _resolve_model_path(cfg.get("moonshine_cached_decoder"))
         if not (preprocessor and encoder and uncached and cached):
             raise SherpaUnavailableError(
                 "sherpa-onnx moonshine requires preprocessor/encoder/uncached/cached paths."

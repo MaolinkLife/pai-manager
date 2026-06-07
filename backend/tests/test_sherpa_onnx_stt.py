@@ -150,6 +150,30 @@ def test_sherpa_recognizer_rebuilt_when_settings_change(fake_recognizer, wav_fil
 
 
 @pytest.mark.regression
+def test_relative_paths_resolve_against_stt_models_dir():
+    """Relative paths must land inside backend/storage/models/stt, not CWD."""
+    from constants.paths import STT_MODELS_DIR
+
+    resolved = sherpa_onnx_engine._resolve_model_path("sherpa-onnx-en/encoder.onnx")
+    assert resolved.startswith(STT_MODELS_DIR)
+    assert resolved.endswith("encoder.onnx")
+
+
+@pytest.mark.regression
+def test_absolute_paths_pass_through_unchanged():
+    import os
+
+    absolute = os.path.join(os.sep, "abs", "models", "encoder.onnx")
+    assert sherpa_onnx_engine._resolve_model_path(absolute) == absolute
+
+
+@pytest.mark.regression
+def test_empty_path_returns_empty_string():
+    assert sherpa_onnx_engine._resolve_model_path(None) == ""
+    assert sherpa_onnx_engine._resolve_model_path("   ") == ""
+
+
+@pytest.mark.regression
 def test_sherpa_misconfigured_transducer_raises(wav_file, monkeypatch):
     """Missing tokens path must raise SherpaUnavailableError rather than letting sherpa-onnx crash on its own."""
     monkeypatch.setattr(
