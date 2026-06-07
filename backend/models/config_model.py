@@ -126,9 +126,28 @@ class VoiceConfig(BaseModel):
     voice_language: str = "en-US-JennyNeural"
 
 
+class STTSherpaOnnxConfig(BaseModel):
+    model_type: str = "transducer"
+    encoder: str = ""
+    decoder: str = ""
+    joiner: str = ""
+    paraformer: str = ""
+    whisper_encoder: str = ""
+    whisper_decoder: str = ""
+    moonshine_preprocessor: str = ""
+    moonshine_encoder: str = ""
+    moonshine_uncached_decoder: str = ""
+    moonshine_cached_decoder: str = ""
+    tokens: str = ""
+    num_threads: int = 1
+    provider: str = "cpu"
+
+
 class STTConfig(BaseModel):
     language: str = "en-US"
     auto_detect: bool = False
+    provider: str = "whisper"
+    sherpa_onnx: STTSherpaOnnxConfig = STTSherpaOnnxConfig()
 
 
 class ModulesConfig(BaseModel):

@@ -310,6 +310,14 @@ def normalize_config_structure(config: dict | None) -> dict:
         _merge_missing(moral_section, moral_defaults)
     normalized["moral"] = moral_section
 
+    stt_defaults = DEFAULT_CONFIG.get("stt", {})
+    stt_section = normalized.get("stt")
+    if not isinstance(stt_section, dict):
+        stt_section = copy.deepcopy(stt_defaults)
+    else:
+        _merge_missing(stt_section, stt_defaults)
+    normalized["stt"] = stt_section
+
     return normalized
 
 
