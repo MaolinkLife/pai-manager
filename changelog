@@ -1,3 +1,37 @@
+version: 0.7.2
+- Tunnel-Aware API Access Guard
+  - Replaced the implicit "CORS *" policy with a positive access check in `core/access_guard.py`, ordered inside the request logger so 403 rejections still show up in console logs.
+  - Added `system.api_access_mode` DB key with three values: `tunnel_aware` (default, loopback + currently active tunnel `public_url`), `strict_local` (loopback only, even when a tunnel is running), `open` (legacy permissive behaviour for development).
+  - Added `modules.system.tunnel.runtime_snapshot()` returning `{running, public_url}` without the DB roundtrip that `get_status()` does, so the hot-path middleware stays cheap.
+  - WebSocket handshakes are gated via `core.access_guard.accept_ws()` at the top of `/api/ws`.
+- llama.cpp Provider Parity
+  - Added the llama.cpp transport (`modules/llama_cpp/`) with sync + async streaming chat completions, embeddings, and process-launcher helpers for `llama-server`. Multi-GPU profiles are honoured; single-CUDA profiles get `CUDA_VISIBLE_DEVICES` scoping.
+  - Registered llama.cpp adapters in every existing provider registry: generative (`modules/generative/providers/llama_cpp.py`), analyzer, moral matrix, vision (`llama_cpp_vision` via `--mmproj`). Each domain keeps its own `active_provider` + `providers.<name>.model` selection — no new "service model" abstraction.
+  - All adapters are off by default. Opt in per-domain via `<module>.providers.llama_cpp.enabled = true` and `base_url`.
+  - Sampler config (temperature/top_p/top_k/min_p/repeat_penalty/max_tokens) merges DB defaults with per-request options; `num_predict` is aliased to `max_tokens` for parity with the Ollama provider's request shape.
+- sherpa-onnx STT
+  - Added `stt.provider` switch: `whisper` (default, existing faster-whisper) or `sherpa_onnx`. Whisper path is untouched.
+  - New `modules/voice/sherpa_onnx_engine.py` supports all four OfflineRecognizer families (transducer, paraformer, whisper, moonshine) with fingerprint-based recognizer caching.
+  - Relative paths in `stt.sherpa_onnx.*` resolve against `STT_MODELS_DIR` (`backend/storage/models/stt`), the same gitignored model storage faster-whisper already uses; absolute paths pass through.
+  - Added `sherpa-onnx>=1.13.0` to `backend/requirements.txt`.
+- Qwen-TTS
+  - Added `QwenTTSProvider` via `faster-qwen3-tts` next to Coqui/Edge/ElevenLabs/gTTS/Offline in the existing TTSManager registry. In-process, lazy load, shutdown releases GPU.
+  - Weights download via HuggingFace Hub on first synth and pin to `TTS_MODELS_DIR/qwen` (gitignored). `HF_HOME` is only set when not already in env.
+  - DB config: `voice.voice_modules.qwen.*` with load-time fields (`model_name/device/dtype/max_seq_len`) and sampling tunables. Selectable as `voice.active_module = "qwen"`. Default remains `edge`.
+  - Added `faster-qwen3-tts>=0.2.6` to `backend/requirements.txt`.
+- Shutdown Hook
+  - Wired `core.initialize.shutdown_services()` to `main.app_shutdown` — previously the function existed but was never invoked, so vision/TTS/LLM provider weights only got cleaned up implicitly on process exit.
+  - Extended `shutdown_services()` to release every registered generation provider (regardless of `model_memory_profile`), shut down the TTS subsystem, and stop the vision service. Each step is isolated with try/except so one bridge failing cannot block the model-release path.
+  - Does NOT touch the existing `should_release_resources` / `model_memory_profile` policy — those continue to control per-use behaviour as before.
+- Memory Consolidation Policy
+  - Sleep consolidation now consults the LLM-generated `importance_score` that `_summarize_activity` already returns. Entries below `memory.consolidation.importance_threshold` (default 0.2) are flagged `payload.pruned = {reason: low_importance, score, threshold, at}` and hidden from default reads.
+  - `list_daily_activity_entries` gained `include_pruned: bool = False`, so RAG/context consumers automatically skip pruned entries; admin views opt in.
+  - Threshold=0.0 disables the filter (kill switch); lowering the threshold un-prunes existing `low_importance` flags so policy reversals do not require manual DB edits.
+  - Added optional contradiction-resolver judge (`memory.consolidation.judge.enabled`, off by default). When enabled and `_summarize_activity` returned non-empty contradictions, one LLM call per entry (Ollama or llama.cpp) maps each contradiction note to a recent entry plus an action: `supersede` (mark older entry `pruned.reason = superseded_by` in a second pass), `merge` (back-link in `payload.merged_from`), `keep_both`, or `skip`. Nothing fires on a chat turn — only during nightly sleep consolidation.
+  - The judge response is parsed via `_parse_judge_response`, which tolerates JSON-in-prose and code fences and drops invalid actions; unknown `entry_id` is a safe no-op; `supersede` never stomps on non-`low_importance` pruned markers (e.g. `user_archived`).
+- Reliability & Regression Safety
+  - Added regression coverage around the access guard (all three modes, tunnel on/off, WS handshake), llama.cpp transport + provider behaviour, sherpa-onnx routing, Qwen-TTS lifecycle, llama.cpp vision adapter, and diary consolidation (importance pruning + judge resolver). Baseline 66 → 154 passing regression tests; the 5 pre-existing `synthesis_*` failures are unrelated to this branch and tracked separately.
+
 version: 0.7.1
 - Unified Media/Image Pipeline
   - Added a shared media image pipeline used by Sandbox, Synthesis, main chat image generation, and Telegram image flows.
