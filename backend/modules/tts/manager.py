@@ -19,6 +19,7 @@ from modules.tts.providers.edge import EdgeTTSProvider
 from modules.tts.providers.elevenlabs import ElevenLabsProvider
 from modules.tts.providers.gtts import GTTSProvider
 from modules.tts.providers.offline import OfflineTTSProvider
+from modules.tts.providers.qwen import QwenTTSProvider
 from modules.tts.state import voice_state
 from modules.tts.types import TTSRequest, TTSResult
 from modules.system import config as config_service
@@ -229,6 +230,14 @@ class TTSManager:
             "[TTS] Offline TTS provider created",
             AuditStatus.INFO,
             details={"voice": voice_cfg.get("offline", {}).get("voice")},
+        )
+
+        providers["qwen"] = QwenTTSProvider(voice_cfg.get("qwen", {}))
+        log_audit_entry(
+            "tts_provider_created",
+            "[TTS] Qwen-TTS provider created",
+            AuditStatus.INFO,
+            details={"model_name": (voice_cfg.get("qwen") or {}).get("model_name")},
         )
 
         return providers
