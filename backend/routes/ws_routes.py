@@ -12,6 +12,7 @@ from modules.system.service import (
     get_config_value,
     reset_user_context,
 )
+from core import access_guard
 from core.websocket_manager import manager
 from modules.generative import conversation
 from modules.database import service as database_service
@@ -227,6 +228,9 @@ async def _safe_send_json(websocket: WebSocket, payload: dict) -> bool:
 
 @ws_router.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
+    if not await access_guard.accept_ws(websocket):
+        return
+
     session_user_uuid = None
     access_token = websocket.query_params.get("access_token")
     if access_token:

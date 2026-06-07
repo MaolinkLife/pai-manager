@@ -28,6 +28,9 @@ class SystemConfig(BaseModel):
     language: str = "en-US"
     system_prompt: str = ""  # будет подтягиваться из characters/{char_name}.yaml
     theme: str = "default"
+    # HTTP/WS access policy. "tunnel_aware" (default) = loopback + active tunnel public_url;
+    # "strict_local" = loopback only (even with active tunnel); "open" = no host/origin checks.
+    api_access_mode: str = "tunnel_aware"
     runtime: Dict[str, Any] = Field(
         default_factory=lambda: {
             "model_memory_profile": "low_memory_strict",

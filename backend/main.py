@@ -18,6 +18,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from core.initialize import run_startup_checks, start_async_warmups
+from core import access_guard
 from modules.system.logger import log_console, log_error, log_traceback
 
 # Windows: ProactorEventLoop may emit noisy ConnectionResetError traces
@@ -97,6 +98,29 @@ from modules.telegram.runtime import autostart_telegram_bridge, stop_telegram_br
 app = FastAPI()
 
 
+# NOTE: FastAPI middleware decorators are LIFO — the last decorator declared
+# becomes the *outermost* middleware. We want order (outer → inner):
+#   CORSMiddleware → console_api_request_logger → api_access_guard → app
+# so logging captures every request including 403s emitted by the guard.
+# That means: declare api_access_guard FIRST, console_api_request_logger SECOND.
+
+
+@app.middleware("http")
+async def api_access_guard(request, call_next):
+    # /api/ping stays open so health checks and the launcher keep working,
+    # everything else is gated by core.access_guard policy.
+    if request.url.path != "/api/ping":
+        try:
+            access_guard.enforce_http(request)
+        except Exception as exc:
+            from fastapi.responses import JSONResponse
+
+            status_code = getattr(exc, "status_code", 500)
+            detail = getattr(exc, "detail", "Forbidden")
+            return JSONResponse(status_code=status_code, content={"detail": detail})
+    return await call_next(request)
+
+
 @app.middleware("http")
 async def console_api_request_logger(request, call_next):
     started = time.perf_counter()
@@ -134,9 +158,10 @@ async def console_api_request_logger(request, call_next):
         )
     return response
 
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # or http://localhost:3880
+    allow_origins=["*"],  # access guard performs the actual host/origin policy check
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
