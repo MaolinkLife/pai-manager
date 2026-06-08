@@ -5,7 +5,7 @@ import threading
 import traceback
 import uuid
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Any, Optional
 
@@ -392,6 +392,153 @@ def _fetch_audit_logs_from_db(
         rows = ordered.all()
 
     return [_audit_row_to_legacy_dict(row) for row in rows], total
+
+
+# ---------------------------------------------------------------------------
+# Retention
+# ---------------------------------------------------------------------------
+
+# Defaults; the worker reads overrides from DB config (audit_logs.retention.*).
+# Two passes: age-based delete + hard cap per severity (oldest go first when
+# the cap is exceeded).
+_DEFAULT_RETENTION_AGE_DAYS: dict[str, int] = {
+    "info": 7,
+    "success": 7,
+    "warning": 30,
+    "error": 90,
+    # Reserved for the upcoming DebugVault integration (§3.6).
+    "audit_fail": 90,
+}
+
+_DEFAULT_RETENTION_HARD_CAP: dict[str, int] = {
+    "info": 50_000,
+    "success": 50_000,
+    "warning": 10_000,
+    "error": 5_000,
+    "audit_fail": 5_000,
+}
+
+
+def _resolve_retention_policy() -> tuple[dict[str, int], dict[str, int]]:
+    """Merge defaults with DB config. Caller-friendly: never raises."""
+    try:
+        from modules.system import config as config_service
+
+        raw_age = config_service.get_config_value(
+            "audit_logs.retention.age_days", {}
+        ) or {}
+        raw_cap = config_service.get_config_value(
+            "audit_logs.retention.hard_cap", {}
+        ) or {}
+    except Exception:
+        raw_age, raw_cap = {}, {}
+
+    age = {**_DEFAULT_RETENTION_AGE_DAYS}
+    if isinstance(raw_age, dict):
+        for k, v in raw_age.items():
+            try:
+                age[str(k).lower()] = int(v)
+            except (TypeError, ValueError):
+                continue
+
+    cap = {**_DEFAULT_RETENTION_HARD_CAP}
+    if isinstance(raw_cap, dict):
+        for k, v in raw_cap.items():
+            try:
+                cap[str(k).lower()] = int(v)
+            except (TypeError, ValueError):
+                continue
+
+    return age, cap
+
+
+def prune_audit_logs(now: Optional[datetime] = None) -> dict[str, Any]:
+    """Apply retention policy to audit_logs.
+
+    Two passes per severity:
+      1. Age — delete rows older than ``age_days[severity]`` calendar days.
+      2. Hard cap — if the remaining row count for that severity still
+         exceeds ``hard_cap[severity]``, drop the oldest until it doesn't.
+
+    Returns a stats dict ``{severity: {age_deleted, cap_deleted, remaining}}``
+    for the audit log entry that loop_initiative writes after the job runs.
+    Best-effort: any per-severity failure is captured into the result rather
+    than propagated, so a misconfigured policy can't kill the entire job.
+    """
+    now = now or datetime.now(timezone.utc)
+    age_policy, cap_policy = _resolve_retention_policy()
+    results: dict[str, Any] = {}
+
+    try:
+        from models.models import AuditLogRecord
+        from modules.database.core import SessionLocal
+    except Exception as exc:
+        return {"error": f"db_unavailable: {exc}"}
+
+    all_severities = set(age_policy) | set(cap_policy)
+
+    for severity in sorted(all_severities):
+        severity_stats: dict[str, Any] = {
+            "age_deleted": 0,
+            "cap_deleted": 0,
+            "remaining": 0,
+        }
+        try:
+            # --- Age pass ---
+            age_days = int(age_policy.get(severity, 0))
+            if age_days > 0:
+                cutoff = now - timedelta(days=age_days)
+                with SessionLocal() as session:
+                    deleted = (
+                        session.query(AuditLogRecord)
+                        .filter(
+                            AuditLogRecord.severity == severity,
+                            AuditLogRecord.created_at < cutoff,
+                        )
+                        .delete(synchronize_session=False)
+                    )
+                    session.commit()
+                severity_stats["age_deleted"] = int(deleted or 0)
+
+            # --- Hard cap pass ---
+            cap = int(cap_policy.get(severity, 0))
+            with SessionLocal() as session:
+                remaining_count = (
+                    session.query(AuditLogRecord)
+                    .filter(AuditLogRecord.severity == severity)
+                    .count()
+                )
+
+                if cap > 0 and remaining_count > cap:
+                    overflow = remaining_count - cap
+                    # ROW_NUMBER would be cleaner but SQLite needs ORDER+LIMIT
+                    # in a subquery; easier: fetch the IDs of the oldest
+                    # `overflow` rows and delete by primary key.
+                    victim_ids = [
+                        row.id
+                        for row in session.query(AuditLogRecord.id)
+                        .filter(AuditLogRecord.severity == severity)
+                        .order_by(AuditLogRecord.created_at.asc())
+                        .limit(overflow)
+                        .all()
+                    ]
+                    if victim_ids:
+                        deleted = (
+                            session.query(AuditLogRecord)
+                            .filter(AuditLogRecord.id.in_(victim_ids))
+                            .delete(synchronize_session=False)
+                        )
+                        session.commit()
+                        severity_stats["cap_deleted"] = int(deleted or 0)
+                        remaining_count -= severity_stats["cap_deleted"]
+
+                severity_stats["remaining"] = int(remaining_count)
+        except Exception as exc:
+            severity_stats["error"] = str(exc)
+
+        results[severity] = severity_stats
+
+    return results
 
 
 def _fetch_audit_logs_from_jsonl(

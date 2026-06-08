@@ -44,6 +44,32 @@ class CoreConfig(BaseModel):
     debug: bool = False
 
 
+class AuditLogsRetentionConfig(BaseModel):
+    enabled: bool = True
+    age_days: Dict[str, int] = Field(
+        default_factory=lambda: {
+            "info": 7,
+            "success": 7,
+            "warning": 30,
+            "error": 90,
+            "audit_fail": 90,
+        }
+    )
+    hard_cap: Dict[str, int] = Field(
+        default_factory=lambda: {
+            "info": 50000,
+            "success": 50000,
+            "warning": 10000,
+            "error": 5000,
+            "audit_fail": 5000,
+        }
+    )
+
+
+class AuditLogsConfig(BaseModel):
+    retention: AuditLogsRetentionConfig = AuditLogsRetentionConfig()
+
+
 class DecisionLayerCapabilitiesConfig(BaseModel):
     tool: bool = False
     vision: bool = False

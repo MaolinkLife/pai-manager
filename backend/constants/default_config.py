@@ -25,6 +25,31 @@ DEFAULT_CONFIG = {
         "env": "dev",
         "debug": False,
     },
+    "audit_logs": {
+        # Retention policy applied nightly by loop_initiative right after
+        # the diary consolidation + emotional decay window. age_days/hard_cap
+        # are keyed by severity; severities not listed here use the defaults
+        # baked into modules.system.logger._DEFAULT_RETENTION_*.
+        # Set age_days[severity]=0 to disable the age sweep for that bucket.
+        # Set hard_cap[severity]=0 to disable the row-count cap.
+        "retention": {
+            "enabled": True,
+            "age_days": {
+                "info": 7,
+                "success": 7,
+                "warning": 30,
+                "error": 90,
+                "audit_fail": 90,
+            },
+            "hard_cap": {
+                "info": 50000,
+                "success": 50000,
+                "warning": 10000,
+                "error": 5000,
+                "audit_fail": 5000,
+            },
+        },
+    },
     "decision_layer": {
         "mode": "system",
         "active_provider": "ollama",

@@ -120,6 +120,40 @@ def _run_emotional_decay(*, character_id: str, day_iso: str) -> None:
         )
 
 
+def _run_audit_log_retention(*, day_iso: str) -> None:
+    """Apply audit_logs retention policy. Reads audit_logs.retention.enabled
+    from DB config so the operator can pause cleanup without restarting."""
+    try:
+        from modules.system import config as config_service
+        from modules.system.logger import prune_audit_logs
+
+        if not bool(
+            config_service.get_config_value("audit_logs.retention.enabled", True)
+        ):
+            log_audit_entry(
+                event_type="audit_log_retention_skipped",
+                msg="[Initiative] Audit log retention disabled by config.",
+                status=AuditStatus.INFO,
+                details={"day": day_iso},
+            )
+            return
+
+        stats = prune_audit_logs()
+        log_audit_entry(
+            event_type="audit_log_retention_completed",
+            msg="[Initiative] Audit log retention pass completed.",
+            status=AuditStatus.INFO,
+            details={"day": day_iso, "by_severity": stats},
+        )
+    except Exception as exc:
+        log_audit_entry(
+            event_type="audit_log_retention_failed",
+            msg="[Initiative] Audit log retention failed.",
+            status=AuditStatus.WARNING,
+            details={"day": day_iso, "error": str(exc)},
+        )
+
+
 def _is_daily_diary_due(now: datetime, diary_day_iso: str | None) -> bool:
     trigger_dt = datetime.combine(
         now.date(),
@@ -272,6 +306,11 @@ def initiative_monitor():
                         # Emotional decay — same window as consolidation: nightly,
                         # idempotent (uses last_decayed_at), skipped when disabled.
                         _run_emotional_decay(character_id=character.id, day_iso=diary_day_iso)
+
+                        # Audit log retention — runs once per nightly window
+                        # (character_id-agnostic, but we piggyback on the
+                        # diary slot so it never collides with active turns).
+                        _run_audit_log_retention(day_iso=diary_day_iso)
                 except Exception as diary_exc:
                     log_audit_entry(
                         event_type="daily_diary_generation_error",
