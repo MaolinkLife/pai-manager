@@ -211,6 +211,29 @@ class MoralMatrixModule:
         print("[MoralMatrix] History ids ->", history_ids)
 
         recent_traces = self._repository.fetch_recent_traces(character_id, limit=6)
+
+        # Heuristic forgiveness pass: if the current user message shows a
+        # warm/apologetic tone, soften recent unresolved negative traces.
+        # Deliberately NOT an LLM call — same-turn latency must stay flat.
+        # Future enhancement: validate suspect-cases via service-LLM judge.
+        try:
+            self._apply_heuristic_forgiveness(
+                character_id=character_id,
+                analyzer_emotion=self._extract_analyzer_emotion(analysis_result),
+                user_message_text=str((user_message or {}).get("content") or ""),
+            )
+        except Exception as exc:
+            log_audit_entry(
+                "moral_matrix_forgiveness_skipped",
+                "[MoralMatrix] Forgiveness heuristic skipped due to error.",
+                AuditStatus.WARNING,
+                details={"error": str(exc), "character_id": character_id},
+            )
+
+        # Re-fetch traces — the forgiveness pass may have updated intensities
+        # and we want the rest of evaluate() to see the softened values.
+        recent_traces = self._repository.fetch_recent_traces(character_id, limit=6)
+
         matched_traces = self._repository.fetch_traces_for_messages(
             character_id, history_ids
         )
@@ -530,6 +553,104 @@ class MoralMatrixModule:
             # Similar situations matter, but should be interpreted as context,
             # not copied as the new dominant emotion.
             emotion_vector[emotion] = min(1.0, emotion_vector.get(emotion, 0.0) + intensity * 0.12)
+
+    def _apply_heuristic_forgiveness(
+        self,
+        *,
+        character_id: str,
+        analyzer_emotion: Dict[str, Any],
+        user_message_text: str,
+    ) -> None:
+        """Detect compensating user behaviour and soften matching traces.
+
+        Heuristic only — no LLM call. Detection: primary tone or any secondary
+        tone falls into ``moral.forgiveness.compensating_tones``. When matched,
+        the most recent unresolved negative trace in window is softened by
+        ``delta_per_event``. The softening is clamped to ``persistence_floor``
+        in the repository — see register_forgiveness.
+        """
+        if not bool(config_service.get_config_value("moral.forgiveness.enabled", True)):
+            return
+        if not character_id:
+            return
+
+        compensating_tones = set(
+            map(
+                str.lower,
+                config_service.get_config_value(
+                    "moral.forgiveness.compensating_tones", []
+                )
+                or [],
+            )
+        )
+        softenable = config_service.get_config_value(
+            "moral.forgiveness.softenable_emotions", []
+        ) or []
+        delta = float(
+            config_service.get_config_value("moral.forgiveness.delta_per_event", 0.15)
+            or 0.15
+        )
+        lookback = int(
+            config_service.get_config_value("moral.forgiveness.lookback_days", 30)
+            or 30
+        )
+
+        if not compensating_tones or not softenable or delta <= 0:
+            return
+
+        primary = str((analyzer_emotion or {}).get("primary") or "").lower()
+        secondary = [str(x).lower() for x in (analyzer_emotion or {}).get("secondary") or []]
+        matched_tone = None
+        if primary in compensating_tones:
+            matched_tone = primary
+        else:
+            for tone in secondary:
+                if tone in compensating_tones:
+                    matched_tone = tone
+                    break
+
+        if not matched_tone:
+            return
+
+        candidates = self._repository.fetch_unresolved_negative_traces(
+            character_id,
+            emotions=list(softenable),
+            within_days=lookback,
+            limit=1,  # MVP: soften the most recent only. Bulk-softening can be
+                     # tuned later if log evidence shows it under-applies.
+        )
+        if not candidates:
+            return
+
+        target = candidates[0]
+        target_id = target.get("id")
+        if not target_id:
+            return
+
+        # Build a human-readable trail for diagnostics / UI timeline.
+        excerpt = (user_message_text or "").strip()
+        if len(excerpt) > 240:
+            excerpt = excerpt[:240] + "…"
+
+        applied = self._repository.register_forgiveness(
+            character_id,
+            trace_id=target_id,
+            cause=f"compensating tone detected: {matched_tone}",
+            compensating_action=excerpt,
+            delta_intensity=delta,
+        )
+        if applied:
+            log_audit_entry(
+                "moral_matrix_forgiveness_applied",
+                "[MoralMatrix] Forgiveness softened a trace.",
+                AuditStatus.INFO,
+                details={
+                    "character_id": character_id,
+                    "trace_id": target_id,
+                    "tone": matched_tone,
+                    **applied,
+                },
+            )
 
     @staticmethod
     def _extract_analyzer_emotion(analysis_result: Dict[str, Any]) -> Dict[str, Any]:

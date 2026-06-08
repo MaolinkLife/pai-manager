@@ -346,6 +346,34 @@ DEFAULT_CONFIG = {
             "enabled": True,
             "global_rate": 0.05,
         },
+        "forgiveness": {
+            "enabled": True,
+            # Tone hints from analyzer.emotional_tone.primary that count as
+            # compensating actions. The heuristic also looks at synonyms via
+            # secondary_emotion in service-level logic.
+            "compensating_tones": [
+                "warm",
+                "tender",
+                "kind",
+                "apologetic",
+                "soft",
+                "loving",
+            ],
+            # Which unresolved emotions can be softened by a compensating action.
+            "softenable_emotions": [
+                "sadness",
+                "resentment",
+                "frustration",
+                "anger",
+                "longing",
+                "fear",
+                "shame",
+            ],
+            # Per-event intensity delta applied when a compensating tone is detected.
+            "delta_per_event": 0.15,
+            # How many days back we look for unresolved traces to soften.
+            "lookback_days": 30,
+        },
         "current_state": {
             "current_emotion": "peace",
             "emotion_intensity": 0.34,

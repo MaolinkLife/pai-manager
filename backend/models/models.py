@@ -442,6 +442,33 @@ class EmotionalTrace(Base):
     message = relationship("History")
 
 
+class ForgivenessEvent(Base):
+    """Records a positive/compensating action that softens an EmotionalTrace.
+
+    Concept: see Архитектура.md > II. Механика прощения. Each row reduces the
+    target trace's intensity by ``delta_intensity`` but never below the trace's
+    ``persistence_floor`` — emotions can be released, but the memory remains.
+    """
+
+    __tablename__ = "forgiveness_events"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    character_id = Column(String, ForeignKey("characters.id"), nullable=False)
+    trace_id = Column(
+        String, ForeignKey("emotional_traces.id", ondelete="CASCADE"), nullable=False
+    )
+    cause = Column(Text, nullable=True)
+    # What the user did that softened the emotion (free-form natural text).
+    compensating_action = Column(Text, nullable=True)
+    delta_intensity = Column(Float, default=0.0)
+    # Whether this event flipped the target trace's resolved flag.
+    triggered_resolve = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+
+    character = relationship("Character")
+    trace = relationship("EmotionalTrace")
+
+
 class DailyMoralSummary(Base):
     __tablename__ = "daily_moral_summaries"
 

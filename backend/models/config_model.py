@@ -431,6 +431,36 @@ class MoralDecayConfig(BaseModel):
     global_rate: float = 0.05
 
 
+class MoralForgivenessConfig(BaseModel):
+    # When the analyzer reports a compensating tone on the current user
+    # message, the system softens recent unresolved negative traces by
+    # ``delta_per_event``, clamped at each trace's ``persistence_floor``.
+    enabled: bool = True
+    compensating_tones: List[str] = Field(
+        default_factory=lambda: [
+            "warm",
+            "tender",
+            "kind",
+            "apologetic",
+            "soft",
+            "loving",
+        ]
+    )
+    softenable_emotions: List[str] = Field(
+        default_factory=lambda: [
+            "sadness",
+            "resentment",
+            "frustration",
+            "anger",
+            "longing",
+            "fear",
+            "shame",
+        ]
+    )
+    delta_per_event: float = 0.15
+    lookback_days: int = 30
+
+
 class MoralMatrixConfig(BaseModel):
     enabled: bool = True
     active_provider: str = "ollama"
@@ -441,6 +471,7 @@ class MoralMatrixConfig(BaseModel):
     system_prompt: str = MORAL_MATRIX_PROVIDER_PROMPT
     providers: MoralProvidersConfig = MoralProvidersConfig()
     decay: MoralDecayConfig = MoralDecayConfig()
+    forgiveness: MoralForgivenessConfig = MoralForgivenessConfig()
 
 
 class MemoryConsolidationJudgeConfig(BaseModel):

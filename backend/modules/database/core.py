@@ -43,6 +43,7 @@ def create_database():
     _ensure_users_auth_columns()
     _ensure_user_settings_active_character_column()
     _ensure_emotional_trace_decay_columns()
+    _ensure_forgiveness_events_table()
     _log_console("Схема базы данных готова.")
 
 
@@ -271,6 +272,44 @@ def _ensure_user_settings_active_character_column() -> None:
             text(
                 "CREATE INDEX IF NOT EXISTS ix_user_settings_active_character_id "
                 "ON user_settings(active_character_id)"
+            )
+        )
+
+
+def _ensure_forgiveness_events_table() -> None:
+    """Records of compensating actions that softened a specific EmotionalTrace.
+
+    SQLAlchemy create_all builds the table on fresh DBs; this ensures it also
+    exists on databases migrated from earlier schema, plus the index used by
+    the per-trace forgiveness aggregation query.
+    """
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS forgiveness_events (
+                    id TEXT PRIMARY KEY,
+                    character_id TEXT NOT NULL,
+                    trace_id TEXT NOT NULL,
+                    cause TEXT,
+                    compensating_action TEXT,
+                    delta_intensity FLOAT DEFAULT 0.0,
+                    triggered_resolve BOOLEAN DEFAULT 0,
+                    created_at DATETIME
+                )
+                """
+            )
+        )
+        conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_forgiveness_events_trace_id "
+                "ON forgiveness_events(trace_id)"
+            )
+        )
+        conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_forgiveness_events_character_created "
+                "ON forgiveness_events(character_id, created_at)"
             )
         )
 
