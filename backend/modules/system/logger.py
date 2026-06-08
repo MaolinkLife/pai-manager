@@ -5,7 +5,7 @@ import threading
 import traceback
 import uuid
 from dataclasses import asdict, dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Optional
 
@@ -14,6 +14,19 @@ from modules.system.localization import get_active_language, get_text
 from utils.open_file_w_utf8 import open_utf8
 
 TRACEBACK_FILE = os.path.join(TRACEBACK_LOGS_DIR, "runtime_tracebacks.log")
+
+# MODE controls audit verbosity. Read once at module load — must NOT depend on
+# DB-first config because the logger boots before initialize_database().
+# Accepted values:
+#   "dev"  (default) — log everything (info/warning/error/success).
+#   "prod"           — drop info/success, keep warning+ only.
+# Anything else falls back to dev for safety.
+_AUDIT_MODE = (os.getenv("MODE", "dev") or "dev").strip().lower()
+if _AUDIT_MODE not in {"dev", "prod"}:
+    _AUDIT_MODE = "dev"
+
+# In PROD these severities are dropped before reaching the DB writer.
+_PROD_DROPPED_SEVERITIES = {"info", "success"}
 
 os.makedirs(LOGS_DIR, exist_ok=True)
 os.makedirs(TRACEBACK_LOGS_DIR, exist_ok=True)
@@ -138,6 +151,52 @@ def _write_jsonl(filepath, record):
             file.write(line)
 
 
+# Flag flipped after the first successful DB write — used to decide whether
+# to keep dual-writing JSONL on every call (boot window) or to write JSONL
+# only when the DB write itself fails (steady state).
+_DB_LOGGING_READY = False
+_DB_READY_LOCK = threading.Lock()
+
+
+def _try_write_audit_to_db(log: "AuditLog") -> bool:
+    """Persist one AuditLog row in `audit_logs`. Returns True on success.
+
+    Best-effort: any exception (DB not ready, schema not migrated yet, write
+    failure under load) is swallowed so the caller can fall back to JSONL.
+    The first successful write flips ``_DB_LOGGING_READY`` so subsequent
+    successful writes skip the JSONL dual-write.
+    """
+    global _DB_LOGGING_READY
+    try:
+        # Imported here so the logger module can be imported at startup —
+        # well before SQLAlchemy / config finished initialising.
+        from models.models import AuditLogRecord
+        from modules.database.core import SessionLocal
+
+        with SessionLocal() as session:
+            record = AuditLogRecord(
+                id=str(uuid.uuid4()),
+                session_id=log.session_id,
+                event_type=log.event_type,
+                severity=str(log.status.value if hasattr(log.status, "value") else log.status).lower(),
+                msg=log.msg or "",
+                details=json.dumps(log.details or {}, ensure_ascii=False, default=str),
+                meta=json.dumps(log.meta or {}, ensure_ascii=False, default=str),
+                language=log.language,
+                message_key=log.message_key,
+                created_at=datetime.now(timezone.utc),
+            )
+            session.add(record)
+            session.commit()
+
+        if not _DB_LOGGING_READY:
+            with _DB_READY_LOCK:
+                _DB_LOGGING_READY = True
+        return True
+    except Exception:
+        return False
+
+
 def _read_log_lines_lossy(filepath: str) -> list[str]:
     with open(filepath, "rb") as file:
         return file.read().decode("utf-8", errors="replace").splitlines()
@@ -195,6 +254,17 @@ def log_audit_entry(
     message_key: Optional[str] = None,
     message_args: Optional[dict] = None,
 ):
+    """Record a runtime audit event.
+
+    Writes go to the ``audit_logs`` table; the JSONL files remain as fallback
+    so the boot window (before DB is ready) and DB-write failures are still
+    captured. In ``MODE=prod`` the verbose severities (info / success) are
+    dropped before reaching either sink.
+    """
+    severity_label = str(status.value if hasattr(status, "value") else status).lower()
+    if _AUDIT_MODE == "prod" and severity_label in _PROD_DROPPED_SEVERITIES:
+        return
+
     localized_message, resolved_key = _resolve_localized_message(
         event_type, msg, message_key, message_args
     )
@@ -213,8 +283,16 @@ def log_audit_entry(
         session_id=SESSION_ID,
         message_key=resolved_key,
     )
-    _write_jsonl(DEBUG_FILE_PER_SESSION, log.as_dict())
-    _write_jsonl(DEBUG_FILE_CURRENT, log.as_dict())
+
+    db_ok = _try_write_audit_to_db(log)
+    # JSONL fallback:
+    #   * always while DB hasn't accepted a single write yet (boot window)
+    #   * always when the current write itself failed
+    # Once the DB is healthy, JSONL stays quiet — the file is for emergencies
+    # and post-mortems, not for steady-state log volume.
+    if not db_ok or not _DB_LOGGING_READY:
+        _write_jsonl(DEBUG_FILE_PER_SESSION, log.as_dict())
+        _write_jsonl(DEBUG_FILE_CURRENT, log.as_dict())
 
 
 def log_error(error_msg, context=None, severity="error"):

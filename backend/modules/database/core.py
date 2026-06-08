@@ -44,6 +44,7 @@ def create_database():
     _ensure_user_settings_active_character_column()
     _ensure_emotional_trace_decay_columns()
     _ensure_forgiveness_events_table()
+    _ensure_audit_logs_table()
     _log_console("Схема базы данных готова.")
 
 
@@ -272,6 +273,53 @@ def _ensure_user_settings_active_character_column() -> None:
             text(
                 "CREATE INDEX IF NOT EXISTS ix_user_settings_active_character_id "
                 "ON user_settings(active_character_id)"
+            )
+        )
+
+
+def _ensure_audit_logs_table() -> None:
+    """Replaces backend/logs/*_debug.jsonl as the canonical audit log store.
+
+    The JSONL files remain as a boot-window fallback (see logger._jsonl_dual_write)
+    but UI reads and retention now go through this table.
+    """
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS audit_logs (
+                    id TEXT PRIMARY KEY,
+                    session_id TEXT NOT NULL,
+                    event_type TEXT NOT NULL,
+                    severity TEXT NOT NULL DEFAULT 'info',
+                    msg TEXT NOT NULL DEFAULT '',
+                    details TEXT DEFAULT '{}',
+                    meta TEXT DEFAULT '{}',
+                    language TEXT,
+                    message_key TEXT,
+                    created_at DATETIME
+                )
+                """
+            )
+        )
+        # Filters used by the UI page (severity + time range) and by the
+        # retention worker (severity + created_at).
+        conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_audit_logs_severity_created "
+                "ON audit_logs(severity, created_at)"
+            )
+        )
+        conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_audit_logs_session_created "
+                "ON audit_logs(session_id, created_at)"
+            )
+        )
+        conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_audit_logs_event_type_created "
+                "ON audit_logs(event_type, created_at)"
             )
         )
 

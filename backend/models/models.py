@@ -442,6 +442,34 @@ class EmotionalTrace(Base):
     message = relationship("History")
 
 
+class AuditLogRecord(Base):
+    """Runtime audit/debug log line.
+
+    Replaces the per-session JSONL files for `log_audit_entry`. Heavy churn —
+    expect tens of rows per turn — so retention runs nightly: see
+    ``modules/system/logger.prune_audit_logs`` for the policy. ``severity``
+    mirrors ``AuditStatus`` values (info / warning / error / success).
+
+    JSONL fallback remains for the boot window where the DB may not yet be
+    ready; that path is exercised by ``logger._jsonl_dual_write``.
+    """
+
+    __tablename__ = "audit_logs"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    session_id = Column(String, nullable=False, index=True)
+    event_type = Column(String, nullable=False, index=True)
+    severity = Column(String, nullable=False, default="info", index=True)
+    msg = Column(Text, nullable=False, default="")
+    details = Column(Text, default="{}")  # JSON blob
+    meta = Column(Text, default="{}")     # JSON blob
+    language = Column(String, nullable=True)
+    message_key = Column(String, nullable=True)
+    created_at = Column(
+        DateTime, default=lambda: datetime.now(timezone.utc), index=True
+    )
+
+
 class ForgivenessEvent(Base):
     """Records a positive/compensating action that softens an EmotionalTrace.
 
