@@ -119,3 +119,4 @@ backend/**/z-waif.session
 backend/**/z-waif.session-journal
 
 CLAUDE.md
+CONCEPT_GAP_REPORT.md
