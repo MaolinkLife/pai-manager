@@ -330,37 +330,131 @@ def log_console(component: str, message: str, details: Optional[dict[str, Any]] 
     print(f"{prefix} {message}", flush=True)
 
 
-def get_debug_log(limit: Optional[int] = None, offset: int = 0, session_id: Optional[str] = None):
-    resolved_session_id = str(session_id or get_session_id()).strip()
-    log_file = os.path.join(LOGS_DIR, f"{resolved_session_id}_debug.jsonl")
+def _audit_row_to_legacy_dict(row: Any) -> dict:
+    """Map an audit_logs row back into the JSONL/AuditLog shape the UI expects.
 
+    Pre-migration the API returned ``{event_type, msg, status, details, meta,
+    timestamp, session_id, language, message_key}`` where status had the
+    enum value (``Info``/``Warning``/...). The DB stores severity lowercased,
+    so we capitalise back for backward compat with the existing frontend.
+    """
+    def _parse_json(text_value: Any) -> Any:
+        if isinstance(text_value, (dict, list)):
+            return text_value
+        if not isinstance(text_value, str) or not text_value.strip():
+            return {}
+        try:
+            return json.loads(text_value)
+        except Exception:
+            return {}
+
+    severity = str(getattr(row, "severity", "") or "info").lower()
+    status_legacy = severity.capitalize()  # info → Info, warning → Warning, etc.
+
+    created_at = getattr(row, "created_at", None)
+    if hasattr(created_at, "isoformat"):
+        timestamp_iso = created_at.isoformat(timespec="seconds")
+    else:
+        timestamp_iso = str(created_at) if created_at else ""
+
+    return {
+        "event_type": getattr(row, "event_type", "") or "",
+        "msg": getattr(row, "msg", "") or "",
+        "status": status_legacy,
+        "details": _parse_json(getattr(row, "details", "{}")),
+        "meta": _parse_json(getattr(row, "meta", "{}")),
+        "timestamp": timestamp_iso,
+        "session_id": getattr(row, "session_id", "") or "",
+        "language": getattr(row, "language", None),
+        "message_key": getattr(row, "message_key", None),
+    }
+
+
+def _fetch_audit_logs_from_db(
+    session_id: str, limit: Optional[int], offset: int
+) -> tuple[list[dict], int]:
+    """Page through audit_logs newest-first. Returns (rows, total)."""
+    from models.models import AuditLogRecord
+    from modules.database.core import SessionLocal
+
+    safe_offset = max(int(offset or 0), 0)
+    safe_limit = max(int(limit), 1) if limit is not None else None
+
+    with SessionLocal() as session:
+        base_query = session.query(AuditLogRecord).filter(
+            AuditLogRecord.session_id == session_id
+        )
+        total = base_query.count()
+
+        ordered = base_query.order_by(AuditLogRecord.created_at.desc())
+        if safe_limit is not None:
+            ordered = ordered.offset(safe_offset).limit(safe_limit)
+        rows = ordered.all()
+
+    return [_audit_row_to_legacy_dict(row) for row in rows], total
+
+
+def _fetch_audit_logs_from_jsonl(
+    session_id: str, limit: Optional[int], offset: int
+) -> Optional[tuple[list[dict], int]]:
+    """Legacy JSONL reader — used only when the DB path failed or the file
+    still contains boot-window entries that never made it to the DB.
+    Returns None when the file doesn't exist."""
+    log_file = os.path.join(LOGS_DIR, f"{session_id}_debug.jsonl")
     if not os.path.exists(log_file):
-        return None, resolved_session_id, 0
+        return None
+
+    safe_offset = max(int(offset or 0), 0)
+    safe_limit = max(int(limit), 1) if limit is not None else None
+
+    lines = _read_log_lines_lossy(log_file)
+    total = len(lines)
+    if safe_limit is None:
+        selected_lines = lines
+    else:
+        end_idx = max(total - safe_offset, 0)
+        start_idx = max(end_idx - safe_limit, 0)
+        selected_lines = lines[start_idx:end_idx]
+
+    logs = _parse_log_lines(selected_lines)
+    logs.reverse()
+    return logs, total
+
+
+def get_debug_log(limit: Optional[int] = None, offset: int = 0, session_id: Optional[str] = None):
+    """Page through audit logs. Returns ``(rows | None, session_id, total)``.
+
+    Reads from the DB first. If the DB query throws (table missing during
+    early boot, transient error), falls back to the JSONL file. If neither
+    has anything, returns ``(None, session_id, 0)`` so the route can render
+    a 404 like before.
+    """
+    resolved_session_id = str(session_id or get_session_id()).strip()
 
     try:
-        safe_offset = max(int(offset or 0), 0)
-        safe_limit: Optional[int]
-        if limit is None:
-            safe_limit = None
-        else:
-            safe_limit = max(int(limit), 1)
+        rows, total = _fetch_audit_logs_from_db(resolved_session_id, limit, offset)
+    except Exception:
+        rows, total = [], 0
+        db_query_succeeded = False
+    else:
+        db_query_succeeded = True
 
-        lines = _read_log_lines_lossy(log_file)
+    if db_query_succeeded and total > 0:
+        return rows, resolved_session_id, total
 
-        total = len(lines)
-        if safe_limit is None:
-            selected_lines = lines
-        else:
-            # Stored order in file is oldest -> newest. API returns newest-first page.
-            end_idx = max(total - safe_offset, 0)
-            start_idx = max(end_idx - safe_limit, 0)
-            selected_lines = lines[start_idx:end_idx]
+    # DB had nothing (or the query failed) — try the JSONL fallback. This
+    # covers two cases: the boot window (entries written before DB came up)
+    # and an emergency where the DB has been wiped but the operator still
+    # needs to inspect the live session.
+    fallback = _fetch_audit_logs_from_jsonl(resolved_session_id, limit, offset)
+    if fallback is None:
+        # Backward-compat: caller (route) treats ``None`` as "session unknown"
+        # → 404. Returning [] here would silently turn unknown sessions into
+        # empty pages and surprise the existing frontend.
+        return None, resolved_session_id, 0
 
-        logs = _parse_log_lines(selected_lines)
-        logs.reverse()
-        return logs, resolved_session_id, total
-    except Exception as exc:
-        raise RuntimeError(f"Error reading log: {exc}")
+    jsonl_rows, jsonl_total = fallback
+    return jsonl_rows, resolved_session_id, jsonl_total
 
 
 def log_traceback(exc: BaseException, *, source: str = "runtime") -> None:
