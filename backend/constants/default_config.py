@@ -342,6 +342,10 @@ DEFAULT_CONFIG = {
         "fallback_order": ["openrouter", "heuristic"],
         "release_after_use": True,
         "system_prompt": MORAL_MATRIX_PROVIDER_PROMPT,
+        "decay": {
+            "enabled": True,
+            "global_rate": 0.05,
+        },
         "current_state": {
             "current_emotion": "peace",
             "emotion_intensity": 0.34,

@@ -42,6 +42,7 @@ def create_database():
     _ensure_telegram_sync_tables()
     _ensure_users_auth_columns()
     _ensure_user_settings_active_character_column()
+    _ensure_emotional_trace_decay_columns()
     _log_console("Схема базы данных готова.")
 
 
@@ -270,6 +271,40 @@ def _ensure_user_settings_active_character_column() -> None:
             text(
                 "CREATE INDEX IF NOT EXISTS ix_user_settings_active_character_id "
                 "ON user_settings(active_character_id)"
+            )
+        )
+
+
+def _ensure_emotional_trace_decay_columns() -> None:
+    """Add the decay-related columns to emotional_traces for the 0.8.0 cycle.
+
+    Backfills existing rows with sensible defaults so the nightly decay job
+    doesn't crash on legacy data. ``last_decayed_at`` stays NULL — the worker
+    treats NULL as "decay from created_at".
+    """
+    with engine.begin() as conn:
+        table_info = conn.execute(text("PRAGMA table_info(emotional_traces)")).fetchall()
+        if not table_info:
+            return
+
+        columns = {row[1] for row in table_info}
+        additions = [
+            ("decay_rate", "FLOAT DEFAULT 0.05"),
+            ("persistence_floor", "FLOAT DEFAULT 0.0"),
+            ("resolved", "BOOLEAN DEFAULT 0"),
+            ("last_decayed_at", "DATETIME"),
+        ]
+        for column_name, column_sql in additions:
+            if column_name not in columns:
+                conn.execute(
+                    text(f"ALTER TABLE emotional_traces ADD COLUMN {column_name} {column_sql}")
+                )
+
+        # Composite index for the nightly worker scan.
+        conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_emotional_traces_decay_scan "
+                "ON emotional_traces(character_id, resolved, last_decayed_at)"
             )
         )
 

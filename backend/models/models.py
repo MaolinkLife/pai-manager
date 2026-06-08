@@ -428,6 +428,16 @@ class EmotionalTrace(Base):
     notes = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.now(timezone.utc))
 
+    # Decay model: each day the intensity decreases by ``decay_rate``, but
+    # never falls below ``persistence_floor``. ``resolved`` marks traces
+    # that should no longer decay (e.g. consciously processed by the
+    # consolidation judge). ``last_decayed_at`` lets the nightly worker
+    # catch up on missed days without double-applying.
+    decay_rate = Column(Float, default=0.05)
+    persistence_floor = Column(Float, default=0.0)
+    resolved = Column(Boolean, default=False)
+    last_decayed_at = Column(DateTime, nullable=True)
+
     character = relationship("Character")
     message = relationship("History")
 

@@ -422,6 +422,15 @@ class MoralProvidersConfig(BaseModel):
     llama_cpp: MoralProviderLlamaCppConfig = MoralProviderLlamaCppConfig()
 
 
+class MoralDecayConfig(BaseModel):
+    # Nightly worker reduces EmotionalTrace.intensity by ``global_rate``
+    # per day (unless a per-row rate is set). Set ``enabled=False`` to
+    # freeze the emotional state — useful for testing or "max_speed"-style
+    # profiles where memory must stay sharp.
+    enabled: bool = True
+    global_rate: float = 0.05
+
+
 class MoralMatrixConfig(BaseModel):
     enabled: bool = True
     active_provider: str = "ollama"
@@ -431,6 +440,7 @@ class MoralMatrixConfig(BaseModel):
     release_after_use: bool = True
     system_prompt: str = MORAL_MATRIX_PROVIDER_PROMPT
     providers: MoralProvidersConfig = MoralProvidersConfig()
+    decay: MoralDecayConfig = MoralDecayConfig()
 
 
 class MemoryConsolidationJudgeConfig(BaseModel):

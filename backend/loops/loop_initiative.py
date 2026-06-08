@@ -71,6 +71,55 @@ def _get_last_activity_timestamp(char_name: str):
     return ensure_datetime(last_row.get("timestamp"))
 
 
+def _run_emotional_decay(*, character_id: str, day_iso: str) -> None:
+    """Apply nightly decay to unresolved EmotionalTrace rows.
+
+    Reads `moral.decay.enabled` / `moral.decay.global_rate` from DB config.
+    Disabled → quick exit with audit entry so the operator sees the skip.
+    """
+    try:
+        from modules.system import config as config_service
+        from modules.moral_matrix.repository import MoralMatrixRepository
+
+        if not bool(config_service.get_config_value("moral.decay.enabled", True)):
+            log_audit_entry(
+                event_type="emotional_decay_skipped",
+                msg="[Initiative] Emotional decay disabled by config.",
+                status=AuditStatus.INFO,
+                details={"day": day_iso, "character_id": character_id},
+            )
+            return
+
+        global_rate = float(config_service.get_config_value("moral.decay.global_rate", 0.05) or 0.05)
+        repo = MoralMatrixRepository()
+        result = repo.decay_emotional_traces(
+            character_id=character_id,
+            global_rate=global_rate,
+        )
+        log_audit_entry(
+            event_type="emotional_decay_completed",
+            msg="[Initiative] Emotional decay pass completed.",
+            status=AuditStatus.INFO,
+            details={
+                "day": day_iso,
+                "character_id": character_id,
+                "global_rate": global_rate,
+                **(result or {}),
+            },
+        )
+    except Exception as exc:
+        log_audit_entry(
+            event_type="emotional_decay_failed",
+            msg="[Initiative] Emotional decay failed.",
+            status=AuditStatus.WARNING,
+            details={
+                "day": day_iso,
+                "character_id": character_id,
+                "error": str(exc),
+            },
+        )
+
+
 def _is_daily_diary_due(now: datetime, diary_day_iso: str | None) -> bool:
     trigger_dt = datetime.combine(
         now.date(),
@@ -219,6 +268,10 @@ def initiative_monitor():
                                 **(consolidation or {}),
                             },
                         )
+
+                        # Emotional decay — same window as consolidation: nightly,
+                        # idempotent (uses last_decayed_at), skipped when disabled.
+                        _run_emotional_decay(character_id=character.id, day_iso=diary_day_iso)
                 except Exception as diary_exc:
                     log_audit_entry(
                         event_type="daily_diary_generation_error",
