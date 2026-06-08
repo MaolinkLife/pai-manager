@@ -45,6 +45,7 @@ def create_database():
     _ensure_emotional_trace_decay_columns()
     _ensure_forgiveness_events_table()
     _ensure_audit_logs_table()
+    _ensure_debug_vault_table()
     _log_console("Схема базы данных готова.")
 
 
@@ -273,6 +274,44 @@ def _ensure_user_settings_active_character_column() -> None:
             text(
                 "CREATE INDEX IF NOT EXISTS ix_user_settings_active_character_id "
                 "ON user_settings(active_character_id)"
+            )
+        )
+
+
+def _ensure_debug_vault_table() -> None:
+    """Curated anomalies — Validator failures, judge skips, factual flags."""
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS debug_vault_entries (
+                    id TEXT PRIMARY KEY,
+                    character_id TEXT,
+                    kind TEXT NOT NULL,
+                    severity TEXT NOT NULL DEFAULT 'warning',
+                    summary TEXT NOT NULL DEFAULT '',
+                    context TEXT DEFAULT '{}',
+                    output TEXT DEFAULT '',
+                    violations TEXT DEFAULT '[]',
+                    runtime_meta TEXT DEFAULT '{}',
+                    reviewed BOOLEAN DEFAULT 0,
+                    reviewed_at DATETIME,
+                    reviewed_note TEXT,
+                    created_at DATETIME
+                )
+                """
+            )
+        )
+        conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_debug_vault_kind_created "
+                "ON debug_vault_entries(kind, created_at)"
+            )
+        )
+        conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_debug_vault_reviewed_created "
+                "ON debug_vault_entries(reviewed, created_at)"
             )
         )
 

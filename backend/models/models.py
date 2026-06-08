@@ -442,6 +442,47 @@ class EmotionalTrace(Base):
     message = relationship("History")
 
 
+class DebugVaultEntry(Base):
+    """Record of a specific anomaly worth human review.
+
+    Concept: Pai_Updated_Concept.md > 3.6 Validator → DebugVault. Distinct
+    from audit_logs:
+      * audit_logs = high-volume runtime trace (every event, retention applies)
+      * debug_vault = low-volume curated anomalies (kept long, reviewed by op)
+
+    On write, a parallel audit_logs row is created with severity='audit_fail'
+    and details.vault_entry_id pointing here — so the debug UI can either
+    page through the vault directly or filter the main log by severity.
+
+    ``kind`` values used today:
+      validation_failed  — Validator returned compliance < threshold
+      reroll_exhausted   — auto-reroll loop hit its cap (future: §3.5 follow-up)
+      judge_skipped      — memory_judge JSON parse failed / provider missing
+      factual_inconsistency — confidence check flagged hallucination signals
+    Extending the vocab is fine — UI lists kinds dynamically from this table.
+    """
+
+    __tablename__ = "debug_vault_entries"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    character_id = Column(String, ForeignKey("characters.id"), nullable=True)
+    kind = Column(String, nullable=False, index=True)
+    severity = Column(String, nullable=False, default="warning")
+    summary = Column(Text, nullable=False, default="")
+    context = Column(Text, default="{}")    # JSON: input + history snippet + decisions
+    output = Column(Text, default="")        # actual model output (or partial)
+    violations = Column(Text, default="[]")  # JSON: list[str]
+    runtime_meta = Column(Text, default="{}")  # JSON: provider, latency, run_id, ...
+    reviewed = Column(Boolean, default=False, index=True)
+    reviewed_at = Column(DateTime, nullable=True)
+    reviewed_note = Column(Text, nullable=True)
+    created_at = Column(
+        DateTime, default=lambda: datetime.now(timezone.utc), index=True
+    )
+
+    character = relationship("Character")
+
+
 class AuditLogRecord(Base):
     """Runtime audit/debug log line.
 
