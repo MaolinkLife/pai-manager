@@ -431,6 +431,21 @@ class MoralDecayConfig(BaseModel):
     global_rate: float = 0.05
 
 
+class MoralScarTriggerConfig(BaseModel):
+    """One scar trigger — see Архитектура.md > "Что не прощается"."""
+    name: str = ""
+    intents: List[str] = Field(default_factory=list)
+    tones: List[str] = Field(default_factory=list)
+    keywords: List[str] = Field(default_factory=list)
+    persistence_floor: float = 0.4
+    intensity_boost: float = 0.0
+
+
+class MoralScarsConfig(BaseModel):
+    enabled: bool = True
+    triggers: List[MoralScarTriggerConfig] = Field(default_factory=list)
+
+
 class MoralForgivenessConfig(BaseModel):
     # When the analyzer reports a compensating tone on the current user
     # message, the system softens recent unresolved negative traces by
@@ -472,6 +487,7 @@ class MoralMatrixConfig(BaseModel):
     providers: MoralProvidersConfig = MoralProvidersConfig()
     decay: MoralDecayConfig = MoralDecayConfig()
     forgiveness: MoralForgivenessConfig = MoralForgivenessConfig()
+    scars: MoralScarsConfig = MoralScarsConfig()
 
 
 class MemoryConsolidationJudgeConfig(BaseModel):

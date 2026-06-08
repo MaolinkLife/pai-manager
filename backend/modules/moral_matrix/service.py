@@ -404,6 +404,7 @@ class MoralMatrixModule:
                 message_meta=message_meta,
                 analyzer_snapshot=analyzer_snapshot,
                 user_message=user_message,
+                analysis_result=analysis_result,
             )
         else:
             log_audit_entry(
@@ -553,6 +554,111 @@ class MoralMatrixModule:
             # Similar situations matter, but should be interpreted as context,
             # not copied as the new dominant emotion.
             emotion_vector[emotion] = min(1.0, emotion_vector.get(emotion, 0.0) + intensity * 0.12)
+
+    @staticmethod
+    def _match_scar_trigger(
+        analyzer_emotion: Dict[str, Any],
+        analysis_result: Dict[str, Any],
+        message_text: str,
+        triggers: Sequence[Dict[str, Any]],
+    ) -> Optional[Dict[str, Any]]:
+        """Return the first scar trigger matching the current turn, or None.
+
+        Match is OR across the three signal types within a single trigger:
+        a trigger fires when ANY of its intents / tones / keywords matches.
+        Triggers themselves are evaluated in declaration order — first wins.
+        """
+        if not triggers:
+            return None
+
+        # Pull intent from analysis_result. Concept docs (Pai_Updated_Concept §3.2)
+        # state analyzer surfaces intent in input_analysis.intent; we accept
+        # either a string or {primary, ...}.
+        intent_field = (
+            (analysis_result or {}).get("input_analysis", {}).get("intent")
+            if isinstance(analysis_result, dict)
+            else None
+        )
+        if isinstance(intent_field, dict):
+            intent_value = str(intent_field.get("primary") or "").strip().lower()
+        else:
+            intent_value = str(intent_field or "").strip().lower()
+
+        tones: set[str] = set()
+        primary_tone = str((analyzer_emotion or {}).get("primary") or "").lower()
+        if primary_tone:
+            tones.add(primary_tone)
+        for secondary in (analyzer_emotion or {}).get("secondary") or []:
+            tones.add(str(secondary).lower())
+
+        text_lower = (message_text or "").lower()
+
+        for trigger in triggers:
+            if not isinstance(trigger, dict):
+                continue
+            name = str(trigger.get("name") or "").strip()
+            if not name:
+                continue
+
+            intent_hits = [
+                str(item).strip().lower()
+                for item in (trigger.get("intents") or [])
+                if str(item).strip()
+            ]
+            if intent_value and intent_value in intent_hits:
+                return trigger
+
+            tone_hits = {
+                str(item).strip().lower()
+                for item in (trigger.get("tones") or [])
+                if str(item).strip()
+            }
+            if tone_hits & tones:
+                return trigger
+
+            keyword_hits = [
+                str(item).strip().lower()
+                for item in (trigger.get("keywords") or [])
+                if str(item).strip()
+            ]
+            if text_lower and any(kw in text_lower for kw in keyword_hits):
+                return trigger
+
+        return None
+
+    @staticmethod
+    def _apply_scar_to_payload(
+        trace_payload: Dict[str, Any],
+        scar: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Mutate ``trace_payload`` to bake a scar into the new EmotionalTrace.
+
+        Bumps intensity by ``intensity_boost`` (clamped to 1.0), sets
+        ``persistence_floor`` from the trigger config, ensures the result is
+        not below the floor, and records the scar label inside notes for the
+        UI timeline + later auditing.
+        """
+        boost = float(scar.get("intensity_boost") or 0.0)
+        floor = float(scar.get("persistence_floor") or 0.4)
+        label = str(scar.get("name") or "")
+
+        current_intensity = float(trace_payload.get("intensity") or 0.0)
+        new_intensity = min(1.0, max(current_intensity + boost, floor))
+
+        trace_payload["intensity"] = new_intensity
+        trace_payload["persistence_floor"] = floor
+
+        notes = trace_payload.get("notes")
+        if not isinstance(notes, dict):
+            notes = {"text": notes} if notes else {}
+        notes["scar"] = {
+            "label": label,
+            "persistence_floor": floor,
+            "intensity_boost": boost,
+        }
+        trace_payload["notes"] = notes
+        trace_payload["scar_label"] = label  # surfaced to audit log
+        return trace_payload
 
     def _apply_heuristic_forgiveness(
         self,
@@ -1070,6 +1176,7 @@ class MoralMatrixModule:
         message_meta: Optional[Dict[str, Any]],
         analyzer_snapshot: Optional[Dict[str, Any]],
         user_message: Optional[Dict[str, Any]],
+        analysis_result: Optional[Dict[str, Any]] = None,
     ) -> None:
         message_id = (message_meta or {}).get("message_id")
         snapshot_payload = {
@@ -1113,6 +1220,43 @@ class MoralMatrixModule:
                 "hard_directives": result.hard_directives,
             },
         }
+
+        # Scar check — does this turn cross a boundary the operator marked as
+        # irreversible? If so, the new trace is born with a high persistence_floor
+        # and an intensity boost; decay and forgiveness will respect the floor.
+        try:
+            if bool(config_service.get_config_value("moral.scars.enabled", True)):
+                triggers = (
+                    config_service.get_config_value("moral.scars.triggers", []) or []
+                )
+                scar = self._match_scar_trigger(
+                    analyzer_snapshot or {},
+                    analysis_result or {},
+                    str((user_message or {}).get("content") or ""),
+                    triggers,
+                )
+                if scar:
+                    self._apply_scar_to_payload(trace_payload, scar)
+                    log_audit_entry(
+                        "moral_matrix_scar_applied",
+                        "[MoralMatrix] Scar trigger matched, persistence_floor raised.",
+                        AuditStatus.WARNING,
+                        details={
+                            "character_id": character_id,
+                            "message_id": message_id,
+                            "scar": trace_payload.get("scar_label"),
+                            "persistence_floor": trace_payload.get("persistence_floor"),
+                            "intensity": trace_payload.get("intensity"),
+                        },
+                    )
+        except Exception as exc:
+            log_audit_entry(
+                "moral_matrix_scar_check_failed",
+                "[MoralMatrix] Scar detection failed, falling back to plain trace.",
+                AuditStatus.WARNING,
+                details={"error": str(exc), "character_id": character_id},
+            )
+
         self._repository.store_emotional_trace(
             character_id, message_id=message_id, payload=trace_payload
         )

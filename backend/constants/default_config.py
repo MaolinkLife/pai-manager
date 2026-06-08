@@ -346,6 +346,26 @@ DEFAULT_CONFIG = {
             "enabled": True,
             "global_rate": 0.05,
         },
+        "scars": {
+            # Emotional scars from Архитектура.md > "Что не прощается".
+            # When a turn matches one of these triggers, the EmotionalTrace
+            # is created with a high persistence_floor — decay and forgiveness
+            # will never reduce it below that floor. The trace also gets an
+            # intensity boost on top of whatever the moral matrix computed.
+            #
+            # Default list ships empty so existing behaviour is unchanged.
+            # Operator sets concrete triggers in UI / via /api/config.
+            #
+            # Schema of each entry:
+            #   name (str)              — readable label, also stored on the trace
+            #   intents (list[str])     — match if analyzer.intent in list
+            #   tones (list[str])       — match if analyzer primary/secondary tone in list
+            #   keywords (list[str])    — match if message text contains any (case-insensitive)
+            #   persistence_floor (float, 0.0–1.0) — minimum intensity after decay/forgiveness
+            #   intensity_boost (float, 0.0–1.0)   — added to intensity on the new trace, clamped to 1.0
+            "enabled": True,
+            "triggers": [],
+        },
         "forgiveness": {
             "enabled": True,
             # Tone hints from analyzer.emotional_tone.primary that count as

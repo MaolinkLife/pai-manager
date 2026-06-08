@@ -200,7 +200,7 @@ class MoralMatrixRepository:
         if not character_id:
             return None
         with self._session() as session:
-            trace = EmotionalTrace(
+            trace_kwargs: Dict[str, Any] = dict(
                 character_id=character_id,
                 message_id=message_id,
                 trigger_role=payload.get("trigger_role", "assistant"),
@@ -218,6 +218,17 @@ class MoralMatrixRepository:
                     else payload.get("notes")
                 ),
             )
+
+            # Optional scar/decay overrides — only forwarded when explicitly
+            # set by the caller (typically the scar detector). Schema defaults
+            # apply for ordinary traces.
+            for optional_field in ("persistence_floor", "decay_rate"):
+                if optional_field in payload and payload[optional_field] is not None:
+                    trace_kwargs[optional_field] = float(payload[optional_field])
+            if "resolved" in payload and payload["resolved"] is not None:
+                trace_kwargs["resolved"] = bool(payload["resolved"])
+
+            trace = EmotionalTrace(**trace_kwargs)
             session.add(trace)
             session.commit()
             session.refresh(trace)
@@ -231,6 +242,8 @@ class MoralMatrixRepository:
                     "message_id": message_id,
                     "primary": payload.get("primary_emotion"),
                     "intensity": payload.get("intensity"),
+                    "persistence_floor": payload.get("persistence_floor"),
+                    "scar_label": payload.get("scar_label"),
                 },
             )
             print(
