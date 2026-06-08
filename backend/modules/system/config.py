@@ -318,6 +318,22 @@ def normalize_config_structure(config: dict | None) -> dict:
         _merge_missing(stt_section, stt_defaults)
     normalized["stt"] = stt_section
 
+    audit_logs_defaults = DEFAULT_CONFIG.get("audit_logs", {})
+    audit_logs_section = normalized.get("audit_logs")
+    if not isinstance(audit_logs_section, dict):
+        audit_logs_section = copy.deepcopy(audit_logs_defaults)
+    else:
+        _merge_missing(audit_logs_section, audit_logs_defaults)
+    normalized["audit_logs"] = audit_logs_section
+
+    validator_defaults = DEFAULT_CONFIG.get("validator", {})
+    validator_section = normalized.get("validator")
+    if not isinstance(validator_section, dict):
+        validator_section = copy.deepcopy(validator_defaults)
+    else:
+        _merge_missing(validator_section, validator_defaults)
+    normalized["validator"] = validator_section
+
     return normalized
 
 

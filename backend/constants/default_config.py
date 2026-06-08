@@ -25,6 +25,18 @@ DEFAULT_CONFIG = {
         "env": "dev",
         "debug": False,
     },
+    "validator": {
+        # Off by default — turning it on adds one LLM call per sync generation
+        # (no streaming impact). Concept: Pai_Updated_Concept.md > 3.5.
+        "enabled": False,
+        "threshold": 0.7,
+        "max_tokens": 256,
+        "temperature": 0.0,
+        # Inputs are truncated before the prompt — validator is intentionally
+        # cheap, not a deep critic.
+        "instruction_char_limit": 4000,
+        "output_char_limit": 4000,
+    },
     "audit_logs": {
         # Retention policy applied nightly by loop_initiative right after
         # the diary consolidation + emotional decay window. age_days/hard_cap

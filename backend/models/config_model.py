@@ -70,6 +70,18 @@ class AuditLogsConfig(BaseModel):
     retention: AuditLogsRetentionConfig = AuditLogsRetentionConfig()
 
 
+class ValidatorConfig(BaseModel):
+    # Off by default. When enabled, each sync generation pays one LLM call
+    # to score how well the output followed its instructions. Streaming
+    # generation is not validated on this iteration.
+    enabled: bool = False
+    threshold: float = 0.7
+    max_tokens: int = 256
+    temperature: float = 0.0
+    instruction_char_limit: int = 4000
+    output_char_limit: int = 4000
+
+
 class DecisionLayerCapabilitiesConfig(BaseModel):
     tool: bool = False
     vision: bool = False

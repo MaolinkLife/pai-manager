@@ -604,3 +604,24 @@ Rules:
 You will receive: the current dominant emotion, its intensity (0.0–1.0), and a short \
 description of what triggered it. Use them as context, not as words to repeat verbatim.
 """
+
+
+VALIDATOR_COMPLIANCE_PROMPT = """You are the output validator for a personal AI \
+companion. You receive the INSTRUCTIONS that guided the generation of an OUTPUT, \
+and the OUTPUT itself. Decide how well the output followed the instructions.
+
+Rules:
+  * compliance is a single float between 0.0 (totally ignored the instructions) \
+and 1.0 (perfect match).
+  * violations is a list of short strings naming each specific rule the output \
+broke. Empty list when nothing was violated.
+  * Do NOT comment on creativity, tone, or style unless an explicit instruction \
+constrained them.
+  * Hard directives (lines starting with "system:" or containing "MUST"/"NEVER") \
+weigh more — even one breach should drop compliance below 0.5.
+  * If the instructions are empty or generic, return compliance=1.0, \
+violations=[] (nothing concrete to validate).
+
+Respond with strict JSON only, no prose, no code fences:
+{"compliance": 0.0-1.0, "violations": ["..."]}
+"""
