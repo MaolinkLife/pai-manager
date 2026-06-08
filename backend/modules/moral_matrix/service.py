@@ -555,6 +555,106 @@ class MoralMatrixModule:
             # not copied as the new dominant emotion.
             emotion_vector[emotion] = min(1.0, emotion_vector.get(emotion, 0.0) + intensity * 0.12)
 
+    def _generate_inner_voice(
+        self,
+        *,
+        emotion: str,
+        intensity: float,
+        cause: str,
+        language_hint: str,
+    ) -> str:
+        """One short first-person sentence explaining the current emotional shift.
+
+        Used by ``_persist_state``: feeds into ``EmotionalTrace.notes.inner_voice``
+        and into ``result.meta["inner_voice"]`` so the existing WS ``moral_state``
+        event surfaces it to the UI without a new event type.
+
+        Returns "" on any failure — inner voice is a wow-feature, not a
+        correctness requirement.
+        """
+        try:
+            # Lazy imports — avoid circular import via generative → analyzer pipeline.
+            from constants.prompts import MORAL_INNER_VOICE_PROMPT
+            from modules.generative.manager import (
+                NoProviderResolved,
+                generation_manager,
+            )
+            from modules.generative.types import GenerateRequest
+        except Exception as exc:
+            log_audit_entry(
+                "moral_matrix_inner_voice_import_failed",
+                "[MoralMatrix] Inner voice generation module unavailable.",
+                AuditStatus.WARNING,
+                details={"error": str(exc)},
+            )
+            return ""
+
+        max_tokens = int(
+            config_service.get_config_value("moral.inner_voice.max_tokens", 80) or 80
+        )
+        temperature = float(
+            config_service.get_config_value("moral.inner_voice.temperature", 0.7) or 0.7
+        )
+        language = (
+            str(language_hint or "")
+            or str(config_service.get_config_value("moral.inner_voice.language", "") or "")
+            or str(config_service.get_config_value("system.language", "en-US") or "en-US")
+        )
+
+        user_payload = (
+            f"Language: {language}\n"
+            f"Current emotion: {emotion}\n"
+            f"Intensity: {round(float(intensity or 0.0), 3)}\n"
+            f"Trigger: {str(cause or '').strip()[:600]}"
+        )
+
+        try:
+            result = generation_manager.generate(
+                GenerateRequest(
+                    messages=[
+                        {"role": "system", "content": MORAL_INNER_VOICE_PROMPT},
+                        {"role": "user", "content": user_payload},
+                    ],
+                    options={
+                        "temperature": temperature,
+                        "num_predict": max_tokens,
+                        "max_tokens": max_tokens,
+                        "__think": False,
+                    },
+                    metadata={"mode": "moral_inner_voice"},
+                )
+            )
+        except NoProviderResolved as exc:
+            log_audit_entry(
+                "moral_matrix_inner_voice_no_provider",
+                "[MoralMatrix] No provider for inner voice; skipping.",
+                AuditStatus.WARNING,
+                details={"error": str(exc)},
+            )
+            return ""
+        except Exception as exc:
+            log_audit_entry(
+                "moral_matrix_inner_voice_failed",
+                "[MoralMatrix] Inner voice generation failed.",
+                AuditStatus.WARNING,
+                details={"error": str(exc)},
+            )
+            return ""
+
+        text = str(getattr(result, "content", "") or "").strip()
+        # Strip a possible "Inner voice:" prefix that small models love to add.
+        for prefix in ("Inner voice:", "PAI:", "Lim:", "Лим:", "ПАИ:"):
+            if text.lower().startswith(prefix.lower()):
+                text = text[len(prefix):].strip()
+        # Trim to a single sentence — model sometimes ignores the rule.
+        # Take everything up to the first sentence terminator + 1 char.
+        for terminator in (". ", "! ", "? ", "\n"):
+            idx = text.find(terminator)
+            if 0 < idx < 240:
+                text = text[: idx + 1].strip()
+                break
+        return text
+
     @staticmethod
     def _match_scar_trigger(
         analyzer_emotion: Dict[str, Any],
@@ -1253,6 +1353,34 @@ class MoralMatrixModule:
             log_audit_entry(
                 "moral_matrix_scar_check_failed",
                 "[MoralMatrix] Scar detection failed, falling back to plain trace.",
+                AuditStatus.WARNING,
+                details={"error": str(exc), "character_id": character_id},
+            )
+
+        # Inner voice — one short first-person sentence explaining "why I feel this".
+        # Feeds back into both the persisted trace (for later RAG / UI timeline)
+        # and result.meta (the WS moral_state event already serialises meta).
+        try:
+            if bool(config_service.get_config_value("moral.inner_voice.enabled", True)):
+                inner_voice = self._generate_inner_voice(
+                    emotion=result.current_emotion,
+                    intensity=result.emotion_intensity,
+                    cause=str(result.trigger or (user_message or {}).get("content") or ""),
+                    language_hint=str(
+                        config_service.get_config_value("system.language", "") or ""
+                    ),
+                )
+                if inner_voice:
+                    notes = trace_payload.get("notes")
+                    if not isinstance(notes, dict):
+                        notes = {"text": notes} if notes else {}
+                    notes["inner_voice"] = inner_voice
+                    trace_payload["notes"] = notes
+                    result.meta = {**(result.meta or {}), "inner_voice": inner_voice}
+        except Exception as exc:
+            log_audit_entry(
+                "moral_matrix_inner_voice_unexpected",
+                "[MoralMatrix] Inner voice integration error.",
                 AuditStatus.WARNING,
                 details={"error": str(exc), "character_id": character_id},
             )

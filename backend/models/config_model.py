@@ -431,6 +431,17 @@ class MoralDecayConfig(BaseModel):
     global_rate: float = 0.05
 
 
+class MoralInnerVoiceConfig(BaseModel):
+    # Single-sentence first-person explanation written by a small LLM after
+    # each emotional shift. Surfaces in the existing WS moral_state event
+    # via result.meta.inner_voice. Adds one short LLM call per turn —
+    # disable when latency matters more than introspection UX.
+    enabled: bool = True
+    max_tokens: int = 80
+    temperature: float = 0.7
+    language: str = ""  # blank → falls back to system.language
+
+
 class MoralScarTriggerConfig(BaseModel):
     """One scar trigger — see Архитектура.md > "Что не прощается"."""
     name: str = ""
@@ -488,6 +499,7 @@ class MoralMatrixConfig(BaseModel):
     decay: MoralDecayConfig = MoralDecayConfig()
     forgiveness: MoralForgivenessConfig = MoralForgivenessConfig()
     scars: MoralScarsConfig = MoralScarsConfig()
+    inner_voice: MoralInnerVoiceConfig = MoralInnerVoiceConfig()
 
 
 class MemoryConsolidationJudgeConfig(BaseModel):

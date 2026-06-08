@@ -346,6 +346,15 @@ DEFAULT_CONFIG = {
             "enabled": True,
             "global_rate": 0.05,
         },
+        "inner_voice": {
+            # One short first-person sentence on each turn, explaining why PAI
+            # feels what she feels right now. Costs a small LLM call per turn,
+            # so the operator can turn it off if latency matters more.
+            "enabled": True,
+            "max_tokens": 80,
+            "temperature": 0.7,
+            "language": "",  # fallback to system.language if blank
+        },
         "scars": {
             # Emotional scars from Архитектура.md > "Что не прощается".
             # When a turn matches one of these triggers, the EmotionalTrace
