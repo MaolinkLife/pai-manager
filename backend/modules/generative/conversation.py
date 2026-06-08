@@ -303,6 +303,126 @@ def _generate_tags_for_text(
     return tags
 
 
+def _build_validator_instructions(decision_context: Dict[str, Any]) -> str:
+    """Compose the instruction text the validator scores against.
+
+    Order matters — validator weights hard directives more than the system
+    prompt, so we concatenate in that priority and let the prompt truncation
+    inside the validator clip at the configured char limit.
+    """
+    system_prompt = str(decision_context.get("system_prompt", "") or "").strip()
+    moral_state = decision_context.get("moral_state") or {}
+    hard_directives = moral_state.get("hard_directives") if isinstance(moral_state, dict) else None
+    directives_block = ""
+    if isinstance(hard_directives, list) and hard_directives:
+        directives_block = "HARD DIRECTIVES (MUST follow):\n" + "\n".join(
+            f"- {str(item).strip()}" for item in hard_directives if str(item).strip()
+        )
+
+    pieces = [p for p in (directives_block, system_prompt) if p]
+    return "\n\n".join(pieces)
+
+
+def _maybe_run_validator(
+    *,
+    decision_context: Dict[str, Any],
+    last_user_message: Dict[str, Any],
+    assistant_content: str,
+    provider: Any,
+    metadata: Dict[str, Any] | None,
+) -> Dict[str, Any]:
+    """Run the LLM-as-judge validator over the assistant output.
+
+    Returns a small dict embedded into the audit trail; an empty dict when
+    validator is disabled / skipped. On compliance < threshold a DebugVault
+    entry is written. Never raises — broken validator must not break
+    generation, see modules/validator/service contract.
+    """
+    try:
+        from modules.validator import validate_output
+        from modules.validator.service import get_compliance_threshold
+        from modules.debug_vault import write_vault_entry
+        from modules.system.service import get_active_character_name
+        from modules.system import character as character_service
+    except Exception as exc:
+        log_audit_entry(
+            "validator_integration_import_failed",
+            "[Conversation] Validator integration import failed.",
+            AuditStatus.WARNING,
+            details={"error": str(exc)},
+        )
+        return {}
+
+    instructions = _build_validator_instructions(decision_context)
+    if not instructions:
+        # Nothing concrete to validate — skip without an LLM call.
+        return {"skipped": True, "skip_reason": "empty_instructions"}
+
+    result = validate_output(
+        output=assistant_content,
+        instructions=instructions,
+    )
+    if result.skipped:
+        return result.to_dict()
+
+    threshold = get_compliance_threshold()
+    summary_payload = result.to_dict()
+    summary_payload["threshold"] = threshold
+    summary_payload["acceptable"] = result.is_acceptable(threshold)
+
+    if result.is_acceptable(threshold):
+        log_audit_entry(
+            "validator_pass",
+            f"[Validator] compliance {result.compliance:.2f} ≥ {threshold:.2f}",
+            AuditStatus.INFO,
+            details=summary_payload,
+        )
+        return summary_payload
+
+    # Below threshold → DebugVault. We still return the result; caller proceeds
+    # with the existing output. Auto-reroll arrives in a separate commit.
+    try:
+        char_name = get_active_character_name(default="default")
+        character = character_service.get_or_create_character(char_name) if char_name else None
+        character_id = getattr(character, "id", None)
+    except Exception:
+        character_id = None
+
+    try:
+        vault_id = write_vault_entry(
+            kind="validation_failed",
+            severity="warning",
+            summary=(
+                f"Validator compliance {result.compliance:.2f} < {threshold:.2f} "
+                f"({len(result.violations)} violation(s))"
+            ),
+            character_id=character_id,
+            context={
+                "user_message": (last_user_message or {}).get("content", "")[:2000],
+                "user_message_id": (last_user_message or {}).get("id"),
+                "instructions_preview": instructions[:1000],
+            },
+            output=assistant_content[:50_000],
+            violations=result.violations,
+            runtime_meta={
+                "provider": provider,
+                "model_meta": metadata or {},
+                "compliance": round(float(result.compliance), 4),
+                "threshold": threshold,
+            },
+        )
+        summary_payload["vault_entry_id"] = vault_id
+    except Exception as exc:
+        log_audit_entry(
+            "validator_vault_write_failed",
+            "[Validator] Could not record DebugVault entry for low-compliance output.",
+            AuditStatus.WARNING,
+            details={"error": str(exc), **summary_payload},
+        )
+
+    return summary_payload
+
+
 def _build_generation_options() -> dict:
     exclude = ["name", "description"]
     full_settings = config_service.get_config_value("generate_settings", {})
@@ -1107,6 +1227,19 @@ async def generate_standard(
     )
     print("[Generator] Обработан ответ провайдера (standard).")
 
+    # Validator pass (§3.5). Opt-in via validator.enabled. On low-compliance
+    # the output still flows downstream — we just record the anomaly in
+    # DebugVault for later human review. Auto-reroll is intentionally NOT
+    # part of this commit; it lands as a follow-up so the seam can be
+    # observed under load before adding retry latency.
+    validator_payload = _maybe_run_validator(
+        decision_context=decision_context,
+        last_user_message=last_user_message,
+        assistant_content=assistant_content,
+        provider=generate_result.provider,
+        metadata=generate_result.metadata,
+    )
+
     assistant_message_obj = None
     suppress_user_echo = bool(last_user_message.get("suppress_user_echo")) if last_user_message else False
     if store and assistant_content:
@@ -1191,6 +1324,7 @@ async def generate_standard(
                 "provider": generate_result.provider,
                 "assistant_content": assistant_content,
                 "assistant_reasoning": assistant_reasoning,
+                "validator": validator_payload,
             },
         )
         print("[Generator] Стандартная генерация завершена.")
@@ -1216,6 +1350,7 @@ async def generate_standard(
         "provider": generate_result.provider,
         "memory_meta": memory_meta,
         "media": _sanitize_media_items(assistant_media_payload),
+        "validator": validator_payload,
     }
     log_audit_entry(
         "conversation_standard_complete_full",
