@@ -721,6 +721,9 @@
         "empty": "Diary is empty",
         "selfReflection": "Self-reflection"
     },
+    "chatNotify": {
+        "newMessage": "New chat message"
+    },
     "tasks": {
         "title": "Reminders",
         "subtitle": "Scheduled reminders and wake-ups - from chat or created manually",

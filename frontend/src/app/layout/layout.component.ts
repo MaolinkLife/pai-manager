@@ -14,6 +14,8 @@ import { UiFeatureFlagsService } from '../core/services/ui-feature-flags.service
 import { AuthService } from '../core/services/auth.service';
 import { AuthUser } from '../core/models/auth.model';
 import { LocalizationService } from '../shared/pipes/translation/localization.service';
+import { WebsocketService } from '../core/services/websocket.service';
+import { Subscription } from 'rxjs';
 
 @Component({
     selector: 'app-layout',
@@ -47,6 +49,8 @@ export class LayoutComponent implements OnInit, OnDestroy {
     anonymousMode = false;
     private generationConfigSnapshot: ProjectConfig | null = null;
     private generationRuntimeRefreshTimer: ReturnType<typeof setInterval> | null = null;
+    private wsNotifySub: Subscription | null = null;
+    private lastNotifiedMessageId = '';
 
     constructor(
         private modalService: ModalService,
@@ -57,6 +61,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
         private authService: AuthService,
         private uiFeatureFlags: UiFeatureFlagsService,
         private localizationService: LocalizationService,
+        private websocketService: WebsocketService,
         private router: Router
     ) { }
 
@@ -81,10 +86,68 @@ export class LayoutComponent implements OnInit, OnDestroy {
                 this.entityPanelOpen = false;
             }
         });
+
+        // Off-page chat notifications: when the assistant finishes a reply
+        // (or a reminder fires) while the user is on another page, show a
+        // toast with a snippet and play a soft chime.
+        this.wsNotifySub = this.websocketService.messages$.subscribe((raw) => {
+            try {
+                const event = JSON.parse(raw);
+                if (event?.type !== 'message' || event?.role !== 'assistant') {
+                    return;
+                }
+                if (this.isChatRoute || !event.content) {
+                    return;
+                }
+                const id = String(event.id || '');
+                if (id && id === this.lastNotifiedMessageId) {
+                    return;
+                }
+                this.lastNotifiedMessageId = id;
+                const plain = String(event.content)
+                    .replace(/<think>[\s\S]*?<\/think>/g, '')
+                    .trim();
+                if (!plain) {
+                    return;
+                }
+                this.notificationService.open({
+                    type: 'info',
+                    title: this.t('chatNotify.newMessage'),
+                    message: plain.length > 140 ? `${plain.slice(0, 140)}…` : plain,
+                    autoClose: true,
+                    duration: 6000,
+                });
+                this.playChatChime();
+            } catch {
+                // non-json ws payloads are fine to ignore
+            }
+        });
     }
 
     ngOnDestroy(): void {
         this.stopGenerationRuntimeRefresh();
+        this.wsNotifySub?.unsubscribe();
+    }
+
+    private playChatChime(): void {
+        try {
+            const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+            const gain = ctx.createGain();
+            gain.gain.value = 0.04;
+            gain.connect(ctx.destination);
+            [880, 1318.5].forEach((freq, index) => {
+                const osc = ctx.createOscillator();
+                osc.type = 'sine';
+                osc.frequency.value = freq;
+                osc.connect(gain);
+                const start = ctx.currentTime + index * 0.12;
+                osc.start(start);
+                osc.stop(start + 0.18);
+            });
+            setTimeout(() => ctx.close().catch(() => undefined), 600);
+        } catch {
+            // audio is best-effort: autoplay policies may block it
+        }
     }
 
     toggleTheme() {

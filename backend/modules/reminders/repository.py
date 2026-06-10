@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from models.models import UserReminder
@@ -183,6 +183,27 @@ class RemindersRepository:
             session.commit()
             session.refresh(row)
             return _row_to_dict(row)
+
+    def prune_finished(self, *, older_than_days: int = 30) -> int:
+        """Delete fired/cancelled/failed rows older than the cutoff.
+
+        Pending rows are never touched. Returns the number of deleted rows.
+        """
+        cutoff = _utc_now() - timedelta(days=max(1, int(older_than_days or 30)))
+        try:
+            with SessionLocal() as session:
+                deleted = (
+                    session.query(UserReminder)
+                    .filter(
+                        UserReminder.status.in_(("fired", "cancelled", "failed")),
+                        UserReminder.created_at < cutoff,
+                    )
+                    .delete(synchronize_session=False)
+                )
+                session.commit()
+                return int(deleted or 0)
+        except Exception:
+            return 0
 
     def count_active(self, *, character_id: str) -> int:
         try:

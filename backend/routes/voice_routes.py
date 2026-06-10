@@ -10,7 +10,7 @@ from fastapi.responses import Response
 
 from core.decision_layer import decision_layer
 from core.websocket_manager import manager
-from modules.generative.conversation import generate_standard, play_message
+from modules.generative.conversation import play_message
 from modules.tts.paths import create_temp_audio_file
 from modules.tts.paths import voices_root
 from modules.tts.ffmpeg_tools import FFmpegError
@@ -396,10 +396,11 @@ async def stop_record(request: Request):
         user_message["actor_user_uuid"] = actor_user_uuid
     interaction_policy = resolve_interaction_policy(actor_user_uuid)
 
-    async def push_ws(msg):
+    async def push_ws(msg) -> bool:
         await manager.send_message(json.dumps(msg, ensure_ascii=False))
+        return True
 
-    # Show the recognised message in the chat right away. generate_standard
+    # Show the recognised message in the chat right away. The stream pipeline
     # re-emits the same id later — the frontend patches it, no duplicate.
     await push_ws(
         {
@@ -412,14 +413,32 @@ async def stop_record(request: Request):
     )
 
     async def _process_voice_turn() -> None:
+        # Mirrors the VAD pipeline: streaming generation gives the chat the
+        # same UX as typed messages (reasoning accordion, runtime trace,
+        # chunked output, compliance updates) — generate_standard had none.
         try:
-            decision_context = await decision_layer.process_message(user_message, None)
-            decision_context.pop("raw_media", None)
-            await generate_standard(
-                decision_context,
-                [user_message],
-                user_message,
-                emit_ws_fn=push_ws,
+            from core.instructor import Instructor
+            from modules.generative.conversation import generate_stream
+
+            processing_result = await decision_layer.process_message(user_message, None)
+            raw_media_payload = processing_result.pop("raw_media", None)
+            instructor = Instructor()
+            formatted_history = await instructor.format_for_api(
+                processing_result["system_prompt"],
+                processing_result["user_message"],
+                analysis=processing_result.get("analysis"),
+                decisions=processing_result.get("decisions"),
+                moral_state=processing_result.get("moral_state"),
+                memory_context=processing_result.get("memory_context"),
+                visual_context=processing_result.get("visual_context"),
+                module_tasks=processing_result.get("module_tasks"),
+            )
+            await generate_stream(
+                processing_result,
+                formatted_history,
+                emit_fn=push_ws,
+                last_user_message=processing_result.get("user_message", user_message),
+                raw_user_media=raw_media_payload,
                 store=interaction_policy.can_affect_global_memory,
             )
         except Exception as exc:

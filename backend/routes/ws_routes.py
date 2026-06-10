@@ -797,6 +797,11 @@ async def websocket_endpoint(websocket: WebSocket):
                                         "timestamp": datetime.now(timezone.utc).isoformat(),
                                         "store_enabled": allow_global_store,
                                     },
+                                    # merge=True: generate_stream has already
+                                    # merged compliance summaries onto this
+                                    # row — a plain replace wipes the badges
+                                    # after a page reload.
+                                    merge=True,
                                 )
                             status = "stopped" if stop_event.is_set() else "completed"
                             await _safe_send_json(
@@ -1084,6 +1089,7 @@ async def websocket_endpoint(websocket: WebSocket):
                                     "timestamp": datetime.now(timezone.utc).isoformat(),
                                     "store_enabled": prepared.get("store"),
                                 },
+                                merge=True,
                             )
                         await _safe_send_json(
                             websocket,

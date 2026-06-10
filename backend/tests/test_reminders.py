@@ -292,3 +292,20 @@ def test_fire_delivery_failure_marks_failed(monkeypatch):
     refreshed = repo.get(row["id"])
     assert refreshed["status"] == "failed"
     assert "ws down" in str(refreshed["meta"].get("delivery_error"))
+
+
+def test_prune_finished_keeps_pending_and_recent():
+    repo = _repo()
+    old_fired = repo.create(character_id=_char(), text="old", due_at=_in(-10))
+    repo.mark(old_fired["id"], status="fired")
+    pending = repo.create(character_id=_char(), text="pending", due_at=_in(60))
+    # Age the fired row beyond the cutoff.
+    with engine.begin() as conn:
+        conn.execute(
+            text("UPDATE user_reminders SET created_at = :ts WHERE id = :id"),
+            {"ts": "2020-01-01 00:00:00", "id": old_fired["id"]},
+        )
+    deleted = repo.prune_finished(older_than_days=30)
+    assert deleted >= 1
+    assert repo.get(old_fired["id"]) is None
+    assert repo.get(pending["id"]) is not None

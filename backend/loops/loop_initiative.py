@@ -389,6 +389,38 @@ def initiative_monitor():
                         # diary slot so it never collides with active turns).
                         _run_audit_log_retention(day_iso=diary_day_iso)
 
+                        # Finished reminders cleanup — same nightly slot.
+                        try:
+                            from modules.system import config as config_service
+                            from modules.reminders import reminders_repository
+
+                            retention_days = int(
+                                config_service.get_config_value(
+                                    "reminders.retention_days", 30
+                                )
+                                or 30
+                            )
+                            pruned = reminders_repository.prune_finished(
+                                older_than_days=retention_days
+                            )
+                            if pruned:
+                                log_audit_entry(
+                                    event_type="reminders_pruned",
+                                    msg="[Initiative] Finished reminders pruned.",
+                                    status=AuditStatus.INFO,
+                                    details={
+                                        "deleted": pruned,
+                                        "older_than_days": retention_days,
+                                    },
+                                )
+                        except Exception as prune_exc:
+                            log_audit_entry(
+                                event_type="reminders_prune_failed",
+                                msg="[Initiative] Reminders prune failed.",
+                                status=AuditStatus.WARNING,
+                                details={"error": str(prune_exc)},
+                            )
+
                         # Self-Watcher nightly reflection (§3.7) — aggregates
                         # recent expectation_events into a short first-person
                         # passage and stitches it into the diary payload that

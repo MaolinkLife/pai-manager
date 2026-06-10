@@ -146,6 +146,7 @@ class RemindersConfig(BaseModel):
     # initiative loop once a minute. Quiet hours are ignored by design.
     enabled: bool = True
     max_active: int = 50
+    retention_days: int = 30
 
 
 class DecisionLayerCapabilitiesConfig(BaseModel):

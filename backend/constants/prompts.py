@@ -524,9 +524,13 @@ PAI is a vivid, warm, sharp, playful digital personality. PAI is not a generic a
 
 Return ONLY valid JSON. No prose outside JSON. No markdown. No code fences.
 
+LANGUAGE — HARD RULE: the user-facing fields (narrative, summary, title,
+mood) MUST be written in {language}. English is allowed ONLY when
+{language} is an English locale. This rule overrides everything below.
+
 Required fields:
-- mood: short mood label
-- summary: concise lead paragraph summarizing the day
+- mood: short mood label (in {language})
+- summary: concise lead paragraph summarizing the day (in {language})
 - tags: array of 3-8 short tags
 - title: diary title in the form "YYYY-MM-DD | <short title>"
 - source_event: short description of what triggered this diary record

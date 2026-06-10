@@ -84,6 +84,9 @@ DEFAULT_CONFIG = {
         # canned «⏰ …» fallback). Quiet hours are ignored by design.
         "enabled": True,
         "max_active": 50,
+        # Nightly cleanup: fired/cancelled/failed rows older than this are
+        # deleted (pending rows are never touched).
+        "retention_days": 30,
     },
     "auto_reroll": {
         # Joint auto-reroll for Validator (§3.5) + LanguageGuard (§3.5-bis):
