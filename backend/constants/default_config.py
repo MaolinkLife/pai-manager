@@ -25,6 +25,57 @@ DEFAULT_CONFIG = {
         "env": "dev",
         "debug": False,
     },
+    "language_guard": {
+        # Language compliance guard (§3.5-bis). Detects dominant unicode
+        # script of the assistant output and compares with User.language.
+        # NO LLM call — pure CPU script-ratio counter. Off by default;
+        # producing DebugVault entries when on. Auto-reroll is a follow-up.
+        "enabled": False,
+        "min_dominance": 0.7,
+        "min_output_chars": 40,
+    },
+    "confidence": {
+        # Confidence estimation (§3.8). Mini LLM call scoring how confident
+        # PAI should be the output addressed the user message. Off by
+        # default — one extra LLM call per sync generation. Low confidence
+        # is a SIGNAL (audit WARNING + runtime_meta.confidence) — NOT an
+        # anomaly, so DebugVault is NOT written. Factuality check (§3.9)
+        # is the natural downstream consumer.
+        "enabled": False,
+        "threshold": 0.5,
+        "max_tokens": 64,
+        "temperature": 0.0,
+        "user_char_limit": 2000,
+        "output_char_limit": 4000,
+    },
+    "factuality": {
+        # Factuality check (§3.9). Extracts factual claims from the output
+        # (years, dates, numbers+units, capitalized phrases) and looks them
+        # up in PAI's OWN memory (lorebook). NO web/internet — that
+        # belongs to §3.10 Skill Training which is OUT OF CORE.
+        # gate_on_low_confidence=True means we only run when §3.8 already
+        # flagged the output as low-confidence — keeps the cost bounded.
+        "enabled": False,
+        "gate_on_low_confidence": True,
+        "top_k": 3,
+        "min_similarity": 0.6,
+        "max_claims": 6,
+        "claim_min_length": 3,
+    },
+    "self_watcher": {
+        # Self-Watcher / Meta-cognition (§3.7). Observes predicted-vs-actual
+        # emotional mismatches and feeds them into a nightly LLM-written
+        # self-reflection in the diary. Off by default. The per-turn check
+        # is CPU-only; the nightly reflection adds one LLM call per day
+        # per character.
+        "enabled": False,
+        "mismatch_threshold": 0.5,
+        "nightly_reflection_enabled": True,
+        "lookback_days": 7,
+        "max_events_in_cluster": 20,
+        "llm_max_tokens": 220,
+        "llm_temperature": 0.5,
+    },
     "validator": {
         # Off by default — turning it on adds one LLM call per sync generation
         # (no streaming impact). Concept: Pai_Updated_Concept.md > 3.5.
@@ -503,6 +554,16 @@ DEFAULT_CONFIG = {
                 "temperature": 0.0,
                 "max_tokens": 512,
                 "request_timeout": 60,
+            },
+        },
+        "diary": {
+            # Narrative diary (§3.9-bis): the daily summarisation LLM call
+            # already returns a structured payload; we extend the same JSON
+            # schema with a free-form first-person passage. No extra LLM call.
+            "narrative": {
+                "enabled": True,
+                "min_chars": 80,
+                "max_chars": 3000,
             },
         },
     },

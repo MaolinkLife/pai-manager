@@ -1,6 +1,6 @@
 # ==========================================================
 # Module: main.py
-# Purpose: Entry point to the LIM application. Launches FastAPI, connects routes, activates CORS
+# Purpose: Entry point to the PAI application. Launches FastAPI, connects routes, activates CORS
 # Used: at startup of the entire system
 # Features:
 # - Connects configuration (config_service)

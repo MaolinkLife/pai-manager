@@ -1,6 +1,6 @@
 # ==========================================================
 # Module: initialize.py
-# Purpose: Primary initialization of the LIM project before starting FastAPI.
+# Purpose: Primary initialization of the PAI project before starting FastAPI.
 # Responsible for preparing the environment: creating a config, generating user_id,
 # checking directories and basic values.
 #
@@ -31,7 +31,7 @@ from utils.structure_utils import get_label_from_file
 
 def run_startup_checks():
     """
-    The main method for initializing LIM.
+    The main method for initializing PAI.
     Runs when main.py starts, before the application starts.
     """
     # Local imports prevent cyclic import during bootstrap.
@@ -49,7 +49,7 @@ def run_startup_checks():
         get_text(
             "initialize.print_start",
             params={"label": label},
-            default="Starting LIM initialization...",
+            default="Starting PAI initialization...",
         )
     )
     log_audit_entry(
@@ -57,7 +57,7 @@ def run_startup_checks():
         msg=get_text(
             "initialize.startup_begin",
             params={"label": label},
-            default=f"{label} Starting LIM initialization",
+            default=f"{label} Starting PAI initialization",
         ),
         status=AuditStatus.SUCCESS,
         message_key="initialize.startup_begin",

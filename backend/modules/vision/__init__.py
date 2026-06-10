@@ -1,4 +1,4 @@
-"""Vision module for LIM - Computer Vision tools for screen analysis."""
+"""Vision module for PAI - Computer Vision tools for screen analysis."""
 
 from .analyzer import VisionAnalyzer
 from .worker import VisionBuffer, ScreenCapturer

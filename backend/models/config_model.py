@@ -82,6 +82,55 @@ class ValidatorConfig(BaseModel):
     output_char_limit: int = 4000
 
 
+class LanguageGuardConfig(BaseModel):
+    # Detects dominant unicode script of the generated output and compares
+    # with User.language. No LLM call — pure CPU script-ratio counter.
+    # Off by default.
+    enabled: bool = False
+    min_dominance: float = 0.7
+    min_output_chars: int = 40
+
+
+class ConfidenceConfig(BaseModel):
+    # Mini LLM call that scores how confident PAI should be in its output.
+    # Off by default — one extra LLM call per sync generation. The score
+    # lands on History.runtime_meta.confidence; low confidence triggers a
+    # WARNING audit log but does NOT write DebugVault (it's a signal, not
+    # an anomaly).
+    enabled: bool = False
+    threshold: float = 0.5
+    max_tokens: int = 64
+    temperature: float = 0.0
+    user_char_limit: int = 2000
+    output_char_limit: int = 4000
+
+
+class FactualityConfig(BaseModel):
+    # Regex-based claim extraction + lorebook lookup. CPU-only, no extra
+    # LLM call. Off by default. gate_on_low_confidence=True means the
+    # check is gated on §3.8 confidence_low — a natural cost guard.
+    enabled: bool = False
+    gate_on_low_confidence: bool = True
+    top_k: int = 3
+    min_similarity: float = 0.6
+    max_claims: int = 6
+    claim_min_length: int = 3
+
+
+class SelfWatcherConfig(BaseModel):
+    # Self-Watcher (§3.7): records predicted-vs-actual emotional
+    # mismatches and aggregates them into a nightly reflection. Off by
+    # default. The per-turn check is CPU-only; nightly reflection adds
+    # one LLM call per day per character.
+    enabled: bool = False
+    mismatch_threshold: float = 0.5
+    nightly_reflection_enabled: bool = True
+    lookback_days: int = 7
+    max_events_in_cluster: int = 20
+    llm_max_tokens: int = 220
+    llm_temperature: float = 0.5
+
+
 class DecisionLayerCapabilitiesConfig(BaseModel):
     tool: bool = False
     vision: bool = False
@@ -556,6 +605,16 @@ class MemoryConsolidationConfig(BaseModel):
     judge: MemoryConsolidationJudgeConfig = MemoryConsolidationJudgeConfig()
 
 
+class MemoryDiaryNarrativeConfig(BaseModel):
+    enabled: bool = True
+    min_chars: int = 80
+    max_chars: int = 3000
+
+
+class MemoryDiaryConfig(BaseModel):
+    narrative: MemoryDiaryNarrativeConfig = MemoryDiaryNarrativeConfig()
+
+
 class MemoryConfig(BaseModel):
     deep_memory_enabled: bool = True
     force_deep_memory: bool = False
@@ -566,6 +625,7 @@ class MemoryConfig(BaseModel):
     embedding_provider: str = "auto"
     embedding_model: str = "nomic-embed-text"
     consolidation: MemoryConsolidationConfig = MemoryConsolidationConfig()
+    diary: MemoryDiaryConfig = MemoryDiaryConfig()
 
 
 class SynthesisSdWebUIConfig(BaseModel):

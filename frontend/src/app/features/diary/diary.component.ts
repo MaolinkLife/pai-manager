@@ -28,6 +28,7 @@ interface DiaryEntry {
     date: string;
     mood: string;
     summary: string;
+    narrative: string;
     tags: string[];
     structured: DiaryStructuredPayload | null;
 }
@@ -99,10 +100,14 @@ export class DiaryComponent implements OnInit {
         const structuredRaw = payload?.['structured'] && typeof payload['structured'] === 'object'
             ? payload['structured'] as Record<string, any>
             : null;
+        const narrative = typeof payload?.['narrative'] === 'string'
+            ? String(payload['narrative']).trim()
+            : '';
         return {
             date: row.day || row.updated_at || new Date().toISOString(),
             mood: row.mood || 'Neutral',
             summary: row.summary || '',
+            narrative,
             tags: Array.isArray(row.tags) ? row.tags : [],
             structured: structuredRaw ? this.mapStructured(structuredRaw) : null,
         };

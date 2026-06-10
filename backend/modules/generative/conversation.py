@@ -423,6 +423,361 @@ def _maybe_run_validator(
     return summary_payload
 
 
+def _maybe_run_language_guard(
+    *,
+    last_user_message: Dict[str, Any],
+    assistant_content: str,
+    provider: Any,
+    metadata: Dict[str, Any] | None,
+) -> Dict[str, Any]:
+    """Compare dominant unicode script of the assistant output with User.language.
+
+    Never raises. Mirrors the Validator contract: skipped/ok results are
+    audit-only; a confirmed mismatch lands in DebugVault as a curated entry.
+    Auto-reroll is a follow-up commit — for now we record and proceed.
+    """
+    try:
+        from modules.language_guard import check_language
+        from modules.system.user import resolve_user_language
+        from modules.system.service import get_active_character_name
+        from modules.system import character as character_service
+    except Exception as exc:
+        log_audit_entry(
+            "language_guard_import_failed",
+            "[Conversation] Language guard import failed.",
+            AuditStatus.WARNING,
+            details={"error": str(exc)},
+        )
+        return {}
+
+    actor_user_uuid = None
+    if isinstance(last_user_message, dict):
+        actor_user_uuid = (
+            last_user_message.get("user_uuid")
+            or last_user_message.get("actor_user_uuid")
+        )
+
+    character_id = None
+    try:
+        char_name = get_active_character_name(default="default")
+        character = character_service.get_or_create_character(char_name) if char_name else None
+        character_id = getattr(character, "id", None)
+    except Exception:
+        character_id = None
+
+    try:
+        expected = resolve_user_language(
+            user_uuid=actor_user_uuid,
+            character_id=character_id,
+        )
+    except Exception:
+        expected = ""
+
+    result = check_language(assistant_content, expected)
+    payload = result.to_dict()
+    if result.skipped:
+        return payload
+
+    if result.ok:
+        log_audit_entry(
+            "language_guard_pass",
+            f"[LanguageGuard] {result.detected} dominance {result.dominance:.2f}",
+            AuditStatus.INFO,
+            details=payload,
+        )
+        return payload
+
+    # mismatch → DebugVault
+    try:
+        from modules.debug_vault import write_vault_entry
+    except Exception as exc:
+        log_audit_entry(
+            "language_guard_vault_import_failed",
+            "[LanguageGuard] DebugVault import failed.",
+            AuditStatus.WARNING,
+            details={"error": str(exc), **payload},
+        )
+        return payload
+
+    try:
+        vault_id = write_vault_entry(
+            kind="language_mismatch",
+            severity="warning",
+            summary=(
+                f"Output script '{result.detected}' does not match expected "
+                f"language '{result.expected}' (dominance {result.dominance:.2f})"
+            ),
+            character_id=character_id,
+            context={
+                "user_message": (last_user_message or {}).get("content", "")[:2000],
+                "user_message_id": (last_user_message or {}).get("id"),
+                "expected_language": result.expected,
+            },
+            output=assistant_content[:50_000],
+            violations=[
+                f"detected_script={result.detected}",
+                f"expected_language={result.expected}",
+                f"dominance={result.dominance:.4f}",
+            ],
+            runtime_meta={
+                "provider": provider,
+                "model_meta": metadata or {},
+                "detected": result.detected,
+                "expected": result.expected,
+                "dominance": round(float(result.dominance), 4),
+            },
+        )
+        payload["vault_entry_id"] = vault_id
+    except Exception as exc:
+        log_audit_entry(
+            "language_guard_vault_write_failed",
+            "[LanguageGuard] Could not record DebugVault entry for language mismatch.",
+            AuditStatus.WARNING,
+            details={"error": str(exc), **payload},
+        )
+
+    return payload
+
+
+def _maybe_run_confidence(
+    *,
+    last_user_message: Dict[str, Any],
+    assistant_content: str,
+) -> Dict[str, Any]:
+    """Score how confident PAI should be in this output.
+
+    Never raises. Low confidence is a SIGNAL (audit WARNING + runtime_meta
+    update) — NOT an anomaly, so DebugVault is NOT written. The score
+    flows into History.runtime_meta.confidence for downstream consumers
+    (Factuality check §3.9, low-confidence UI hint Phase 10).
+    """
+    try:
+        from modules.confidence import estimate_confidence, get_confidence_threshold
+    except Exception as exc:
+        log_audit_entry(
+            "confidence_import_failed",
+            "[Conversation] Confidence module import failed.",
+            AuditStatus.WARNING,
+            details={"error": str(exc)},
+        )
+        return {}
+
+    user_text = ""
+    if isinstance(last_user_message, dict):
+        user_text = str(last_user_message.get("content") or "").strip()
+
+    result = estimate_confidence(
+        user_message=user_text,
+        assistant_output=assistant_content,
+    )
+    payload = result.to_dict()
+
+    if result.skipped:
+        return payload
+
+    threshold = get_confidence_threshold()
+    payload["threshold"] = round(float(threshold), 4)
+    payload["low"] = result.is_low(threshold)
+
+    if result.is_low(threshold):
+        log_audit_entry(
+            "confidence_low",
+            f"[Confidence] {result.score:.2f} < {threshold:.2f}",
+            AuditStatus.WARNING,
+            details={
+                "score": payload["score"],
+                "threshold": payload["threshold"],
+                "user_message_id": (last_user_message or {}).get("id"),
+            },
+        )
+    else:
+        log_audit_entry(
+            "confidence_pass",
+            f"[Confidence] {result.score:.2f} ≥ {threshold:.2f}",
+            AuditStatus.INFO,
+            details={"score": payload["score"], "threshold": payload["threshold"]},
+        )
+
+    return payload
+
+
+def _extract_predicted_emotion_meta(decision_context: Dict[str, Any]) -> Dict[str, Any]:
+    """Pull PAI's predicted emotion + valence from the current moral_state.
+
+    Returns a dict ready to be merged onto the assistant message's
+    runtime_meta. Empty dict when moral_state is missing or empty.
+    """
+    moral_state = decision_context.get("moral_state") if isinstance(decision_context, dict) else None
+    if not isinstance(moral_state, dict) or not moral_state:
+        return {}
+
+    emotion = str(moral_state.get("current_emotion") or "").strip()
+    if not emotion:
+        return {}
+    try:
+        intensity = float(moral_state.get("emotion_intensity") or 0.0)
+    except (TypeError, ValueError):
+        intensity = 0.0
+
+    from modules.self_watcher import classify_valence
+
+    return {
+        "pai_predicted_emotion": emotion,
+        "pai_predicted_valence": classify_valence(emotion),
+        "pai_predicted_intensity": round(max(0.0, min(intensity, 1.0)), 4),
+    }
+
+
+def _maybe_run_self_watcher(
+    *,
+    decision_context: Dict[str, Any],
+    last_user_message: Dict[str, Any],
+    history: list,
+) -> Dict[str, Any]:
+    """Compare PAI's prediction on the previous turn with the user's
+    current reaction. Records an expectation_events row on mismatch.
+
+    Never raises. Self-Watcher is observation-only and must not break
+    the generation pipeline.
+    """
+    try:
+        from modules.self_watcher import check_expectation
+        from modules.system.service import get_active_character_name
+        from modules.system import character as character_service
+    except Exception as exc:
+        log_audit_entry(
+            "self_watcher_import_failed",
+            "[Conversation] Self-Watcher import failed.",
+            AuditStatus.WARNING,
+            details={"error": str(exc)},
+        )
+        return {}
+
+    # Pull the previous assistant message from history. ``history`` here
+    # is the sanitized list passed to the LLM — assistant turns carry
+    # their runtime_meta in the stored DB row, NOT in this list, so we
+    # have to fetch the row by id.
+    prev_assistant_meta: Dict[str, Any] = {}
+    prev_assistant_message_id: Optional[str] = None
+    try:
+        for item in reversed(history or []):
+            if isinstance(item, dict) and item.get("role") == "assistant":
+                msg_id = str(item.get("id") or "").strip()
+                if not msg_id:
+                    continue
+                row = database_service.get_message_by_id(msg_id)
+                if not isinstance(row, dict):
+                    continue
+                meta = row.get("runtime_meta")
+                if isinstance(meta, dict) and meta:
+                    prev_assistant_meta = meta
+                    prev_assistant_message_id = msg_id
+                break
+    except Exception:
+        prev_assistant_meta = {}
+        prev_assistant_message_id = None
+
+    if not prev_assistant_meta:
+        return {"skipped": True, "skip_reason": "no_previous_prediction"}
+
+    analysis = decision_context.get("analysis") if isinstance(decision_context, dict) else None
+    tone_primary = ""
+    tone_intensity = 0.5
+    if isinstance(analysis, dict):
+        understanding = analysis.get("understanding") or {}
+        if isinstance(understanding, dict):
+            tone = understanding.get("emotional_tone") or {}
+            if isinstance(tone, dict):
+                tone_primary = str(tone.get("primary") or "").strip()
+                try:
+                    tone_intensity = float(tone.get("intensity") or 0.5)
+                except (TypeError, ValueError):
+                    tone_intensity = 0.5
+
+    if not tone_primary:
+        return {"skipped": True, "skip_reason": "no_user_tone"}
+
+    try:
+        char_name = get_active_character_name(default="default")
+        character = character_service.get_or_create_character(char_name) if char_name else None
+        character_id = getattr(character, "id", None) or ""
+    except Exception:
+        character_id = ""
+
+    triggering_message_id = None
+    if isinstance(last_user_message, dict):
+        triggering_message_id = str(last_user_message.get("id") or "").strip() or None
+
+    result = check_expectation(
+        character_id=character_id,
+        prev_assistant_meta=prev_assistant_meta,
+        prev_assistant_message_id=prev_assistant_message_id,
+        current_user_tone=tone_primary,
+        current_user_intensity=tone_intensity,
+        triggering_user_message_id=triggering_message_id,
+    )
+    return result.to_dict()
+
+
+def _maybe_run_factuality(
+    *,
+    assistant_content: str,
+    confidence_payload: Dict[str, Any] | None,
+) -> Dict[str, Any]:
+    """Run the factuality gate (§3.9) over the assistant output.
+
+    Never raises. The gate is normally piped through §3.8 confidence
+    (low-confidence outputs are the ones worth checking). Result lives in
+    runtime_meta.factuality only — does NOT rewrite the output.
+    """
+    try:
+        from modules.factuality import check_factuality
+    except Exception as exc:
+        log_audit_entry(
+            "factuality_import_failed",
+            "[Conversation] Factuality module import failed.",
+            AuditStatus.WARNING,
+            details={"error": str(exc)},
+        )
+        return {}
+
+    confidence_low = False
+    if isinstance(confidence_payload, dict):
+        confidence_low = bool(confidence_payload.get("low"))
+
+    result = check_factuality(
+        output=assistant_content,
+        confidence_low=confidence_low,
+    )
+    payload = result.to_dict()
+
+    if result.skipped:
+        return payload
+
+    if not result.supported:
+        log_audit_entry(
+            "factuality_unverified",
+            f"[Factuality] {len(result.claims)} claim(s) unverified against local memory.",
+            AuditStatus.WARNING,
+            details={
+                "claims": result.claims,
+                "sources_found": result.sources_found,
+            },
+        )
+    else:
+        log_audit_entry(
+            "factuality_supported",
+            f"[Factuality] {result.sources_found} corroborating source(s) found.",
+            AuditStatus.INFO,
+            details={
+                "claims": result.claims,
+                "sources_found": result.sources_found,
+            },
+        )
+
+    return payload
+
+
 def _build_generation_options() -> dict:
     exclude = ["name", "description"]
     full_settings = config_service.get_config_value("generate_settings", {})
@@ -1240,6 +1595,43 @@ async def generate_standard(
         metadata=generate_result.metadata,
     )
 
+    # Language guard (§3.5-bis). Opt-in via language_guard.enabled. No LLM
+    # cost — pure CPU script-ratio counter. Auto-reroll is a follow-up.
+    language_guard_payload = _maybe_run_language_guard(
+        last_user_message=last_user_message,
+        assistant_content=assistant_content,
+        provider=generate_result.provider,
+        metadata=generate_result.metadata,
+    )
+
+    # Confidence estimation (§3.8). Opt-in. One mini LLM call per sync
+    # generation. Low confidence is a SIGNAL — written to History.runtime_meta
+    # and surfaces as a WARNING audit log, but does NOT land in DebugVault.
+    confidence_payload = _maybe_run_confidence(
+        last_user_message=last_user_message,
+        assistant_content=assistant_content,
+    )
+
+    # Factuality check (§3.9). Opt-in, CPU-only (no extra LLM call).
+    # By default gated on confidence_low — runs only when §3.8 already
+    # flagged the output. Looks each extracted claim up against PAI's
+    # OWN memory (lorebook). Web/internet check belongs to §3.10 which
+    # is OUT OF CORE.
+    factuality_payload = _maybe_run_factuality(
+        assistant_content=assistant_content,
+        confidence_payload=confidence_payload,
+    )
+
+    # Self-Watcher (§3.7). Compares PAI's prediction on the previous
+    # turn (stored in History.runtime_meta) with the user's actual
+    # emotional tone on this turn (from analyzer). Records mismatches
+    # for nightly diary reflection. Does NOT influence the current turn.
+    self_watcher_payload = _maybe_run_self_watcher(
+        decision_context=decision_context,
+        last_user_message=last_user_message,
+        history=history,
+    )
+
     assistant_message_obj = None
     suppress_user_echo = bool(last_user_message.get("suppress_user_echo")) if last_user_message else False
     if store and assistant_content:
@@ -1280,6 +1672,48 @@ async def generate_standard(
                 assistant_message_obj.id,
                 assistant_reasoning,
             )
+
+        # Persist compliance metadata (§3.8 confidence, §3.9 factuality,
+        # §3.7 self-watcher prediction) onto the message's runtime_meta
+        # so the UI / downstream tools can read it without re-running
+        # anything. merge=True keeps any upstream metadata intact.
+        meta_update: Dict[str, Any] = {}
+        if (
+            confidence_payload
+            and not confidence_payload.get("skipped")
+            and "score" in confidence_payload
+        ):
+            meta_update["confidence"] = confidence_payload["score"]
+            meta_update["confidence_threshold"] = confidence_payload.get("threshold")
+            meta_update["confidence_low"] = confidence_payload.get("low", False)
+
+        if (
+            factuality_payload
+            and not factuality_payload.get("skipped")
+            and factuality_payload.get("checked")
+        ):
+            meta_update["factuality"] = {
+                "supported": factuality_payload.get("supported"),
+                "sources_found": factuality_payload.get("sources_found"),
+                "claims": factuality_payload.get("claims", []),
+            }
+
+        # §3.7 — stamp PAI's prediction on THIS assistant message so the
+        # NEXT turn's Self-Watcher pass has something to compare against.
+        meta_update.update(_extract_predicted_emotion_meta(decision_context))
+
+        if meta_update and getattr(assistant_message_obj, "id", None):
+            try:
+                database_service.update_history_runtime_meta(
+                    assistant_message_obj.id, meta_update, merge=True
+                )
+            except Exception as exc:
+                log_audit_entry(
+                    "compliance_meta_persist_failed",
+                    "[Compliance] Could not persist meta on runtime_meta.",
+                    AuditStatus.WARNING,
+                    details={"error": str(exc), "message_id": assistant_message_obj.id},
+                )
 
     if emit_ws_fn and assistant_content:
         display_content = assistant_content
@@ -1325,6 +1759,10 @@ async def generate_standard(
                 "assistant_content": assistant_content,
                 "assistant_reasoning": assistant_reasoning,
                 "validator": validator_payload,
+                "language_guard": language_guard_payload,
+                "confidence": confidence_payload,
+                "factuality": factuality_payload,
+                "self_watcher": self_watcher_payload,
             },
         )
         print("[Generator] Стандартная генерация завершена.")
@@ -1351,6 +1789,10 @@ async def generate_standard(
         "memory_meta": memory_meta,
         "media": _sanitize_media_items(assistant_media_payload),
         "validator": validator_payload,
+        "language_guard": language_guard_payload,
+        "confidence": confidence_payload,
+        "factuality": factuality_payload,
+        "self_watcher": self_watcher_payload,
     }
     log_audit_entry(
         "conversation_standard_complete_full",

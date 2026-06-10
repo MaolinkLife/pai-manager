@@ -33,6 +33,7 @@ from modules.system import config as config_service
 from modules.system.logger import AuditStatus, log_audit_entry
 from modules.system.runtime_profile import should_release_resources
 from modules.system.service import get_active_character_name
+from modules.system.user import resolve_user_language
 
 
 @dataclass
@@ -595,10 +596,13 @@ class MoralMatrixModule:
         temperature = float(
             config_service.get_config_value("moral.inner_voice.temperature", 0.7) or 0.7
         )
+        # Source of truth for generation language is User.language.
+        # system.language is UI-only; using it here is a legacy fallback kept
+        # for boot windows when DB lookup fails.
         language = (
             str(language_hint or "")
             or str(config_service.get_config_value("moral.inner_voice.language", "") or "")
-            or str(config_service.get_config_value("system.language", "en-US") or "en-US")
+            or resolve_user_language(fallback="en-US")
         )
 
         user_payload = (
@@ -1366,8 +1370,9 @@ class MoralMatrixModule:
                     emotion=result.current_emotion,
                     intensity=result.emotion_intensity,
                     cause=str(result.trigger or (user_message or {}).get("content") or ""),
-                    language_hint=str(
-                        config_service.get_config_value("system.language", "") or ""
+                    language_hint=resolve_user_language(
+                        character_id=character_id,
+                        fallback="",
                     ),
                 )
                 if inner_voice:

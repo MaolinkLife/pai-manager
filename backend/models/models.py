@@ -511,6 +511,42 @@ class AuditLogRecord(Base):
     )
 
 
+class ExpectationEvent(Base):
+    """Self-Watcher (§3.7) record: a recognised mismatch between what PAI
+    predicted the user would feel and how the user actually reacted.
+
+    PAI's predicted emotion comes from the moral_matrix output of the
+    previous assistant turn (stored on History.runtime_meta).
+    The actual user feedback is the analyzer's emotional_tone on the next
+    user message. When the two valences diverge above the configured
+    threshold, a row is inserted here.
+
+    These rows are NOT user-facing on their own; the nightly diary job
+    aggregates them into ``daily_activity_diary.payload.self_reflection``
+    (LLM prose). The table itself is the audit trail behind that
+    reflection, so a curious operator can see WHY PAI thinks she misread
+    a situation.
+    """
+
+    __tablename__ = "expectation_events"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    character_id = Column(String, ForeignKey("characters.id"), nullable=False, index=True)
+    prev_assistant_message_id = Column(String, nullable=True, index=True)
+    triggering_user_message_id = Column(String, nullable=True, index=True)
+    pai_predicted_emotion = Column(String, nullable=True)
+    pai_predicted_valence = Column(String, nullable=True)  # positive/negative/neutral
+    user_actual_tone = Column(String, nullable=True)
+    user_actual_valence = Column(String, nullable=True)
+    mismatch_score = Column(Float, default=0.0)
+    notes = Column(Text, nullable=True)
+    created_at = Column(
+        DateTime, default=lambda: datetime.now(timezone.utc), index=True
+    )
+
+    character = relationship("Character")
+
+
 class ForgivenessEvent(Base):
     """Records a positive/compensating action that softens an EmotionalTrace.
 

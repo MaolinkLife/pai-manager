@@ -21,6 +21,7 @@ from modules.generative.manager import NoProviderResolved, generation_manager
 from modules.generative.types import GenerateRequest
 from modules.system import config as config_service
 from modules.system.logger import AuditStatus, log_audit_entry
+from modules.system.user import resolve_user_language
 
 
 @dataclass(slots=True)
@@ -55,7 +56,25 @@ def generate_daily_activity_entry(
     rows = _load_day_rows(character_id=character_id, day=day)
     stats = _build_day_activity_stats(rows)
     transcript = _build_activity_transcript(rows)
-    summary_payload = _summarize_activity(day=day, stats=stats, transcript=transcript)
+    language = _resolve_generation_language(character_id=character_id)
+    summary_payload = _summarize_activity(
+        day=day, stats=stats, transcript=transcript, language=language
+    )
+
+    diary_payload: dict[str, Any] = {
+        "transcript_preview": transcript[:2400],
+        "messages_used": len(rows),
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "language": language,
+        "structured": _build_structured_payload(
+            day=day,
+            stats=stats,
+            summary_payload=summary_payload,
+        ),
+    }
+    narrative = _coerce_narrative(summary_payload.get("narrative"))
+    if narrative:
+        diary_payload["narrative"] = narrative
 
     entry = _upsert_diary_entry(
         character_id=character_id,
@@ -64,18 +83,42 @@ def generate_daily_activity_entry(
         summary=summary_payload["summary"],
         tags=summary_payload["tags"],
         stats=stats,
-        payload={
-            "transcript_preview": transcript[:2400],
-            "messages_used": len(rows),
-            "generated_at": datetime.now(timezone.utc).isoformat(),
-            "structured": _build_structured_payload(
-                day=day,
-                stats=stats,
-                summary_payload=summary_payload,
-            ),
-        },
+        payload=diary_payload,
     )
     return {"generated": True, "entry": entry.to_dict()}
+
+
+def _resolve_generation_language(*, character_id: str) -> str:
+    """User.language is the source of truth for what language PAI writes in.
+    system.language is UI/locale only — never used for generation.
+
+    Delegates to the canonical resolver in modules.system.user."""
+    return resolve_user_language(character_id=character_id, fallback="en-US")
+
+
+def _narrative_settings() -> dict[str, Any]:
+    cfg = config_service.get_config_value("memory.diary.narrative", {}) or {}
+    if not isinstance(cfg, dict):
+        cfg = {}
+    return {
+        "enabled": bool(cfg.get("enabled", True)),
+        "min_chars": max(0, int(cfg.get("min_chars", 80) or 0)),
+        "max_chars": max(0, int(cfg.get("max_chars", 3000) or 0)),
+    }
+
+
+def _coerce_narrative(raw: Any) -> str:
+    settings = _narrative_settings()
+    if not settings["enabled"]:
+        return ""
+    text_raw = str(raw or "").strip()
+    if not text_raw:
+        return ""
+    if settings["max_chars"] and len(text_raw) > settings["max_chars"]:
+        text_raw = text_raw[: settings["max_chars"]].rstrip()
+    if len(text_raw) < settings["min_chars"]:
+        return ""
+    return text_raw
 
 
 def _judge_settings() -> dict[str, Any]:
@@ -612,20 +655,23 @@ def _summarize_activity(
     day: date,
     stats: dict[str, Any],
     transcript: str,
+    language: str = "en-US",
 ) -> dict[str, Any]:
     user = DAILY_ACTIVITY_DIARY_USER_PROMPT_TEMPLATE.format(
         day=day.isoformat(),
+        language=language,
         stats_json=json.dumps(stats, ensure_ascii=False),
         transcript=transcript[:12000],
     )
+    system_prompt = DAILY_ACTIVITY_DIARY_SYSTEM_PROMPT.format(language=language)
     try:
         result = generation_manager.generate(
             GenerateRequest(
                 messages=[
-                    {"role": "system", "content": DAILY_ACTIVITY_DIARY_SYSTEM_PROMPT},
+                    {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user},
                 ],
-                options={"temperature": 0.2, "num_predict": 700},
+                options={"temperature": 0.2, "num_predict": 900},
                 metadata={"mode": "daily_activity_diary"},
             )
         )
@@ -692,6 +738,7 @@ def _parse_summary_json(raw: str) -> dict[str, Any] | None:
         "similarities": _coerce_string_list(payload.get("similarities"), limit=10, item_limit=400),
         "photo_descriptions": _coerce_string_list(payload.get("photo_descriptions"), limit=12, item_limit=500),
         "contradictions": _coerce_string_list(payload.get("contradictions"), limit=10, item_limit=400),
+        "narrative": str(payload.get("narrative") or "").strip(),
     }
 
 
@@ -738,6 +785,7 @@ def _fallback_summary(*, day: date, stats: dict[str, Any]) -> dict[str, Any]:
         "similarities": [],
         "photo_descriptions": [],
         "contradictions": [],
+        "narrative": "",
     }
 
 

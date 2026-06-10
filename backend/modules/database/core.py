@@ -46,6 +46,7 @@ def create_database():
     _ensure_forgiveness_events_table()
     _ensure_audit_logs_table()
     _ensure_debug_vault_table()
+    _ensure_expectation_events_table()
     _log_console("Схема базы данных готова.")
 
 
@@ -312,6 +313,41 @@ def _ensure_debug_vault_table() -> None:
             text(
                 "CREATE INDEX IF NOT EXISTS ix_debug_vault_reviewed_created "
                 "ON debug_vault_entries(reviewed, created_at)"
+            )
+        )
+
+
+def _ensure_expectation_events_table() -> None:
+    """Self-Watcher (§3.7) — predicted-vs-actual emotional mismatches.
+
+    Append-only audit table. Nightly diary aggregates the recent rows into
+    payload.self_reflection via LLM. Pruning is not wired here yet; the
+    audit_logs retention policy is the conceptual sibling if needed later.
+    """
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS expectation_events (
+                    id TEXT PRIMARY KEY,
+                    character_id TEXT NOT NULL,
+                    prev_assistant_message_id TEXT,
+                    triggering_user_message_id TEXT,
+                    pai_predicted_emotion TEXT,
+                    pai_predicted_valence TEXT,
+                    user_actual_tone TEXT,
+                    user_actual_valence TEXT,
+                    mismatch_score REAL DEFAULT 0.0,
+                    notes TEXT,
+                    created_at DATETIME
+                )
+                """
+            )
+        )
+        conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_expectation_events_char_created "
+                "ON expectation_events(character_id, created_at)"
             )
         )
 
