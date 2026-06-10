@@ -51,7 +51,11 @@ def _stub_generation(monkeypatch, *, content: str | None = None, exc: Exception 
 
 
 @pytest.mark.regression
-def test_disabled_by_default_returns_skipped():
+def test_disabled_by_default_returns_skipped(monkeypatch):
+    # Force disabled regardless of the live DB config — the operator may
+    # have validator.enabled=true in their instance, the test must not
+    # depend on it.
+    monkeypatch.setattr(validator_service, "_is_enabled", lambda: False)
     result = validate_output(output="hi", instructions="say hi")
     assert result.skipped is True
     assert result.skip_reason == "disabled"

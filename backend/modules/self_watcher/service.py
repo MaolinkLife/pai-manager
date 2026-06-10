@@ -245,6 +245,8 @@ def record_nightly_reflection(
                 options={
                     "temperature": settings["llm_temperature"],
                     "num_predict": settings["llm_max_tokens"],
+                    # Prose reflection, small budget — thinking would eat it.
+                    "__think": False,
                 },
                 metadata={"mode": "self_watcher_reflection"},
             )

@@ -160,6 +160,9 @@ def estimate_confidence(
                 options={
                     "temperature": settings["temperature"],
                     "num_predict": settings["max_tokens"],
+                    # Judges must not think: reasoning burns the tiny budget
+                    # and can spin for minutes on strict-JSON prompts.
+                    "__think": False,
                 },
                 metadata={"mode": "confidence_estimation"},
             )

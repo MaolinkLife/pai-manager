@@ -87,6 +87,14 @@ class OllamaGenerateProvider(GenerateProvider):
                 True,
             )
         )
+        # Unbounded generation is ONLY for the main conversational paths.
+        # Service/judge calls (validator, confidence, factuality, reminder
+        # extraction, diary, …) send strict-JSON prompts with small explicit
+        # limits — uncapping them lets a reasoning model spin for minutes,
+        # which also pins the model in VRAM (unload requests get deferred
+        # while a request is in flight).
+        if request_mode not in ("standard", "stream"):
+            return options, None
         if not (enable_unbounded and self._looks_reasoning_model(model) and base_limit and base_limit > 0):
             return options, None
 
