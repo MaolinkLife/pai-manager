@@ -368,8 +368,39 @@
         "tasks": "Reminders",
         "audit": "Audit",
         "debug": "Debug",
+        "settings": "Settings",
         "state": "State",
         "profile": "Profile"
+    },
+    "settingsPage": {
+        "groups": {
+            "system": "System",
+            "intelligence": "Intelligence",
+            "personality": "Personality",
+            "perception": "Perception",
+            "channels": "Channels"
+        },
+        "tabs": {
+            "connections": "Connections"
+        },
+        "connections": {
+            "title": "Connections",
+            "subtitle": "LLM provider endpoints and credentials. Generation parameters live in the Generation tab.",
+            "loading": "Loading...",
+            "activeProvider": "Active provider",
+            "activeProviderHint": "Which provider serves the main chat.",
+            "activeBadge": "Active",
+            "baseUrl": "Server URL",
+            "apiKey": "API key",
+            "model": "Model",
+            "llamaCppEnabled": "Enable llama.cpp as an available provider",
+            "transformersHint": "HuggingFace model name or a local path.",
+            "customEndpointNote": "Custom OpenAI-compatible connections (your own server with a model) are coming in a future update.",
+            "save": "Save",
+            "saved": "Connections saved",
+            "loadError": "Failed to load configuration",
+            "saveError": "Failed to save connections"
+        }
     },
     "sandbox": {
         "title": "Sandbox",

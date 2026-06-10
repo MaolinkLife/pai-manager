@@ -1,0 +1,104 @@
+:host {
+    display: block;
+    height: 100%;
+    overflow: hidden;
+}
+
+.settings-page {
+    display: flex;
+    height: 100%;
+    min-height: 0;
+    background-color: var(--color-bg);
+    color: var(--color-text);
+    font-family: var(--font-family);
+}
+
+.settings-nav {
+    display: flex;
+    flex-direction: column;
+    flex: 0 0 248px;
+    box-sizing: border-box;
+    width: 248px;
+    min-width: 248px;
+    padding: 20px 14px;
+    background-color: var(--color-surface);
+    border-right: 1px solid var(--color-border);
+    overflow-y: auto;
+}
+
+.settings-nav-title {
+    color: var(--color-text-active);
+    font-weight: 700;
+    font-size: 17px;
+    padding: 0 8px;
+    margin-bottom: 14px;
+}
+
+.settings-nav-group {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-bottom: 16px;
+}
+
+.settings-nav-group-label {
+    font-size: 10px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: color-mix(in srgb, var(--color-text) 55%, transparent);
+    padding: 0 8px;
+    margin-bottom: 6px;
+}
+
+.settings-nav-item {
+    background-color: transparent;
+    border: none;
+    border-radius: var(--radius);
+    color: var(--color-text);
+    padding: 9px 10px;
+    text-align: left;
+    transition: background-color 0.15s ease, color 0.15s ease;
+    cursor: pointer;
+    font-family: var(--font-family);
+    font-size: 13.5px;
+
+    &:hover {
+        background-color: color-mix(in srgb, var(--color-accent) 12%, transparent);
+        color: var(--color-text-active);
+    }
+
+    &.active {
+        background-color: var(--color-accent);
+        color: var(--color-bg);
+        font-weight: 600;
+        box-shadow: var(--shadow-soft);
+    }
+}
+
+.settings-content {
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+    padding: 26px 30px;
+    overflow-y: auto;
+
+    > * {
+        display: block;
+        max-width: 980px;
+    }
+}
+
+@media (max-width: 768px) {
+    .settings-page {
+        flex-direction: column;
+    }
+
+    .settings-nav {
+        flex: 0 0 auto;
+        width: 100%;
+        min-width: 0;
+        border-right: none;
+        border-bottom: 1px solid var(--color-border);
+    }
+}

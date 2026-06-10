@@ -1,0 +1,36 @@
+<div class="settings-page">
+    <aside class="settings-nav custom-scrollbar">
+        <div class="settings-nav-title">{{ "settingsSidebar.title" | translate }}</div>
+
+        <div class="settings-nav-group" *ngFor="let group of groups">
+            <div class="settings-nav-group-label">{{ group.labelKey | translate }}</div>
+            <button
+                *ngFor="let tab of group.tabs"
+                type="button"
+                class="settings-nav-item"
+                [class.active]="activeTab === tab.key"
+                (click)="selectTab(tab.key)"
+            >
+                {{ tab.labelKey | translate }}
+            </button>
+        </div>
+    </aside>
+
+    <section class="settings-content custom-scrollbar">
+        <app-connections-settings *ngIf="activeTab === 'connections'"></app-connections-settings>
+        <app-generation-settings *ngIf="activeTab === 'generate'"></app-generation-settings>
+        <app-core-settings *ngIf="activeTab === 'core'"></app-core-settings>
+        <app-system-settings *ngIf="activeTab === 'system'"></app-system-settings>
+        <app-analyzer-settings *ngIf="activeTab === 'analyzer'"></app-analyzer-settings>
+        <app-compliance-settings *ngIf="activeTab === 'compliance'"></app-compliance-settings>
+        <app-rag-settings *ngIf="activeTab === 'rag'"></app-rag-settings>
+        <app-persona-settings *ngIf="activeTab === 'persona'"></app-persona-settings>
+        <app-moral-settings *ngIf="activeTab === 'moral'"></app-moral-settings>
+        <app-lorebook *ngIf="activeTab === 'lorebook'"></app-lorebook>
+        <app-vision-settings *ngIf="activeTab === 'vision'"></app-vision-settings>
+        <app-audio-settings *ngIf="activeTab === 'audio'"></app-audio-settings>
+        <app-voice-settings *ngIf="activeTab === 'voice'"></app-voice-settings>
+        <app-media-settings *ngIf="activeTab === 'media'"></app-media-settings>
+        <app-social-settings *ngIf="activeTab === 'social'"></app-social-settings>
+    </section>
+</div>

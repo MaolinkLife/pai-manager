@@ -13,21 +13,8 @@ import { ConfigService } from './core/services/config.service';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { MemoryModalComponent } from './layout/components/modals/memory-modal/memory-modal.component';
 import { MainModalComponent } from './layout/components/modals/main-modal/main-modal.component';
-import { LorebookComponent } from './layout/components/modals/main-modal/lorebook/lorebook.component';
-import { VoiceSettingsComponent } from './layout/components/modals/main-modal/voice-settings/voice-settings.component';
-import { AudioSettingsComponent } from './layout/components/modals/main-modal/audio-settings/audio-settings.component';
-import { VisionSettingsComponent } from './layout/components/modals/main-modal/vision-settings/vision-settings.component';
-import { RagSettingsComponent } from './layout/components/modals/main-modal/rag-settings/rag-settings.component';
-import { AnalyzerSettingsComponent } from './layout/components/modals/main-modal/analyzer-settings/analyzer-settings.component';
-import { MoralSettingsComponent } from './layout/components/modals/main-modal/moral-settings/moral-settings.component';
-import { GenerationSettingsComponent } from './layout/components/modals/main-modal/generation-settings/generation-settings.component';
+import { SettingsComponentsModule } from './layout/components/modals/main-modal/settings-components.module';
 import { MonitorSelectionModalComponent } from './layout/components/modals/monitor-selection-modal/monitor-selection-modal.component';
-import { CoreSettingsComponent } from './layout/components/modals/main-modal/core-settings/core-settings.component';
-import { SystemSettingsComponent } from './layout/components/modals/main-modal/system-settings/system-settings.component';
-import { SocialSettingsComponent } from './layout/components/modals/main-modal/social-settings/social-settings.component';
-import { MediaSettingsComponent } from './layout/components/modals/main-modal/media-settings/media-settings.component';
-import { PersonaSettingsComponent } from './layout/components/modals/main-modal/persona-settings/persona-settings.component';
-import { ComplianceSettingsComponent } from './layout/components/modals/main-modal/compliance-settings/compliance-settings.component';
 import { AiEntityVisualizerComponent } from './layout/components/ai-entity-visualizer/ai-entity-visualizer.component';
 import { AuthInterceptor } from './core/interceptors/auth.interceptor';
 
@@ -39,26 +26,13 @@ import { AuthInterceptor } from './core/interceptors/auth.interceptor';
         LayoutComponent,
         MemoryModalComponent,
         MainModalComponent,
-        LorebookComponent,
-        VoiceSettingsComponent,
-        VisionSettingsComponent,
-        AudioSettingsComponent,
-        RagSettingsComponent,
-        AnalyzerSettingsComponent,
-        MoralSettingsComponent,
-        GenerationSettingsComponent,
-        SocialSettingsComponent,
-        MediaSettingsComponent,
-        PersonaSettingsComponent,
-        ComplianceSettingsComponent,
         MonitorSelectionModalComponent,
-        CoreSettingsComponent,
-        SystemSettingsComponent,
         AiEntityVisualizerComponent,
     ],
     bootstrap: [AppComponent], imports: [BrowserModule,
         AppRoutingModule,
         SharedModule,
+        SettingsComponentsModule,
         BrowserAnimationsModule], providers: [ThemeService, ConfigService, provideHttpClient(withInterceptorsFromDi()), {
             provide: HTTP_INTERCEPTORS,
             useClass: AuthInterceptor,

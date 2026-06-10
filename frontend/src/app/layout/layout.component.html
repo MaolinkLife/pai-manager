@@ -43,6 +43,10 @@
             <button *ngIf="!anonymousMode" class="icon-button" [routerLink]="['debug']" routerLinkActive="active" [attr.data-tooltip]="t('navigation.debug')" [attr.aria-label]="t('navigation.debug')">
                 <app-custom-svg name="bug" [size]="20"></app-custom-svg>
             </button>
+
+            <button *ngIf="!anonymousMode && canManageSettings()" class="icon-button" [routerLink]="['settings']" routerLinkActive="active" [attr.data-tooltip]="t('navigation.settings')" [attr.aria-label]="t('navigation.settings')">
+                <app-custom-svg name="tools" [size]="20"></app-custom-svg>
+            </button>
         </div>
 
         <div class="bottom-button">
