@@ -52,6 +52,104 @@
         </div>
     </section>
 
+    <section class="pull-card hf-card">
+        <h3>{{ "settingsPage.models.hfTitle" | translate }}</h3>
+        <div class="pull-form">
+            <app-ui-input
+                type="text"
+                [placeholder]="'settingsPage.models.hfPlaceholder' | translate"
+                [(ngModel)]="hfQuery"
+                (keydown.enter)="searchHf()"
+            ></app-ui-input>
+            <app-ui-button
+                [disabled]="hfQuery.trim().length < 2 || hfSearching"
+                [loading]="hfSearching"
+                (pressed)="searchHf()"
+            >
+                {{ "settingsPage.models.hfSearch" | translate }}
+            </app-ui-button>
+        </div>
+        <div class="pull-hint">{{ "settingsPage.models.hfHint" | translate }}</div>
+
+        <div class="hf-results" *ngIf="hfResults.length">
+            <ng-container *ngFor="let result of hfResults; trackBy: trackByHfResult">
+                <button
+                    type="button"
+                    class="hf-result"
+                    [class.expanded]="hfSelectedRepo === result.repo_id"
+                    (click)="selectHfRepo(result.repo_id)"
+                >
+                    <span class="hf-result-name">
+                        {{ result.repo_id }}
+                        <span class="hf-gated" *ngIf="result.gated">{{ "settingsPage.models.hfGated" | translate }}</span>
+                    </span>
+                    <span class="hf-result-meta">
+                        ↓ {{ formatDownloads(result.downloads) }} · ♥ {{ formatDownloads(result.likes) }}
+                    </span>
+                </button>
+
+                <div class="hf-files" *ngIf="hfSelectedRepo === result.repo_id">
+                    <div class="hf-files-loading" *ngIf="hfFilesLoading">{{ "settingsPage.models.loading" | translate }}</div>
+                    <div class="hf-files-error" *ngIf="hfFilesError">{{ hfFilesError }}</div>
+                    <div class="hf-files-empty" *ngIf="!hfFilesLoading && !hfFilesError && !hfFiles.length">
+                        {{ "settingsPage.models.hfNoFiles" | translate }}
+                    </div>
+                    <div class="hf-file" *ngFor="let file of hfFiles; trackBy: trackByHfFile">
+                        <div class="hf-file-main">
+                            <span class="hf-file-name" [title]="file.path">{{ hfFileName(file.path) }}</span>
+                            <span class="hf-file-size">{{ formatSize(file.size) }}</span>
+                        </div>
+                        <div class="hf-file-actions">
+                            <app-ui-select
+                                [options]="hfCategoryOptions"
+                                [ngModel]="hfFileCategories[file.path]"
+                                (ngModelChange)="hfFileCategories[file.path] = $event"
+                            ></app-ui-select>
+                            <app-ui-button
+                                size="sm"
+                                [disabled]="isHfFileDownloading(file)"
+                                (pressed)="hfDownloadFile(file)"
+                            >
+                                {{ "settingsPage.models.hfDownload" | translate }}
+                            </app-ui-button>
+                        </div>
+                    </div>
+                </div>
+            </ng-container>
+        </div>
+
+        <div class="pull-list" *ngIf="hfDownloads.length">
+            <div class="pull-item" *ngFor="let item of hfDownloads; trackBy: trackByHfDownload">
+                <div class="pull-item-head">
+                    <span class="pull-item-name" [title]="item.repo_id + '/' + item.path">
+                        {{ hfFileName(item.path) }}
+                        <span class="hf-download-category">→ {{ item.category }}</span>
+                    </span>
+                    <span class="pull-item-status" [class.error]="item.error">
+                        {{ item.error ? item.error : item.status }}
+                    </span>
+                </div>
+                <div class="pull-progress" *ngIf="!item.done">
+                    <div class="pull-progress-bar">
+                        <div class="pull-progress-fill" [style.width.%]="hfPercent(item)"></div>
+                    </div>
+                    <span class="pull-progress-meta">
+                        {{ formatSize(item.completed) }} / {{ formatSize(item.total) }}
+                        <ng-container *ngIf="item.total"> · {{ hfPercent(item) }}%</ng-container>
+                    </span>
+                </div>
+                <div class="pull-item-actions">
+                    <button type="button" class="link-btn" *ngIf="!item.done" (click)="cancelHfDownload(item.id)">
+                        {{ "settingsPage.models.cancel" | translate }}
+                    </button>
+                    <button type="button" class="link-btn" *ngIf="item.done" (click)="dismissHfDownload(item.id)">
+                        {{ "settingsPage.models.dismiss" | translate }}
+                    </button>
+                </div>
+            </div>
+        </div>
+    </section>
+
     <section class="list-card">
         <div class="list-head">
             <h3>{{ "settingsPage.models.installedTitle" | translate }}</h3>

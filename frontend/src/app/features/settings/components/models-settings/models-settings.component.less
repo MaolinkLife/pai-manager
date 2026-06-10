@@ -120,6 +120,126 @@
     justify-content: flex-end;
 }
 
+.hf-results {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-height: 420px;
+    overflow-y: auto;
+}
+
+.hf-result {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    background: transparent;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    padding: 9px 12px;
+    cursor: pointer;
+    font-family: var(--font-family);
+    transition: border-color 0.15s ease;
+
+    &:hover,
+    &.expanded {
+        border-color: var(--color-accent);
+    }
+}
+
+.hf-result-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-text-active);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.hf-gated {
+    font-size: 10px;
+    font-weight: 800;
+    text-transform: uppercase;
+    color: #ff9a4d;
+    margin-left: 6px;
+}
+
+.hf-result-meta {
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+    color: color-mix(in srgb, var(--color-text) 60%, transparent);
+    white-space: nowrap;
+}
+
+.hf-files {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px 12px;
+    border: 1px dashed color-mix(in srgb, var(--color-border) 80%, transparent);
+    border-radius: var(--radius);
+}
+
+.hf-files-loading,
+.hf-files-empty {
+    font-size: 12px;
+    color: color-mix(in srgb, var(--color-text) 60%, transparent);
+}
+
+.hf-files-error {
+    font-size: 12px;
+    color: #ff5b62;
+}
+
+.hf-file {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.hf-file-main {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    flex: 1 1 220px;
+}
+
+.hf-file-name {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--color-text-active);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.hf-file-size {
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+    color: color-mix(in srgb, var(--color-text) 60%, transparent);
+}
+
+.hf-file-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+
+    app-ui-select {
+        min-width: 210px;
+    }
+}
+
+.hf-download-category {
+    font-size: 10.5px;
+    font-weight: 500;
+    color: color-mix(in srgb, var(--color-text) 55%, transparent);
+    margin-left: 6px;
+}
+
 .list-head {
     display: flex;
     align-items: center;

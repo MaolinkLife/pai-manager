@@ -53,6 +53,34 @@ export interface OllamaRuntimeModelsResponse {
     message?: string;
 }
 
+export interface HfSearchResult {
+    repo_id: string;
+    downloads: number;
+    likes: number;
+    updated_at?: string | null;
+    tags: string[];
+    gated?: boolean;
+}
+
+export interface HfRepoFile {
+    path: string;
+    size: number;
+    suggested_category: string;
+}
+
+export interface HfDownloadState {
+    type?: string;
+    id: string;
+    repo_id: string;
+    path: string;
+    category: string;
+    status: string;
+    completed: number;
+    total: number;
+    done: boolean;
+    error: string | null;
+}
+
 export interface OllamaPullState {
     type?: string;
     model: string;
@@ -166,6 +194,7 @@ export class ApiService {
     private apiUrl = `${environment.apiBaseUrl}/ollama`;
     private resourcesApiUrl = `${environment.apiBaseUrl}/resources`;
     private sandboxApiUrl = `${environment.apiBaseUrl}/sandbox`;
+    private hfApiUrl = `${environment.apiBaseUrl}/hf`;
 
     constructor(private http: HttpClient) { }
 
@@ -225,6 +254,45 @@ export class ApiService {
     deleteOllamaModel$(model: string): Observable<{ status: string; message?: string } | null> {
         return this.http
             .post<{ status: string; message?: string }>(`${this.apiUrl}/models/delete`, { model })
+            .pipe(catchError((_err) => of(null)));
+    }
+
+    searchHfModels$(query: string, limit = 20): Observable<HfSearchResult[]> {
+        const params = `q=${encodeURIComponent(query)}&limit=${limit}`;
+        return this.http
+            .get<{ status: string; results: HfSearchResult[] }>(`${this.hfApiUrl}/search?${params}`)
+            .pipe(
+                map((response) => (Array.isArray(response?.results) ? response.results : [])),
+                catchError((_err) => of([]))
+            );
+    }
+
+    getHfRepoFiles$(repo: string): Observable<{ status: string; message?: string; files: HfRepoFile[] } | null> {
+        return this.http
+            .get<{ status: string; message?: string; files: HfRepoFile[] }>(
+                `${this.hfApiUrl}/files?repo=${encodeURIComponent(repo)}`
+            )
+            .pipe(catchError((_err) => of(null)));
+    }
+
+    getHfDownloads$(): Observable<HfDownloadState[]> {
+        return this.http
+            .get<{ status: string; downloads: HfDownloadState[] }>(`${this.hfApiUrl}/downloads`)
+            .pipe(
+                map((response) => (Array.isArray(response?.downloads) ? response.downloads : [])),
+                catchError((_err) => of([]))
+            );
+    }
+
+    startHfDownload$(repo: string, path: string, category: string): Observable<{ status: string; id?: string } | null> {
+        return this.http
+            .post<{ status: string; id?: string }>(`${this.hfApiUrl}/download`, { repo, path, category })
+            .pipe(catchError((_err) => of(null)));
+    }
+
+    cancelHfDownload$(id: string): Observable<{ status: string } | null> {
+        return this.http
+            .post<{ status: string }>(`${this.hfApiUrl}/download/cancel`, { id })
             .pipe(catchError((_err) => of(null)));
     }
 

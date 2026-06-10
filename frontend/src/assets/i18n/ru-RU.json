@@ -407,7 +407,27 @@
             "deleteConfirmTitle": "Удалить модель?",
             "deleteConfirmText": "Модель будет удалена с диска:",
             "cancel": "Отмена",
-            "dismiss": "Скрыть"
+            "dismiss": "Скрыть",
+            "hfTitle": "Импорт с HuggingFace",
+            "hfPlaceholder": "поиск по hub: qwen gguf, flux, whisper...",
+            "hfSearch": "Найти",
+            "hfHint": "Файлы скачиваются в локальное хранилище моделей. Тип определяет каталог: GGUF — для llama.cpp и совместимых, чекпоинты — для генерации изображений, и т.д.",
+            "hfGated": "gated",
+            "hfNoFiles": "В репозитории нет подходящих файлов весов.",
+            "hfFilesError": "Не удалось получить список файлов",
+            "hfDownload": "Скачать",
+            "hfDownloaded": "Файл скачан",
+            "hfDownloadStartError": "Не удалось начать скачивание",
+            "hfCategories": {
+                "gguf": "GGUF (текст: llama.cpp и др.)",
+                "image_checkpoint": "Диффузия: чекпоинт",
+                "image_lora": "Диффузия: LoRA",
+                "image_vae": "Диффузия: VAE",
+                "stt": "STT (распознавание речи)",
+                "tts": "TTS (синтез речи)",
+                "vision": "Vision",
+                "rvc": "RVC"
+            }
         },
         "connections": {
             "title": "Подключения",

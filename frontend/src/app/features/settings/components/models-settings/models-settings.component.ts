@@ -2,6 +2,9 @@ import { ChangeDetectorRef, Component, DestroyRef, OnInit, inject } from '@angul
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import {
     ApiService,
+    HfDownloadState,
+    HfRepoFile,
+    HfSearchResult,
     OllamaPullState,
     OllamaRuntimeModel,
 } from '../../../../core/services/api.service';
@@ -33,6 +36,21 @@ export class ModelsSettingsComponent implements OnInit {
     confirmDeleteModel: string | null = null;
     busyModels = new Set<string>();
 
+    hfQuery = '';
+    hfSearching = false;
+    hfResults: HfSearchResult[] = [];
+    hfSelectedRepo: string | null = null;
+    hfFiles: HfRepoFile[] = [];
+    hfFilesLoading = false;
+    hfFilesError = '';
+    hfDownloads: HfDownloadState[] = [];
+    hfFileCategories: Record<string, string> = {};
+
+    private readonly hfCategoryKeys = [
+        'gguf', 'image_checkpoint', 'image_lora', 'image_vae', 'stt', 'tts', 'vision', 'rvc',
+    ];
+    hfCategoryOptions: Array<{ label: string; value: string }> = [];
+
     constructor(
         private apiService: ApiService,
         private websocketService: WebsocketService,
@@ -43,8 +61,13 @@ export class ModelsSettingsComponent implements OnInit {
 
     ngOnInit(): void {
         this.localizationService.init();
+        this.hfCategoryOptions = this.hfCategoryKeys.map((key) => ({
+            label: this.t(`settingsPage.models.hfCategories.${key}`),
+            value: key,
+        }));
         this.refresh();
         this.loadPulls();
+        this.loadHfDownloads();
 
         this.websocketService.messages$
             .pipe(takeUntilDestroyed(this.destroyRef))
@@ -53,6 +76,8 @@ export class ModelsSettingsComponent implements OnInit {
                     const event = JSON.parse(raw);
                     if (event?.type === 'model_pull' && event?.model) {
                         this.applyPullEvent(event as OllamaPullState);
+                    } else if (event?.type === 'hf_download' && event?.id) {
+                        this.applyHfEvent(event as HfDownloadState);
                     }
                 } catch {
                     // ignore non-json ws payloads
@@ -201,6 +226,143 @@ export class ModelsSettingsComponent implements OnInit {
             this.pulls = pulls;
             this.cdr.markForCheck();
         });
+    }
+
+    searchHf(): void {
+        const query = this.hfQuery.trim();
+        if (query.length < 2 || this.hfSearching) {
+            return;
+        }
+        this.hfSearching = true;
+        this.hfSelectedRepo = null;
+        this.hfFiles = [];
+        this.apiService.searchHfModels$(query).subscribe((results) => {
+            this.hfResults = results;
+            this.hfSearching = false;
+            this.cdr.markForCheck();
+        });
+    }
+
+    selectHfRepo(repo: string): void {
+        if (this.hfSelectedRepo === repo) {
+            this.hfSelectedRepo = null;
+            this.hfFiles = [];
+            return;
+        }
+        this.hfSelectedRepo = repo;
+        this.hfFiles = [];
+        this.hfFilesError = '';
+        this.hfFilesLoading = true;
+        this.apiService.getHfRepoFiles$(repo).subscribe((response) => {
+            this.hfFilesLoading = false;
+            if (!response || response.status !== 'ok') {
+                this.hfFilesError = response?.message || this.t('settingsPage.models.hfFilesError');
+            } else {
+                this.hfFiles = response.files;
+                for (const file of this.hfFiles) {
+                    this.hfFileCategories[file.path] = file.suggested_category;
+                }
+            }
+            this.cdr.markForCheck();
+        });
+    }
+
+    hfDownloadFile(file: HfRepoFile): void {
+        const repo = this.hfSelectedRepo;
+        if (!repo) {
+            return;
+        }
+        const category = this.hfFileCategories[file.path] || file.suggested_category;
+        this.apiService.startHfDownload$(repo, file.path, category).subscribe((response) => {
+            if (!response) {
+                this.notificationService.open({
+                    type: 'error',
+                    message: this.t('settingsPage.models.hfDownloadStartError'),
+                    autoClose: true,
+                });
+            } else {
+                this.loadHfDownloads();
+            }
+            this.cdr.markForCheck();
+        });
+    }
+
+    cancelHfDownload(id: string): void {
+        this.apiService.cancelHfDownload$(id).subscribe(() => this.loadHfDownloads());
+    }
+
+    dismissHfDownload(id: string): void {
+        this.hfDownloads = this.hfDownloads.filter((item) => item.id !== id);
+        this.cdr.markForCheck();
+    }
+
+    isHfFileDownloading(file: HfRepoFile): boolean {
+        const repo = this.hfSelectedRepo;
+        if (!repo) {
+            return false;
+        }
+        const key = `${repo}::${file.path}`;
+        return this.hfDownloads.some((item) => item.id === key && !item.done);
+    }
+
+    hfPercent(item: HfDownloadState): number {
+        if (!item.total) {
+            return 0;
+        }
+        return Math.min(100, Math.round((item.completed / item.total) * 100));
+    }
+
+    hfFileName(path: string): string {
+        const parts = path.split('/');
+        return parts[parts.length - 1] || path;
+    }
+
+    trackByHfResult(_index: number, item: HfSearchResult): string {
+        return item.repo_id;
+    }
+
+    trackByHfFile(_index: number, item: HfRepoFile): string {
+        return item.path;
+    }
+
+    trackByHfDownload(_index: number, item: HfDownloadState): string {
+        return item.id;
+    }
+
+    formatDownloads(count: number): string {
+        if (count >= 1_000_000) {
+            return `${(count / 1_000_000).toFixed(1)}M`;
+        }
+        if (count >= 1_000) {
+            return `${(count / 1_000).toFixed(0)}k`;
+        }
+        return String(count);
+    }
+
+    private loadHfDownloads(): void {
+        this.apiService.getHfDownloads$().subscribe((downloads) => {
+            this.hfDownloads = downloads;
+            this.cdr.markForCheck();
+        });
+    }
+
+    private applyHfEvent(event: HfDownloadState): void {
+        const index = this.hfDownloads.findIndex((item) => item.id === event.id);
+        if (index === -1) {
+            this.hfDownloads = [...this.hfDownloads, event];
+        } else {
+            const next = [...this.hfDownloads];
+            next[index] = { ...next[index], ...event };
+            this.hfDownloads = next;
+        }
+        if (event.done && event.status === 'success') {
+            this.notificationService.open({
+                type: 'success',
+                message: `${this.t('settingsPage.models.hfDownloaded')}: ${this.hfFileName(event.path)}`,
+                autoClose: true,
+            });
+        }
+        this.cdr.markForCheck();
     }
 
     private applyPullEvent(event: OllamaPullState): void {

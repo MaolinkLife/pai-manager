@@ -406,7 +406,27 @@
             "deleteConfirmTitle": "Delete model?",
             "deleteConfirmText": "The model will be removed from disk:",
             "cancel": "Cancel",
-            "dismiss": "Dismiss"
+            "dismiss": "Dismiss",
+            "hfTitle": "Import from HuggingFace",
+            "hfPlaceholder": "search the hub: qwen gguf, flux, whisper...",
+            "hfSearch": "Search",
+            "hfHint": "Files are downloaded into the local model storage. The type picks the directory: GGUF for llama.cpp and compatible runtimes, checkpoints for image generation, etc.",
+            "hfGated": "gated",
+            "hfNoFiles": "No suitable weight files in this repository.",
+            "hfFilesError": "Failed to fetch the file list",
+            "hfDownload": "Download",
+            "hfDownloaded": "File downloaded",
+            "hfDownloadStartError": "Failed to start the download",
+            "hfCategories": {
+                "gguf": "GGUF (text: llama.cpp and others)",
+                "image_checkpoint": "Diffusion: checkpoint",
+                "image_lora": "Diffusion: LoRA",
+                "image_vae": "Diffusion: VAE",
+                "stt": "STT (speech recognition)",
+                "tts": "TTS (speech synthesis)",
+                "vision": "Vision",
+                "rvc": "RVC"
+            }
         },
         "connections": {
             "title": "Connections",
