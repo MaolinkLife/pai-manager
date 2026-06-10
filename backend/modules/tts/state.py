@@ -22,6 +22,36 @@ class VoiceStateSnapshot:
     reason: Optional[str]
 
 
+def _broadcast_voice_state(stage: str, reason: Optional[str]) -> None:
+    """Fire-and-forget WS push of the voice stage onto the uvicorn loop.
+
+    Transitions happen in TTS worker threads, so the coroutine is scheduled
+    via the main-loop registry; before the loop is registered (boot window)
+    the event is silently dropped.
+    """
+    try:
+        import asyncio
+        import json
+
+        from core.event_loop_registry import get_main_loop
+        from core.websocket_manager import manager
+
+        loop = get_main_loop()
+        if loop is None:
+            return
+        payload = {
+            "type": "voice_state",
+            "stage": stage,
+            "reason": reason,
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+        asyncio.run_coroutine_threadsafe(
+            manager.send_message(json.dumps(payload, ensure_ascii=False)), loop
+        )
+    except Exception:
+        pass
+
+
 class VoiceStateController:
     def __init__(self) -> None:
         self._lock = threading.Lock()
@@ -43,6 +73,7 @@ class VoiceStateController:
             AuditStatus.INFO,
             details={"stage": stage.value, "reason": reason},
         )
+        _broadcast_voice_state(stage.value, reason)
 
     def enter_waiting(self, reason: Optional[str] = None) -> None:
         self._set_stage(VoiceStage.WAITING, reason)

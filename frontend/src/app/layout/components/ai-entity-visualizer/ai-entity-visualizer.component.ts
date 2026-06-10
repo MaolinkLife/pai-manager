@@ -10,6 +10,7 @@ import {
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { MoralDashboardState, MoralStateService } from '../../../core/services/moral-state.service';
+import { WebsocketService } from '../../../core/services/websocket.service';
 import { LocalizationService } from '../../../shared/pipes/translation/localization.service';
 
 @Component({
@@ -32,6 +33,7 @@ export class AiEntityVisualizerComponent implements OnInit, OnDestroy {
 
     readonly state = signal<MoralDashboardState>(this.fallbackState);
     readonly tick = signal(0);
+    readonly speaking = signal(false);
 
     readonly particles = Array.from({ length: 15 }, () => ({
         x: Math.random() * 100,
@@ -49,6 +51,21 @@ export class AiEntityVisualizerComponent implements OnInit, OnDestroy {
         this.tick();
         const time = performance.now() / 5000;
         return Math.sin(time) * 4;
+    });
+
+    // Pseudo-amplitude while TTS is speaking: layered sines read as natural
+    // speech cadence (the backend plays audio itself, so no analyser node).
+    readonly talk = computed(() => {
+        this.tick();
+        if (!this.speaking()) {
+            return 0;
+        }
+        const time = performance.now() / 1000;
+        const wave =
+            Math.sin(time * 9.7) * 0.5 +
+            Math.sin(time * 15.3 + 1.7) * 0.3 +
+            Math.sin(time * 23.1 + 0.6) * 0.2;
+        return (wave + 1) / 2;
     });
 
     readonly entityColor = computed(() => {
@@ -77,9 +94,11 @@ export class AiEntityVisualizerComponent implements OnInit, OnDestroy {
     );
 
     private animationId: number | null = null;
+    private speakingGuardId: number | null = null;
 
     constructor(
         private moralStateService: MoralStateService,
+        private websocketService: WebsocketService,
         private localizationService: LocalizationService
     ) {}
 
@@ -94,6 +113,19 @@ export class AiEntityVisualizerComponent implements OnInit, OnDestroy {
                 }
             });
 
+        this.websocketService.messages$
+            .pipe(takeUntilDestroyed(this.destroyRef))
+            .subscribe((raw) => {
+                try {
+                    const event = JSON.parse(raw);
+                    if (event?.type === 'voice_state') {
+                        this.setSpeaking(event.stage === 'speaking');
+                    }
+                } catch {
+                    // ignore non-json ws payloads
+                }
+            });
+
         const animate = () => {
             this.tick.update((v) => v + 1);
             this.animationId = window.setTimeout(animate, 80);
@@ -105,6 +137,26 @@ export class AiEntityVisualizerComponent implements OnInit, OnDestroy {
         if (this.animationId !== null) {
             window.clearTimeout(this.animationId);
             this.animationId = null;
+        }
+        if (this.speakingGuardId !== null) {
+            window.clearTimeout(this.speakingGuardId);
+            this.speakingGuardId = null;
+        }
+    }
+
+    // A "listening" transition can be lost across a WS reconnect; the guard
+    // keeps the orb from pulsing forever on a stale "speaking" state.
+    private setSpeaking(value: boolean): void {
+        this.speaking.set(value);
+        if (this.speakingGuardId !== null) {
+            window.clearTimeout(this.speakingGuardId);
+            this.speakingGuardId = null;
+        }
+        if (value) {
+            this.speakingGuardId = window.setTimeout(() => {
+                this.speaking.set(false);
+                this.speakingGuardId = null;
+            }, 180_000);
         }
     }
 

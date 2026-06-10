@@ -1,4 +1,4 @@
-<div class="entity-wrap" [style.--entity-color]="entityColor()">
+<div class="entity-wrap" [class.speaking]="speaking()" [style.--entity-color]="entityColor()">
     <div class="panel-title">{{ "entityVisualizer.title" | translate }}</div>
     <div class="ambient" [style.background]="entityGlow()"></div>
 
@@ -10,7 +10,7 @@
             <circle
                 cx="100"
                 cy="100"
-                [attr.r]="80 + breath()"
+                [attr.r]="80 + breath() + (talk() * 4)"
                 fill="none"
                 [attr.stroke]="entityColor()"
                 stroke-width="0.5"
@@ -21,7 +21,7 @@
             <circle
                 cx="100"
                 cy="100"
-                [attr.r]="40 + (breath() * 2)"
+                [attr.r]="40 + (breath() * 2) + (talk() * 9)"
                 [attr.fill]="entityColor()"
                 class="center-orb"
             ></circle>

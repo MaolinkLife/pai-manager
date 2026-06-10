@@ -165,6 +165,36 @@
     animation: scan 8s linear infinite;
 }
 
+.entity-wrap.speaking {
+    .ambient {
+        opacity: 0.3;
+    }
+
+    .entity-svg {
+        filter: drop-shadow(0 0 36px color-mix(in srgb, var(--entity-color, var(--color-accent)) 45%, transparent));
+    }
+
+    // Short linear transitions: the talk pulse updates every tick and longer
+    // eased transitions smear it into a slow swell instead of speech cadence.
+    .outer-orb {
+        transition: all 0.12s linear;
+        opacity: 0.32;
+    }
+
+    .center-orb {
+        transition: all 0.12s linear;
+        opacity: 0.24;
+    }
+
+    .ring-one {
+        animation-duration: 8s;
+    }
+
+    .ring-two {
+        animation-duration: 12s;
+    }
+}
+
 @keyframes float {
     0%,
     100% {
