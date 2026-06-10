@@ -1587,12 +1587,14 @@ def _recover_empty_content_with_retries(
     options: dict,
     assistant_reasoning: str,
     mode: str,
-) -> tuple[str, str, str]:
+) -> tuple[str, str, str, dict]:
     """
     Recovery when provider produced only reasoning and empty visible content.
     Does not try to parse visible text from reasoning directly.
     Makes up to 2 strict retry attempts, then returns empty content.
-    Returns: (content, reasoning, provider)
+    Returns: (content, reasoning, provider, metadata) — metadata is the
+    successful retry's provider metadata (model/usage), so callers can keep
+    generation details intact when the recovered result replaces the stream.
     """
     attempts = 2
     prior_reasoning = (assistant_reasoning or "").strip()
@@ -1654,7 +1656,20 @@ def _recover_empty_content_with_retries(
             prior_reasoning = (parsed_reasoning or prior_reasoning).strip()
 
         if (recovered_content or "").strip():
-            return (recovered_content or "").strip(), (prior_reasoning or "").strip(), used_provider
+            recovered_metadata = dict(
+                result.metadata if isinstance(result.metadata, dict) else {}
+            )
+            # Provider metadata carries only the model; token counts live in
+            # the raw response — fold them in so generation details survive.
+            raw_usage = _extract_usage_metadata(getattr(result, "raw", None))
+            if raw_usage:
+                recovered_metadata.update(raw_usage)
+            return (
+                (recovered_content or "").strip(),
+                (prior_reasoning or "").strip(),
+                used_provider,
+                recovered_metadata,
+            )
 
     log_audit_entry(
         "conversation_empty_content_recovery_exhausted",
@@ -1662,7 +1677,7 @@ def _recover_empty_content_with_retries(
         AuditStatus.ERROR,
         details={"mode": mode, "attempts": attempts, "provider": used_provider},
     )
-    return "", (prior_reasoning or "").strip(), used_provider
+    return "", (prior_reasoning or "").strip(), used_provider, {}
 
 
 def _build_empty_content_recovery_messages(
@@ -1866,7 +1881,7 @@ async def generate_standard(
         assistant_content, assistant_reasoning = split_reasoning(assistant_raw)
     if not assistant_content:
         try:
-            recovered_content, recovered_reasoning, recovered_provider = _recover_empty_content_with_retries(
+            recovered_content, recovered_reasoning, recovered_provider, recovered_metadata = _recover_empty_content_with_retries(
                 chat_history=chat_history,
                 options=request_payload.options,
                 assistant_reasoning=assistant_reasoning,
@@ -1877,6 +1892,11 @@ async def generate_standard(
                 assistant_reasoning = recovered_reasoning or assistant_reasoning
                 if recovered_provider:
                     generate_result.provider = recovered_provider
+                if recovered_metadata and not (
+                    isinstance(generate_result.metadata, dict)
+                    and generate_result.metadata.get("model")
+                ):
+                    generate_result.metadata = recovered_metadata
                 log_audit_entry(
                     "conversation_standard_empty_content_recovered",
                     "[Conversation] Empty content recovered by retry regeneration.",
@@ -2676,7 +2696,7 @@ async def generate_stream(
         ).strip())
     if not assistant_content:
         try:
-            recovered_content, recovered_reasoning, recovered_provider = _recover_empty_content_with_retries(
+            recovered_content, recovered_reasoning, recovered_provider, recovered_metadata = _recover_empty_content_with_retries(
                 chat_history=chat_history,
                 options=request_payload.options,
                 assistant_reasoning=assistant_reasoning,
@@ -2687,6 +2707,14 @@ async def generate_stream(
                 assistant_reasoning = _trim_reasoning_for_storage(recovered_reasoning or assistant_reasoning)
                 if recovered_provider:
                     provider_used_stream = recovered_provider
+                # The recovered (non-streaming) result replaces the dead
+                # stream — carry its model/usage forward, otherwise the
+                # generation-details popup ends up empty for this message.
+                if recovered_metadata:
+                    if not isinstance(final_chunk_metadata, dict) or not final_chunk_metadata.get("model"):
+                        final_chunk_metadata = recovered_metadata
+                    if not _extract_usage_metadata(final_chunk_raw):
+                        final_chunk_raw = recovered_metadata
                 log_audit_entry(
                     "conversation_stream_response_empty_content_recovered",
                     "[Conversation] Empty content recovered by retry regeneration.",
@@ -2694,6 +2722,7 @@ async def generate_stream(
                     details={
                         "provider": provider_used_stream,
                         "reasoning_budget_exceeded": reasoning_budget_exceeded,
+                        "recovered_metadata_keys": sorted(recovered_metadata.keys()),
                     },
                 )
         except Exception as exc:

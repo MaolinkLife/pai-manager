@@ -106,7 +106,7 @@
                 class="compliance-badge"
                 *ngFor="let badge of complianceBadges; trackBy: trackByBadge"
                 [ngClass]="'compliance-badge--' + badge.state"
-                [attr.title]="badge.tooltip"
+                [attr.data-tooltip]="badge.tooltip"
             >
                 <span class="compliance-badge__icon">{{ badge.icon }}</span>
                 <span class="compliance-badge__label" *ngIf="badge.label">{{ badge.label }}</span>

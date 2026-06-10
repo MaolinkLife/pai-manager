@@ -89,8 +89,8 @@ export class ChatMessageComponent {
                 label: `${pct}%`,
                 state: ok ? 'ok' : 'warn',
                 tooltip: ok
-                    ? `Validator: compliance ${pct}%`
-                    : `Validator: compliance ${pct}% — ${violations || 'нарушения инструкций'}`,
+                    ? `Соответствие инструкциям: ${pct}%`
+                    : `Соответствие инструкциям: ${pct}% — ${violations || 'нарушения инструкций'}`,
             });
         }
 
@@ -102,8 +102,8 @@ export class ChatMessageComponent {
                 label: c.languageGuard.detected || '',
                 state: ok ? 'ok' : 'warn',
                 tooltip: ok
-                    ? `Язык: ${c.languageGuard.detected} соответствует ${c.languageGuard.expected}`
-                    : `Язык: ответ на ${c.languageGuard.detected}, ожидался ${c.languageGuard.expected}`,
+                    ? `Язык ответа: ${c.languageGuard.detected} соответствует ${c.languageGuard.expected}`
+                    : `Язык ответа: ${c.languageGuard.detected}, ожидался ${c.languageGuard.expected}`,
             });
         }
 
@@ -116,8 +116,8 @@ export class ChatMessageComponent {
                 label: `${pct}%`,
                 state: low ? 'warn' : 'ok',
                 tooltip: low
-                    ? `Confidence: ${pct}% — ниже порога, ответ может быть неточным`
-                    : `Confidence: ${pct}%`,
+                    ? `Уверенность в ответе: ${pct}% — ниже порога, ответ может быть неточным`
+                    : `Уверенность в ответе: ${pct}%`,
             });
         }
 
@@ -130,8 +130,8 @@ export class ChatMessageComponent {
                 label: ok ? '' : 'unverified',
                 state: ok ? 'ok' : 'warn',
                 tooltip: ok
-                    ? `Факты подтверждены памятью (${c.factuality.sourcesFound} источн.)`
-                    : `Факты не найдены в памяти: ${claims || 'нет подтверждения'}`,
+                    ? `Фактическая опора: подтверждено памятью (${c.factuality.sourcesFound} источн.)`
+                    : `Фактическая опора: не найдена в памяти — ${claims || 'нет подтверждения'}`,
             });
         }
 

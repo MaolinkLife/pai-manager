@@ -455,6 +455,50 @@
     color: var(--color-text-secondary);
     cursor: default;
     user-select: none;
+    position: relative;
+
+    &[data-tooltip]::after {
+        content: attr(data-tooltip);
+        position: absolute;
+        left: 50%;
+        bottom: calc(100% + 10px);
+        transform: translateX(-50%) translateY(4px);
+        opacity: 0;
+        pointer-events: none;
+        z-index: 60;
+        white-space: normal;
+        width: max-content;
+        max-width: 320px;
+        font-size: 11px;
+        line-height: 1.35;
+        padding: 7px 9px;
+        border-radius: 8px;
+        border: 1px solid fade(@color-border, 90%);
+        background: color-mix(in srgb, var(--color-surface) 96%, #000);
+        color: var(--color-text-active);
+        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+        transition: opacity 0.15s ease, transform 0.15s ease;
+    }
+
+    &[data-tooltip]::before {
+        content: "";
+        position: absolute;
+        left: 50%;
+        bottom: calc(100% + 2px);
+        transform: translateX(-50%) translateY(4px);
+        opacity: 0;
+        pointer-events: none;
+        z-index: 60;
+        border: 5px solid transparent;
+        border-top-color: fade(@color-border, 90%);
+        transition: opacity 0.15s ease, transform 0.15s ease;
+    }
+
+    &[data-tooltip]:hover::after,
+    &[data-tooltip]:hover::before {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+    }
 
     &--ok {
         border-color: color-mix(in srgb, var(--color-accent) 45%, transparent);
