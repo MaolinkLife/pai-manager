@@ -83,7 +83,7 @@
                         <span>{{ "matrix.trigger" | translate }}</span>
                         <strong>{{ affectiveTrigger }}</strong>
                     </div>
-                    <div class="data-row" *ngFor="let item of influenceEntries">
+                    <div class="data-row" *ngFor="let item of influenceEntries; trackBy: trackByInfluence">
                         <span>{{ ('matrix.influence.' + item.key) | translate }}</span>
                         <strong>{{ item.value }}</strong>
                     </div>
