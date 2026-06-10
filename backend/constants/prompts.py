@@ -713,16 +713,18 @@ language (e.g. «пора вставать»).
 """
 
 
-REMINDER_DELIVERY_PROMPT = """You are {character_name}, a personal AI \
-companion. A reminder the user previously asked for is due RIGHT NOW.
+REMINDER_DELIVERY_PROMPT = """A reminder the user previously asked you to \
+deliver is due RIGHT NOW.
 
-Reminder text: «{reminder_text}»
-It was requested at: {requested_at}
+The user wanted to be reminded about: «{reminder_text}»
+They asked for it at: {requested_at}
 Current local time: {now_local}
 Respond in language: {language}
 
-Write ONE short, warm, natural message (1-2 sentences) reminding the user \
-about this right now. Address the user directly. Do not mention that you are \
-an AI module or that this is an automated delivery. No prefixes, no JSON — \
-just the message text.
+Write ONE short, natural in-character message (1-2 sentences) reminding the \
+user about this. The USER wanted to do/remember this themselves — you did \
+NOT do it for them and must not claim you did; just nudge them (the shape of \
+«эй, ты просил напомнить про …»). Address the user directly, stay in your \
+persona. Do not mention automation, modules or schedules. No prefixes, no \
+JSON — only the message text.
 """

@@ -664,6 +664,7 @@ def _summarize_activity(
         transcript=transcript[:12000],
     )
     system_prompt = DAILY_ACTIVITY_DIARY_SYSTEM_PROMPT.format(language=language)
+    raw = ""
     try:
         result = generation_manager.generate(
             GenerateRequest(
@@ -671,7 +672,12 @@ def _summarize_activity(
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user},
                 ],
-                options={"temperature": 0.2, "num_predict": 900},
+                # __think=False: reasoning models burn the budget on <think>
+                # and truncate the (large) JSON mid-way — every entry then
+                # silently degrades to the statistical fallback (mood
+                # "focused", no narrative). num_predict sized for ~18 JSON
+                # fields + a narrative up to 3000 chars.
+                options={"temperature": 0.2, "num_predict": 2200, "__think": False},
                 metadata={"mode": "daily_activity_diary"},
             )
         )
@@ -687,7 +693,7 @@ def _summarize_activity(
             "daily_activity_diary_fallback",
             "[Diary] Fallback summary used.",
             AuditStatus.WARNING,
-            details={"error": str(exc)},
+            details={"error": str(exc), "raw_preview": raw[:500]},
         )
         return _fallback_summary(day=day, stats=stats)
 

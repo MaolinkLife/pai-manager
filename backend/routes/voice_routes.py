@@ -396,19 +396,45 @@ async def stop_record(request: Request):
         user_message["actor_user_uuid"] = actor_user_uuid
     interaction_policy = resolve_interaction_policy(actor_user_uuid)
 
-    decision_context = await decision_layer.process_message(user_message, None)
-    decision_context.pop("raw_media", None)
-
     async def push_ws(msg):
         await manager.send_message(json.dumps(msg, ensure_ascii=False))
 
-    await generate_standard(
-        decision_context,
-        [user_message],
-        user_message,
-        emit_ws_fn=push_ws,
-        store=interaction_policy.can_affect_global_memory,
+    # Show the recognised message in the chat right away. generate_standard
+    # re-emits the same id later — the frontend patches it, no duplicate.
+    await push_ws(
+        {
+            "type": "message",
+            "role": "user",
+            "content": user_message.get("content", ""),
+            "id": user_message.get("id"),
+            "timestamp": user_message.get("timestamp"),
+        }
     )
+
+    async def _process_voice_turn() -> None:
+        try:
+            decision_context = await decision_layer.process_message(user_message, None)
+            decision_context.pop("raw_media", None)
+            await generate_standard(
+                decision_context,
+                [user_message],
+                user_message,
+                emit_ws_fn=push_ws,
+                store=interaction_policy.can_affect_global_memory,
+            )
+        except Exception as exc:
+            log_audit_entry(
+                "voice_record_processing_failed",
+                "[Voice] Background processing of recorded message failed.",
+                AuditStatus.ERROR,
+                details={"error": str(exc), "message_id": user_message.get("id")},
+            )
+
+    # HTTP returns as soon as the transcript is ready: the mic icon must go
+    # out when the user stops talking, not when the model finishes replying.
+    # The pipeline continues in the background; all chat updates arrive over
+    # the websocket.
+    asyncio.create_task(_process_voice_turn())
 
     return {
         "status": "ok",

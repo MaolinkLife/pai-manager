@@ -260,11 +260,17 @@ def maybe_capture_reminder(
 
 
 def _compose_delivery_text(reminder: Dict[str, Any]) -> str:
-    """One short in-character line via the generation LLM; canned fallback."""
+    """One short in-character line via the generation LLM; canned fallback.
+
+    The character's full persona prompt rides along as the first system
+    message — without it the model produced generic out-of-character
+    "assistant" lines (wrong voice, even wrong grammatical gender).
+    """
     meta = reminder.get("meta") or {}
     fallback = f"⏰ Напоминание: {reminder.get('text')}"
     try:
         from constants.prompts import REMINDER_DELIVERY_PROMPT
+        from core.prompt_loader import load_system_prompt
         from modules.generative.manager import generation_manager
         from modules.generative.types import GenerateRequest
 
@@ -280,9 +286,17 @@ def _compose_delivery_text(reminder: Dict[str, Any]) -> str:
             now_local=datetime.now(tz).strftime("%Y-%m-%d %H:%M"),
             language=str(meta.get("language") or "en-US"),
         )
+        messages = []
+        try:
+            persona = str(load_system_prompt() or "").strip()
+            if persona and not persona.startswith("[System Error]"):
+                messages.append({"role": "system", "content": persona})
+        except Exception:
+            pass
+        messages.append({"role": "system", "content": prompt})
         result = generation_manager.generate(
             GenerateRequest(
-                messages=[{"role": "system", "content": prompt}],
+                messages=messages,
                 options={"temperature": 0.6, "num_predict": 220, "__think": False},
                 metadata={"mode": "reminder_delivery"},
             )
