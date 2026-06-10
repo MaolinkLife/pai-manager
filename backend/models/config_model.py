@@ -131,6 +131,15 @@ class SelfWatcherConfig(BaseModel):
     llm_temperature: float = 0.5
 
 
+class AutoRerollConfig(BaseModel):
+    # Joint auto-reroll for Validator + LanguageGuard (sync path only).
+    # Off by default — each retry is a full generation-LLM call.
+    enabled: bool = False
+    max_attempts: int = 1
+    on_validator: bool = True
+    on_language_guard: bool = True
+
+
 class RemindersConfig(BaseModel):
     # §3.9-quinquies Tasks/Reminders. Capture hook in the decision layer
     # (regex gate + one extraction LLM call when matched); delivery via the

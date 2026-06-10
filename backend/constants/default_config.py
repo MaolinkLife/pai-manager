@@ -85,6 +85,19 @@ DEFAULT_CONFIG = {
         "enabled": True,
         "max_active": 50,
     },
+    "auto_reroll": {
+        # Joint auto-reroll for Validator (§3.5) + LanguageGuard (§3.5-bis):
+        # when a sync generation fails a gating check, regenerate with a
+        # corrective hint up to max_attempts times BEFORE persisting/sending.
+        # Off by default — each retry is a full generation-LLM call. The last
+        # candidate is kept even if still failing (violations stay visible in
+        # runtime_meta/DebugVault). Streaming is exempt: the original text is
+        # already on screen.
+        "enabled": False,
+        "max_attempts": 1,
+        "on_validator": True,
+        "on_language_guard": True,
+    },
     "validator": {
         # Off by default — turning it on adds one LLM call per sync generation
         # (no streaming impact). Concept: Pai_Updated_Concept.md > 3.5.

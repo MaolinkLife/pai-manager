@@ -829,6 +829,200 @@ def _run_compliance_pipeline(
     }
 
 
+def _reroll_reasons(
+    validator_payload: Dict[str, Any] | None,
+    language_guard_payload: Dict[str, Any] | None,
+) -> list[str]:
+    """Which gating checks demand a regeneration (config-gated per check)."""
+    reasons: list[str] = []
+    if bool(config_service.get_config_value("auto_reroll.on_validator", True)):
+        vp = validator_payload or {}
+        if vp and not vp.get("skipped") and vp.get("acceptable") is False:
+            reasons.append("validator")
+    if bool(config_service.get_config_value("auto_reroll.on_language_guard", True)):
+        lp = language_guard_payload or {}
+        if lp and not lp.get("skipped") and lp.get("ok") is False:
+            reasons.append("language_guard")
+    return reasons
+
+
+def _build_reroll_hint(
+    reasons: list[str],
+    validator_payload: Dict[str, Any] | None,
+    language_guard_payload: Dict[str, Any] | None,
+) -> str:
+    lines = [
+        "[QUALITY RETRY] Your previous reply (shown above) was rejected by "
+        "automatic checks. Write a corrected reply to the user's last message:"
+    ]
+    if "language_guard" in reasons:
+        lp = language_guard_payload or {}
+        lines.append(
+            f"- Wrong language: it came out as '{lp.get('detected')}'. "
+            f"Respond STRICTLY in {lp.get('expected')}."
+        )
+    if "validator" in reasons:
+        violations = [
+            str(item).strip()
+            for item in ((validator_payload or {}).get("violations") or [])
+            if str(item or "").strip()
+        ][:5]
+        if violations:
+            lines.append("- It violated instructions: " + "; ".join(violations))
+        else:
+            lines.append(
+                "- It did not comply with the system instructions; follow them precisely."
+            )
+    lines.append(
+        "Do not mention this correction or the previous attempt. "
+        "Reply naturally, once."
+    )
+    return "\n".join(lines)
+
+
+def _run_compliance_pipeline_with_reroll(
+    *,
+    decision_context: Dict[str, Any],
+    last_user_message: Dict[str, Any],
+    assistant_content: str,
+    assistant_reasoning: str,
+    provider: Any,
+    metadata: Dict[str, Any] | None,
+    history: list,
+    chat_history: list,
+    request_options: dict,
+) -> Dict[str, Any]:
+    """Sync-path compliance with auto-reroll (Validator + LanguageGuard).
+
+    Runs the two gating checks; when auto_reroll.enabled and a check fails,
+    regenerates with a corrective system hint (previous attempt included in
+    the retry context) up to auto_reroll.max_attempts times, re-checking each
+    candidate. The LAST candidate is kept even if still failing — its
+    violations stay visible in runtime_meta/DebugVault. The remaining checks
+    (confidence/factuality/self-watcher) run once, on the final text.
+
+    Streaming keeps the plain pipeline: the original text has already been
+    shown, swapping it post-stream would be jarring.
+
+    Returns {"compliance", "assistant_content", "assistant_reasoning",
+    "provider", "metadata", "reroll"} — reroll is None when no retry fired.
+    """
+    enabled = bool(config_service.get_config_value("auto_reroll.enabled", False))
+    try:
+        max_attempts = int(config_service.get_config_value("auto_reroll.max_attempts", 1) or 1)
+    except (TypeError, ValueError):
+        max_attempts = 1
+    max_attempts = max(0, min(max_attempts, 3))
+
+    attempts = 0
+    reroll_log: list[Dict[str, Any]] = []
+
+    while True:
+        validator_payload = _maybe_run_validator(
+            decision_context=decision_context,
+            last_user_message=last_user_message,
+            assistant_content=assistant_content,
+            provider=provider,
+            metadata=metadata,
+        )
+        language_guard_payload = _maybe_run_language_guard(
+            last_user_message=last_user_message,
+            assistant_content=assistant_content,
+            provider=provider,
+            metadata=metadata,
+        )
+        reasons = _reroll_reasons(validator_payload, language_guard_payload) if enabled else []
+        if not reasons or attempts >= max_attempts:
+            break
+
+        attempts += 1
+        hint = _build_reroll_hint(reasons, validator_payload, language_guard_payload)
+        retry_messages = list(chat_history) + [
+            {"role": "assistant", "content": assistant_content},
+            {"role": "system", "content": hint},
+        ]
+        try:
+            retry_result = generation_manager.generate(
+                GenerateRequest(
+                    messages=retry_messages,
+                    options=dict(request_options or {}),
+                    metadata={"mode": "compliance_reroll", "attempt": attempts},
+                )
+            )
+        except Exception as exc:
+            log_audit_entry(
+                "compliance_reroll_generation_failed",
+                "[Conversation] Compliance reroll generation failed — keeping previous output.",
+                AuditStatus.WARNING,
+                details={"attempt": attempts, "reasons": reasons, "error": str(exc)},
+            )
+            break
+
+        new_raw = normalize_output_text((retry_result.content or "").strip())
+        new_reasoning = (retry_result.reasoning or "").strip()
+        if new_reasoning:
+            new_content = new_raw
+        else:
+            new_content, new_reasoning = split_reasoning(new_raw)
+        if not new_content:
+            log_audit_entry(
+                "compliance_reroll_empty",
+                "[Conversation] Compliance reroll returned empty content — keeping previous output.",
+                AuditStatus.WARNING,
+                details={"attempt": attempts, "reasons": reasons},
+            )
+            break
+
+        reroll_log.append(
+            {
+                "attempt": attempts,
+                "reasons": reasons,
+                "previous_length": len(assistant_content),
+                "new_length": len(new_content),
+            }
+        )
+        log_audit_entry(
+            "compliance_reroll_applied",
+            "[Conversation] Compliance reroll produced a replacement candidate.",
+            AuditStatus.INFO,
+            details=reroll_log[-1],
+        )
+        assistant_content = new_content
+        assistant_reasoning = new_reasoning or assistant_reasoning
+        provider = retry_result.provider
+        metadata = retry_result.metadata if isinstance(retry_result.metadata, dict) else metadata
+
+    confidence_payload = _maybe_run_confidence(
+        last_user_message=last_user_message,
+        assistant_content=assistant_content,
+    )
+    factuality_payload = _maybe_run_factuality(
+        assistant_content=assistant_content,
+        confidence_payload=confidence_payload,
+    )
+    self_watcher_payload = _maybe_run_self_watcher(
+        decision_context=decision_context,
+        last_user_message=last_user_message,
+        history=history,
+    )
+    return {
+        "compliance": {
+            "validator": validator_payload,
+            "language_guard": language_guard_payload,
+            "confidence": confidence_payload,
+            "factuality": factuality_payload,
+            "self_watcher": self_watcher_payload,
+        },
+        "assistant_content": assistant_content,
+        "assistant_reasoning": assistant_reasoning,
+        "provider": provider,
+        "metadata": metadata,
+        "reroll": (
+            {"attempts": attempts, "log": reroll_log} if reroll_log else None
+        ),
+    }
+
+
 def _build_compliance_meta_update(
     compliance: Dict[str, Any],
     decision_context: Dict[str, Any],
@@ -1710,16 +1904,27 @@ async def generate_standard(
     print("[Generator] Обработан ответ провайдера (standard).")
 
     # Compliance pipeline (§3.5/3.5-bis/3.7/3.8/3.9). All opt-in, all
-    # never-raise. Output is never modified — results go to runtime_meta,
-    # audit log, DebugVault. Auto-reroll is a deferred follow-up.
-    compliance_results = _run_compliance_pipeline(
+    # never-raise. Sync path supports auto-reroll: when auto_reroll.enabled
+    # and Validator/LanguageGuard reject the output, the reply is regenerated
+    # with a corrective hint before anything is persisted or sent.
+    pipeline_outcome = _run_compliance_pipeline_with_reroll(
         decision_context=decision_context,
         last_user_message=last_user_message,
         assistant_content=assistant_content,
+        assistant_reasoning=assistant_reasoning,
         provider=generate_result.provider,
         metadata=generate_result.metadata,
         history=history,
+        chat_history=chat_history,
+        request_options=request_payload.options,
     )
+    assistant_content = pipeline_outcome["assistant_content"]
+    assistant_reasoning = pipeline_outcome["assistant_reasoning"]
+    generate_result.provider = pipeline_outcome["provider"]
+    if isinstance(pipeline_outcome["metadata"], dict):
+        generate_result.metadata = pipeline_outcome["metadata"]
+    compliance_reroll = pipeline_outcome["reroll"]
+    compliance_results = pipeline_outcome["compliance"]
     validator_payload = compliance_results["validator"]
     language_guard_payload = compliance_results["language_guard"]
     confidence_payload = compliance_results["confidence"]
@@ -1771,6 +1976,8 @@ async def generate_standard(
         # UI / downstream tools can read it without re-running anything.
         # merge=True keeps any upstream metadata intact.
         meta_update = _build_compliance_meta_update(compliance_results, decision_context)
+        if compliance_reroll:
+            meta_update["compliance_reroll"] = compliance_reroll
 
         if meta_update and getattr(assistant_message_obj, "id", None):
             try:
