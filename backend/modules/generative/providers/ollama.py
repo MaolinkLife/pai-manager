@@ -22,6 +22,12 @@ class OllamaGenerateProvider(GenerateProvider):
         "qwq",
         "reason",
         "thinking",
+        # qwen3 / qwen3.5 families think by default (the user's main model
+        # huihui_ai/qwen3.5-* was not detected and got hard-capped).
+        "qwen3",
+        "deepseek",
+        "magistral",
+        "gpt-oss",
     )
 
     def supports_streaming(self) -> bool:
@@ -84,18 +90,13 @@ class OllamaGenerateProvider(GenerateProvider):
         if not (enable_unbounded and self._looks_reasoning_model(model) and base_limit and base_limit > 0):
             return options, None
 
-        headroom_raw = config_service.get_config_value(
-            "generate_settings.reasoning_headroom_tokens",
-            512,
-        )
-        try:
-            headroom = max(0, min(int(headroom_raw), 2048))
-        except (TypeError, ValueError):
-            headroom = 512
-
-        expanded_limit = base_limit + headroom
-        options["num_predict"] = expanded_limit
-        options["max_tokens"] = expanded_limit
+        # Open-webui parity: reasoning models stop on their own EOS. Any hard
+        # num_predict cap means long thinking swallows the answer budget and
+        # the visible content comes out EMPTY (then the recovery retry adds
+        # ~a minute of latency). -1 = unlimited in ollama. The configured
+        # limit survives as a soft cap on the VISIBLE answer only.
+        options["num_predict"] = -1
+        options.pop("max_tokens", None)
         soft_output_limit = base_limit
         return options, soft_output_limit
 

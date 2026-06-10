@@ -352,10 +352,18 @@ def _audit_row_to_legacy_dict(row: Any) -> dict:
     status_legacy = severity.capitalize()  # info → Info, warning → Warning, etc.
 
     created_at = getattr(row, "created_at", None)
-    if hasattr(created_at, "isoformat"):
-        timestamp_iso = created_at.isoformat(timespec="seconds")
-    else:
-        timestamp_iso = str(created_at) if created_at else ""
+    # Column stores naive UTC; render in the user's timezone like chat
+    # history does — otherwise the log viewer looks «3 hours behind» and
+    # recent entries seem missing.
+    try:
+        from utils.time_utils import to_user_tz_iso
+
+        timestamp_iso = to_user_tz_iso(created_at) or ""
+    except Exception:
+        if hasattr(created_at, "isoformat"):
+            timestamp_iso = created_at.isoformat(timespec="seconds")
+        else:
+            timestamp_iso = str(created_at) if created_at else ""
 
     return {
         "event_type": getattr(row, "event_type", "") or "",

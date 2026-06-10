@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from models.models import DebugVaultEntry
 from modules.database.core import SessionLocal
+from utils.time_utils import to_user_tz_iso
 
 
 class DebugVaultRepository:
@@ -151,13 +152,13 @@ class DebugVaultRepository:
             "runtime_meta": _safe_load(row.runtime_meta, {}),
             "reviewed": bool(row.reviewed),
             "reviewed_at": (
-                row.reviewed_at.isoformat()
+                to_user_tz_iso(row.reviewed_at)
                 if hasattr(row.reviewed_at, "isoformat")
                 else None
             ),
             "reviewed_note": row.reviewed_note,
             "created_at": (
-                row.created_at.isoformat()
+                to_user_tz_iso(row.created_at)
                 if hasattr(row.created_at, "isoformat")
                 else None
             ),

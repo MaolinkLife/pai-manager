@@ -1,8 +1,16 @@
+:host {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+}
+
 .filters {
     display: flex;
     flex-direction: column;
     gap: 8px;
-    padding: 18px 24px 12px;
+    padding: 10px 24px 12px;
+    flex: 0 0 auto;
 
     .debug-session {
         font-size: 12px;
@@ -86,7 +94,10 @@
     box-sizing: border-box;
     overflow-x: hidden;
     overflow-y: auto;
-    max-height: calc(100vh - 220px);
+    // Single scroll container: the host is a fixed-height flex column, so
+    // only this list scrolls — no second page-level scrollbar.
+    flex: 1 1 auto;
+    min-height: 0;
 
     .log-loading {
         text-align: center;
@@ -269,7 +280,9 @@
 .debug-tabs {
     display: flex;
     gap: 8px;
+    padding: 18px 24px 0;
     margin-bottom: 14px;
+    flex: 0 0 auto;
 }
 
 .debug-tab {
