@@ -106,6 +106,11 @@ async def _run_pull(model: str) -> None:
     finally:
         _tasks.pop(model, None)
         await _broadcast(state)
+        # Cancelled and successful pulls leave the snapshot right away (the WS
+        # event already told any open page); errors stay visible until the
+        # same model is pulled again, so a refreshed page can still see them.
+        if state.get("status") in ("cancelled", "success"):
+            _states.pop(model, None)
         log_audit_entry(
             "ollama_model_pull_finished",
             "[Ollama] Model pull finished.",

@@ -390,7 +390,7 @@
             "pullTitle": "Pull a model",
             "pullPlaceholder": "e.g. qwen3.5:14b or llama3.2:3b",
             "pull": "Pull",
-            "pullHint": "A model name from the Ollama registry. Pulls run in the background — you can leave the page.",
+            "pullHint": "A name from the Ollama registry or hf.co/<repo>:<quant>. Pulls run on the server: leaving the page keeps the progress, and a cancelled pull resumes from the already-downloaded layers.",
             "pullStartError": "Failed to start the pull",
             "installedTitle": "Installed",
             "refresh": "Refresh list",
