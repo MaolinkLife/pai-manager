@@ -219,8 +219,12 @@ def get_reasoning_by_message_id(message_id: str):
     return history_service.get_reasoning_by_message_id(message_id)
 
 
-def update_history_runtime_meta(message_id: str, runtime_meta: dict) -> bool:
-    return history_service.update_history_runtime_meta(message_id, runtime_meta)
+def update_history_runtime_meta(
+    message_id: str, runtime_meta: dict, *, merge: bool = False
+) -> bool:
+    return history_service.update_history_runtime_meta(
+        message_id, runtime_meta, merge=merge
+    )
 
 
 def add_conversation_state_log(

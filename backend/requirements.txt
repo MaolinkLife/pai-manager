@@ -21,6 +21,8 @@ edge-tts
 gTTS>=2.5.0
 emoji>=2.0.0
 faster-whisper
+sherpa-onnx>=1.13.0
+faster-qwen3-tts>=0.2.6
 python-dateutil
 sentence-transformers
 openai

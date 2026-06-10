@@ -1,6 +1,6 @@
 # ==========================================================
 # Module: initialize.py
-# Purpose: Primary initialization of the LIM project before starting FastAPI.
+# Purpose: Primary initialization of the PAI project before starting FastAPI.
 # Responsible for preparing the environment: creating a config, generating user_id,
 # checking directories and basic values.
 #
@@ -31,7 +31,7 @@ from utils.structure_utils import get_label_from_file
 
 def run_startup_checks():
     """
-    The main method for initializing LIM.
+    The main method for initializing PAI.
     Runs when main.py starts, before the application starts.
     """
     # Local imports prevent cyclic import during bootstrap.
@@ -49,7 +49,7 @@ def run_startup_checks():
         get_text(
             "initialize.print_start",
             params={"label": label},
-            default="Starting LIM initialization...",
+            default="Starting PAI initialization...",
         )
     )
     log_audit_entry(
@@ -57,7 +57,7 @@ def run_startup_checks():
         msg=get_text(
             "initialize.startup_begin",
             params={"label": label},
-            default=f"{label} Starting LIM initialization",
+            default=f"{label} Starting PAI initialization",
         ),
         status=AuditStatus.SUCCESS,
         message_key="initialize.startup_begin",
@@ -238,10 +238,43 @@ def _run_short_memory_refresh_warmup() -> None:
 
 
 def shutdown_services():
-    """Shut down all services."""
-    # ... other shutdown routines ...
+    """Shut down all services.
 
-    # Stop the vision service
+    Called from main.app_shutdown. Designed to be robust: each step is wrapped
+    in its own try/except so a failure in one subsystem cannot leave the rest
+    holding GPU memory or file handles.
+    """
+
+    # Release generation providers — even max_speed / release_after_use=False
+    # profiles must let go of weights at shutdown.
+    try:
+        from modules.generative.manager import generation_manager
+        from modules.system.logger import log_audit_entry, AuditStatus
+
+        for name, provider in generation_manager._providers.items():
+            try:
+                provider.release_resources()
+            except Exception as exc:
+                log_audit_entry(
+                    event_type="shutdown_generative_release_error",
+                    msg="[Initialize] Не удалось освободить ресурсы генеративного провайдера на shutdown.",
+                    status=AuditStatus.WARNING,
+                    details={"provider": name, "error": str(exc)},
+                )
+        print("[Initialize] Генеративные провайдеры выгружены.")
+    except Exception as exc:
+        print(f"[Initialize] Ошибка выгрузки генеративных провайдеров: {exc}")
+
+    # Shut down the TTS subsystem (releases XTTS/RVC weights, stops worker threads).
+    try:
+        from modules.tts import service as tts_service
+
+        tts_service.shutdown()
+        print("[Initialize] TTS сервис остановлен.")
+    except Exception as exc:
+        print(f"[Initialize] Ошибка остановки TTS сервиса: {exc}")
+
+    # Stop the vision service.
     try:
         from modules.vision.service import VisionService
         vision_service = VisionService()

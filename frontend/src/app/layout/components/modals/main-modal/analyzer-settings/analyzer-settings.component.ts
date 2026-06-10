@@ -47,11 +47,13 @@ export class AnalyzerSettingsComponent implements OnInit {
             activeProvider: ['openrouter', Validators.required],
             fallbackOpenrouter: [false],
             fallbackOllama: [true],
+            fallbackLlamaCpp: [false],
             releaseAfterUse: [true],
             systemPrompt: [this.defaultAnalyzerSystemPrompt, Validators.required],
             providers: this.fb.group({
                 openrouter: this.createProviderGroup({}),
                 ollama: this.createProviderGroup({}),
+                llamaCpp: this.createLlamaCppGroup({}),
             })
         });
     }
@@ -62,6 +64,17 @@ export class AnalyzerSettingsComponent implements OnInit {
             model: [providerConfig.model || '', Validators.required],
             temperature: [providerConfig.temperature ?? 0.7, [Validators.min(0), Validators.max(2)]],
             maxTokens: [providerConfig.maxTokens ?? 1024, [Validators.min(1), Validators.max(4096)]],
+        });
+    }
+
+    private createLlamaCppGroup(cfg: any): UntypedFormGroup {
+        return this.fb.group({
+            enabled: [cfg?.enabled ?? false],
+            baseUrl: [cfg?.baseUrl || 'http://127.0.0.1:8080'],
+            model: [cfg?.model || ''],
+            temperature: [cfg?.temperature ?? 0.1, [Validators.min(0), Validators.max(2)]],
+            maxTokens: [cfg?.maxTokens ?? 1024, [Validators.min(1), Validators.max(4096)]],
+            requestTimeout: [cfg?.requestTimeout ?? 120, [Validators.min(1), Validators.max(600)]],
         });
     }
 
@@ -82,6 +95,7 @@ export class AnalyzerSettingsComponent implements OnInit {
                     activeProvider: analyzer.activeProvider || 'openrouter',
                     fallbackOpenrouter: (analyzer.fallbackOrder || []).includes('openrouter'),
                     fallbackOllama: (analyzer.fallbackOrder || []).includes('ollama'),
+                    fallbackLlamaCpp: (analyzer.fallbackOrder || []).includes('llama_cpp'),
                     releaseAfterUse: analyzer.releaseAfterUse ?? true,
                     systemPrompt: analyzer.systemPrompt || this.defaultAnalyzerSystemPrompt,
                 });
@@ -90,16 +104,37 @@ export class AnalyzerSettingsComponent implements OnInit {
                 const providersGroup = this.analyzerForm.get('providers') as UntypedFormGroup;
                 Object.keys(providers).forEach(providerName => {
                     const providerConfig = providers[providerName];
-                    const providerGroup = providersGroup.get(providerName) as UntypedFormGroup | null;
+                    const normalizedName = providerName === 'llama_cpp' ? 'llamaCpp' : providerName;
+                    const providerGroup = providersGroup.get(normalizedName) as UntypedFormGroup | null;
                     if (providerGroup) {
-                        providerGroup.patchValue({
-                            apiKey: providerConfig.apiKey || '',
-                            model: providerConfig.model || '',
-                            temperature: providerConfig.temperature ?? 0.7,
-                            maxTokens: providerConfig.maxTokens ?? 1024,
-                        });
+                        if (normalizedName === 'llamaCpp') {
+                            providerGroup.patchValue({
+                                enabled: providerConfig.enabled ?? false,
+                                baseUrl:
+                                    providerConfig.baseUrl ||
+                                    providerConfig.base_url ||
+                                    'http://127.0.0.1:8080',
+                                model: providerConfig.model || '',
+                                temperature: providerConfig.temperature ?? 0.1,
+                                maxTokens:
+                                    providerConfig.maxTokens ?? providerConfig.max_tokens ?? 1024,
+                                requestTimeout:
+                                    providerConfig.requestTimeout ??
+                                    providerConfig.request_timeout ??
+                                    120,
+                            });
+                        } else {
+                            providerGroup.patchValue({
+                                apiKey: providerConfig.apiKey || '',
+                                model: providerConfig.model || '',
+                                temperature: providerConfig.temperature ?? 0.7,
+                                maxTokens: providerConfig.maxTokens ?? 1024,
+                            });
+                        }
+                    } else if (normalizedName === 'llamaCpp') {
+                        providersGroup.addControl('llamaCpp', this.createLlamaCppGroup(providerConfig));
                     } else {
-                        providersGroup.addControl(providerName, this.createProviderGroup(providerConfig));
+                        providersGroup.addControl(normalizedName, this.createProviderGroup(providerConfig));
                     }
                 });
 
@@ -154,21 +189,21 @@ export class AnalyzerSettingsComponent implements OnInit {
     }
 
     private toggleFallbackControls(activeProvider: string): void {
-        const fallbackOpenrouterCtrl = this.analyzerForm.get('fallbackOpenrouter');
-        const fallbackOllamaCtrl = this.analyzerForm.get('fallbackOllama');
-
-        if (activeProvider === 'openrouter') {
-            fallbackOpenrouterCtrl?.disable({ emitEvent: false });
-            fallbackOpenrouterCtrl?.setValue(false);
-            fallbackOllamaCtrl?.enable({ emitEvent: false });
-        } else if (activeProvider === 'ollama') {
-            fallbackOllamaCtrl?.disable({ emitEvent: false });
-            fallbackOllamaCtrl?.setValue(false);
-            fallbackOpenrouterCtrl?.enable({ emitEvent: false });
-        } else {
-            fallbackOpenrouterCtrl?.enable({ emitEvent: false });
-            fallbackOllamaCtrl?.enable({ emitEvent: false });
-        }
+        const ctrls: Record<string, any> = {
+            openrouter: this.analyzerForm.get('fallbackOpenrouter'),
+            ollama: this.analyzerForm.get('fallbackOllama'),
+            llama_cpp: this.analyzerForm.get('fallbackLlamaCpp'),
+        };
+        Object.keys(ctrls).forEach((key) => {
+            const ctrl = ctrls[key];
+            if (!ctrl) return;
+            if (key === activeProvider) {
+                ctrl.disable({ emitEvent: false });
+                ctrl.setValue(false);
+            } else {
+                ctrl.enable({ emitEvent: false });
+            }
+        });
     }
 
     saveChanges(): void {
@@ -211,6 +246,9 @@ export class AnalyzerSettingsComponent implements OnInit {
         if (formValue.fallbackOllama && formValue.activeProvider !== 'ollama') {
             fallbackOrder.push('ollama');
         }
+        if (formValue.fallbackLlamaCpp && formValue.activeProvider !== 'llama_cpp') {
+            fallbackOrder.push('llama_cpp');
+        }
 
         const providers = { ...formValue.providers };
         Object.keys(providers).forEach(providerName => {
@@ -218,6 +256,9 @@ export class AnalyzerSettingsComponent implements OnInit {
             // Приводим числовые поля
             provider.temperature = Number(provider.temperature);
             provider.maxTokens = Number(provider.maxTokens);
+            if (providerName === 'llamaCpp') {
+                provider.requestTimeout = Number(provider.requestTimeout);
+            }
         });
 
         return {
@@ -282,6 +323,19 @@ export class AnalyzerSettingsComponent implements OnInit {
         return [
             { value: 'openrouter', label: 'OpenRouter' },
             { value: 'ollama', label: 'Ollama' },
+            { value: 'llama_cpp', label: 'llama.cpp' },
         ];
+    }
+
+    get isLlamaCppActive(): boolean {
+        return this.activeProvider === 'llama_cpp';
+    }
+
+    get isOpenrouterActive(): boolean {
+        return this.activeProvider === 'openrouter';
+    }
+
+    get isOllamaActive(): boolean {
+        return this.activeProvider === 'ollama';
     }
 }

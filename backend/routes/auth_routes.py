@@ -152,6 +152,45 @@ async def me(authorization: Optional[str] = Header(default=None)):
     return {"user": auth_service.serialize_user(user)}
 
 
+class UpdateMeSettingsRequest(BaseModel):
+    language: Optional[str] = None
+    timezone: Optional[str] = None
+
+
+@router.patch("/me/settings")
+async def update_me_settings(
+    payload: UpdateMeSettingsRequest,
+    authorization: Optional[str] = Header(default=None),
+):
+    """Update UserSettings fields for the current authenticated user.
+
+    Currently exposes ``language`` (generation language — source of truth
+    for resolve_user_language) and ``timezone``. UI prefs go through other
+    endpoints. Other fields stay immutable to avoid accidental ownership
+    confusion.
+    """
+    token = _extract_bearer_token(authorization)
+    try:
+        user = auth_service.get_user_from_access_token(token)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc))
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found or inactive",
+        )
+    try:
+        auth_service.update_user_settings(
+            user.uuid,
+            language=payload.language,
+            timezone=payload.timezone,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+    refreshed = auth_service.get_user_from_access_token(token)
+    return {"user": auth_service.serialize_user(refreshed)} if refreshed else {"user": None}
+
+
 @router.get("/bootstrap-state")
 async def bootstrap_state():
     return auth_service.get_auth_bootstrap_state()

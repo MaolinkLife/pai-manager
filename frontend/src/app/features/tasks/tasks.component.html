@@ -1,16 +1,88 @@
 <div class="tasks-page custom-scrollbar">
-    <div class="tasks-shell">
-        <ng-container *ngIf="featureEnabled; else tasksWip">
-            <h2>Tasks</h2>
-            <p>tasks works!</p>
-        </ng-container>
+    <div class="tasks-shell" *ngIf="featureEnabled; else tasksWip">
+        <header class="page-header">
+            <div>
+                <h2>{{ 'tasks.title' | translate }}</h2>
+                <p>{{ 'tasks.subtitle' | translate }}</p>
+            </div>
+            <div class="header-actions">
+                <app-ui-select
+                    class="status-filter"
+                    [options]="statusSelectOptions"
+                    [ngModel]="statusFilter"
+                    (ngModelChange)="onStatusFilterChanged($event)"
+                ></app-ui-select>
+            </div>
+        </header>
 
-        <ng-template #tasksWip>
+        <section class="create-card">
+            <div class="create-row">
+                <div class="create-field create-field--text">
+                    <label>{{ 'tasks.textLabel' | translate }}</label>
+                    <app-ui-input
+                        [(ngModel)]="newText"
+                        [placeholder]="'tasks.textPlaceholder' | translate"
+                    ></app-ui-input>
+                </div>
+                <div class="create-field">
+                    <label>{{ 'tasks.dueLabel' | translate }}</label>
+                    <input
+                        type="datetime-local"
+                        class="due-input"
+                        [(ngModel)]="newDueAt"
+                    />
+                </div>
+                <app-ui-button (pressed)="create()" [disabled]="saving">
+                    {{ 'tasks.create' | translate }}
+                </app-ui-button>
+            </div>
+            <p class="form-error" *ngIf="formError">{{ formError }}</p>
+        </section>
+
+        <section class="reminder-list" *ngIf="items.length; else emptyState">
+            <article
+                class="reminder-item"
+                *ngFor="let item of items; trackBy: trackById"
+                [class.reminder-item--done]="item.status !== 'pending'"
+            >
+                <div class="reminder-main">
+                    <span class="status-chip" [ngClass]="'status-chip--' + item.status">
+                        {{ statusLabel(item.status) }}
+                    </span>
+                    <span class="reminder-text">{{ item.text }}</span>
+                </div>
+                <div class="reminder-meta">
+                    <span>{{ 'tasks.due' | translate }}: <strong>{{ item.dueLabel }}</strong></span>
+                    <span>{{ 'tasks.createdAt' | translate }}: {{ item.createdLabel }}</span>
+                    <span>{{ 'tasks.source' | translate }}: {{ item.sourceKey | translate }}</span>
+                    <button
+                        type="button"
+                        class="cancel-btn"
+                        *ngIf="item.canCancel"
+                        (click)="cancelReminder(item.id)"
+                    >
+                        {{ 'tasks.cancel' | translate }}
+                    </button>
+                </div>
+            </article>
+        </section>
+
+        <ng-template #emptyState>
+            <section class="empty-state">
+                <app-skeleton *ngIf="loading" width="100%" height="80px"></app-skeleton>
+                <p *ngIf="!loading && error">{{ error }}</p>
+                <p *ngIf="!loading && !error">{{ 'tasks.empty' | translate }}</p>
+            </section>
+        </ng-template>
+    </div>
+
+    <ng-template #tasksWip>
+        <div class="tasks-shell">
             <section class="wip-card">
                 <h2>{{ 'feature.wipTitle' | translate }}</h2>
                 <p>{{ 'feature.wipText' | translate }}</p>
                 <p class="wip-hint">{{ 'feature.wipDevHint' | translate }}</p>
             </section>
-        </ng-template>
-    </div>
+        </div>
+    </ng-template>
 </div>

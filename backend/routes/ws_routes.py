@@ -12,6 +12,7 @@ from modules.system.service import (
     get_config_value,
     reset_user_context,
 )
+from core import access_guard
 from core.websocket_manager import manager
 from modules.generative import conversation
 from modules.database import service as database_service
@@ -149,6 +150,20 @@ def _source_label(source_name: str) -> str:
     return mapping.get(source_name, source_name.replace("_", " ").title() or "Main chat")
 
 
+def _clean_runtime_meta_payload(payload: dict) -> dict:
+    """Drop empty values (None / {} / []) from a runtime_meta write.
+
+    Final-meta writes happen more than once per run when the empty-answer
+    retry kicks in; combined with merge=True this keeps the first attempt's
+    real usage/model from being clobbered by a retry that captured nothing.
+    """
+    return {
+        key: value
+        for key, value in payload.items()
+        if value is not None and value != {} and value != []
+    }
+
+
 def _attach_history_source(item: dict) -> dict:
     if not isinstance(item, dict):
         return item
@@ -227,6 +242,9 @@ async def _safe_send_json(websocket: WebSocket, payload: dict) -> bool:
 
 @ws_router.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
+    if not await access_guard.accept_ws(websocket):
+        return
+
     session_user_uuid = None
     access_token = websocket.query_params.get("access_token")
     if access_token:
@@ -775,14 +793,14 @@ async def websocket_endpoint(websocket: WebSocket):
                             if allow_global_store and final_message_id:
                                 database_service.update_history_runtime_meta(
                                     final_message_id,
-                                    {
+                                    _clean_runtime_meta_payload({
                                         "run_id": payload_run_id,
                                         "actor_user_uuid": payload_data.get("actor_user_uuid"),
                                         "actor_role": interaction_policy.actor_role,
                                         "model": final_message_model,
                                         "provider": final_message_provider,
-                                        "usage": final_message_usage or {},
-                                        "meta": final_message_meta or {},
+                                        "usage": final_message_usage,
+                                        "meta": final_message_meta,
                                         "traces": trace_events,
                                         "elapsed_ms": round(
                                             (time.perf_counter() - run_started) * 1000, 2
@@ -792,7 +810,12 @@ async def websocket_endpoint(websocket: WebSocket):
                                         "stopped": final_message_stopped,
                                         "timestamp": datetime.now(timezone.utc).isoformat(),
                                         "store_enabled": allow_global_store,
-                                    },
+                                    }),
+                                    # merge=True: generate_stream has already
+                                    # merged compliance summaries onto this
+                                    # row — a plain replace wipes the badges
+                                    # after a page reload.
+                                    merge=True,
                                 )
                             status = "stopped" if stop_event.is_set() else "completed"
                             await _safe_send_json(
@@ -1063,14 +1086,14 @@ async def websocket_endpoint(websocket: WebSocket):
                         if prepared.get("store") and final_message_id:
                             database_service.update_history_runtime_meta(
                                 final_message_id,
-                                {
+                                _clean_runtime_meta_payload({
                                     "run_id": payload_run_id,
                                     "actor_user_uuid": prepared.get("actor_user_uuid"),
                                     "actor_role": prepared.get("interaction_role"),
                                     "model": final_message_model,
                                     "provider": final_message_provider,
-                                    "usage": final_message_usage or {},
-                                    "meta": final_message_meta or {},
+                                    "usage": final_message_usage,
+                                    "meta": final_message_meta,
                                     "traces": trace_events,
                                     "elapsed_ms": round((time.perf_counter() - run_started) * 1000, 2),
                                     "reasoning_elapsed_ms": final_message_reasoning_elapsed,
@@ -1079,7 +1102,8 @@ async def websocket_endpoint(websocket: WebSocket):
                                     "skip_thinking": True,
                                     "timestamp": datetime.now(timezone.utc).isoformat(),
                                     "store_enabled": prepared.get("store"),
-                                },
+                                }),
+                                merge=True,
                             )
                         await _safe_send_json(
                             websocket,

@@ -303,6 +303,802 @@ def _generate_tags_for_text(
     return tags
 
 
+def _build_validator_instructions(decision_context: Dict[str, Any]) -> str:
+    """Compose the instruction text the validator scores against.
+
+    Order matters — validator weights hard directives more than the system
+    prompt, so we concatenate in that priority and let the prompt truncation
+    inside the validator clip at the configured char limit.
+    """
+    system_prompt = str(decision_context.get("system_prompt", "") or "").strip()
+    moral_state = decision_context.get("moral_state") or {}
+    hard_directives = moral_state.get("hard_directives") if isinstance(moral_state, dict) else None
+    directives_block = ""
+    if isinstance(hard_directives, list) and hard_directives:
+        directives_block = "HARD DIRECTIVES (MUST follow):\n" + "\n".join(
+            f"- {str(item).strip()}" for item in hard_directives if str(item).strip()
+        )
+
+    pieces = [p for p in (directives_block, system_prompt) if p]
+    return "\n\n".join(pieces)
+
+
+def _maybe_run_validator(
+    *,
+    decision_context: Dict[str, Any],
+    last_user_message: Dict[str, Any],
+    assistant_content: str,
+    provider: Any,
+    metadata: Dict[str, Any] | None,
+) -> Dict[str, Any]:
+    """Run the LLM-as-judge validator over the assistant output.
+
+    Returns a small dict embedded into the audit trail; an empty dict when
+    validator is disabled / skipped. On compliance < threshold a DebugVault
+    entry is written. Never raises — broken validator must not break
+    generation, see modules/validator/service contract.
+    """
+    try:
+        from modules.validator import validate_output
+        from modules.validator.service import get_compliance_threshold
+        from modules.debug_vault import write_vault_entry
+        from modules.system.service import get_active_character_name
+        from modules.system import character as character_service
+    except Exception as exc:
+        log_audit_entry(
+            "validator_integration_import_failed",
+            "[Conversation] Validator integration import failed.",
+            AuditStatus.WARNING,
+            details={"error": str(exc)},
+        )
+        return {}
+
+    instructions = _build_validator_instructions(decision_context)
+    if not instructions:
+        # Nothing concrete to validate — skip without an LLM call.
+        return {"skipped": True, "skip_reason": "empty_instructions"}
+
+    result = validate_output(
+        output=assistant_content,
+        instructions=instructions,
+    )
+    if result.skipped:
+        return result.to_dict()
+
+    threshold = get_compliance_threshold()
+    summary_payload = result.to_dict()
+    summary_payload["threshold"] = threshold
+    summary_payload["acceptable"] = result.is_acceptable(threshold)
+
+    if result.is_acceptable(threshold):
+        log_audit_entry(
+            "validator_pass",
+            f"[Validator] compliance {result.compliance:.2f} ≥ {threshold:.2f}",
+            AuditStatus.INFO,
+            details=summary_payload,
+        )
+        return summary_payload
+
+    # Below threshold → DebugVault. We still return the result; caller proceeds
+    # with the existing output. Auto-reroll arrives in a separate commit.
+    try:
+        char_name = get_active_character_name(default="default")
+        character = character_service.get_or_create_character(char_name) if char_name else None
+        character_id = getattr(character, "id", None)
+    except Exception:
+        character_id = None
+
+    try:
+        vault_id = write_vault_entry(
+            kind="validation_failed",
+            severity="warning",
+            summary=(
+                f"Validator compliance {result.compliance:.2f} < {threshold:.2f} "
+                f"({len(result.violations)} violation(s))"
+            ),
+            character_id=character_id,
+            context={
+                "user_message": (last_user_message or {}).get("content", "")[:2000],
+                "user_message_id": (last_user_message or {}).get("id"),
+                "instructions_preview": instructions[:1000],
+            },
+            output=assistant_content[:50_000],
+            violations=result.violations,
+            runtime_meta={
+                "provider": provider,
+                "model_meta": metadata or {},
+                "compliance": round(float(result.compliance), 4),
+                "threshold": threshold,
+            },
+        )
+        summary_payload["vault_entry_id"] = vault_id
+    except Exception as exc:
+        log_audit_entry(
+            "validator_vault_write_failed",
+            "[Validator] Could not record DebugVault entry for low-compliance output.",
+            AuditStatus.WARNING,
+            details={"error": str(exc), **summary_payload},
+        )
+
+    return summary_payload
+
+
+def _maybe_run_language_guard(
+    *,
+    last_user_message: Dict[str, Any],
+    assistant_content: str,
+    provider: Any,
+    metadata: Dict[str, Any] | None,
+) -> Dict[str, Any]:
+    """Compare dominant unicode script of the assistant output with User.language.
+
+    Never raises. Mirrors the Validator contract: skipped/ok results are
+    audit-only; a confirmed mismatch lands in DebugVault as a curated entry.
+    Auto-reroll is a follow-up commit — for now we record and proceed.
+    """
+    try:
+        from modules.language_guard import check_language
+        from modules.system.user import resolve_user_language
+        from modules.system.service import get_active_character_name
+        from modules.system import character as character_service
+    except Exception as exc:
+        log_audit_entry(
+            "language_guard_import_failed",
+            "[Conversation] Language guard import failed.",
+            AuditStatus.WARNING,
+            details={"error": str(exc)},
+        )
+        return {}
+
+    actor_user_uuid = None
+    if isinstance(last_user_message, dict):
+        actor_user_uuid = (
+            last_user_message.get("user_uuid")
+            or last_user_message.get("actor_user_uuid")
+        )
+
+    character_id = None
+    try:
+        char_name = get_active_character_name(default="default")
+        character = character_service.get_or_create_character(char_name) if char_name else None
+        character_id = getattr(character, "id", None)
+    except Exception:
+        character_id = None
+
+    try:
+        expected = resolve_user_language(
+            user_uuid=actor_user_uuid,
+            character_id=character_id,
+        )
+    except Exception:
+        expected = ""
+
+    result = check_language(assistant_content, expected)
+    payload = result.to_dict()
+    if result.skipped:
+        return payload
+
+    if result.ok:
+        log_audit_entry(
+            "language_guard_pass",
+            f"[LanguageGuard] {result.detected} dominance {result.dominance:.2f}",
+            AuditStatus.INFO,
+            details=payload,
+        )
+        return payload
+
+    # mismatch → DebugVault
+    try:
+        from modules.debug_vault import write_vault_entry
+    except Exception as exc:
+        log_audit_entry(
+            "language_guard_vault_import_failed",
+            "[LanguageGuard] DebugVault import failed.",
+            AuditStatus.WARNING,
+            details={"error": str(exc), **payload},
+        )
+        return payload
+
+    try:
+        vault_id = write_vault_entry(
+            kind="language_mismatch",
+            severity="warning",
+            summary=(
+                f"Output script '{result.detected}' does not match expected "
+                f"language '{result.expected}' (dominance {result.dominance:.2f})"
+            ),
+            character_id=character_id,
+            context={
+                "user_message": (last_user_message or {}).get("content", "")[:2000],
+                "user_message_id": (last_user_message or {}).get("id"),
+                "expected_language": result.expected,
+            },
+            output=assistant_content[:50_000],
+            violations=[
+                f"detected_script={result.detected}",
+                f"expected_language={result.expected}",
+                f"dominance={result.dominance:.4f}",
+            ],
+            runtime_meta={
+                "provider": provider,
+                "model_meta": metadata or {},
+                "detected": result.detected,
+                "expected": result.expected,
+                "dominance": round(float(result.dominance), 4),
+            },
+        )
+        payload["vault_entry_id"] = vault_id
+    except Exception as exc:
+        log_audit_entry(
+            "language_guard_vault_write_failed",
+            "[LanguageGuard] Could not record DebugVault entry for language mismatch.",
+            AuditStatus.WARNING,
+            details={"error": str(exc), **payload},
+        )
+
+    return payload
+
+
+def _maybe_run_confidence(
+    *,
+    last_user_message: Dict[str, Any],
+    assistant_content: str,
+) -> Dict[str, Any]:
+    """Score how confident PAI should be in this output.
+
+    Never raises. Low confidence is a SIGNAL (audit WARNING + runtime_meta
+    update) — NOT an anomaly, so DebugVault is NOT written. The score
+    flows into History.runtime_meta.confidence for downstream consumers
+    (Factuality check §3.9, low-confidence UI hint Phase 10).
+    """
+    try:
+        from modules.confidence import estimate_confidence, get_confidence_threshold
+    except Exception as exc:
+        log_audit_entry(
+            "confidence_import_failed",
+            "[Conversation] Confidence module import failed.",
+            AuditStatus.WARNING,
+            details={"error": str(exc)},
+        )
+        return {}
+
+    user_text = ""
+    if isinstance(last_user_message, dict):
+        user_text = str(last_user_message.get("content") or "").strip()
+
+    result = estimate_confidence(
+        user_message=user_text,
+        assistant_output=assistant_content,
+    )
+    payload = result.to_dict()
+
+    if result.skipped:
+        return payload
+
+    threshold = get_confidence_threshold()
+    payload["threshold"] = round(float(threshold), 4)
+    payload["low"] = result.is_low(threshold)
+
+    if result.is_low(threshold):
+        log_audit_entry(
+            "confidence_low",
+            f"[Confidence] {result.score:.2f} < {threshold:.2f}",
+            AuditStatus.WARNING,
+            details={
+                "score": payload["score"],
+                "threshold": payload["threshold"],
+                "user_message_id": (last_user_message or {}).get("id"),
+            },
+        )
+    else:
+        log_audit_entry(
+            "confidence_pass",
+            f"[Confidence] {result.score:.2f} ≥ {threshold:.2f}",
+            AuditStatus.INFO,
+            details={"score": payload["score"], "threshold": payload["threshold"]},
+        )
+
+    return payload
+
+
+def _extract_predicted_emotion_meta(decision_context: Dict[str, Any]) -> Dict[str, Any]:
+    """Pull PAI's predicted emotion + valence from the current moral_state.
+
+    Returns a dict ready to be merged onto the assistant message's
+    runtime_meta. Empty dict when moral_state is missing or empty.
+    """
+    moral_state = decision_context.get("moral_state") if isinstance(decision_context, dict) else None
+    if not isinstance(moral_state, dict) or not moral_state:
+        return {}
+
+    emotion = str(moral_state.get("current_emotion") or "").strip()
+    if not emotion:
+        return {}
+    try:
+        intensity = float(moral_state.get("emotion_intensity") or 0.0)
+    except (TypeError, ValueError):
+        intensity = 0.0
+
+    from modules.self_watcher import classify_valence
+
+    return {
+        "pai_predicted_emotion": emotion,
+        "pai_predicted_valence": classify_valence(emotion),
+        "pai_predicted_intensity": round(max(0.0, min(intensity, 1.0)), 4),
+    }
+
+
+def _maybe_run_self_watcher(
+    *,
+    decision_context: Dict[str, Any],
+    last_user_message: Dict[str, Any],
+    history: list,
+) -> Dict[str, Any]:
+    """Compare PAI's prediction on the previous turn with the user's
+    current reaction. Records an expectation_events row on mismatch.
+
+    Never raises. Self-Watcher is observation-only and must not break
+    the generation pipeline.
+    """
+    try:
+        from modules.self_watcher import check_expectation
+        from modules.system.service import get_active_character_name
+        from modules.system import character as character_service
+    except Exception as exc:
+        log_audit_entry(
+            "self_watcher_import_failed",
+            "[Conversation] Self-Watcher import failed.",
+            AuditStatus.WARNING,
+            details={"error": str(exc)},
+        )
+        return {}
+
+    # Pull the previous assistant message from history. ``history`` here
+    # is the sanitized list passed to the LLM — assistant turns carry
+    # their runtime_meta in the stored DB row, NOT in this list, so we
+    # have to fetch the row by id.
+    prev_assistant_meta: Dict[str, Any] = {}
+    prev_assistant_message_id: Optional[str] = None
+    try:
+        for item in reversed(history or []):
+            if isinstance(item, dict) and item.get("role") == "assistant":
+                msg_id = str(item.get("id") or "").strip()
+                if not msg_id:
+                    continue
+                row = database_service.get_message_by_id(msg_id)
+                if not isinstance(row, dict):
+                    continue
+                meta = row.get("runtime_meta")
+                if isinstance(meta, dict) and meta:
+                    prev_assistant_meta = meta
+                    prev_assistant_message_id = msg_id
+                break
+    except Exception:
+        prev_assistant_meta = {}
+        prev_assistant_message_id = None
+
+    if not prev_assistant_meta:
+        return {"skipped": True, "skip_reason": "no_previous_prediction"}
+
+    analysis = decision_context.get("analysis") if isinstance(decision_context, dict) else None
+    tone_primary = ""
+    tone_intensity = 0.5
+    if isinstance(analysis, dict):
+        understanding = analysis.get("understanding") or {}
+        if isinstance(understanding, dict):
+            tone = understanding.get("emotional_tone") or {}
+            if isinstance(tone, dict):
+                tone_primary = str(tone.get("primary") or "").strip()
+                try:
+                    tone_intensity = float(tone.get("intensity") or 0.5)
+                except (TypeError, ValueError):
+                    tone_intensity = 0.5
+
+    if not tone_primary:
+        return {"skipped": True, "skip_reason": "no_user_tone"}
+
+    try:
+        char_name = get_active_character_name(default="default")
+        character = character_service.get_or_create_character(char_name) if char_name else None
+        character_id = getattr(character, "id", None) or ""
+    except Exception:
+        character_id = ""
+
+    triggering_message_id = None
+    if isinstance(last_user_message, dict):
+        triggering_message_id = str(last_user_message.get("id") or "").strip() or None
+
+    result = check_expectation(
+        character_id=character_id,
+        prev_assistant_meta=prev_assistant_meta,
+        prev_assistant_message_id=prev_assistant_message_id,
+        current_user_tone=tone_primary,
+        current_user_intensity=tone_intensity,
+        triggering_user_message_id=triggering_message_id,
+    )
+    return result.to_dict()
+
+
+def _maybe_run_factuality(
+    *,
+    assistant_content: str,
+    confidence_payload: Dict[str, Any] | None,
+) -> Dict[str, Any]:
+    """Run the factuality gate (§3.9) over the assistant output.
+
+    Never raises. The gate is normally piped through §3.8 confidence
+    (low-confidence outputs are the ones worth checking). Result lives in
+    runtime_meta.factuality only — does NOT rewrite the output.
+    """
+    try:
+        from modules.factuality import check_factuality
+    except Exception as exc:
+        log_audit_entry(
+            "factuality_import_failed",
+            "[Conversation] Factuality module import failed.",
+            AuditStatus.WARNING,
+            details={"error": str(exc)},
+        )
+        return {}
+
+    confidence_low = False
+    if isinstance(confidence_payload, dict):
+        confidence_low = bool(confidence_payload.get("low"))
+
+    result = check_factuality(
+        output=assistant_content,
+        confidence_low=confidence_low,
+    )
+    payload = result.to_dict()
+
+    if result.skipped:
+        return payload
+
+    if not result.supported:
+        log_audit_entry(
+            "factuality_unverified",
+            f"[Factuality] {len(result.claims)} claim(s) unverified against local memory.",
+            AuditStatus.WARNING,
+            details={
+                "claims": result.claims,
+                "sources_found": result.sources_found,
+            },
+        )
+    else:
+        log_audit_entry(
+            "factuality_supported",
+            f"[Factuality] {result.sources_found} corroborating source(s) found.",
+            AuditStatus.INFO,
+            details={
+                "claims": result.claims,
+                "sources_found": result.sources_found,
+            },
+        )
+
+    return payload
+
+
+def _run_compliance_pipeline(
+    *,
+    decision_context: Dict[str, Any],
+    last_user_message: Dict[str, Any],
+    assistant_content: str,
+    provider: Any,
+    metadata: Dict[str, Any] | None,
+    history: list,
+) -> Dict[str, Any]:
+    """Run all five post-generation checks in order.
+
+    Shared by sync ``generate_standard`` and streaming ``generate_stream``
+    (the latter calls it via asyncio.to_thread after message_end so the
+    user-visible stream is never delayed). Every check is never-raise and
+    opt-in via its own config flag.
+    """
+    validator_payload = _maybe_run_validator(
+        decision_context=decision_context,
+        last_user_message=last_user_message,
+        assistant_content=assistant_content,
+        provider=provider,
+        metadata=metadata,
+    )
+    language_guard_payload = _maybe_run_language_guard(
+        last_user_message=last_user_message,
+        assistant_content=assistant_content,
+        provider=provider,
+        metadata=metadata,
+    )
+    confidence_payload = _maybe_run_confidence(
+        last_user_message=last_user_message,
+        assistant_content=assistant_content,
+    )
+    factuality_payload = _maybe_run_factuality(
+        assistant_content=assistant_content,
+        confidence_payload=confidence_payload,
+    )
+    self_watcher_payload = _maybe_run_self_watcher(
+        decision_context=decision_context,
+        last_user_message=last_user_message,
+        history=history,
+    )
+    return {
+        "validator": validator_payload,
+        "language_guard": language_guard_payload,
+        "confidence": confidence_payload,
+        "factuality": factuality_payload,
+        "self_watcher": self_watcher_payload,
+    }
+
+
+def _reroll_reasons(
+    validator_payload: Dict[str, Any] | None,
+    language_guard_payload: Dict[str, Any] | None,
+) -> list[str]:
+    """Which gating checks demand a regeneration (config-gated per check)."""
+    reasons: list[str] = []
+    if bool(config_service.get_config_value("auto_reroll.on_validator", True)):
+        vp = validator_payload or {}
+        if vp and not vp.get("skipped") and vp.get("acceptable") is False:
+            reasons.append("validator")
+    if bool(config_service.get_config_value("auto_reroll.on_language_guard", True)):
+        lp = language_guard_payload or {}
+        if lp and not lp.get("skipped") and lp.get("ok") is False:
+            reasons.append("language_guard")
+    return reasons
+
+
+def _build_reroll_hint(
+    reasons: list[str],
+    validator_payload: Dict[str, Any] | None,
+    language_guard_payload: Dict[str, Any] | None,
+) -> str:
+    lines = [
+        "[QUALITY RETRY] Your previous reply (shown above) was rejected by "
+        "automatic checks. Write a corrected reply to the user's last message:"
+    ]
+    if "language_guard" in reasons:
+        lp = language_guard_payload or {}
+        lines.append(
+            f"- Wrong language: it came out as '{lp.get('detected')}'. "
+            f"Respond STRICTLY in {lp.get('expected')}."
+        )
+    if "validator" in reasons:
+        violations = [
+            str(item).strip()
+            for item in ((validator_payload or {}).get("violations") or [])
+            if str(item or "").strip()
+        ][:5]
+        if violations:
+            lines.append("- It violated instructions: " + "; ".join(violations))
+        else:
+            lines.append(
+                "- It did not comply with the system instructions; follow them precisely."
+            )
+    lines.append(
+        "Do not mention this correction or the previous attempt. "
+        "Reply naturally, once."
+    )
+    return "\n".join(lines)
+
+
+def _run_compliance_pipeline_with_reroll(
+    *,
+    decision_context: Dict[str, Any],
+    last_user_message: Dict[str, Any],
+    assistant_content: str,
+    assistant_reasoning: str,
+    provider: Any,
+    metadata: Dict[str, Any] | None,
+    history: list,
+    chat_history: list,
+    request_options: dict,
+) -> Dict[str, Any]:
+    """Sync-path compliance with auto-reroll (Validator + LanguageGuard).
+
+    Runs the two gating checks; when auto_reroll.enabled and a check fails,
+    regenerates with a corrective system hint (previous attempt included in
+    the retry context) up to auto_reroll.max_attempts times, re-checking each
+    candidate. The LAST candidate is kept even if still failing — its
+    violations stay visible in runtime_meta/DebugVault. The remaining checks
+    (confidence/factuality/self-watcher) run once, on the final text.
+
+    Streaming keeps the plain pipeline: the original text has already been
+    shown, swapping it post-stream would be jarring.
+
+    Returns {"compliance", "assistant_content", "assistant_reasoning",
+    "provider", "metadata", "reroll"} — reroll is None when no retry fired.
+    """
+    enabled = bool(config_service.get_config_value("auto_reroll.enabled", False))
+    try:
+        max_attempts = int(config_service.get_config_value("auto_reroll.max_attempts", 1) or 1)
+    except (TypeError, ValueError):
+        max_attempts = 1
+    max_attempts = max(0, min(max_attempts, 3))
+
+    attempts = 0
+    reroll_log: list[Dict[str, Any]] = []
+
+    while True:
+        validator_payload = _maybe_run_validator(
+            decision_context=decision_context,
+            last_user_message=last_user_message,
+            assistant_content=assistant_content,
+            provider=provider,
+            metadata=metadata,
+        )
+        language_guard_payload = _maybe_run_language_guard(
+            last_user_message=last_user_message,
+            assistant_content=assistant_content,
+            provider=provider,
+            metadata=metadata,
+        )
+        reasons = _reroll_reasons(validator_payload, language_guard_payload) if enabled else []
+        if not reasons or attempts >= max_attempts:
+            break
+
+        attempts += 1
+        hint = _build_reroll_hint(reasons, validator_payload, language_guard_payload)
+        retry_messages = list(chat_history) + [
+            {"role": "assistant", "content": assistant_content},
+            {"role": "system", "content": hint},
+        ]
+        try:
+            retry_result = generation_manager.generate(
+                GenerateRequest(
+                    messages=retry_messages,
+                    options=dict(request_options or {}),
+                    metadata={"mode": "compliance_reroll", "attempt": attempts},
+                )
+            )
+        except Exception as exc:
+            log_audit_entry(
+                "compliance_reroll_generation_failed",
+                "[Conversation] Compliance reroll generation failed — keeping previous output.",
+                AuditStatus.WARNING,
+                details={"attempt": attempts, "reasons": reasons, "error": str(exc)},
+            )
+            break
+
+        new_raw = normalize_output_text((retry_result.content or "").strip())
+        new_reasoning = (retry_result.reasoning or "").strip()
+        if new_reasoning:
+            new_content = new_raw
+        else:
+            new_content, new_reasoning = split_reasoning(new_raw)
+        if not new_content:
+            log_audit_entry(
+                "compliance_reroll_empty",
+                "[Conversation] Compliance reroll returned empty content — keeping previous output.",
+                AuditStatus.WARNING,
+                details={"attempt": attempts, "reasons": reasons},
+            )
+            break
+
+        reroll_log.append(
+            {
+                "attempt": attempts,
+                "reasons": reasons,
+                "previous_length": len(assistant_content),
+                "new_length": len(new_content),
+            }
+        )
+        log_audit_entry(
+            "compliance_reroll_applied",
+            "[Conversation] Compliance reroll produced a replacement candidate.",
+            AuditStatus.INFO,
+            details=reroll_log[-1],
+        )
+        assistant_content = new_content
+        assistant_reasoning = new_reasoning or assistant_reasoning
+        provider = retry_result.provider
+        metadata = retry_result.metadata if isinstance(retry_result.metadata, dict) else metadata
+
+    confidence_payload = _maybe_run_confidence(
+        last_user_message=last_user_message,
+        assistant_content=assistant_content,
+    )
+    factuality_payload = _maybe_run_factuality(
+        assistant_content=assistant_content,
+        confidence_payload=confidence_payload,
+    )
+    self_watcher_payload = _maybe_run_self_watcher(
+        decision_context=decision_context,
+        last_user_message=last_user_message,
+        history=history,
+    )
+    return {
+        "compliance": {
+            "validator": validator_payload,
+            "language_guard": language_guard_payload,
+            "confidence": confidence_payload,
+            "factuality": factuality_payload,
+            "self_watcher": self_watcher_payload,
+        },
+        "assistant_content": assistant_content,
+        "assistant_reasoning": assistant_reasoning,
+        "provider": provider,
+        "metadata": metadata,
+        "reroll": (
+            {"attempts": attempts, "log": reroll_log} if reroll_log else None
+        ),
+    }
+
+
+def _build_compliance_meta_update(
+    compliance: Dict[str, Any],
+    decision_context: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Compose the runtime_meta merge-payload from compliance results.
+
+    Persists summaries for ALL checks (not just confidence/factuality) so
+    the chat compliance bar can rehydrate badges from history reloads.
+    Skipped checks leave no trace in runtime_meta.
+    """
+    meta_update: Dict[str, Any] = {}
+
+    confidence_payload = compliance.get("confidence") or {}
+    if (
+        confidence_payload
+        and not confidence_payload.get("skipped")
+        and "score" in confidence_payload
+    ):
+        meta_update["confidence"] = confidence_payload["score"]
+        meta_update["confidence_threshold"] = confidence_payload.get("threshold")
+        meta_update["confidence_low"] = confidence_payload.get("low", False)
+
+    factuality_payload = compliance.get("factuality") or {}
+    if (
+        factuality_payload
+        and not factuality_payload.get("skipped")
+        and factuality_payload.get("checked")
+    ):
+        meta_update["factuality"] = {
+            "supported": factuality_payload.get("supported"),
+            "sources_found": factuality_payload.get("sources_found"),
+            "claims": factuality_payload.get("claims", []),
+        }
+
+    validator_payload = compliance.get("validator") or {}
+    if (
+        validator_payload
+        and not validator_payload.get("skipped")
+        and "compliance" in validator_payload
+    ):
+        meta_update["validator"] = {
+            "compliance": validator_payload.get("compliance"),
+            "acceptable": validator_payload.get("acceptable"),
+            "threshold": validator_payload.get("threshold"),
+            "violations": list(validator_payload.get("violations") or [])[:10],
+        }
+
+    language_guard_payload = compliance.get("language_guard") or {}
+    if language_guard_payload and not language_guard_payload.get("skipped"):
+        meta_update["language_guard"] = {
+            "ok": language_guard_payload.get("ok"),
+            "detected": language_guard_payload.get("detected"),
+            "expected": language_guard_payload.get("expected"),
+            "dominance": language_guard_payload.get("dominance"),
+        }
+
+    # §3.7 — stamp PAI's prediction on THIS assistant message so the
+    # NEXT turn's Self-Watcher pass has something to compare against.
+    meta_update.update(_extract_predicted_emotion_meta(decision_context))
+    return meta_update
+
+
+def _compliance_ws_payload(compliance: Dict[str, Any]) -> Dict[str, Any]:
+    """Subset of compliance results worth pushing to the chat UI.
+
+    Skipped checks are dropped entirely — the badge bar renders only what
+    actually ran.
+    """
+    visible: Dict[str, Any] = {}
+    for key in ("validator", "language_guard", "confidence", "factuality"):
+        payload = compliance.get(key)
+        if isinstance(payload, dict) and payload and not payload.get("skipped"):
+            visible[key] = payload
+    return visible
+
+
 def _build_generation_options() -> dict:
     exclude = ["name", "description"]
     full_settings = config_service.get_config_value("generate_settings", {})
@@ -791,12 +1587,14 @@ def _recover_empty_content_with_retries(
     options: dict,
     assistant_reasoning: str,
     mode: str,
-) -> tuple[str, str, str]:
+) -> tuple[str, str, str, dict]:
     """
     Recovery when provider produced only reasoning and empty visible content.
     Does not try to parse visible text from reasoning directly.
     Makes up to 2 strict retry attempts, then returns empty content.
-    Returns: (content, reasoning, provider)
+    Returns: (content, reasoning, provider, metadata) — metadata is the
+    successful retry's provider metadata (model/usage), so callers can keep
+    generation details intact when the recovered result replaces the stream.
     """
     attempts = 2
     prior_reasoning = (assistant_reasoning or "").strip()
@@ -858,7 +1656,20 @@ def _recover_empty_content_with_retries(
             prior_reasoning = (parsed_reasoning or prior_reasoning).strip()
 
         if (recovered_content or "").strip():
-            return (recovered_content or "").strip(), (prior_reasoning or "").strip(), used_provider
+            recovered_metadata = dict(
+                result.metadata if isinstance(result.metadata, dict) else {}
+            )
+            # Provider metadata carries only the model; token counts live in
+            # the raw response — fold them in so generation details survive.
+            raw_usage = _extract_usage_metadata(getattr(result, "raw", None))
+            if raw_usage:
+                recovered_metadata.update(raw_usage)
+            return (
+                (recovered_content or "").strip(),
+                (prior_reasoning or "").strip(),
+                used_provider,
+                recovered_metadata,
+            )
 
     log_audit_entry(
         "conversation_empty_content_recovery_exhausted",
@@ -866,7 +1677,7 @@ def _recover_empty_content_with_retries(
         AuditStatus.ERROR,
         details={"mode": mode, "attempts": attempts, "provider": used_provider},
     )
-    return "", (prior_reasoning or "").strip(), used_provider
+    return "", (prior_reasoning or "").strip(), used_provider, {}
 
 
 def _build_empty_content_recovery_messages(
@@ -1070,7 +1881,7 @@ async def generate_standard(
         assistant_content, assistant_reasoning = split_reasoning(assistant_raw)
     if not assistant_content:
         try:
-            recovered_content, recovered_reasoning, recovered_provider = _recover_empty_content_with_retries(
+            recovered_content, recovered_reasoning, recovered_provider, recovered_metadata = _recover_empty_content_with_retries(
                 chat_history=chat_history,
                 options=request_payload.options,
                 assistant_reasoning=assistant_reasoning,
@@ -1081,6 +1892,11 @@ async def generate_standard(
                 assistant_reasoning = recovered_reasoning or assistant_reasoning
                 if recovered_provider:
                     generate_result.provider = recovered_provider
+                if recovered_metadata and not (
+                    isinstance(generate_result.metadata, dict)
+                    and generate_result.metadata.get("model")
+                ):
+                    generate_result.metadata = recovered_metadata
                 log_audit_entry(
                     "conversation_standard_empty_content_recovered",
                     "[Conversation] Empty content recovered by retry regeneration.",
@@ -1106,6 +1922,34 @@ async def generate_standard(
         },
     )
     print("[Generator] Обработан ответ провайдера (standard).")
+
+    # Compliance pipeline (§3.5/3.5-bis/3.7/3.8/3.9). All opt-in, all
+    # never-raise. Sync path supports auto-reroll: when auto_reroll.enabled
+    # and Validator/LanguageGuard reject the output, the reply is regenerated
+    # with a corrective hint before anything is persisted or sent.
+    pipeline_outcome = _run_compliance_pipeline_with_reroll(
+        decision_context=decision_context,
+        last_user_message=last_user_message,
+        assistant_content=assistant_content,
+        assistant_reasoning=assistant_reasoning,
+        provider=generate_result.provider,
+        metadata=generate_result.metadata,
+        history=history,
+        chat_history=chat_history,
+        request_options=request_payload.options,
+    )
+    assistant_content = pipeline_outcome["assistant_content"]
+    assistant_reasoning = pipeline_outcome["assistant_reasoning"]
+    generate_result.provider = pipeline_outcome["provider"]
+    if isinstance(pipeline_outcome["metadata"], dict):
+        generate_result.metadata = pipeline_outcome["metadata"]
+    compliance_reroll = pipeline_outcome["reroll"]
+    compliance_results = pipeline_outcome["compliance"]
+    validator_payload = compliance_results["validator"]
+    language_guard_payload = compliance_results["language_guard"]
+    confidence_payload = compliance_results["confidence"]
+    factuality_payload = compliance_results["factuality"]
+    self_watcher_payload = compliance_results["self_watcher"]
 
     assistant_message_obj = None
     suppress_user_echo = bool(last_user_message.get("suppress_user_echo")) if last_user_message else False
@@ -1147,6 +1991,26 @@ async def generate_standard(
                 assistant_message_obj.id,
                 assistant_reasoning,
             )
+
+        # Persist compliance metadata onto the message's runtime_meta so the
+        # UI / downstream tools can read it without re-running anything.
+        # merge=True keeps any upstream metadata intact.
+        meta_update = _build_compliance_meta_update(compliance_results, decision_context)
+        if compliance_reroll:
+            meta_update["compliance_reroll"] = compliance_reroll
+
+        if meta_update and getattr(assistant_message_obj, "id", None):
+            try:
+                database_service.update_history_runtime_meta(
+                    assistant_message_obj.id, meta_update, merge=True
+                )
+            except Exception as exc:
+                log_audit_entry(
+                    "compliance_meta_persist_failed",
+                    "[Compliance] Could not persist meta on runtime_meta.",
+                    AuditStatus.WARNING,
+                    details={"error": str(exc), "message_id": assistant_message_obj.id},
+                )
 
     if emit_ws_fn and assistant_content:
         display_content = assistant_content
@@ -1191,6 +2055,11 @@ async def generate_standard(
                 "provider": generate_result.provider,
                 "assistant_content": assistant_content,
                 "assistant_reasoning": assistant_reasoning,
+                "validator": validator_payload,
+                "language_guard": language_guard_payload,
+                "confidence": confidence_payload,
+                "factuality": factuality_payload,
+                "self_watcher": self_watcher_payload,
             },
         )
         print("[Generator] Стандартная генерация завершена.")
@@ -1216,6 +2085,11 @@ async def generate_standard(
         "provider": generate_result.provider,
         "memory_meta": memory_meta,
         "media": _sanitize_media_items(assistant_media_payload),
+        "validator": validator_payload,
+        "language_guard": language_guard_payload,
+        "confidence": confidence_payload,
+        "factuality": factuality_payload,
+        "self_watcher": self_watcher_payload,
     }
     log_audit_entry(
         "conversation_standard_complete_full",
@@ -1822,7 +2696,7 @@ async def generate_stream(
         ).strip())
     if not assistant_content:
         try:
-            recovered_content, recovered_reasoning, recovered_provider = _recover_empty_content_with_retries(
+            recovered_content, recovered_reasoning, recovered_provider, recovered_metadata = _recover_empty_content_with_retries(
                 chat_history=chat_history,
                 options=request_payload.options,
                 assistant_reasoning=assistant_reasoning,
@@ -1833,6 +2707,14 @@ async def generate_stream(
                 assistant_reasoning = _trim_reasoning_for_storage(recovered_reasoning or assistant_reasoning)
                 if recovered_provider:
                     provider_used_stream = recovered_provider
+                # The recovered (non-streaming) result replaces the dead
+                # stream — carry its model/usage forward, otherwise the
+                # generation-details popup ends up empty for this message.
+                if recovered_metadata:
+                    if not isinstance(final_chunk_metadata, dict) or not final_chunk_metadata.get("model"):
+                        final_chunk_metadata = recovered_metadata
+                    if not _extract_usage_metadata(final_chunk_raw):
+                        final_chunk_raw = recovered_metadata
                 log_audit_entry(
                     "conversation_stream_response_empty_content_recovered",
                     "[Conversation] Empty content recovered by retry regeneration.",
@@ -1840,6 +2722,7 @@ async def generate_stream(
                     details={
                         "provider": provider_used_stream,
                         "reasoning_budget_exceeded": reasoning_budget_exceeded,
+                        "recovered_metadata_keys": sorted(recovered_metadata.keys()),
                     },
                 )
         except Exception as exc:
@@ -1998,6 +2881,46 @@ async def generate_stream(
         )
     )
     await emit_fn(_with_run({"type": "system", "event": "typing_end"}))
+
+    # Compliance pipeline for the streaming path (§3.5/3.5-bis/3.7/3.8/3.9).
+    # Runs AFTER message_end + typing_end so the user-visible stream is never
+    # delayed by judge/confidence LLM calls. Results persist on runtime_meta
+    # (merge) and are pushed to the open chat via a compliance_update event
+    # so badges appear on the just-finished bubble without a reload.
+    if assistant_content and not stopped and store and not append_to_message_id:
+        try:
+            compliance_results = await asyncio.to_thread(
+                _run_compliance_pipeline,
+                decision_context=decision_context,
+                last_user_message=last_user_message or {},
+                assistant_content=assistant_content,
+                provider=provider_used_stream,
+                metadata=final_chunk_metadata if isinstance(final_chunk_metadata, dict) else {},
+                history=history,
+            )
+            meta_update = _build_compliance_meta_update(compliance_results, decision_context)
+            if meta_update and assistant_message_id:
+                database_service.update_history_runtime_meta(
+                    assistant_message_id, meta_update, merge=True
+                )
+            visible = _compliance_ws_payload(compliance_results)
+            if visible and assistant_message_id:
+                await emit_fn(
+                    _with_run(
+                        {
+                            "type": "compliance_update",
+                            "id": assistant_message_id,
+                            "compliance": visible,
+                        }
+                    )
+                )
+        except Exception as exc:
+            log_audit_entry(
+                "compliance_stream_failed",
+                "[Compliance] Streaming compliance pass failed.",
+                AuditStatus.WARNING,
+                details={"error": str(exc), "message_id": assistant_message_id},
+            )
 
 
 def play_message(msg_id: str):

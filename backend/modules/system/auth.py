@@ -555,6 +555,44 @@ def serialize_user(user: User) -> dict:
     return _serialize_user(user)
 
 
+def update_user_settings(
+    user_uuid: str,
+    *,
+    language: Optional[str] = None,
+    timezone: Optional[str] = None,
+) -> None:
+    """Patch UserSettings for the given user. Currently surfaces language and
+    timezone — the two fields exposed via PATCH /api/auth/me/settings.
+
+    Each field is optional; missing values leave the row untouched. Creates
+    the UserSettings row if missing (defensive — register_user should have
+    already created it, but legacy DBs might not).
+    """
+    if not user_uuid:
+        raise ValueError("user_uuid is required")
+    if language is None and timezone is None:
+        return
+    session: Session = SessionLocal()
+    try:
+        settings = (
+            session.query(UserSettings).filter_by(user_uuid=user_uuid).first()
+        )
+        if not settings:
+            settings = UserSettings(user_uuid=user_uuid)
+            session.add(settings)
+        if language is not None:
+            cleaned = str(language).strip()
+            if cleaned:
+                settings.language = cleaned
+        if timezone is not None:
+            cleaned_tz = str(timezone).strip()
+            if cleaned_tz:
+                settings.timezone_name = cleaned_tz
+        session.commit()
+    finally:
+        session.close()
+
+
 def get_user_by_uuid(user_uuid: str) -> Optional[User]:
     if not user_uuid:
         return None

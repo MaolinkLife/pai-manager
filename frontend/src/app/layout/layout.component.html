@@ -35,6 +35,10 @@
                 <app-custom-svg name="audit" [size]="20"></app-custom-svg>
             </button>
 
+            <button *ngIf="!anonymousMode && uiFlags.tasks" class="icon-button" [routerLink]="['tasks']" routerLinkActive="active" [attr.data-tooltip]="t('navigation.tasks')" [attr.aria-label]="t('navigation.tasks')">
+                <app-custom-svg name="alarm" [size]="20"></app-custom-svg>
+            </button>
+
             <!-- Debug/Bug Icon -->
             <button *ngIf="!anonymousMode" class="icon-button" [routerLink]="['debug']" routerLinkActive="active" [attr.data-tooltip]="t('navigation.debug')" [attr.aria-label]="t('navigation.debug')">
                 <app-custom-svg name="bug" [size]="20"></app-custom-svg>

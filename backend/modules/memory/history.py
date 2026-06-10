@@ -103,8 +103,19 @@ def add_history(
 
 
 def update_history_runtime_meta(
-    message_id: str, runtime_meta: dict, session: Optional[Session] = None
+    message_id: str,
+    runtime_meta: dict,
+    session: Optional[Session] = None,
+    *,
+    merge: bool = False,
 ) -> bool:
+    """Write runtime_meta JSON for a history row.
+
+    By default replaces the column wholesale (existing behaviour). When
+    ``merge=True`` reads the current JSON, shallow-merges the new keys on top
+    and writes the result. Used by §3.8 Confidence integration so a partial
+    update does not erase upstream metadata (provider, latency, ...).
+    """
     own_session = False
     if session is None:
         session = SessionLocal()
@@ -114,7 +125,18 @@ def update_history_runtime_meta(
         message = session.query(History).filter_by(id=message_id).first()
         if not message:
             return False
-        message.runtime_meta = json.dumps(runtime_meta or {}, ensure_ascii=False)
+        payload = dict(runtime_meta or {})
+        if merge:
+            existing_raw = getattr(message, "runtime_meta", "{}") or "{}"
+            try:
+                existing = json.loads(existing_raw)
+            except Exception:
+                existing = {}
+            if not isinstance(existing, dict):
+                existing = {}
+            existing.update(payload)
+            payload = existing
+        message.runtime_meta = json.dumps(payload, ensure_ascii=False)
         session.commit()
         return True
     except Exception:

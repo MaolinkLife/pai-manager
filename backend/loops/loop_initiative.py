@@ -71,6 +71,144 @@ def _get_last_activity_timestamp(char_name: str):
     return ensure_datetime(last_row.get("timestamp"))
 
 
+def _run_emotional_decay(*, character_id: str, day_iso: str) -> None:
+    """Apply nightly decay to unresolved EmotionalTrace rows.
+
+    Reads `moral.decay.enabled` / `moral.decay.global_rate` from DB config.
+    Disabled → quick exit with audit entry so the operator sees the skip.
+    """
+    try:
+        from modules.system import config as config_service
+        from modules.moral_matrix.repository import MoralMatrixRepository
+
+        if not bool(config_service.get_config_value("moral.decay.enabled", True)):
+            log_audit_entry(
+                event_type="emotional_decay_skipped",
+                msg="[Initiative] Emotional decay disabled by config.",
+                status=AuditStatus.INFO,
+                details={"day": day_iso, "character_id": character_id},
+            )
+            return
+
+        global_rate = float(config_service.get_config_value("moral.decay.global_rate", 0.05) or 0.05)
+        repo = MoralMatrixRepository()
+        result = repo.decay_emotional_traces(
+            character_id=character_id,
+            global_rate=global_rate,
+        )
+        log_audit_entry(
+            event_type="emotional_decay_completed",
+            msg="[Initiative] Emotional decay pass completed.",
+            status=AuditStatus.INFO,
+            details={
+                "day": day_iso,
+                "character_id": character_id,
+                "global_rate": global_rate,
+                **(result or {}),
+            },
+        )
+    except Exception as exc:
+        log_audit_entry(
+            event_type="emotional_decay_failed",
+            msg="[Initiative] Emotional decay failed.",
+            status=AuditStatus.WARNING,
+            details={
+                "day": day_iso,
+                "character_id": character_id,
+                "error": str(exc),
+            },
+        )
+
+
+def _run_audit_log_retention(*, day_iso: str) -> None:
+    """Apply audit_logs retention policy. Reads audit_logs.retention.enabled
+    from DB config so the operator can pause cleanup without restarting."""
+    try:
+        from modules.system import config as config_service
+        from modules.system.logger import prune_audit_logs
+
+        if not bool(
+            config_service.get_config_value("audit_logs.retention.enabled", True)
+        ):
+            log_audit_entry(
+                event_type="audit_log_retention_skipped",
+                msg="[Initiative] Audit log retention disabled by config.",
+                status=AuditStatus.INFO,
+                details={"day": day_iso},
+            )
+            return
+
+        stats = prune_audit_logs()
+        log_audit_entry(
+            event_type="audit_log_retention_completed",
+            msg="[Initiative] Audit log retention pass completed.",
+            status=AuditStatus.INFO,
+            details={"day": day_iso, "by_severity": stats},
+        )
+    except Exception as exc:
+        log_audit_entry(
+            event_type="audit_log_retention_failed",
+            msg="[Initiative] Audit log retention failed.",
+            status=AuditStatus.WARNING,
+            details={"day": day_iso, "error": str(exc)},
+        )
+
+
+def _run_self_watcher_reflection(*, character_id: str, day_iso: str) -> None:
+    """Run §3.7 nightly cluster reflection and stitch the prose into the
+    diary entry's payload.self_reflection. Never raises.
+    """
+    try:
+        from datetime import date as date_cls
+        import json as _json
+
+        from modules.self_watcher import record_nightly_reflection
+        from modules.memory.diary import get_daily_activity_entry
+        from modules.database.core import engine
+        from sqlalchemy import text as _text
+
+        try:
+            day_obj = date_cls.fromisoformat(day_iso)
+        except Exception:
+            day_obj = date_cls.today()
+
+        reflection = record_nightly_reflection(character_id=character_id, day=day_obj)
+        if not reflection:
+            return
+
+        entry = get_daily_activity_entry(character_id=character_id, target_day=day_obj)
+        if entry is None:
+            return
+
+        payload = dict(entry.payload or {})
+        payload["self_reflection"] = reflection
+        with engine.begin() as conn:
+            conn.execute(
+                _text(
+                    "UPDATE daily_activity_diary SET payload = :payload "
+                    "WHERE id = :id"
+                ),
+                {
+                    "payload": _json.dumps(payload, ensure_ascii=False),
+                    "id": entry.id,
+                },
+            )
+
+        log_audit_entry(
+            event_type="self_watcher_reflection_written",
+            msg="[Initiative] Self-Watcher nightly reflection stitched into diary.",
+            status=AuditStatus.INFO,
+            details={"day": day_iso, "character_id": character_id, "length": len(reflection)},
+        )
+    except Exception as exc:
+        log_audit_entry(
+            event_type="self_watcher_reflection_failed",
+            msg="[Initiative] Self-Watcher nightly reflection failed.",
+            status=AuditStatus.WARNING,
+            details={"day": day_iso, "character_id": character_id, "error": str(exc)},
+        )
+
+
 def _is_daily_diary_due(now: datetime, diary_day_iso: str | None) -> bool:
     trigger_dt = datetime.combine(
         now.date(),
@@ -100,6 +238,28 @@ def initiative_monitor():
     while True:
         try:
             now = datetime.now(timezone.utc)
+
+            # §3.9-quinquies — fire due user reminders (every tick, before the
+            # diary branch: «разбуди в 7» must not wait for nightly jobs).
+            try:
+                from modules.reminders import fire_due_reminders
+
+                fire_summary = fire_due_reminders(now=now)
+                if fire_summary.get("fired") or fire_summary.get("failed"):
+                    log_audit_entry(
+                        event_type="reminders_fired",
+                        msg="[Initiative] Due reminders processed.",
+                        status=AuditStatus.INFO,
+                        details=fire_summary,
+                    )
+            except Exception as reminders_exc:
+                log_audit_entry(
+                    event_type="reminders_pass_error",
+                    msg="[Initiative] Reminders pass failed.",
+                    status=AuditStatus.WARNING,
+                    details={"error": str(reminders_exc)},
+                )
+
             diary_day = (now - timedelta(days=1)).date()
             diary_day_iso = diary_day.isoformat()
             if (
@@ -219,6 +379,55 @@ def initiative_monitor():
                                 **(consolidation or {}),
                             },
                         )
+
+                        # Emotional decay — same window as consolidation: nightly,
+                        # idempotent (uses last_decayed_at), skipped when disabled.
+                        _run_emotional_decay(character_id=character.id, day_iso=diary_day_iso)
+
+                        # Audit log retention — runs once per nightly window
+                        # (character_id-agnostic, but we piggyback on the
+                        # diary slot so it never collides with active turns).
+                        _run_audit_log_retention(day_iso=diary_day_iso)
+
+                        # Finished reminders cleanup — same nightly slot.
+                        try:
+                            from modules.system import config as config_service
+                            from modules.reminders import reminders_repository
+
+                            retention_days = int(
+                                config_service.get_config_value(
+                                    "reminders.retention_days", 30
+                                )
+                                or 30
+                            )
+                            pruned = reminders_repository.prune_finished(
+                                older_than_days=retention_days
+                            )
+                            if pruned:
+                                log_audit_entry(
+                                    event_type="reminders_pruned",
+                                    msg="[Initiative] Finished reminders pruned.",
+                                    status=AuditStatus.INFO,
+                                    details={
+                                        "deleted": pruned,
+                                        "older_than_days": retention_days,
+                                    },
+                                )
+                        except Exception as prune_exc:
+                            log_audit_entry(
+                                event_type="reminders_prune_failed",
+                                msg="[Initiative] Reminders prune failed.",
+                                status=AuditStatus.WARNING,
+                                details={"error": str(prune_exc)},
+                            )
+
+                        # Self-Watcher nightly reflection (§3.7) — aggregates
+                        # recent expectation_events into a short first-person
+                        # passage and stitches it into the diary payload that
+                        # was just (re)written above.
+                        _run_self_watcher_reflection(
+                            character_id=character.id, day_iso=diary_day_iso
+                        )
                 except Exception as diary_exc:
                     log_audit_entry(
                         event_type="daily_diary_generation_error",
@@ -278,70 +487,10 @@ def initiative_monitor():
                             ),
                         },
                     )
-            # else:
-            #     print("[LIM] 💤 No conditions for initiative yet.")
-            # log_audit_entry("initiative_conditions_not_met", {"pattern": [msg["role"] for msg in messages]})
-
             time.sleep(CHECK_EVERY)
 
         except Exception as e:
             log_error("[Initiative] Initiative Error:", str(e))
             time.sleep(60)
 
-
-# # ===========================================================
-# # Initiative generation
-# # ===========================================================
-# def run_initiative(emotion: str = "беспокойство"):
-#     base_prompt = load_system_prompt()
-
-#     if emotion == "беспокойство":
-#         emotion_note = (
-#             "LIM волнуется из-за долгого молчания пользователя. "
-#             "Она проявляет инициативу мягко, с заботой и тревожной теплотой.\n\n"
-#         )
-#     elif emotion == "раздражение + беспокойство":
-#         emotion_note = (
-#             "Пользователь продолжает молчать. LIM ощущает лёгкое раздражение, "
-#             "но всё ещё заботится.\n\n"
-#         )
-#     elif emotion == "обида + злость":
-#         emotion_note = (
-#             "LIM чувствует, что пользователь её игнорирует. "
-#             "Появляется обида и злость.\n\n"
-#         )
-#     else:
-#         emotion_note = "LIM проявляет инициативу, не дождавшись пользователя.\n\n"
-
-#     full_prompt = emotion_note + base_prompt
-#     messages = [{"role": "system", "content": full_prompt}]
-#     char_name = config_service.get_config_value("system.char_name", "default")
-#     options = get_generation_options_from_config()
-
-#     response = ollama_service.api_standard(messages, options)
-#     if "error" in response:
-#         raise RuntimeError(response["error"])
-
-#     assistant_content = response.get("message", {}).get("content", "").strip()
-
-#     database_service.add_message_to_history(
-#         character_name=char_name,
-#         role="assistant",
-#         content=assistant_content,
-#         timestamp=datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
-#     )
-
-#     if config_service.get_config_value("voice.enabled", False):
-#         set_speaking(True)
-#         threading.Thread(target=speak_line, args=(assistant_content, False)).start()
-
-#     log_audit_entry(
-#         event_type="generation_initiative",
-#         msg="[API] Генерация инициативного ответа",
-#         status=AuditStatus.SUCCESS,
-#         details={"emotion": emotion, "assistant_output": assistant_content},
-#         meta={"source": "model", "mode": "initiative", "full_response": response},
-#     )
-
-#     return assistant_content
 

@@ -1,6 +1,6 @@
 # ===========================================================
 # Module: config_routes.py
-# Purpose: API endpoints for working with LIM configuration
+# Purpose: API endpoints for working with PAI configuration
 # Used in: WebUI and any external components that need to read/change config
 # Features:
 # - Supports full replacement and partial update

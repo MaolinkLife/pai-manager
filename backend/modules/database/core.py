@@ -42,6 +42,12 @@ def create_database():
     _ensure_telegram_sync_tables()
     _ensure_users_auth_columns()
     _ensure_user_settings_active_character_column()
+    _ensure_emotional_trace_decay_columns()
+    _ensure_forgiveness_events_table()
+    _ensure_audit_logs_table()
+    _ensure_debug_vault_table()
+    _ensure_expectation_events_table()
+    _ensure_user_reminders_table()
     _log_console("Схема базы данных готова.")
 
 
@@ -270,6 +276,240 @@ def _ensure_user_settings_active_character_column() -> None:
             text(
                 "CREATE INDEX IF NOT EXISTS ix_user_settings_active_character_id "
                 "ON user_settings(active_character_id)"
+            )
+        )
+
+
+def _ensure_debug_vault_table() -> None:
+    """Curated anomalies — Validator failures, judge skips, factual flags."""
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS debug_vault_entries (
+                    id TEXT PRIMARY KEY,
+                    character_id TEXT,
+                    kind TEXT NOT NULL,
+                    severity TEXT NOT NULL DEFAULT 'warning',
+                    summary TEXT NOT NULL DEFAULT '',
+                    context TEXT DEFAULT '{}',
+                    output TEXT DEFAULT '',
+                    violations TEXT DEFAULT '[]',
+                    runtime_meta TEXT DEFAULT '{}',
+                    reviewed BOOLEAN DEFAULT 0,
+                    reviewed_at DATETIME,
+                    reviewed_note TEXT,
+                    created_at DATETIME
+                )
+                """
+            )
+        )
+        conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_debug_vault_kind_created "
+                "ON debug_vault_entries(kind, created_at)"
+            )
+        )
+        conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_debug_vault_reviewed_created "
+                "ON debug_vault_entries(reviewed, created_at)"
+            )
+        )
+
+
+def _ensure_expectation_events_table() -> None:
+    """Self-Watcher (§3.7) — predicted-vs-actual emotional mismatches.
+
+    Append-only audit table. Nightly diary aggregates the recent rows into
+    payload.self_reflection via LLM. Pruning is not wired here yet; the
+    audit_logs retention policy is the conceptual sibling if needed later.
+    """
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS expectation_events (
+                    id TEXT PRIMARY KEY,
+                    character_id TEXT NOT NULL,
+                    prev_assistant_message_id TEXT,
+                    triggering_user_message_id TEXT,
+                    pai_predicted_emotion TEXT,
+                    pai_predicted_valence TEXT,
+                    user_actual_tone TEXT,
+                    user_actual_valence TEXT,
+                    mismatch_score REAL DEFAULT 0.0,
+                    notes TEXT,
+                    created_at DATETIME
+                )
+                """
+            )
+        )
+        conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_expectation_events_char_created "
+                "ON expectation_events(character_id, created_at)"
+            )
+        )
+
+
+def _ensure_user_reminders_table() -> None:
+    """§3.9-quinquies — user reminders («разбуди в 10», «напомни …»).
+
+    Written by the chat capture hook and the /api/reminders REST surface;
+    polled by the initiative loop once a minute for due rows.
+    """
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS user_reminders (
+                    id TEXT PRIMARY KEY,
+                    character_id TEXT NOT NULL,
+                    user_uuid TEXT,
+                    text TEXT NOT NULL,
+                    due_at DATETIME NOT NULL,
+                    recurrence TEXT NOT NULL DEFAULT 'none',
+                    channel TEXT NOT NULL DEFAULT 'main_chat',
+                    status TEXT NOT NULL DEFAULT 'pending',
+                    source TEXT NOT NULL DEFAULT 'chat',
+                    source_message_id TEXT,
+                    fired_at DATETIME,
+                    meta TEXT DEFAULT '{}',
+                    created_at DATETIME
+                )
+                """
+            )
+        )
+        conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_user_reminders_status_due "
+                "ON user_reminders(status, due_at)"
+            )
+        )
+        conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_user_reminders_char_created "
+                "ON user_reminders(character_id, created_at)"
+            )
+        )
+
+
+def _ensure_audit_logs_table() -> None:
+    """Replaces backend/logs/*_debug.jsonl as the canonical audit log store.
+
+    The JSONL files remain as a boot-window fallback (see logger._jsonl_dual_write)
+    but UI reads and retention now go through this table.
+    """
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS audit_logs (
+                    id TEXT PRIMARY KEY,
+                    session_id TEXT NOT NULL,
+                    event_type TEXT NOT NULL,
+                    severity TEXT NOT NULL DEFAULT 'info',
+                    msg TEXT NOT NULL DEFAULT '',
+                    details TEXT DEFAULT '{}',
+                    meta TEXT DEFAULT '{}',
+                    language TEXT,
+                    message_key TEXT,
+                    created_at DATETIME
+                )
+                """
+            )
+        )
+        # Filters used by the UI page (severity + time range) and by the
+        # retention worker (severity + created_at).
+        conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_audit_logs_severity_created "
+                "ON audit_logs(severity, created_at)"
+            )
+        )
+        conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_audit_logs_session_created "
+                "ON audit_logs(session_id, created_at)"
+            )
+        )
+        conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_audit_logs_event_type_created "
+                "ON audit_logs(event_type, created_at)"
+            )
+        )
+
+
+def _ensure_forgiveness_events_table() -> None:
+    """Records of compensating actions that softened a specific EmotionalTrace.
+
+    SQLAlchemy create_all builds the table on fresh DBs; this ensures it also
+    exists on databases migrated from earlier schema, plus the index used by
+    the per-trace forgiveness aggregation query.
+    """
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS forgiveness_events (
+                    id TEXT PRIMARY KEY,
+                    character_id TEXT NOT NULL,
+                    trace_id TEXT NOT NULL,
+                    cause TEXT,
+                    compensating_action TEXT,
+                    delta_intensity FLOAT DEFAULT 0.0,
+                    triggered_resolve BOOLEAN DEFAULT 0,
+                    created_at DATETIME
+                )
+                """
+            )
+        )
+        conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_forgiveness_events_trace_id "
+                "ON forgiveness_events(trace_id)"
+            )
+        )
+        conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_forgiveness_events_character_created "
+                "ON forgiveness_events(character_id, created_at)"
+            )
+        )
+
+
+def _ensure_emotional_trace_decay_columns() -> None:
+    """Add the decay-related columns to emotional_traces for the 0.8.0 cycle.
+
+    Backfills existing rows with sensible defaults so the nightly decay job
+    doesn't crash on legacy data. ``last_decayed_at`` stays NULL — the worker
+    treats NULL as "decay from created_at".
+    """
+    with engine.begin() as conn:
+        table_info = conn.execute(text("PRAGMA table_info(emotional_traces)")).fetchall()
+        if not table_info:
+            return
+
+        columns = {row[1] for row in table_info}
+        additions = [
+            ("decay_rate", "FLOAT DEFAULT 0.05"),
+            ("persistence_floor", "FLOAT DEFAULT 0.0"),
+            ("resolved", "BOOLEAN DEFAULT 0"),
+            ("last_decayed_at", "DATETIME"),
+        ]
+        for column_name, column_sql in additions:
+            if column_name not in columns:
+                conn.execute(
+                    text(f"ALTER TABLE emotional_traces ADD COLUMN {column_name} {column_sql}")
+                )
+
+        # Composite index for the nightly worker scan.
+        conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_emotional_traces_decay_scan "
+                "ON emotional_traces(character_id, resolved, last_decayed_at)"
             )
         )
 

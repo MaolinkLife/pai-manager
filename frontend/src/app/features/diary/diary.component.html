@@ -28,7 +28,16 @@
                     <h3>{{ entry.structured?.title }}</h3>
                 </section>
 
-                <div class="content">{{ entry.summary }}</div>
+                <section class="diary-narrative" *ngIf="entry.narrative">
+                    <p>{{ entry.narrative }}</p>
+                </section>
+
+                <section class="diary-self-reflection" *ngIf="entry.selfReflection">
+                    <h4>🪞 {{ 'diary.selfReflection' | translate }}</h4>
+                    <p>{{ entry.selfReflection }}</p>
+                </section>
+
+                <div class="content" *ngIf="entry.summary">{{ entry.summary }}</div>
 
                 <section class="detail-grid" *ngIf="entry.structured as structured">
                     <div class="detail-row" *ngIf="structured.importance_score !== null">

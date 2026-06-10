@@ -138,6 +138,24 @@ export class AuthService {
         );
     }
 
+    /**
+     * Patch UserSettings (language / timezone) for the currently authenticated
+     * user. Source of truth for "generation language" used by all LLM calls
+     * (resolve_user_language helper).
+     */
+    updateMeSettings$(payload: { language?: string; timezone?: string }): Observable<AuthUser | null> {
+        return this.http.patch<{ user: AuthUser }>(`${this.apiUrl}/me/settings`, payload).pipe(
+            map((response) => response.user ?? null),
+            tap((user) => {
+                if (user) {
+                    this.currentUserSubject.next(user);
+                    localStorage.setItem(this.userKey, JSON.stringify(user));
+                }
+            }),
+            catchError(() => of(null))
+        );
+    }
+
     getBootstrapState$(forceRefresh: boolean = false): Observable<AuthBootstrapState> {
         const cached = this.bootstrapStateSubject.value;
         if (!forceRefresh && cached) {

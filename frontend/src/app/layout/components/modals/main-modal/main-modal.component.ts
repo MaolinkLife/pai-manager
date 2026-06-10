@@ -19,6 +19,7 @@ export class MainModalComponent implements OnInit {
         { key: 'rag', labelKey: 'settingsSidebar.rag' },
         { key: 'analyzer', labelKey: 'settingsSidebar.analyzer' },
         { key: 'moral', labelKey: 'settingsSidebar.moral' },
+        { key: 'compliance', labelKey: 'settingsSidebar.compliance' },
         { key: 'generate', labelKey: 'settingsSidebar.generation' },
         { key: 'persona', labelKey: 'settingsSidebar.persona' },
         { key: 'media', labelKey: 'settingsSidebar.media' },

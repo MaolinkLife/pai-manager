@@ -4,6 +4,6 @@ export const environment = {
     uiFeatures: {
         audit: false,
         diary: true,
-        tasks: false,
+        tasks: true,
     },
 };

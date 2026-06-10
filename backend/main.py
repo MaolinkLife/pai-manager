@@ -1,6 +1,6 @@
 # ==========================================================
 # Module: main.py
-# Purpose: Entry point to the LIM application. Launches FastAPI, connects routes, activates CORS
+# Purpose: Entry point to the PAI application. Launches FastAPI, connects routes, activates CORS
 # Used: at startup of the entire system
 # Features:
 # - Connects configuration (config_service)
@@ -17,7 +17,8 @@ import traceback
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from core.initialize import run_startup_checks, start_async_warmups
+from core.initialize import run_startup_checks, shutdown_services, start_async_warmups
+from core import access_guard
 from modules.system.logger import log_console, log_error, log_traceback
 
 # Windows: ProactorEventLoop may emit noisy ConnectionResetError traces
@@ -89,12 +90,38 @@ from routes.telegram_routes import router as telegram_router
 from routes.synthesis_routes import router as synthesis_router
 from routes.sandbox_routes import router as sandbox_router
 from routes.web_runtime_routes import router as web_runtime_router
+from routes.debug_vault_routes import router as debug_vault_router
+from routes.self_watcher_routes import router as self_watcher_router
+from routes.reminder_routes import router as reminder_router
 
 from loops.loop_core import run_loop
 from modules.system import tunnel as tunnel_service
 from modules.telegram.runtime import autostart_telegram_bridge, stop_telegram_bridge
 
 app = FastAPI()
+
+
+# NOTE: FastAPI middleware decorators are LIFO — the last decorator declared
+# becomes the *outermost* middleware. We want order (outer → inner):
+#   CORSMiddleware → console_api_request_logger → api_access_guard → app
+# so logging captures every request including 403s emitted by the guard.
+# That means: declare api_access_guard FIRST, console_api_request_logger SECOND.
+
+
+@app.middleware("http")
+async def api_access_guard(request, call_next):
+    # /api/ping stays open so health checks and the launcher keep working,
+    # everything else is gated by core.access_guard policy.
+    if request.url.path != "/api/ping":
+        try:
+            access_guard.enforce_http(request)
+        except Exception as exc:
+            from fastapi.responses import JSONResponse
+
+            status_code = getattr(exc, "status_code", 500)
+            detail = getattr(exc, "detail", "Forbidden")
+            return JSONResponse(status_code=status_code, content={"detail": detail})
+    return await call_next(request)
 
 
 @app.middleware("http")
@@ -134,9 +161,10 @@ async def console_api_request_logger(request, call_next):
         )
     return response
 
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # or http://localhost:3880
+    allow_origins=["*"],  # access guard performs the actual host/origin policy check
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -161,6 +189,9 @@ app.include_router(telegram_router)
 app.include_router(synthesis_router)
 app.include_router(sandbox_router)
 app.include_router(web_runtime_router)
+app.include_router(debug_vault_router)
+app.include_router(self_watcher_router)
+app.include_router(reminder_router)
 
 # Start background loops
 run_loop()
@@ -169,6 +200,9 @@ run_loop()
 @app.on_event("startup")
 def app_startup() -> None:
     _install_asyncio_exception_filter()
+    from core.event_loop_registry import register_main_loop
+
+    register_main_loop()
     start_async_warmups()
     tunnel_service.autostart_owner_tunnel()
     autostart_telegram_bridge()
@@ -176,8 +210,20 @@ def app_startup() -> None:
 
 @app.on_event("shutdown")
 def app_shutdown() -> None:
-    stop_telegram_bridge()
-    tunnel_service.stop_tunnel()
+    # Stop external bridges first so they cannot send during teardown,
+    # then release model/runtime resources.
+    try:
+        stop_telegram_bridge()
+    except Exception as exc:
+        log_console("Shutdown", "Не удалось остановить Telegram bridge.", {"error": str(exc)})
+    try:
+        tunnel_service.stop_tunnel()
+    except Exception as exc:
+        log_console("Shutdown", "Не удалось остановить tunnel.", {"error": str(exc)})
+    try:
+        shutdown_services()
+    except Exception as exc:
+        log_console("Shutdown", "Ошибка в shutdown_services.", {"error": str(exc)})
 
 
 @app.get("/api/ping")

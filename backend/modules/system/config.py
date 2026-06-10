@@ -1,6 +1,6 @@
 # ===========================================================
 # Module: config_service.py
-# Purpose: Managing LIM configuration in DB-first mode.
+# Purpose: Managing PAI configuration in DB-first mode.
 # Runtime does not depend on config.json.
 # Used in: services, utilities, core — anywhere configuration is needed
 # Features:
@@ -309,6 +309,70 @@ def normalize_config_structure(config: dict | None) -> dict:
     else:
         _merge_missing(moral_section, moral_defaults)
     normalized["moral"] = moral_section
+
+    stt_defaults = DEFAULT_CONFIG.get("stt", {})
+    stt_section = normalized.get("stt")
+    if not isinstance(stt_section, dict):
+        stt_section = copy.deepcopy(stt_defaults)
+    else:
+        _merge_missing(stt_section, stt_defaults)
+    normalized["stt"] = stt_section
+
+    audit_logs_defaults = DEFAULT_CONFIG.get("audit_logs", {})
+    audit_logs_section = normalized.get("audit_logs")
+    if not isinstance(audit_logs_section, dict):
+        audit_logs_section = copy.deepcopy(audit_logs_defaults)
+    else:
+        _merge_missing(audit_logs_section, audit_logs_defaults)
+    normalized["audit_logs"] = audit_logs_section
+
+    validator_defaults = DEFAULT_CONFIG.get("validator", {})
+    validator_section = normalized.get("validator")
+    if not isinstance(validator_section, dict):
+        validator_section = copy.deepcopy(validator_defaults)
+    else:
+        _merge_missing(validator_section, validator_defaults)
+    normalized["validator"] = validator_section
+
+    language_guard_defaults = DEFAULT_CONFIG.get("language_guard", {})
+    language_guard_section = normalized.get("language_guard")
+    if not isinstance(language_guard_section, dict):
+        language_guard_section = copy.deepcopy(language_guard_defaults)
+    else:
+        _merge_missing(language_guard_section, language_guard_defaults)
+    normalized["language_guard"] = language_guard_section
+
+    confidence_defaults = DEFAULT_CONFIG.get("confidence", {})
+    confidence_section = normalized.get("confidence")
+    if not isinstance(confidence_section, dict):
+        confidence_section = copy.deepcopy(confidence_defaults)
+    else:
+        _merge_missing(confidence_section, confidence_defaults)
+    normalized["confidence"] = confidence_section
+
+    factuality_defaults = DEFAULT_CONFIG.get("factuality", {})
+    factuality_section = normalized.get("factuality")
+    if not isinstance(factuality_section, dict):
+        factuality_section = copy.deepcopy(factuality_defaults)
+    else:
+        _merge_missing(factuality_section, factuality_defaults)
+    normalized["factuality"] = factuality_section
+
+    self_watcher_defaults = DEFAULT_CONFIG.get("self_watcher", {})
+    self_watcher_section = normalized.get("self_watcher")
+    if not isinstance(self_watcher_section, dict):
+        self_watcher_section = copy.deepcopy(self_watcher_defaults)
+    else:
+        _merge_missing(self_watcher_section, self_watcher_defaults)
+    normalized["self_watcher"] = self_watcher_section
+
+    memory_defaults = DEFAULT_CONFIG.get("memory", {})
+    memory_section = normalized.get("memory")
+    if not isinstance(memory_section, dict):
+        memory_section = copy.deepcopy(memory_defaults)
+    else:
+        _merge_missing(memory_section, memory_defaults)
+    normalized["memory"] = memory_section
 
     return normalized
 

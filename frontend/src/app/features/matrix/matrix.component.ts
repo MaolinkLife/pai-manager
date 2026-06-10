@@ -72,6 +72,7 @@ export class MatrixComponent implements OnInit {
                     });
                 } else {
                     this.state = null;
+                    this.recomputeDerived();
                 }
                 this.isLoading = false;
             },
@@ -91,43 +92,24 @@ export class MatrixComponent implements OnInit {
         return this.clamp01(raw);
     }
 
-    get coherencePercent(): number {
-        return Math.round(this.getMetricValue('stability') * 100);
-    }
+    // ВАЖНО: всё ниже — поля, а не геттеры. Геттеры, возвращающие новые
+    // массивы/объекты на каждый вызов, в паре с *ngFor без trackBy
+    // пересоздавали DOM-строки на каждом change detection. Каждая новая
+    // строка создавала новые инстансы impure translate-пайпа, чей effect()
+    // дёргает markForCheck → новый CD → новый массив → новые строки —
+    // бесконечная CD-петля, наглухо вешавшая renderer. Поля пересчитываются
+    // один раз в applyPayload.
+    coherencePercent = 0;
+    latestTrace: any = null;
+    traceCount = 0;
+    affectiveTrigger = '';
+    influenceEntries: Array<{ key: string; value: any }> = [];
+    associatedEvents: string[] = [];
+    latestTraceCause = '';
+    latestTraceOutcomes: any[] = [];
 
-    get latestTrace(): any {
-        return this.recentTraces[0] || null;
-    }
-
-    get traceCount(): number {
-        return this.recentTraces.length;
-    }
-
-    get affectiveTrigger(): string {
-        return String(this.state?.trigger || this.state?.affective_state?.['trigger'] || '').trim();
-    }
-
-    get influenceEntries(): Array<{ key: string; value: any }> {
-        const influence = this.state?.influence || this.state?.affective_state?.['influence'] || {};
-        if (!influence || typeof influence !== 'object') {
-            return [];
-        }
-        return Object.entries(influence).map(([key, value]) => ({ key, value }));
-    }
-
-    get associatedEvents(): string[] {
-        const events = this.state?.associated_events || this.state?.affective_state?.['associated_events'] || [];
-        return Array.isArray(events) ? events.map((item) => String(item)) : [];
-    }
-
-    get latestTraceCause(): string {
-        return this.formatTraceCause(this.latestTrace?.cause);
-    }
-
-    get latestTraceOutcomes(): any[] {
-        const notes = this.latestTrace?.notes;
-        const outcomes = notes && typeof notes === 'object' ? notes.outcomes : [];
-        return Array.isArray(outcomes) ? outcomes : [];
+    trackByInfluence(_index: number, item: { key: string; value: any }): string {
+        return item.key;
     }
 
     formatUpdatedAt(value: string | null | undefined): string {
@@ -187,5 +169,30 @@ export class MatrixComponent implements OnInit {
         this.latestSnapshot = payload.latestSnapshot || null;
         this.dailySummary = payload.dailySummary || null;
         this.recentTraces = Array.isArray(payload.recentTraces) ? payload.recentTraces : [];
+        this.recomputeDerived();
+    }
+
+    private recomputeDerived(): void {
+        this.coherencePercent = Math.round(this.getMetricValue('stability') * 100);
+        this.latestTrace = this.recentTraces[0] || null;
+        this.traceCount = this.recentTraces.length;
+        this.affectiveTrigger = String(
+            this.state?.trigger || this.state?.affective_state?.['trigger'] || ''
+        ).trim();
+
+        const influence = this.state?.influence || this.state?.affective_state?.['influence'] || {};
+        this.influenceEntries =
+            influence && typeof influence === 'object'
+                ? Object.entries(influence).map(([key, value]) => ({ key, value }))
+                : [];
+
+        const events = this.state?.associated_events || this.state?.affective_state?.['associated_events'] || [];
+        this.associatedEvents = Array.isArray(events) ? events.map((item) => String(item)) : [];
+
+        this.latestTraceCause = this.formatTraceCause(this.latestTrace?.cause);
+
+        const notes = this.latestTrace?.notes;
+        const outcomes = notes && typeof notes === 'object' ? notes.outcomes : [];
+        this.latestTraceOutcomes = Array.isArray(outcomes) ? outcomes : [];
     }
 }

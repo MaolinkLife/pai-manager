@@ -8,6 +8,14 @@ export interface UsageDetailLine {
     value: string;
 }
 
+export interface ComplianceBadgeView {
+    key: string;
+    icon: string;
+    label: string;
+    state: 'ok' | 'warn';
+    tooltip: string;
+}
+
 @Component({
     selector: 'app-chat-message',
     templateUrl: './chat-message.component.html',
@@ -60,6 +68,78 @@ export class ChatMessageComponent {
 
     get actionsVisible(): boolean {
         return !this.msg.isPending;
+    }
+
+    /** Badge list for the compliance bar (assistant bubbles only).
+     *  Empty array = bar hidden. Only checks that actually ran appear. */
+    get complianceBadges(): ComplianceBadgeView[] {
+        if (this.msg.role !== 'assistant' || !this.msg.compliance) {
+            return [];
+        }
+        const c = this.msg.compliance;
+        const badges: ComplianceBadgeView[] = [];
+
+        if (c.validator?.compliance !== undefined) {
+            const ok = c.validator.acceptable !== false;
+            const pct = Math.round((c.validator.compliance ?? 0) * 100);
+            const violations = (c.validator.violations || []).slice(0, 5).join('; ');
+            badges.push({
+                key: 'validator',
+                icon: ok ? '✓' : '⚠',
+                label: `${pct}%`,
+                state: ok ? 'ok' : 'warn',
+                tooltip: ok
+                    ? `Соответствие инструкциям: ${pct}%`
+                    : `Соответствие инструкциям: ${pct}% — ${violations || 'нарушения инструкций'}`,
+            });
+        }
+
+        if (c.languageGuard?.ok !== undefined) {
+            const ok = !!c.languageGuard.ok;
+            badges.push({
+                key: 'language',
+                icon: '🌐',
+                label: c.languageGuard.detected || '',
+                state: ok ? 'ok' : 'warn',
+                tooltip: ok
+                    ? `Язык ответа: ${c.languageGuard.detected} соответствует ${c.languageGuard.expected}`
+                    : `Язык ответа: ${c.languageGuard.detected}, ожидался ${c.languageGuard.expected}`,
+            });
+        }
+
+        if (c.confidence?.score !== undefined) {
+            const low = !!c.confidence.low;
+            const pct = Math.round((c.confidence.score ?? 0) * 100);
+            badges.push({
+                key: 'confidence',
+                icon: low ? '⚠' : '◎',
+                label: `${pct}%`,
+                state: low ? 'warn' : 'ok',
+                tooltip: low
+                    ? `Уверенность в ответе: ${pct}% — ниже порога, ответ может быть неточным`
+                    : `Уверенность в ответе: ${pct}%`,
+            });
+        }
+
+        if (c.factuality?.supported !== undefined) {
+            const ok = !!c.factuality.supported;
+            const claims = (c.factuality.claims || []).slice(0, 5).join('; ');
+            badges.push({
+                key: 'factuality',
+                icon: ok ? '📚' : '❔',
+                label: ok ? '' : 'unverified',
+                state: ok ? 'ok' : 'warn',
+                tooltip: ok
+                    ? `Фактическая опора: подтверждено памятью (${c.factuality.sourcesFound} источн.)`
+                    : `Фактическая опора: не найдена в памяти — ${claims || 'нет подтверждения'}`,
+            });
+        }
+
+        return badges;
+    }
+
+    trackByBadge(_index: number, badge: ComplianceBadgeView): string {
+        return badge.key;
     }
 
     get canSaveEdit(): boolean {

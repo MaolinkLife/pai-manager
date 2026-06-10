@@ -34,6 +34,21 @@ export class AudioSettingsComponent implements OnInit {
         { value: 1, label: 'Mono (1)' },
         { value: 2, label: 'Stereo (2)' },
     ];
+    sttProviderOptions: UiSelectOption<string>[] = [
+        { value: 'whisper', label: 'faster-whisper (default)' },
+        { value: 'sherpa_onnx', label: 'sherpa-onnx' },
+    ];
+    sherpaModelTypeOptions: UiSelectOption<string>[] = [
+        { value: 'transducer', label: 'Transducer (encoder/decoder/joiner)' },
+        { value: 'paraformer', label: 'Paraformer' },
+        { value: 'whisper', label: 'Whisper ONNX' },
+        { value: 'moonshine', label: 'Moonshine' },
+    ];
+    sherpaDeviceOptions: UiSelectOption<string>[] = [
+        { value: 'cpu', label: 'CPU' },
+        { value: 'cuda', label: 'CUDA' },
+    ];
+    private originalSttSnapshot: any = {};
 
     constructor(
         private fb: UntypedFormBuilder,
@@ -63,8 +78,77 @@ export class AudioSettingsComponent implements OnInit {
             minAudioLength: [0.5],
             maxAudioLength: [30.0],
             triggerWords: [[]],
-            ignoreTriggerWords: [true]
+            ignoreTriggerWords: [true],
+            // STT block (0.7.2)
+            stt: this.fb.group({
+                language: ['en-US'],
+                autoDetect: [false],
+                provider: ['whisper'],
+                sherpaOnnx: this.fb.group({
+                    modelType: ['transducer'],
+                    encoder: [''],
+                    decoder: [''],
+                    joiner: [''],
+                    paraformer: [''],
+                    whisperEncoder: [''],
+                    whisperDecoder: [''],
+                    moonshinePreprocessor: [''],
+                    moonshineEncoder: [''],
+                    moonshineUncachedDecoder: [''],
+                    moonshineCachedDecoder: [''],
+                    tokens: [''],
+                    numThreads: [1],
+                    provider: ['cpu'],
+                }),
+            }),
         });
+    }
+
+    get sttProvider(): string {
+        return String(this.audioForm.get('stt.provider')?.value || 'whisper');
+    }
+
+    get sherpaModelType(): string {
+        return String(this.audioForm.get('stt.sherpaOnnx.modelType')?.value || 'transducer');
+    }
+
+    private patchSttSection(stt: any): void {
+        const s = stt || {};
+        const sherpa = s.sherpaOnnx || s.sherpa_onnx || {};
+        this.audioForm.get('stt')!.patchValue({
+            language: s.language ?? 'en-US',
+            autoDetect: s.autoDetect ?? s.auto_detect ?? false,
+            provider: s.provider ?? 'whisper',
+            sherpaOnnx: {
+                modelType: sherpa.modelType ?? sherpa.model_type ?? 'transducer',
+                encoder: sherpa.encoder ?? '',
+                decoder: sherpa.decoder ?? '',
+                joiner: sherpa.joiner ?? '',
+                paraformer: sherpa.paraformer ?? '',
+                whisperEncoder: sherpa.whisperEncoder ?? sherpa.whisper_encoder ?? '',
+                whisperDecoder: sherpa.whisperDecoder ?? sherpa.whisper_decoder ?? '',
+                moonshinePreprocessor:
+                    sherpa.moonshinePreprocessor ?? sherpa.moonshine_preprocessor ?? '',
+                moonshineEncoder:
+                    sherpa.moonshineEncoder ?? sherpa.moonshine_encoder ?? '',
+                moonshineUncachedDecoder:
+                    sherpa.moonshineUncachedDecoder ?? sherpa.moonshine_uncached_decoder ?? '',
+                moonshineCachedDecoder:
+                    sherpa.moonshineCachedDecoder ?? sherpa.moonshine_cached_decoder ?? '',
+                tokens: sherpa.tokens ?? '',
+                numThreads: sherpa.numThreads ?? sherpa.num_threads ?? 1,
+                provider: sherpa.provider ?? 'cpu',
+            },
+        });
+        this.originalSttSnapshot = JSON.parse(JSON.stringify(this.audioForm.get('stt')!.value));
+    }
+
+    private buildSttPayload(): any {
+        return JSON.parse(JSON.stringify(this.audioForm.get('stt')!.value));
+    }
+
+    private sttHasChanges(): boolean {
+        return JSON.stringify(this.buildSttPayload()) !== JSON.stringify(this.originalSttSnapshot);
     }
 
     private loadConfigAndDevices(): void {
@@ -87,6 +171,9 @@ export class AudioSettingsComponent implements OnInit {
                         sttEnabled: this.originalModules.whisper,
                     });
                 }
+
+                // STT block (0.7.2)
+                this.patchSttSection((config as any)?.stt);
 
                 // Load devices
                 const inputDevices: AudioDevice[] = [
@@ -114,6 +201,8 @@ export class AudioSettingsComponent implements OnInit {
     saveChanges(): void {
         const normalized = this.normalizeAudioPayload(this.audioForm.value);
         const modules = this.buildModulesPayload();
+        const sttPayload = this.buildSttPayload();
+        const sttDirty = this.sttHasChanges();
         const updateData: any = {};
         if (this.hasPayloadChanged(normalized)) {
             updateData.audio = normalized;
@@ -121,11 +210,17 @@ export class AudioSettingsComponent implements OnInit {
         if (JSON.stringify(modules) !== JSON.stringify(this.originalModules)) {
             updateData.modules = modules;
         }
+        if (sttDirty) {
+            updateData.stt = sttPayload;
+        }
         if (Object.keys(updateData).length > 0) {
             this.configService.updateConfig$(updateData).subscribe({
                 next: (response) => {
                     console.log('Audio settings updated:', response);
                     this.originalConfig = normalized;
+                    if (sttDirty) {
+                        this.originalSttSnapshot = sttPayload;
+                    }
                     this.notificationService.open({
                         title: 'Success',
                         type: 'success',
@@ -155,7 +250,8 @@ export class AudioSettingsComponent implements OnInit {
         const modules = this.buildModulesPayload();
         return (
             this.hasPayloadChanged(normalized) ||
-            JSON.stringify(modules) !== JSON.stringify(this.originalModules)
+            JSON.stringify(modules) !== JSON.stringify(this.originalModules) ||
+            this.sttHasChanges()
         );
     }
 

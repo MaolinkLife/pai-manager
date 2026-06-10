@@ -428,8 +428,150 @@ class EmotionalTrace(Base):
     notes = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.now(timezone.utc))
 
+    # Decay model: each day the intensity decreases by ``decay_rate``, but
+    # never falls below ``persistence_floor``. ``resolved`` marks traces
+    # that should no longer decay (e.g. consciously processed by the
+    # consolidation judge). ``last_decayed_at`` lets the nightly worker
+    # catch up on missed days without double-applying.
+    decay_rate = Column(Float, default=0.05)
+    persistence_floor = Column(Float, default=0.0)
+    resolved = Column(Boolean, default=False)
+    last_decayed_at = Column(DateTime, nullable=True)
+
     character = relationship("Character")
     message = relationship("History")
+
+
+class DebugVaultEntry(Base):
+    """Record of a specific anomaly worth human review.
+
+    Concept: Pai_Updated_Concept.md > 3.6 Validator → DebugVault. Distinct
+    from audit_logs:
+      * audit_logs = high-volume runtime trace (every event, retention applies)
+      * debug_vault = low-volume curated anomalies (kept long, reviewed by op)
+
+    On write, a parallel audit_logs row is created with severity='audit_fail'
+    and details.vault_entry_id pointing here — so the debug UI can either
+    page through the vault directly or filter the main log by severity.
+
+    ``kind`` values used today:
+      validation_failed  — Validator returned compliance < threshold
+      reroll_exhausted   — auto-reroll loop hit its cap (future: §3.5 follow-up)
+      judge_skipped      — memory_judge JSON parse failed / provider missing
+      factual_inconsistency — confidence check flagged hallucination signals
+    Extending the vocab is fine — UI lists kinds dynamically from this table.
+    """
+
+    __tablename__ = "debug_vault_entries"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    character_id = Column(String, ForeignKey("characters.id"), nullable=True)
+    kind = Column(String, nullable=False, index=True)
+    severity = Column(String, nullable=False, default="warning")
+    summary = Column(Text, nullable=False, default="")
+    context = Column(Text, default="{}")    # JSON: input + history snippet + decisions
+    output = Column(Text, default="")        # actual model output (or partial)
+    violations = Column(Text, default="[]")  # JSON: list[str]
+    runtime_meta = Column(Text, default="{}")  # JSON: provider, latency, run_id, ...
+    reviewed = Column(Boolean, default=False, index=True)
+    reviewed_at = Column(DateTime, nullable=True)
+    reviewed_note = Column(Text, nullable=True)
+    created_at = Column(
+        DateTime, default=lambda: datetime.now(timezone.utc), index=True
+    )
+
+    character = relationship("Character")
+
+
+class AuditLogRecord(Base):
+    """Runtime audit/debug log line.
+
+    Replaces the per-session JSONL files for `log_audit_entry`. Heavy churn —
+    expect tens of rows per turn — so retention runs nightly: see
+    ``modules/system/logger.prune_audit_logs`` for the policy. ``severity``
+    mirrors ``AuditStatus`` values (info / warning / error / success).
+
+    JSONL fallback remains for the boot window where the DB may not yet be
+    ready; that path is exercised by ``logger._jsonl_dual_write``.
+    """
+
+    __tablename__ = "audit_logs"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    session_id = Column(String, nullable=False, index=True)
+    event_type = Column(String, nullable=False, index=True)
+    severity = Column(String, nullable=False, default="info", index=True)
+    msg = Column(Text, nullable=False, default="")
+    details = Column(Text, default="{}")  # JSON blob
+    meta = Column(Text, default="{}")     # JSON blob
+    language = Column(String, nullable=True)
+    message_key = Column(String, nullable=True)
+    created_at = Column(
+        DateTime, default=lambda: datetime.now(timezone.utc), index=True
+    )
+
+
+class ExpectationEvent(Base):
+    """Self-Watcher (§3.7) record: a recognised mismatch between what PAI
+    predicted the user would feel and how the user actually reacted.
+
+    PAI's predicted emotion comes from the moral_matrix output of the
+    previous assistant turn (stored on History.runtime_meta).
+    The actual user feedback is the analyzer's emotional_tone on the next
+    user message. When the two valences diverge above the configured
+    threshold, a row is inserted here.
+
+    These rows are NOT user-facing on their own; the nightly diary job
+    aggregates them into ``daily_activity_diary.payload.self_reflection``
+    (LLM prose). The table itself is the audit trail behind that
+    reflection, so a curious operator can see WHY PAI thinks she misread
+    a situation.
+    """
+
+    __tablename__ = "expectation_events"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    character_id = Column(String, ForeignKey("characters.id"), nullable=False, index=True)
+    prev_assistant_message_id = Column(String, nullable=True, index=True)
+    triggering_user_message_id = Column(String, nullable=True, index=True)
+    pai_predicted_emotion = Column(String, nullable=True)
+    pai_predicted_valence = Column(String, nullable=True)  # positive/negative/neutral
+    user_actual_tone = Column(String, nullable=True)
+    user_actual_valence = Column(String, nullable=True)
+    mismatch_score = Column(Float, default=0.0)
+    notes = Column(Text, nullable=True)
+    created_at = Column(
+        DateTime, default=lambda: datetime.now(timezone.utc), index=True
+    )
+
+    character = relationship("Character")
+
+
+class ForgivenessEvent(Base):
+    """Records a positive/compensating action that softens an EmotionalTrace.
+
+    Concept: see Архитектура.md > II. Механика прощения. Each row reduces the
+    target trace's intensity by ``delta_intensity`` but never below the trace's
+    ``persistence_floor`` — emotions can be released, but the memory remains.
+    """
+
+    __tablename__ = "forgiveness_events"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    character_id = Column(String, ForeignKey("characters.id"), nullable=False)
+    trace_id = Column(
+        String, ForeignKey("emotional_traces.id", ondelete="CASCADE"), nullable=False
+    )
+    cause = Column(Text, nullable=True)
+    # What the user did that softened the emotion (free-form natural text).
+    compensating_action = Column(Text, nullable=True)
+    delta_intensity = Column(Float, default=0.0)
+    # Whether this event flipped the target trace's resolved flag.
+    triggered_resolve = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+
+    character = relationship("Character")
+    trace = relationship("EmotionalTrace")
 
 
 class DailyMoralSummary(Base):
@@ -474,6 +616,40 @@ class MoralStateSnapshot(Base):
 
     character = relationship("Character")
     message = relationship("History")
+
+
+class UserReminder(Base):
+    """§3.9-quinquies Tasks/Reminders — user-requested wake-ups and reminders.
+
+    Rows are created either by the in-chat capture hook (decision layer
+    detects «напомни/разбуди…» and the service LLM extracts a structured
+    {text, due_at}) or manually through the /api/reminders REST surface.
+    The initiative loop polls due rows once a minute and delivers them to
+    ``channel`` (v1: main_chat — assistant message persisted to history and
+    broadcast over WS).
+
+    Status flow: pending → fired | cancelled | failed. Recurrence is stored
+    but v1 only implements 'none' (one-shot); the field exists so recurring
+    reminders don't need a schema change later.
+    """
+
+    __tablename__ = "user_reminders"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    character_id = Column(String, ForeignKey("characters.id"), nullable=False, index=True)
+    user_uuid = Column(String, nullable=True, index=True)
+    text = Column(Text, nullable=False)
+    due_at = Column(DateTime, nullable=False, index=True)  # naive UTC
+    recurrence = Column(String, nullable=False, default="none")
+    channel = Column(String, nullable=False, default="main_chat")
+    status = Column(String, nullable=False, default="pending", index=True)
+    source = Column(String, nullable=False, default="chat")  # chat | api
+    source_message_id = Column(String, nullable=True)
+    fired_at = Column(DateTime, nullable=True)
+    meta = Column(Text, default="{}")
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+
+    character = relationship("Character")
 
 
 class ConversationStateLog(Base):

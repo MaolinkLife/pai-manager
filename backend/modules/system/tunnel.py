@@ -191,6 +191,15 @@ def get_status(user_uuid: Optional[str] = None) -> Dict[str, Any]:
     return status
 
 
+def runtime_snapshot() -> Dict[str, Any]:
+    """Cheap, DB-free snapshot for hot-path callers (e.g. access guard middleware)."""
+    with _STATE_LOCK:
+        return {
+            "running": bool(_STATE.get("running")),
+            "public_url": str(_STATE.get("public_url") or ""),
+        }
+
+
 def start_tunnel(
     user_uuid: Optional[str] = None, overrides: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:

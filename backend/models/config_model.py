@@ -28,6 +28,9 @@ class SystemConfig(BaseModel):
     language: str = "en-US"
     system_prompt: str = ""  # будет подтягиваться из characters/{char_name}.yaml
     theme: str = "default"
+    # HTTP/WS access policy. "tunnel_aware" (default) = loopback + active tunnel public_url;
+    # "strict_local" = loopback only (even with active tunnel); "open" = no host/origin checks.
+    api_access_mode: str = "tunnel_aware"
     runtime: Dict[str, Any] = Field(
         default_factory=lambda: {
             "model_memory_profile": "low_memory_strict",
@@ -39,6 +42,111 @@ class CoreConfig(BaseModel):
     version: str = "1.0.0"
     env: str = "dev"
     debug: bool = False
+
+
+class AuditLogsRetentionConfig(BaseModel):
+    enabled: bool = True
+    age_days: Dict[str, int] = Field(
+        default_factory=lambda: {
+            "info": 7,
+            "success": 7,
+            "warning": 30,
+            "error": 90,
+            "audit_fail": 90,
+        }
+    )
+    hard_cap: Dict[str, int] = Field(
+        default_factory=lambda: {
+            "info": 50000,
+            "success": 50000,
+            "warning": 10000,
+            "error": 5000,
+            "audit_fail": 5000,
+        }
+    )
+
+
+class AuditLogsConfig(BaseModel):
+    retention: AuditLogsRetentionConfig = AuditLogsRetentionConfig()
+
+
+class ValidatorConfig(BaseModel):
+    # Off by default. When enabled, each sync generation pays one LLM call
+    # to score how well the output followed its instructions. Streaming
+    # generation is not validated on this iteration.
+    enabled: bool = False
+    threshold: float = 0.7
+    max_tokens: int = 256
+    temperature: float = 0.0
+    instruction_char_limit: int = 4000
+    output_char_limit: int = 4000
+
+
+class LanguageGuardConfig(BaseModel):
+    # Detects dominant unicode script of the generated output and compares
+    # with User.language. No LLM call — pure CPU script-ratio counter.
+    # Off by default.
+    enabled: bool = False
+    min_dominance: float = 0.7
+    min_output_chars: int = 40
+
+
+class ConfidenceConfig(BaseModel):
+    # Mini LLM call that scores how confident PAI should be in its output.
+    # Off by default — one extra LLM call per sync generation. The score
+    # lands on History.runtime_meta.confidence; low confidence triggers a
+    # WARNING audit log but does NOT write DebugVault (it's a signal, not
+    # an anomaly).
+    enabled: bool = False
+    threshold: float = 0.5
+    max_tokens: int = 64
+    temperature: float = 0.0
+    user_char_limit: int = 2000
+    output_char_limit: int = 4000
+
+
+class FactualityConfig(BaseModel):
+    # Regex-based claim extraction + lorebook lookup. CPU-only, no extra
+    # LLM call. Off by default. gate_on_low_confidence=True means the
+    # check is gated on §3.8 confidence_low — a natural cost guard.
+    enabled: bool = False
+    gate_on_low_confidence: bool = True
+    top_k: int = 3
+    min_similarity: float = 0.6
+    max_claims: int = 6
+    claim_min_length: int = 3
+
+
+class SelfWatcherConfig(BaseModel):
+    # Self-Watcher (§3.7): records predicted-vs-actual emotional
+    # mismatches and aggregates them into a nightly reflection. Off by
+    # default. The per-turn check is CPU-only; nightly reflection adds
+    # one LLM call per day per character.
+    enabled: bool = False
+    mismatch_threshold: float = 0.5
+    nightly_reflection_enabled: bool = True
+    lookback_days: int = 7
+    max_events_in_cluster: int = 20
+    llm_max_tokens: int = 220
+    llm_temperature: float = 0.5
+
+
+class AutoRerollConfig(BaseModel):
+    # Joint auto-reroll for Validator + LanguageGuard (sync path only).
+    # Off by default — each retry is a full generation-LLM call.
+    enabled: bool = False
+    max_attempts: int = 1
+    on_validator: bool = True
+    on_language_guard: bool = True
+
+
+class RemindersConfig(BaseModel):
+    # §3.9-quinquies Tasks/Reminders. Capture hook in the decision layer
+    # (regex gate + one extraction LLM call when matched); delivery via the
+    # initiative loop once a minute. Quiet hours are ignored by design.
+    enabled: bool = True
+    max_active: int = 50
+    retention_days: int = 30
 
 
 class DecisionLayerCapabilitiesConfig(BaseModel):
@@ -119,13 +227,44 @@ class VoiceConfig(BaseModel):
             "similarity": 0.75,
         },
         "edge": {"voice_language": "en-US-JennyNeural"},
+        "qwen": {
+            "model_name": "Qwen/Qwen3-TTS-Flash",
+            "device": "cuda",
+            "dtype": "bfloat16",
+            "max_seq_len": 2048,
+            "language": "English",
+            "temperature": 0.9,
+            "top_k": 50,
+            "repetition_penalty": 1.05,
+            "max_new_tokens": 2048,
+            "do_sample": True,
+        },
     }
     voice_language: str = "en-US-JennyNeural"
+
+
+class STTSherpaOnnxConfig(BaseModel):
+    model_type: str = "transducer"
+    encoder: str = ""
+    decoder: str = ""
+    joiner: str = ""
+    paraformer: str = ""
+    whisper_encoder: str = ""
+    whisper_decoder: str = ""
+    moonshine_preprocessor: str = ""
+    moonshine_encoder: str = ""
+    moonshine_uncached_decoder: str = ""
+    moonshine_cached_decoder: str = ""
+    tokens: str = ""
+    num_threads: int = 1
+    provider: str = "cpu"
 
 
 class STTConfig(BaseModel):
     language: str = "en-US"
     auto_detect: bool = False
+    provider: str = "whisper"
+    sherpa_onnx: STTSherpaOnnxConfig = STTSherpaOnnxConfig()
 
 
 class ModulesConfig(BaseModel):
@@ -212,6 +351,15 @@ class VisionConfig(BaseModel):
             "probe_cache_seconds": 300,
             "image_format": "PNG",
             "keep_alive": "5m",
+        },
+        "llama_cpp_vision": {
+            "enabled": False,
+            "base_url": "http://127.0.0.1:8080",
+            "model": "",
+            "max_tokens": 512,
+            "request_timeout": 120,
+            "ping_timeout": 3.0,
+            "image_format": "PNG",
         },
     }
 
@@ -325,9 +473,19 @@ class AnalyzerProviderOllamaConfig(BaseModel):
     thinking: bool = False
 
 
+class AnalyzerProviderLlamaCppConfig(BaseModel):
+    enabled: bool = False
+    base_url: str = "http://127.0.0.1:8080"
+    model: str = ""
+    temperature: float = 0.1
+    max_tokens: int = DEFAULT_MAX_TOKENS
+    request_timeout: int = 120
+
+
 class AnalyzerProvidersConfig(BaseModel):
     openrouter: AnalyzerProviderOpenRouterConfig = AnalyzerProviderOpenRouterConfig()
     ollama: AnalyzerProviderOllamaConfig = AnalyzerProviderOllamaConfig()
+    llama_cpp: AnalyzerProviderLlamaCppConfig = AnalyzerProviderLlamaCppConfig()
 
 
 class AnalyzerConfig(BaseModel):
@@ -353,10 +511,85 @@ class MoralProviderOpenRouterConfig(BaseModel):
     max_tokens: int = 512
 
 
+class MoralProviderLlamaCppConfig(BaseModel):
+    enabled: bool = False
+    base_url: str = "http://127.0.0.1:8080"
+    model: str = ""
+    temperature: float = DEFAULT_TEMPERATURE
+    max_tokens: int = 512
+    request_timeout: int = 120
+
+
 class MoralProvidersConfig(BaseModel):
     heuristic: Dict[str, Any] = Field(default_factory=dict)
     ollama: MoralProviderOllamaConfig = MoralProviderOllamaConfig()
     openrouter: MoralProviderOpenRouterConfig = MoralProviderOpenRouterConfig()
+    llama_cpp: MoralProviderLlamaCppConfig = MoralProviderLlamaCppConfig()
+
+
+class MoralDecayConfig(BaseModel):
+    # Nightly worker reduces EmotionalTrace.intensity by ``global_rate``
+    # per day (unless a per-row rate is set). Set ``enabled=False`` to
+    # freeze the emotional state — useful for testing or "max_speed"-style
+    # profiles where memory must stay sharp.
+    enabled: bool = True
+    global_rate: float = 0.05
+
+
+class MoralInnerVoiceConfig(BaseModel):
+    # Single-sentence first-person explanation written by a small LLM after
+    # each emotional shift. Surfaces in the existing WS moral_state event
+    # via result.meta.inner_voice. Adds one short LLM call per turn —
+    # disable when latency matters more than introspection UX.
+    enabled: bool = True
+    max_tokens: int = 80
+    temperature: float = 0.7
+    language: str = ""  # blank → falls back to system.language
+
+
+class MoralScarTriggerConfig(BaseModel):
+    """One scar trigger — see Архитектура.md > "Что не прощается"."""
+    name: str = ""
+    intents: List[str] = Field(default_factory=list)
+    tones: List[str] = Field(default_factory=list)
+    keywords: List[str] = Field(default_factory=list)
+    persistence_floor: float = 0.4
+    intensity_boost: float = 0.0
+
+
+class MoralScarsConfig(BaseModel):
+    enabled: bool = True
+    triggers: List[MoralScarTriggerConfig] = Field(default_factory=list)
+
+
+class MoralForgivenessConfig(BaseModel):
+    # When the analyzer reports a compensating tone on the current user
+    # message, the system softens recent unresolved negative traces by
+    # ``delta_per_event``, clamped at each trace's ``persistence_floor``.
+    enabled: bool = True
+    compensating_tones: List[str] = Field(
+        default_factory=lambda: [
+            "warm",
+            "tender",
+            "kind",
+            "apologetic",
+            "soft",
+            "loving",
+        ]
+    )
+    softenable_emotions: List[str] = Field(
+        default_factory=lambda: [
+            "sadness",
+            "resentment",
+            "frustration",
+            "anger",
+            "longing",
+            "fear",
+            "shame",
+        ]
+    )
+    delta_per_event: float = 0.15
+    lookback_days: int = 30
 
 
 class MoralMatrixConfig(BaseModel):
@@ -368,6 +601,46 @@ class MoralMatrixConfig(BaseModel):
     release_after_use: bool = True
     system_prompt: str = MORAL_MATRIX_PROVIDER_PROMPT
     providers: MoralProvidersConfig = MoralProvidersConfig()
+    decay: MoralDecayConfig = MoralDecayConfig()
+    forgiveness: MoralForgivenessConfig = MoralForgivenessConfig()
+    scars: MoralScarsConfig = MoralScarsConfig()
+    inner_voice: MoralInnerVoiceConfig = MoralInnerVoiceConfig()
+
+
+class MemoryConsolidationJudgeConfig(BaseModel):
+    enabled: bool = False
+    provider: str = "ollama"
+    model: str = ""
+    temperature: float = 0.0
+    max_tokens: int = 512
+    request_timeout: int = 60
+
+
+class MemoryConsolidationConfig(BaseModel):
+    # Diary entries whose importance_score < threshold are flagged
+    # payload.pruned and hidden from default reads. 0.0 disables the filter.
+    importance_threshold: float = 0.2
+    judge: MemoryConsolidationJudgeConfig = MemoryConsolidationJudgeConfig()
+
+
+class MemoryDiaryNarrativeConfig(BaseModel):
+    enabled: bool = True
+    min_chars: int = 80
+    max_chars: int = 3000
+
+
+class MemoryDiaryContextConfig(BaseModel):
+    # §3.9-bis-retrieval: recent diary days (narrative + self_reflection)
+    # injected into generation context. DB read only — no LLM calls.
+    enabled: bool = True
+    days: int = 7
+    max_entries: int = 3
+    max_chars_per_entry: int = 600
+
+
+class MemoryDiaryConfig(BaseModel):
+    narrative: MemoryDiaryNarrativeConfig = MemoryDiaryNarrativeConfig()
+    context: MemoryDiaryContextConfig = MemoryDiaryContextConfig()
 
 
 class MemoryConfig(BaseModel):
@@ -379,6 +652,8 @@ class MemoryConfig(BaseModel):
     session_enabled: bool = True
     embedding_provider: str = "auto"
     embedding_model: str = "nomic-embed-text"
+    consolidation: MemoryConsolidationConfig = MemoryConsolidationConfig()
+    diary: MemoryDiaryConfig = MemoryDiaryConfig()
 
 
 class SynthesisSdWebUIConfig(BaseModel):
@@ -720,10 +995,27 @@ class GeneratorProviderTransformersConfig(GeneratorProviderBaseConfig):
     source: str = "huggingface"
 
 
+class GeneratorProviderLlamaCppConfig(GeneratorProviderBaseConfig):
+    # Off by default — the user must explicitly point at a llama-server before
+    # the manager will route to this provider.
+    enabled: bool = False
+    base_url: str = "http://127.0.0.1:8080"
+    streaming: bool = True
+    request_timeout: int = 300
+    stream_timeout: int = 600
+    # Extra samplers exposed by llama-server's OpenAI endpoint. ``temperature``
+    # and ``max_tokens`` come from the base class.
+    top_p: float = 0.9
+    top_k: int = 50
+    min_p: float = 0.05
+    repeat_penalty: float = 1.1
+
+
 class APIProvidersConfig(BaseModel):
     ollama: GeneratorProviderOllamaConfig = GeneratorProviderOllamaConfig()
     openrouter: GeneratorProviderOpenRouterConfig = GeneratorProviderOpenRouterConfig()
     transformers: GeneratorProviderTransformersConfig = GeneratorProviderTransformersConfig()
+    llama_cpp: GeneratorProviderLlamaCppConfig = GeneratorProviderLlamaCppConfig()
 
 
 class APIConfig(BaseModel):

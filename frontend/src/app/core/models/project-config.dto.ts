@@ -202,6 +202,9 @@ export interface AnalyzerProviderConfigDto {
     model?: string;
     temperature?: number;
     max_tokens?: number;
+    enabled?: boolean;
+    base_url?: string;
+    request_timeout?: number;
 }
 
 export interface AnalyzerConfigDto {
@@ -221,6 +224,43 @@ export interface MoralProviderConfigDto {
     temperature?: number;
     max_tokens?: number;
     thinking?: boolean;
+    enabled?: boolean;
+    base_url?: string;
+    request_timeout?: number;
+}
+
+export interface MoralDecayConfigDto {
+    enabled?: boolean;
+    global_rate?: number;
+}
+
+export interface MoralForgivenessConfigDto {
+    enabled?: boolean;
+    compensating_tones?: string[];
+    softenable_emotions?: string[];
+    delta_per_event?: number;
+    lookback_days?: number;
+}
+
+export interface MoralScarTriggerDto {
+    name?: string;
+    intents?: string[];
+    tones?: string[];
+    keywords?: string[];
+    persistence_floor?: number;
+    intensity_boost?: number;
+}
+
+export interface MoralScarsConfigDto {
+    enabled?: boolean;
+    triggers?: MoralScarTriggerDto[];
+}
+
+export interface MoralInnerVoiceConfigDto {
+    enabled?: boolean;
+    max_tokens?: number;
+    temperature?: number;
+    language?: string;
 }
 
 export interface MoralConfigDto {
@@ -233,7 +273,36 @@ export interface MoralConfigDto {
         heuristic?: Record<string, any>;
         ollama?: MoralProviderConfigDto;
         openrouter?: MoralProviderConfigDto;
+        llama_cpp?: MoralProviderConfigDto;
     };
+    decay?: MoralDecayConfigDto;
+    forgiveness?: MoralForgivenessConfigDto;
+    scars?: MoralScarsConfigDto;
+    inner_voice?: MoralInnerVoiceConfigDto;
+}
+
+export interface MemoryDiaryNarrativeConfigDto {
+    enabled?: boolean;
+    min_chars?: number;
+    max_chars?: number;
+}
+
+export interface MemoryDiaryConfigDto {
+    narrative?: MemoryDiaryNarrativeConfigDto;
+}
+
+export interface MemoryConsolidationJudgeDto {
+    enabled?: boolean;
+    provider?: string;
+    model?: string;
+    temperature?: number;
+    max_tokens?: number;
+    request_timeout?: number;
+}
+
+export interface MemoryConsolidationConfigDto {
+    importance_threshold?: number;
+    judge?: MemoryConsolidationJudgeDto;
 }
 
 export interface MemoryConfigDto {
@@ -244,6 +313,91 @@ export interface MemoryConfigDto {
     session_enabled: boolean;
     embedding_provider: string;
     embedding_model: string;
+    consolidation?: MemoryConsolidationConfigDto;
+    diary?: MemoryDiaryConfigDto;
+}
+
+// --- STT (0.7.2 — whisper + sherpa-onnx) -----------------------------------
+
+export interface SttSherpaOnnxConfigDto {
+    model_type?: string;
+    encoder?: string;
+    decoder?: string;
+    joiner?: string;
+    paraformer?: string;
+    whisper_encoder?: string;
+    whisper_decoder?: string;
+    moonshine_preprocessor?: string;
+    moonshine_encoder?: string;
+    moonshine_uncached_decoder?: string;
+    moonshine_cached_decoder?: string;
+    tokens?: string;
+    num_threads?: number;
+    provider?: string;
+}
+
+export interface SttConfigDto {
+    language?: string;
+    auto_detect?: boolean;
+    provider?: string;
+    sherpa_onnx?: SttSherpaOnnxConfigDto;
+}
+
+// --- Compliance pipeline (0.9.0) -------------------------------------------
+
+export interface ValidatorConfigDto {
+    enabled?: boolean;
+    threshold?: number;
+    max_tokens?: number;
+    temperature?: number;
+    instruction_char_limit?: number;
+    output_char_limit?: number;
+}
+
+export interface LanguageGuardConfigDto {
+    enabled?: boolean;
+    min_dominance?: number;
+    min_output_chars?: number;
+}
+
+export interface ConfidenceConfigDto {
+    enabled?: boolean;
+    threshold?: number;
+    max_tokens?: number;
+    temperature?: number;
+    user_char_limit?: number;
+    output_char_limit?: number;
+}
+
+export interface FactualityConfigDto {
+    enabled?: boolean;
+    gate_on_low_confidence?: boolean;
+    top_k?: number;
+    min_similarity?: number;
+    max_claims?: number;
+    claim_min_length?: number;
+}
+
+export interface SelfWatcherConfigDto {
+    enabled?: boolean;
+    mismatch_threshold?: number;
+    nightly_reflection_enabled?: boolean;
+    lookback_days?: number;
+    max_events_in_cluster?: number;
+    llm_max_tokens?: number;
+    llm_temperature?: number;
+}
+
+// --- Audit logs retention (0.9.0 §3.6-bis) ---------------------------------
+
+export interface AuditLogsRetentionConfigDto {
+    enabled?: boolean;
+    age_days?: Record<string, number>;
+    hard_cap?: Record<string, number>;
+}
+
+export interface AuditLogsConfigDto {
+    retention?: AuditLogsRetentionConfigDto;
 }
 
 export interface SynthesisSdWebUIConfigDto {
@@ -411,4 +565,12 @@ export interface ProjectConfigDto extends BaseConfigDto {
     api: ApiConfigDto;
     generate_settings: GenerationConfigDto;
     system: SystemConfigDto;
+    // 0.9.0 — compliance pipeline + audit logs retention
+    validator?: ValidatorConfigDto;
+    language_guard?: LanguageGuardConfigDto;
+    confidence?: ConfidenceConfigDto;
+    factuality?: FactualityConfigDto;
+    self_watcher?: SelfWatcherConfigDto;
+    audit_logs?: AuditLogsConfigDto;
+    stt?: SttConfigDto;
 }

@@ -280,6 +280,105 @@
                 </div>
             </div>
 
+            <div class="section" formGroupName="stt">
+                <h3>🗣️ {{ "audioSettings.sttTitle" | translate }}</h3>
+                <p class="hint">{{ "audioSettings.sttHint" | translate }}</p>
+
+                <div class="form-group">
+                    <label for="sttLanguage">{{ "audioSettings.sttLanguage" | translate }}</label>
+                    <app-ui-input id="sttLanguage" type="text" formControlName="language" placeholder="en-US / ru-RU"></app-ui-input>
+                </div>
+
+                <div class="form-group">
+                    <app-ui-checkbox formControlName="autoDetect">
+                        {{ "audioSettings.sttAutoDetect" | translate }}
+                    </app-ui-checkbox>
+                </div>
+
+                <div class="form-group">
+                    <label for="sttProvider">{{ "audioSettings.sttProvider" | translate }}</label>
+                    <app-ui-select id="sttProvider" [options]="sttProviderOptions" formControlName="provider"></app-ui-select>
+                </div>
+
+                <div class="section nested" *ngIf="sttProvider === 'sherpa_onnx'" formGroupName="sherpaOnnx">
+                    <h4>{{ "audioSettings.sherpaTitle" | translate }}</h4>
+                    <p class="hint">{{ "audioSettings.sherpaHint" | translate }}</p>
+
+                    <div class="form-group">
+                        <label for="sherpaModelType">{{ "audioSettings.sherpaModelType" | translate }}</label>
+                        <app-ui-select id="sherpaModelType" [options]="sherpaModelTypeOptions" formControlName="modelType"></app-ui-select>
+                    </div>
+
+                    <ng-container *ngIf="sherpaModelType === 'transducer'">
+                        <div class="form-group">
+                            <label>encoder</label>
+                            <app-ui-input type="text" formControlName="encoder"></app-ui-input>
+                        </div>
+                        <div class="form-group">
+                            <label>decoder</label>
+                            <app-ui-input type="text" formControlName="decoder"></app-ui-input>
+                        </div>
+                        <div class="form-group">
+                            <label>joiner</label>
+                            <app-ui-input type="text" formControlName="joiner"></app-ui-input>
+                        </div>
+                    </ng-container>
+
+                    <ng-container *ngIf="sherpaModelType === 'paraformer'">
+                        <div class="form-group">
+                            <label>paraformer</label>
+                            <app-ui-input type="text" formControlName="paraformer"></app-ui-input>
+                        </div>
+                    </ng-container>
+
+                    <ng-container *ngIf="sherpaModelType === 'whisper'">
+                        <div class="form-group">
+                            <label>whisper_encoder</label>
+                            <app-ui-input type="text" formControlName="whisperEncoder"></app-ui-input>
+                        </div>
+                        <div class="form-group">
+                            <label>whisper_decoder</label>
+                            <app-ui-input type="text" formControlName="whisperDecoder"></app-ui-input>
+                        </div>
+                    </ng-container>
+
+                    <ng-container *ngIf="sherpaModelType === 'moonshine'">
+                        <div class="form-group">
+                            <label>moonshine_preprocessor</label>
+                            <app-ui-input type="text" formControlName="moonshinePreprocessor"></app-ui-input>
+                        </div>
+                        <div class="form-group">
+                            <label>moonshine_encoder</label>
+                            <app-ui-input type="text" formControlName="moonshineEncoder"></app-ui-input>
+                        </div>
+                        <div class="form-group">
+                            <label>moonshine_uncached_decoder</label>
+                            <app-ui-input type="text" formControlName="moonshineUncachedDecoder"></app-ui-input>
+                        </div>
+                        <div class="form-group">
+                            <label>moonshine_cached_decoder</label>
+                            <app-ui-input type="text" formControlName="moonshineCachedDecoder"></app-ui-input>
+                        </div>
+                    </ng-container>
+
+                    <div class="form-group">
+                        <label>tokens</label>
+                        <app-ui-input type="text" formControlName="tokens"></app-ui-input>
+                        <p class="hint">{{ "audioSettings.sherpaPathHint" | translate }}</p>
+                    </div>
+
+                    <div class="form-group">
+                        <label>num_threads</label>
+                        <app-ui-input type="number" min="1" max="32" formControlName="numThreads"></app-ui-input>
+                    </div>
+
+                    <div class="form-group">
+                        <label>{{ "audioSettings.sherpaExecutionDevice" | translate }}</label>
+                        <app-ui-select [options]="sherpaDeviceOptions" formControlName="provider"></app-ui-select>
+                    </div>
+                </div>
+            </div>
+
             <div class="button-row">
                 <button type="submit" [disabled]="!hasChanges()">
                     💾 {{ "general.saveAudioSettings" | translate }}

@@ -1,0 +1,15 @@
+Regression baseline before feat/waifu_y-port branch work.
+Date: 2026-06-07
+Branch base: feat/update_from_fork @ a3168cd
+
+Result: 66 passed, 5 failed, 65 deselected (regression marker only)
+
+Known failures (pre-existing, unrelated to port work):
+- tests/test_synthesis_routes_regression.py::test_generate_image_emits_ok_tool_event
+- tests/test_synthesis_routes_regression.py::test_generate_image_normalizes_legacy_provider_model
+- tests/test_synthesis_routes_regression.py::test_generate_image_emits_error_tool_event_on_provider_error
+- tests/test_synthesis_service_fallback.py::test_diffusers_provider_selects_requested_model
+- tests/test_synthesis_service_fallback.py::test_legacy_model_id_provider_still_selects_model
+
+After each phase: run `pytest -m regression` and confirm the same 66 still pass.
+Do NOT count synthesis_* failures as regressions caused by this branch.

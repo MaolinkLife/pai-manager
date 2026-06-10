@@ -147,18 +147,38 @@ def record_audio(filename: str, duration: int = 5):
     _save_wave(filename, audio)
 
 
+def _resolve_provider() -> str:
+    """Returns the active STT provider name.
+
+    ``stt.provider`` is the new switch (faster-whisper vs sherpa-onnx). Defaults
+    to "whisper" so existing users keep the previous behaviour without any
+    config change.
+    """
+    raw = config_service.get_config_value("stt.provider", "whisper") or "whisper"
+    name = str(raw).strip().lower()
+    return name if name in {"whisper", "sherpa_onnx"} else "whisper"
+
+
 def transcribe_audio(filename: str) -> str:
-    model = _get_model()
-    stt_lang = config_service.get_config_value("stt.language", None)
-    auto_detect = config_service.get_config_value("stt.auto_detect", True)
+    provider = _resolve_provider()
 
-    if auto_detect or not stt_lang:
-        segments, _ = model.transcribe(filename)
+    if provider == "sherpa_onnx":
+        from modules.voice import sherpa_onnx_engine
+
+        result = sherpa_onnx_engine.transcribe(filename).strip()
     else:
-        lang_code = stt_lang.split("-")[0]
-        segments, _ = model.transcribe(filename, language=lang_code)
+        model = _get_model()
+        stt_lang = config_service.get_config_value("stt.language", None)
+        auto_detect = config_service.get_config_value("stt.auto_detect", True)
 
-    result = " ".join(segment.text for segment in segments).strip()
+        if auto_detect or not stt_lang:
+            segments, _ = model.transcribe(filename)
+        else:
+            lang_code = stt_lang.split("-")[0]
+            segments, _ = model.transcribe(filename, language=lang_code)
+
+        result = " ".join(segment.text for segment in segments).strip()
+
     if _is_rejected_transcript(result):
         raise TranscriptionRejectedError("No valid speech detected.")
     return result

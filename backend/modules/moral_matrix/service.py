@@ -23,6 +23,7 @@ from modules.moral_matrix.types import MoralMatrixMetrics, MoralMatrixResult
 from modules.moral_matrix import heuristics
 from modules.moral_matrix.providers import (
     HeuristicMoralProvider,
+    LlamaCppMoralProvider,
     OllamaMoralProvider,
     OpenRouterMoralProvider,
 )
@@ -32,6 +33,7 @@ from modules.system import config as config_service
 from modules.system.logger import AuditStatus, log_audit_entry
 from modules.system.runtime_profile import should_release_resources
 from modules.system.service import get_active_character_name
+from modules.system.user import resolve_user_language
 
 
 @dataclass
@@ -48,6 +50,7 @@ class MoralMatrixProviderManager:
             "heuristic": HeuristicMoralProvider(),
             "ollama": OllamaMoralProvider(),
             "openrouter": OpenRouterMoralProvider(),
+            "llama_cpp": LlamaCppMoralProvider(),
         }
 
     async def run(self, payload: Dict[str, Any]) -> ProviderRunResult:
@@ -209,6 +212,29 @@ class MoralMatrixModule:
         print("[MoralMatrix] History ids ->", history_ids)
 
         recent_traces = self._repository.fetch_recent_traces(character_id, limit=6)
+
+        # Heuristic forgiveness pass: if the current user message shows a
+        # warm/apologetic tone, soften recent unresolved negative traces.
+        # Deliberately NOT an LLM call — same-turn latency must stay flat.
+        # Future enhancement: validate suspect-cases via service-LLM judge.
+        try:
+            self._apply_heuristic_forgiveness(
+                character_id=character_id,
+                analyzer_emotion=self._extract_analyzer_emotion(analysis_result),
+                user_message_text=str((user_message or {}).get("content") or ""),
+            )
+        except Exception as exc:
+            log_audit_entry(
+                "moral_matrix_forgiveness_skipped",
+                "[MoralMatrix] Forgiveness heuristic skipped due to error.",
+                AuditStatus.WARNING,
+                details={"error": str(exc), "character_id": character_id},
+            )
+
+        # Re-fetch traces — the forgiveness pass may have updated intensities
+        # and we want the rest of evaluate() to see the softened values.
+        recent_traces = self._repository.fetch_recent_traces(character_id, limit=6)
+
         matched_traces = self._repository.fetch_traces_for_messages(
             character_id, history_ids
         )
@@ -379,6 +405,7 @@ class MoralMatrixModule:
                 message_meta=message_meta,
                 analyzer_snapshot=analyzer_snapshot,
                 user_message=user_message,
+                analysis_result=analysis_result,
             )
         else:
             log_audit_entry(
@@ -528,6 +555,312 @@ class MoralMatrixModule:
             # Similar situations matter, but should be interpreted as context,
             # not copied as the new dominant emotion.
             emotion_vector[emotion] = min(1.0, emotion_vector.get(emotion, 0.0) + intensity * 0.12)
+
+    def _generate_inner_voice(
+        self,
+        *,
+        emotion: str,
+        intensity: float,
+        cause: str,
+        language_hint: str,
+    ) -> str:
+        """One short first-person sentence explaining the current emotional shift.
+
+        Used by ``_persist_state``: feeds into ``EmotionalTrace.notes.inner_voice``
+        and into ``result.meta["inner_voice"]`` so the existing WS ``moral_state``
+        event surfaces it to the UI without a new event type.
+
+        Returns "" on any failure — inner voice is a wow-feature, not a
+        correctness requirement.
+        """
+        try:
+            # Lazy imports — avoid circular import via generative → analyzer pipeline.
+            from constants.prompts import MORAL_INNER_VOICE_PROMPT
+            from modules.generative.manager import (
+                NoProviderResolved,
+                generation_manager,
+            )
+            from modules.generative.types import GenerateRequest
+        except Exception as exc:
+            log_audit_entry(
+                "moral_matrix_inner_voice_import_failed",
+                "[MoralMatrix] Inner voice generation module unavailable.",
+                AuditStatus.WARNING,
+                details={"error": str(exc)},
+            )
+            return ""
+
+        max_tokens = int(
+            config_service.get_config_value("moral.inner_voice.max_tokens", 80) or 80
+        )
+        temperature = float(
+            config_service.get_config_value("moral.inner_voice.temperature", 0.7) or 0.7
+        )
+        # Source of truth for generation language is User.language.
+        # system.language is UI-only; using it here is a legacy fallback kept
+        # for boot windows when DB lookup fails.
+        language = (
+            str(language_hint or "")
+            or str(config_service.get_config_value("moral.inner_voice.language", "") or "")
+            or resolve_user_language(fallback="en-US")
+        )
+
+        user_payload = (
+            f"Language: {language}\n"
+            f"Current emotion: {emotion}\n"
+            f"Intensity: {round(float(intensity or 0.0), 3)}\n"
+            f"Trigger: {str(cause or '').strip()[:600]}"
+        )
+
+        try:
+            result = generation_manager.generate(
+                GenerateRequest(
+                    messages=[
+                        {"role": "system", "content": MORAL_INNER_VOICE_PROMPT},
+                        {"role": "user", "content": user_payload},
+                    ],
+                    options={
+                        "temperature": temperature,
+                        "num_predict": max_tokens,
+                        "max_tokens": max_tokens,
+                        "__think": False,
+                    },
+                    metadata={"mode": "moral_inner_voice"},
+                )
+            )
+        except NoProviderResolved as exc:
+            log_audit_entry(
+                "moral_matrix_inner_voice_no_provider",
+                "[MoralMatrix] No provider for inner voice; skipping.",
+                AuditStatus.WARNING,
+                details={"error": str(exc)},
+            )
+            return ""
+        except Exception as exc:
+            log_audit_entry(
+                "moral_matrix_inner_voice_failed",
+                "[MoralMatrix] Inner voice generation failed.",
+                AuditStatus.WARNING,
+                details={"error": str(exc)},
+            )
+            return ""
+
+        text = str(getattr(result, "content", "") or "").strip()
+        # Strip a possible "Inner voice:" prefix that small models love to add.
+        for prefix in ("Inner voice:", "PAI:", "Lim:", "Лим:", "ПАИ:"):
+            if text.lower().startswith(prefix.lower()):
+                text = text[len(prefix):].strip()
+        # Trim to a single sentence — model sometimes ignores the rule.
+        # Take everything up to the first sentence terminator + 1 char.
+        for terminator in (". ", "! ", "? ", "\n"):
+            idx = text.find(terminator)
+            if 0 < idx < 240:
+                text = text[: idx + 1].strip()
+                break
+        return text
+
+    @staticmethod
+    def _match_scar_trigger(
+        analyzer_emotion: Dict[str, Any],
+        analysis_result: Dict[str, Any],
+        message_text: str,
+        triggers: Sequence[Dict[str, Any]],
+    ) -> Optional[Dict[str, Any]]:
+        """Return the first scar trigger matching the current turn, or None.
+
+        Match is OR across the three signal types within a single trigger:
+        a trigger fires when ANY of its intents / tones / keywords matches.
+        Triggers themselves are evaluated in declaration order — first wins.
+        """
+        if not triggers:
+            return None
+
+        # Pull intent from analysis_result. Concept docs (Pai_Updated_Concept §3.2)
+        # state analyzer surfaces intent in input_analysis.intent; we accept
+        # either a string or {primary, ...}.
+        intent_field = (
+            (analysis_result or {}).get("input_analysis", {}).get("intent")
+            if isinstance(analysis_result, dict)
+            else None
+        )
+        if isinstance(intent_field, dict):
+            intent_value = str(intent_field.get("primary") or "").strip().lower()
+        else:
+            intent_value = str(intent_field or "").strip().lower()
+
+        tones: set[str] = set()
+        primary_tone = str((analyzer_emotion or {}).get("primary") or "").lower()
+        if primary_tone:
+            tones.add(primary_tone)
+        for secondary in (analyzer_emotion or {}).get("secondary") or []:
+            tones.add(str(secondary).lower())
+
+        text_lower = (message_text or "").lower()
+
+        for trigger in triggers:
+            if not isinstance(trigger, dict):
+                continue
+            name = str(trigger.get("name") or "").strip()
+            if not name:
+                continue
+
+            intent_hits = [
+                str(item).strip().lower()
+                for item in (trigger.get("intents") or [])
+                if str(item).strip()
+            ]
+            if intent_value and intent_value in intent_hits:
+                return trigger
+
+            tone_hits = {
+                str(item).strip().lower()
+                for item in (trigger.get("tones") or [])
+                if str(item).strip()
+            }
+            if tone_hits & tones:
+                return trigger
+
+            keyword_hits = [
+                str(item).strip().lower()
+                for item in (trigger.get("keywords") or [])
+                if str(item).strip()
+            ]
+            if text_lower and any(kw in text_lower for kw in keyword_hits):
+                return trigger
+
+        return None
+
+    @staticmethod
+    def _apply_scar_to_payload(
+        trace_payload: Dict[str, Any],
+        scar: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Mutate ``trace_payload`` to bake a scar into the new EmotionalTrace.
+
+        Bumps intensity by ``intensity_boost`` (clamped to 1.0), sets
+        ``persistence_floor`` from the trigger config, ensures the result is
+        not below the floor, and records the scar label inside notes for the
+        UI timeline + later auditing.
+        """
+        boost = float(scar.get("intensity_boost") or 0.0)
+        floor = float(scar.get("persistence_floor") or 0.4)
+        label = str(scar.get("name") or "")
+
+        current_intensity = float(trace_payload.get("intensity") or 0.0)
+        new_intensity = min(1.0, max(current_intensity + boost, floor))
+
+        trace_payload["intensity"] = new_intensity
+        trace_payload["persistence_floor"] = floor
+
+        notes = trace_payload.get("notes")
+        if not isinstance(notes, dict):
+            notes = {"text": notes} if notes else {}
+        notes["scar"] = {
+            "label": label,
+            "persistence_floor": floor,
+            "intensity_boost": boost,
+        }
+        trace_payload["notes"] = notes
+        trace_payload["scar_label"] = label  # surfaced to audit log
+        return trace_payload
+
+    def _apply_heuristic_forgiveness(
+        self,
+        *,
+        character_id: str,
+        analyzer_emotion: Dict[str, Any],
+        user_message_text: str,
+    ) -> None:
+        """Detect compensating user behaviour and soften matching traces.
+
+        Heuristic only — no LLM call. Detection: primary tone or any secondary
+        tone falls into ``moral.forgiveness.compensating_tones``. When matched,
+        the most recent unresolved negative trace in window is softened by
+        ``delta_per_event``. The softening is clamped to ``persistence_floor``
+        in the repository — see register_forgiveness.
+        """
+        if not bool(config_service.get_config_value("moral.forgiveness.enabled", True)):
+            return
+        if not character_id:
+            return
+
+        compensating_tones = set(
+            map(
+                str.lower,
+                config_service.get_config_value(
+                    "moral.forgiveness.compensating_tones", []
+                )
+                or [],
+            )
+        )
+        softenable = config_service.get_config_value(
+            "moral.forgiveness.softenable_emotions", []
+        ) or []
+        delta = float(
+            config_service.get_config_value("moral.forgiveness.delta_per_event", 0.15)
+            or 0.15
+        )
+        lookback = int(
+            config_service.get_config_value("moral.forgiveness.lookback_days", 30)
+            or 30
+        )
+
+        if not compensating_tones or not softenable or delta <= 0:
+            return
+
+        primary = str((analyzer_emotion or {}).get("primary") or "").lower()
+        secondary = [str(x).lower() for x in (analyzer_emotion or {}).get("secondary") or []]
+        matched_tone = None
+        if primary in compensating_tones:
+            matched_tone = primary
+        else:
+            for tone in secondary:
+                if tone in compensating_tones:
+                    matched_tone = tone
+                    break
+
+        if not matched_tone:
+            return
+
+        candidates = self._repository.fetch_unresolved_negative_traces(
+            character_id,
+            emotions=list(softenable),
+            within_days=lookback,
+            limit=1,  # MVP: soften the most recent only. Bulk-softening can be
+                     # tuned later if log evidence shows it under-applies.
+        )
+        if not candidates:
+            return
+
+        target = candidates[0]
+        target_id = target.get("id")
+        if not target_id:
+            return
+
+        # Build a human-readable trail for diagnostics / UI timeline.
+        excerpt = (user_message_text or "").strip()
+        if len(excerpt) > 240:
+            excerpt = excerpt[:240] + "…"
+
+        applied = self._repository.register_forgiveness(
+            character_id,
+            trace_id=target_id,
+            cause=f"compensating tone detected: {matched_tone}",
+            compensating_action=excerpt,
+            delta_intensity=delta,
+        )
+        if applied:
+            log_audit_entry(
+                "moral_matrix_forgiveness_applied",
+                "[MoralMatrix] Forgiveness softened a trace.",
+                AuditStatus.INFO,
+                details={
+                    "character_id": character_id,
+                    "trace_id": target_id,
+                    "tone": matched_tone,
+                    **applied,
+                },
+            )
 
     @staticmethod
     def _extract_analyzer_emotion(analysis_result: Dict[str, Any]) -> Dict[str, Any]:
@@ -947,6 +1280,7 @@ class MoralMatrixModule:
         message_meta: Optional[Dict[str, Any]],
         analyzer_snapshot: Optional[Dict[str, Any]],
         user_message: Optional[Dict[str, Any]],
+        analysis_result: Optional[Dict[str, Any]] = None,
     ) -> None:
         message_id = (message_meta or {}).get("message_id")
         snapshot_payload = {
@@ -990,6 +1324,72 @@ class MoralMatrixModule:
                 "hard_directives": result.hard_directives,
             },
         }
+
+        # Scar check — does this turn cross a boundary the operator marked as
+        # irreversible? If so, the new trace is born with a high persistence_floor
+        # and an intensity boost; decay and forgiveness will respect the floor.
+        try:
+            if bool(config_service.get_config_value("moral.scars.enabled", True)):
+                triggers = (
+                    config_service.get_config_value("moral.scars.triggers", []) or []
+                )
+                scar = self._match_scar_trigger(
+                    analyzer_snapshot or {},
+                    analysis_result or {},
+                    str((user_message or {}).get("content") or ""),
+                    triggers,
+                )
+                if scar:
+                    self._apply_scar_to_payload(trace_payload, scar)
+                    log_audit_entry(
+                        "moral_matrix_scar_applied",
+                        "[MoralMatrix] Scar trigger matched, persistence_floor raised.",
+                        AuditStatus.WARNING,
+                        details={
+                            "character_id": character_id,
+                            "message_id": message_id,
+                            "scar": trace_payload.get("scar_label"),
+                            "persistence_floor": trace_payload.get("persistence_floor"),
+                            "intensity": trace_payload.get("intensity"),
+                        },
+                    )
+        except Exception as exc:
+            log_audit_entry(
+                "moral_matrix_scar_check_failed",
+                "[MoralMatrix] Scar detection failed, falling back to plain trace.",
+                AuditStatus.WARNING,
+                details={"error": str(exc), "character_id": character_id},
+            )
+
+        # Inner voice — one short first-person sentence explaining "why I feel this".
+        # Feeds back into both the persisted trace (for later RAG / UI timeline)
+        # and result.meta (the WS moral_state event already serialises meta).
+        try:
+            if bool(config_service.get_config_value("moral.inner_voice.enabled", True)):
+                inner_voice = self._generate_inner_voice(
+                    emotion=result.current_emotion,
+                    intensity=result.emotion_intensity,
+                    cause=str(result.trigger or (user_message or {}).get("content") or ""),
+                    language_hint=resolve_user_language(
+                        character_id=character_id,
+                        fallback="",
+                    ),
+                )
+                if inner_voice:
+                    notes = trace_payload.get("notes")
+                    if not isinstance(notes, dict):
+                        notes = {"text": notes} if notes else {}
+                    notes["inner_voice"] = inner_voice
+                    trace_payload["notes"] = notes
+                    result.meta = {**(result.meta or {}), "inner_voice": inner_voice}
+        except Exception as exc:
+            log_audit_entry(
+                "moral_matrix_inner_voice_unexpected",
+                "[MoralMatrix] Inner voice integration error.",
+                AuditStatus.WARNING,
+                details={"error": str(exc), "character_id": character_id},
+            )
+
         self._repository.store_emotional_trace(
             character_id, message_id=message_id, payload=trace_payload
         )

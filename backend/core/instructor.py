@@ -432,6 +432,79 @@ class Instructor:
     def _build_environment_tool_content(self) -> str:
         return self._get_environment_info()
 
+    def _build_diary_tool_content(self) -> str:
+        """§3.9-bis-retrieval: recent diary days as generation context.
+
+        Reads the nightly diary (narrative + self_reflection + mood) for the
+        active character and renders the freshest N entries, newest first.
+        Pure SQLite read — no LLM calls. Returns '' when disabled, when the
+        diary is empty, or on any error (context building must never break
+        a turn).
+        """
+        try:
+            if not bool(
+                config_service.get_config_value("memory.diary.context.enabled", True)
+            ):
+                return ""
+
+            days = int(
+                config_service.get_config_value("memory.diary.context.days", 7) or 7
+            )
+            max_entries = int(
+                config_service.get_config_value("memory.diary.context.max_entries", 3)
+                or 3
+            )
+            max_chars = int(
+                config_service.get_config_value(
+                    "memory.diary.context.max_chars_per_entry", 600
+                )
+                or 600
+            )
+
+            from modules.memory.diary import list_daily_activity_entries
+            from modules.system import character as character_module
+            from modules.system.service import get_active_character_name
+
+            char_name = get_active_character_name(default="default_waifu")
+            character = character_module.get_or_create_character(char_name)
+            entries = list_daily_activity_entries(
+                character_id=character.id,
+                days=max(1, days),
+            )
+            if not entries:
+                return ""
+
+            lines: List[str] = [
+                "Your private diary — the most recent days. Use it for continuity "
+                "(what happened, how you felt, what you noticed about yourself). "
+                "Do not quote it verbatim unless asked."
+            ]
+            for entry in entries[: max(1, max_entries)]:
+                payload = entry.payload if isinstance(entry.payload, dict) else {}
+                narrative = str(payload.get("narrative") or "").strip()
+                reflection = str(payload.get("self_reflection") or "").strip()
+                body = narrative or str(entry.summary or "").strip()
+                if not body and not reflection:
+                    continue
+                block: List[str] = [f"[{entry.day}] mood: {entry.mood or 'neutral'}"]
+                if body:
+                    block.append(body[:max_chars])
+                if reflection:
+                    block.append(f"Self-reflection: {reflection[:max_chars]}")
+                lines.append("\n".join(block))
+
+            if len(lines) <= 1:
+                return ""
+            return "\n\n".join(lines)
+        except Exception as exc:
+            log_audit_entry(
+                "instructor_diary_context_failed",
+                "[Instructor] Diary context block failed (non-fatal).",
+                AuditStatus.WARNING,
+                details={"error": str(exc)},
+            )
+            return ""
+
     def _build_dynamic_tool_messages(
         self,
         *,
@@ -505,6 +578,18 @@ class Instructor:
                     "role": "tool",
                     "name": "context.relationship",
                     "content": relation_info,
+                }
+            )
+
+        # §3.9-bis-retrieval: recent diary days (narrative + self_reflection).
+        # Pure DB read, gated by memory.diary.context.enabled.
+        diary_info = self._build_diary_tool_content().strip()
+        if diary_info:
+            dynamic_messages.append(
+                {
+                    "role": "tool",
+                    "name": "diary.recent",
+                    "content": diary_info,
                 }
             )
 

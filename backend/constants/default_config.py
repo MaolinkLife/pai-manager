@@ -25,6 +25,119 @@ DEFAULT_CONFIG = {
         "env": "dev",
         "debug": False,
     },
+    "language_guard": {
+        # Language compliance guard (§3.5-bis). Detects dominant unicode
+        # script of the assistant output and compares with User.language.
+        # NO LLM call — pure CPU script-ratio counter. Off by default;
+        # producing DebugVault entries when on. Auto-reroll is a follow-up.
+        "enabled": False,
+        "min_dominance": 0.7,
+        "min_output_chars": 40,
+    },
+    "confidence": {
+        # Confidence estimation (§3.8). Mini LLM call scoring how confident
+        # PAI should be the output addressed the user message. Off by
+        # default — one extra LLM call per sync generation. Low confidence
+        # is a SIGNAL (audit WARNING + runtime_meta.confidence) — NOT an
+        # anomaly, so DebugVault is NOT written. Factuality check (§3.9)
+        # is the natural downstream consumer.
+        "enabled": False,
+        "threshold": 0.5,
+        "max_tokens": 64,
+        "temperature": 0.0,
+        "user_char_limit": 2000,
+        "output_char_limit": 4000,
+    },
+    "factuality": {
+        # Factuality check (§3.9). Extracts factual claims from the output
+        # (years, dates, numbers+units, capitalized phrases) and looks them
+        # up in PAI's OWN memory (lorebook). NO web/internet — that
+        # belongs to §3.10 Skill Training which is OUT OF CORE.
+        # gate_on_low_confidence=True means we only run when §3.8 already
+        # flagged the output as low-confidence — keeps the cost bounded.
+        "enabled": False,
+        "gate_on_low_confidence": True,
+        "top_k": 3,
+        "min_similarity": 0.6,
+        "max_claims": 6,
+        "claim_min_length": 3,
+    },
+    "self_watcher": {
+        # Self-Watcher / Meta-cognition (§3.7). Observes predicted-vs-actual
+        # emotional mismatches and feeds them into a nightly LLM-written
+        # self-reflection in the diary. Off by default. The per-turn check
+        # is CPU-only; the nightly reflection adds one LLM call per day
+        # per character.
+        "enabled": False,
+        "mismatch_threshold": 0.5,
+        "nightly_reflection_enabled": True,
+        "lookback_days": 7,
+        "max_events_in_cluster": 20,
+        "llm_max_tokens": 220,
+        "llm_temperature": 0.5,
+    },
+    "reminders": {
+        # §3.9-quinquies Tasks/Reminders. Capture: regex gate in the decision
+        # layer + one LLM extraction call only when the gate matches.
+        # Delivery: initiative loop polls due rows once a minute and posts an
+        # assistant message to main_chat (one LLM call per fired reminder,
+        # canned «⏰ …» fallback). Quiet hours are ignored by design.
+        "enabled": True,
+        "max_active": 50,
+        # Nightly cleanup: fired/cancelled/failed rows older than this are
+        # deleted (pending rows are never touched).
+        "retention_days": 30,
+    },
+    "auto_reroll": {
+        # Joint auto-reroll for Validator (§3.5) + LanguageGuard (§3.5-bis):
+        # when a sync generation fails a gating check, regenerate with a
+        # corrective hint up to max_attempts times BEFORE persisting/sending.
+        # Off by default — each retry is a full generation-LLM call. The last
+        # candidate is kept even if still failing (violations stay visible in
+        # runtime_meta/DebugVault). Streaming is exempt: the original text is
+        # already on screen.
+        "enabled": False,
+        "max_attempts": 1,
+        "on_validator": True,
+        "on_language_guard": True,
+    },
+    "validator": {
+        # Off by default — turning it on adds one LLM call per sync generation
+        # (no streaming impact). Concept: Pai_Updated_Concept.md > 3.5.
+        "enabled": False,
+        "threshold": 0.7,
+        "max_tokens": 256,
+        "temperature": 0.0,
+        # Inputs are truncated before the prompt — validator is intentionally
+        # cheap, not a deep critic.
+        "instruction_char_limit": 4000,
+        "output_char_limit": 4000,
+    },
+    "audit_logs": {
+        # Retention policy applied nightly by loop_initiative right after
+        # the diary consolidation + emotional decay window. age_days/hard_cap
+        # are keyed by severity; severities not listed here use the defaults
+        # baked into modules.system.logger._DEFAULT_RETENTION_*.
+        # Set age_days[severity]=0 to disable the age sweep for that bucket.
+        # Set hard_cap[severity]=0 to disable the row-count cap.
+        "retention": {
+            "enabled": True,
+            "age_days": {
+                "info": 7,
+                "success": 7,
+                "warning": 30,
+                "error": 90,
+                "audit_fail": 90,
+            },
+            "hard_cap": {
+                "info": 50000,
+                "success": 50000,
+                "warning": 10000,
+                "error": 5000,
+                "audit_fail": 5000,
+            },
+        },
+    },
     "decision_layer": {
         "mode": "system",
         "active_provider": "ollama",
@@ -79,10 +192,42 @@ DEFAULT_CONFIG = {
                 "similarity": 0.75,
             },
             "edge": {"voice_language": "en-US-JennyNeural"},
+            "qwen": {
+                "model_name": "Qwen/Qwen3-TTS-Flash",
+                "device": "cuda",
+                "dtype": "bfloat16",
+                "max_seq_len": 2048,
+                "language": "English",
+                "temperature": 0.9,
+                "top_k": 50,
+                "repetition_penalty": 1.05,
+                "max_new_tokens": 2048,
+                "do_sample": True,
+            },
         },
         "voice_language": "en-US-JennyNeural",
     },
-    "stt": {"language": "en-US", "auto_detect": False},
+    "stt": {
+        "language": "en-US",
+        "auto_detect": False,
+        "provider": "whisper",
+        "sherpa_onnx": {
+            "model_type": "transducer",
+            "encoder": "",
+            "decoder": "",
+            "joiner": "",
+            "paraformer": "",
+            "whisper_encoder": "",
+            "whisper_decoder": "",
+            "moonshine_preprocessor": "",
+            "moonshine_encoder": "",
+            "moonshine_uncached_decoder": "",
+            "moonshine_cached_decoder": "",
+            "tokens": "",
+            "num_threads": 1,
+            "provider": "cpu",
+        },
+    },
     "modules": {
         "vtube_studio": False,
         "whisper": True,
@@ -148,6 +293,15 @@ DEFAULT_CONFIG = {
                 "image_format": "PNG",
                 "keep_alive": "5m",
                 "use_main_model_context": False,
+            },
+            "llama_cpp_vision": {
+                "enabled": False,
+                "base_url": "http://127.0.0.1:8080",
+                "model": "",
+                "max_tokens": 512,
+                "request_timeout": 120,
+                "ping_timeout": 3.0,
+                "image_format": "PNG",
             },
         },
     },
@@ -285,6 +439,14 @@ DEFAULT_CONFIG = {
                 "max_tokens": 1024,
                 "thinking": False,
             },
+            "llama_cpp": {
+                "enabled": False,
+                "base_url": "http://127.0.0.1:8080",
+                "model": "",
+                "temperature": 0.1,
+                "max_tokens": 1024,
+                "request_timeout": 120,
+            },
         },
     },
     "moral": {
@@ -293,6 +455,67 @@ DEFAULT_CONFIG = {
         "fallback_order": ["openrouter", "heuristic"],
         "release_after_use": True,
         "system_prompt": MORAL_MATRIX_PROVIDER_PROMPT,
+        "decay": {
+            "enabled": True,
+            "global_rate": 0.05,
+        },
+        "inner_voice": {
+            # One short first-person sentence on each turn, explaining why PAI
+            # feels what she feels right now. Costs a small LLM call per turn,
+            # so the operator can turn it off if latency matters more.
+            "enabled": True,
+            "max_tokens": 80,
+            "temperature": 0.7,
+            "language": "",  # fallback to system.language if blank
+        },
+        "scars": {
+            # Emotional scars from Архитектура.md > "Что не прощается".
+            # When a turn matches one of these triggers, the EmotionalTrace
+            # is created with a high persistence_floor — decay and forgiveness
+            # will never reduce it below that floor. The trace also gets an
+            # intensity boost on top of whatever the moral matrix computed.
+            #
+            # Default list ships empty so existing behaviour is unchanged.
+            # Operator sets concrete triggers in UI / via /api/config.
+            #
+            # Schema of each entry:
+            #   name (str)              — readable label, also stored on the trace
+            #   intents (list[str])     — match if analyzer.intent in list
+            #   tones (list[str])       — match if analyzer primary/secondary tone in list
+            #   keywords (list[str])    — match if message text contains any (case-insensitive)
+            #   persistence_floor (float, 0.0–1.0) — minimum intensity after decay/forgiveness
+            #   intensity_boost (float, 0.0–1.0)   — added to intensity on the new trace, clamped to 1.0
+            "enabled": True,
+            "triggers": [],
+        },
+        "forgiveness": {
+            "enabled": True,
+            # Tone hints from analyzer.emotional_tone.primary that count as
+            # compensating actions. The heuristic also looks at synonyms via
+            # secondary_emotion in service-level logic.
+            "compensating_tones": [
+                "warm",
+                "tender",
+                "kind",
+                "apologetic",
+                "soft",
+                "loving",
+            ],
+            # Which unresolved emotions can be softened by a compensating action.
+            "softenable_emotions": [
+                "sadness",
+                "resentment",
+                "frustration",
+                "anger",
+                "longing",
+                "fear",
+                "shame",
+            ],
+            # Per-event intensity delta applied when a compensating tone is detected.
+            "delta_per_event": 0.15,
+            # How many days back we look for unresolved traces to soften.
+            "lookback_days": 30,
+        },
         "current_state": {
             "current_emotion": "peace",
             "emotion_intensity": 0.34,
@@ -328,6 +551,14 @@ DEFAULT_CONFIG = {
                 "temperature": 0.6,
                 "max_tokens": 512,
             },
+            "llama_cpp": {
+                "enabled": False,
+                "base_url": "http://127.0.0.1:8080",
+                "model": "",
+                "temperature": 0.6,
+                "max_tokens": 512,
+                "request_timeout": 120,
+            },
         },
     },
     "memory": {
@@ -339,6 +570,37 @@ DEFAULT_CONFIG = {
         "session_enabled": True,
         "embedding_provider": "auto",
         "embedding_model": "nomic-embed-text",
+        "consolidation": {
+            "importance_threshold": 0.2,
+            "judge": {
+                "enabled": False,
+                "provider": "ollama",
+                "model": "",
+                "temperature": 0.0,
+                "max_tokens": 512,
+                "request_timeout": 60,
+            },
+        },
+        "diary": {
+            # Narrative diary (§3.9-bis): the daily summarisation LLM call
+            # already returns a structured payload; we extend the same JSON
+            # schema with a free-form first-person passage. No extra LLM call.
+            "narrative": {
+                "enabled": True,
+                "min_chars": 80,
+                "max_chars": 3000,
+            },
+            # §3.9-bis-retrieval: recent diary days (narrative +
+            # self_reflection) injected into generation context as a
+            # `diary.recent` tool block. Pure DB read — no LLM calls,
+            # cost is prompt tokens only.
+            "context": {
+                "enabled": True,
+                "days": 7,
+                "max_entries": 3,
+                "max_chars_per_entry": 600,
+            },
+        },
     },
     "synthesis": {
         "active_provider": "core",
@@ -676,6 +938,20 @@ DEFAULT_CONFIG = {
                 "repetition_penalty": 1.1,
                 "keep_loaded": True,
                 "source": "huggingface",
+            },
+            "llama_cpp": {
+                "enabled": False,
+                "model": "",
+                "base_url": "http://127.0.0.1:8080",
+                "streaming": True,
+                "request_timeout": 300,
+                "stream_timeout": 600,
+                "temperature": 0.85,
+                "max_tokens": 2048,
+                "top_p": 0.9,
+                "top_k": 50,
+                "min_p": 0.05,
+                "repeat_penalty": 1.1,
             },
         },
     },

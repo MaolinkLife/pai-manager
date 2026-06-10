@@ -12,6 +12,7 @@ from modules.system.runtime_profile import should_release_resources
 from .base import AnalyzerProvider
 from .openrouter import OpenRouterAnalyzerProvider
 from .ollama import OllamaAnalyzerProvider
+from .llama_cpp import LlamaCppAnalyzerProvider
 
 
 class AnalyzerProviderManager:
@@ -21,6 +22,7 @@ class AnalyzerProviderManager:
         self._registry: Dict[str, AnalyzerProvider] = {
             "openrouter": OpenRouterAnalyzerProvider(),
             "ollama": OllamaAnalyzerProvider(),
+            "llama_cpp": LlamaCppAnalyzerProvider(),
         }
 
     async def analyze(

@@ -1,5 +1,6 @@
 import { AfterViewInit, Component, ElementRef, HostListener, OnInit, ViewChild } from '@angular/core';
 import { LoggerService } from '../../core/services/logger.service';
+import { DebugVaultEntry, DebugVaultService } from '../../core/services/debug-vault.service';
 
 const TAG_RE = /\[([^\]]+)\]/g;
 const JSON_LIKE_RE = /^\s*[\[{]/;
@@ -30,10 +31,126 @@ export class DebugComponent implements OnInit, AfterViewInit {
     availableStatuses: string[] = [];
     activeStatuses: string[] = [];
 
-    constructor(private loggerService: LoggerService) {}
+    // DebugVault tab (0.9.x P10-B)
+    activeTab: 'logs' | 'vault' = 'logs';
+    vaultEntries: DebugVaultEntry[] = [];
+    vaultTotal = 0;
+    vaultOffset = 0;
+    readonly vaultPageSize = 25;
+    vaultLoading = false;
+    vaultKinds: string[] = [];
+    vaultKindFilter = '';
+    vaultReviewedFilter: 'all' | 'reviewed' | 'unreviewed' = 'all';
+    vaultExpanded: Set<string> = new Set();
+    vaultReviewNotes: Record<string, string> = {};
+    vaultReviewBusy: Set<string> = new Set();
+
+    constructor(
+        private loggerService: LoggerService,
+        private debugVaultService: DebugVaultService,
+    ) {}
 
     ngOnInit(): void {
         this.loadAllLogs();
+    }
+
+    selectTab(tab: 'logs' | 'vault'): void {
+        this.activeTab = tab;
+        if (tab === 'vault' && !this.vaultEntries.length && !this.vaultLoading) {
+            this.loadVault(true);
+        }
+    }
+
+    loadVault(reset = false): void {
+        if (reset) {
+            this.vaultOffset = 0;
+            this.vaultEntries = [];
+            this.vaultExpanded.clear();
+        }
+        this.vaultLoading = true;
+        const reviewed =
+            this.vaultReviewedFilter === 'all'
+                ? undefined
+                : this.vaultReviewedFilter === 'reviewed';
+        this.debugVaultService
+            .list$({
+                kind: this.vaultKindFilter || undefined,
+                reviewed,
+                limit: this.vaultPageSize,
+                offset: this.vaultOffset,
+            })
+            .subscribe({
+                next: (response) => {
+                    const incoming = response?.entries || [];
+                    this.vaultEntries = reset
+                        ? incoming
+                        : [...this.vaultEntries, ...incoming];
+                    this.vaultTotal = response?.total ?? this.vaultEntries.length;
+                    this.vaultOffset = this.vaultEntries.length;
+                    this.collectVaultKinds(incoming);
+                    this.vaultLoading = false;
+                },
+                error: () => {
+                    this.vaultLoading = false;
+                },
+            });
+    }
+
+    get vaultHasMore(): boolean {
+        return this.vaultEntries.length < this.vaultTotal;
+    }
+
+    onVaultFilterChanged(): void {
+        this.loadVault(true);
+    }
+
+    toggleVaultEntry(entryId: string): void {
+        if (this.vaultExpanded.has(entryId)) {
+            this.vaultExpanded.delete(entryId);
+        } else {
+            this.vaultExpanded.add(entryId);
+        }
+    }
+
+    markVaultReviewed(entry: DebugVaultEntry): void {
+        if (this.vaultReviewBusy.has(entry.id)) {
+            return;
+        }
+        this.vaultReviewBusy.add(entry.id);
+        const note = (this.vaultReviewNotes[entry.id] || '').trim() || undefined;
+        this.debugVaultService.markReviewed$(entry.id, note).subscribe({
+            next: () => {
+                entry.reviewed = true;
+                entry.reviewed_note = note || entry.reviewed_note;
+                entry.reviewed_at = new Date().toISOString();
+                this.vaultReviewBusy.delete(entry.id);
+                delete this.vaultReviewNotes[entry.id];
+            },
+            error: () => {
+                this.vaultReviewBusy.delete(entry.id);
+            },
+        });
+    }
+
+    formatVaultJson(value: any): string {
+        if (value === null || value === undefined) {
+            return '';
+        }
+        try {
+            return JSON.stringify(value, null, 2);
+        } catch {
+            return String(value);
+        }
+    }
+
+    private collectVaultKinds(entries: DebugVaultEntry[]): void {
+        const kinds = new Set(this.vaultKinds);
+        for (const entry of entries) {
+            if (entry.kind) {
+                kinds.add(entry.kind);
+            }
+        }
+        this.vaultKinds = Array.from(kinds).sort();
     }
 
     ngAfterViewInit(): void {
@@ -52,12 +169,24 @@ export class DebugComponent implements OnInit, AfterViewInit {
         }
     }
 
+    // Server-side paging (0.9.x P10-C): with the DB-backed store a 24/7
+    // session can hold tens of thousands of rows — never fetch unbounded.
+    private readonly SERVER_PAGE_SIZE = 500;
+    private serverOffset = 0;
+    private serverHasMore = false;
+    private serverLoading = false;
+    serverTotal = 0;
+
     private loadAllLogs(): void {
         this.isInitialLoading = true;
-        this.loggerService.getAllDebugLogs$(this.currentSessionId || undefined).subscribe({
-            next: (response) => {
+        this.serverOffset = 0;
+        this.loggerService.getDebugLogPage$(this.SERVER_PAGE_SIZE, 0, this.currentSessionId || undefined).subscribe({
+            next: (response: any) => {
                 this.logs = (response?.logs || []).map((l: any) => this.enrichLog(l));
                 this.currentSessionId = String(response?.session_id || this.currentSessionId || '');
+                this.serverOffset = this.logs.length;
+                this.serverTotal = Number(response?.total ?? this.logs.length);
+                this.serverHasMore = !!response?.has_more;
                 this.rebuildAvailableFilters();
                 this.applyFilters();
             },
@@ -66,12 +195,65 @@ export class DebugComponent implements OnInit, AfterViewInit {
                 this.filteredLogs = [];
                 this.visibleLogs = [];
                 this.hasMoreLogs = false;
+                this.serverHasMore = false;
             },
             complete: () => {
                 this.isInitialLoading = false;
                 setTimeout(() => this.ensureViewportFilled(), 0);
             },
         });
+    }
+
+    private loadNextServerPage(): void {
+        if (!this.serverHasMore || this.serverLoading) {
+            return;
+        }
+        this.serverLoading = true;
+        this.isLoadingMore = true;
+        this.loggerService
+            .getDebugLogPage$(this.SERVER_PAGE_SIZE, this.serverOffset, this.currentSessionId || undefined)
+            .subscribe({
+                next: (response: any) => {
+                    const incoming = (response?.logs || []).map((l: any) => this.enrichLog(l));
+                    this.logs = [...this.logs, ...incoming];
+                    this.serverOffset = this.logs.length;
+                    this.serverTotal = Number(response?.total ?? this.serverTotal);
+                    this.serverHasMore = !!response?.has_more;
+                    this.rebuildAvailableFilters();
+                    this.applyFilters();
+                    this.serverLoading = false;
+                    this.isLoadingMore = false;
+                },
+                error: () => {
+                    this.serverLoading = false;
+                    this.isLoadingMore = false;
+                    this.serverHasMore = false;
+                },
+            });
+    }
+
+    exportLogsAsJsonl(): void {
+        if (!this.filteredLogs.length) {
+            return;
+        }
+        const lines = this.filteredLogs
+            .map((log) => {
+                const { tags, statusLabel, ...raw } = log;
+                try {
+                    return JSON.stringify(raw);
+                } catch {
+                    return '';
+                }
+            })
+            .filter(Boolean)
+            .join('\n');
+        const blob = new Blob([lines], { type: 'application/x-ndjson' });
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = `debug_${this.currentSessionId || 'session'}.jsonl`;
+        anchor.click();
+        URL.revokeObjectURL(url);
     }
 
     private tryExtendVisibleWindow(): void {
@@ -112,6 +294,12 @@ export class DebugComponent implements OnInit, AfterViewInit {
         if (!this.hasMoreLogs) {
             return;
         }
+        // Client window exhausted but the server has more rows — pull the
+        // next page before extending the visible slice.
+        if (this.visibleCount >= this.filteredLogs.length && this.serverHasMore) {
+            this.loadNextServerPage();
+            return;
+        }
         this.isLoadingMore = true;
         this.visibleCount = Math.min(this.visibleCount + this.PAGE_SIZE, this.filteredLogs.length);
         this.rebuildVisibleLogs();
@@ -131,7 +319,7 @@ export class DebugComponent implements OnInit, AfterViewInit {
 
     private rebuildVisibleLogs(): void {
         this.visibleLogs = this.filteredLogs.slice(0, this.visibleCount);
-        this.hasMoreLogs = this.visibleCount < this.filteredLogs.length;
+        this.hasMoreLogs = this.visibleCount < this.filteredLogs.length || this.serverHasMore;
     }
 
     private enrichLog(log: any) {

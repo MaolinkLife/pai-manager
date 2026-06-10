@@ -1,0 +1,209 @@
+<ng-container *ngIf="isLoading$ | async; else content">
+    <div class="settings-wrapper">
+        <div class="settings-form">
+            <h2><app-skeleton height="2rem" width="220px"></app-skeleton></h2>
+            <div class="section">
+                <app-skeleton height="1.5rem" width="160px"></app-skeleton>
+                <app-skeleton height="2.5rem" width="100%"></app-skeleton>
+                <app-skeleton height="2.5rem" width="100%"></app-skeleton>
+            </div>
+            <div class="section">
+                <app-skeleton height="1.5rem" width="160px"></app-skeleton>
+                <app-skeleton height="2.5rem" width="100%"></app-skeleton>
+            </div>
+        </div>
+    </div>
+</ng-container>
+
+<ng-template #content>
+    <div class="settings-wrapper">
+        <form [formGroup]="complianceForm" (ngSubmit)="saveChanges()" class="settings-form">
+            <h2>🛡️ {{ "complianceSettings.title" | translate }}</h2>
+            <p class="hint hint-top">{{ "complianceSettings.intro" | translate }}</p>
+
+            <div class="section" formGroupName="validator">
+                <h3>✅ {{ "complianceSettings.validatorTitle" | translate }}</h3>
+                <p class="hint">{{ "complianceSettings.validatorHint" | translate }}</p>
+
+                <div class="form-group">
+                    <app-ui-checkbox formControlName="enabled">
+                        {{ "complianceSettings.enableLabel" | translate }}
+                    </app-ui-checkbox>
+                </div>
+
+                <div class="form-group">
+                    <label>{{ "complianceSettings.thresholdLabel" | translate }}</label>
+                    <app-ui-input type="number" step="0.05" min="0" max="1" formControlName="threshold"></app-ui-input>
+                </div>
+
+                <div class="form-group">
+                    <label>{{ "settings.maxTokens" | translate }}</label>
+                    <app-ui-input type="number" min="1" max="4096" formControlName="maxTokens"></app-ui-input>
+                </div>
+
+                <div class="form-group">
+                    <label>{{ "settings.temperature" | translate }}</label>
+                    <app-ui-input type="number" step="0.1" min="0" max="2" formControlName="temperature"></app-ui-input>
+                </div>
+
+                <div class="form-group">
+                    <label>{{ "complianceSettings.validatorInstructionLimit" | translate }}</label>
+                    <app-ui-input type="number" min="0" max="100000" formControlName="instructionCharLimit"></app-ui-input>
+                </div>
+
+                <div class="form-group">
+                    <label>{{ "complianceSettings.validatorOutputLimit" | translate }}</label>
+                    <app-ui-input type="number" min="0" max="100000" formControlName="outputCharLimit"></app-ui-input>
+                </div>
+            </div>
+
+            <div class="section" formGroupName="languageGuard">
+                <h3>🌐 {{ "complianceSettings.languageGuardTitle" | translate }}</h3>
+                <p class="hint">{{ "complianceSettings.languageGuardHint" | translate }}</p>
+
+                <div class="form-group">
+                    <app-ui-checkbox formControlName="enabled">
+                        {{ "complianceSettings.enableLabel" | translate }}
+                    </app-ui-checkbox>
+                </div>
+
+                <div class="form-group">
+                    <label>{{ "complianceSettings.langMinDominance" | translate }}</label>
+                    <app-ui-input type="number" step="0.05" min="0" max="1" formControlName="minDominance"></app-ui-input>
+                    <p class="hint">{{ "complianceSettings.langMinDominanceHint" | translate }}</p>
+                </div>
+
+                <div class="form-group">
+                    <label>{{ "complianceSettings.langMinOutputChars" | translate }}</label>
+                    <app-ui-input type="number" min="0" max="10000" formControlName="minOutputChars"></app-ui-input>
+                    <p class="hint">{{ "complianceSettings.langMinOutputCharsHint" | translate }}</p>
+                </div>
+            </div>
+
+            <div class="section" formGroupName="confidence">
+                <h3>📊 {{ "complianceSettings.confidenceTitle" | translate }}</h3>
+                <p class="hint">{{ "complianceSettings.confidenceHint" | translate }}</p>
+
+                <div class="form-group">
+                    <app-ui-checkbox formControlName="enabled">
+                        {{ "complianceSettings.enableLabel" | translate }}
+                    </app-ui-checkbox>
+                </div>
+
+                <div class="form-group">
+                    <label>{{ "complianceSettings.thresholdLabel" | translate }}</label>
+                    <app-ui-input type="number" step="0.05" min="0" max="1" formControlName="threshold"></app-ui-input>
+                    <p class="hint">{{ "complianceSettings.confidenceThresholdHint" | translate }}</p>
+                </div>
+
+                <div class="form-group">
+                    <label>{{ "settings.maxTokens" | translate }}</label>
+                    <app-ui-input type="number" min="1" max="4096" formControlName="maxTokens"></app-ui-input>
+                </div>
+
+                <div class="form-group">
+                    <label>{{ "settings.temperature" | translate }}</label>
+                    <app-ui-input type="number" step="0.1" min="0" max="2" formControlName="temperature"></app-ui-input>
+                </div>
+
+                <div class="form-group">
+                    <label>{{ "complianceSettings.confidenceUserLimit" | translate }}</label>
+                    <app-ui-input type="number" min="0" max="100000" formControlName="userCharLimit"></app-ui-input>
+                </div>
+
+                <div class="form-group">
+                    <label>{{ "complianceSettings.confidenceOutputLimit" | translate }}</label>
+                    <app-ui-input type="number" min="0" max="100000" formControlName="outputCharLimit"></app-ui-input>
+                </div>
+            </div>
+
+            <div class="section" formGroupName="factuality">
+                <h3>📚 {{ "complianceSettings.factualityTitle" | translate }}</h3>
+                <p class="hint">{{ "complianceSettings.factualityHint" | translate }}</p>
+
+                <div class="form-group">
+                    <app-ui-checkbox formControlName="enabled">
+                        {{ "complianceSettings.enableLabel" | translate }}
+                    </app-ui-checkbox>
+                </div>
+
+                <div class="form-group">
+                    <app-ui-checkbox formControlName="gateOnLowConfidence">
+                        {{ "complianceSettings.factualityGate" | translate }}
+                    </app-ui-checkbox>
+                    <p class="hint">{{ "complianceSettings.factualityGateHint" | translate }}</p>
+                </div>
+
+                <div class="form-group">
+                    <label>{{ "complianceSettings.factualityTopK" | translate }}</label>
+                    <app-ui-input type="number" min="1" max="50" formControlName="topK"></app-ui-input>
+                </div>
+
+                <div class="form-group">
+                    <label>{{ "complianceSettings.factualityMinSimilarity" | translate }}</label>
+                    <app-ui-input type="number" step="0.05" min="0" max="1" formControlName="minSimilarity"></app-ui-input>
+                </div>
+
+                <div class="form-group">
+                    <label>{{ "complianceSettings.factualityMaxClaims" | translate }}</label>
+                    <app-ui-input type="number" min="1" max="100" formControlName="maxClaims"></app-ui-input>
+                </div>
+
+                <div class="form-group">
+                    <label>{{ "complianceSettings.factualityClaimMinLength" | translate }}</label>
+                    <app-ui-input type="number" min="1" max="100" formControlName="claimMinLength"></app-ui-input>
+                </div>
+            </div>
+
+            <div class="section" formGroupName="selfWatcher">
+                <h3>🪞 {{ "complianceSettings.selfWatcherTitle" | translate }}</h3>
+                <p class="hint">{{ "complianceSettings.selfWatcherHint" | translate }}</p>
+
+                <div class="form-group">
+                    <app-ui-checkbox formControlName="enabled">
+                        {{ "complianceSettings.enableLabel" | translate }}
+                    </app-ui-checkbox>
+                </div>
+
+                <div class="form-group">
+                    <label>{{ "complianceSettings.swMismatchThreshold" | translate }}</label>
+                    <app-ui-input type="number" step="0.05" min="0" max="1" formControlName="mismatchThreshold"></app-ui-input>
+                    <p class="hint">{{ "complianceSettings.swMismatchHint" | translate }}</p>
+                </div>
+
+                <div class="form-group">
+                    <app-ui-checkbox formControlName="nightlyReflectionEnabled">
+                        {{ "complianceSettings.swNightlyEnable" | translate }}
+                    </app-ui-checkbox>
+                    <p class="hint">{{ "complianceSettings.swNightlyHint" | translate }}</p>
+                </div>
+
+                <div class="form-group">
+                    <label>{{ "complianceSettings.swLookbackDays" | translate }}</label>
+                    <app-ui-input type="number" min="1" max="365" formControlName="lookbackDays"></app-ui-input>
+                </div>
+
+                <div class="form-group">
+                    <label>{{ "complianceSettings.swMaxEvents" | translate }}</label>
+                    <app-ui-input type="number" min="1" max="500" formControlName="maxEventsInCluster"></app-ui-input>
+                </div>
+
+                <div class="form-group">
+                    <label>{{ "complianceSettings.swLlmMaxTokens" | translate }}</label>
+                    <app-ui-input type="number" min="1" max="4096" formControlName="llmMaxTokens"></app-ui-input>
+                </div>
+
+                <div class="form-group">
+                    <label>{{ "complianceSettings.swLlmTemperature" | translate }}</label>
+                    <app-ui-input type="number" step="0.1" min="0" max="2" formControlName="llmTemperature"></app-ui-input>
+                </div>
+            </div>
+
+            <div class="button-row">
+                <button type="submit" [disabled]="!hasChanges()">
+                    💾 {{ "complianceSettings.save" | translate }}
+                </button>
+            </div>
+        </form>
+    </div>
+</ng-template>

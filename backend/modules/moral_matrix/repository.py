@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from pprint import pformat
 import re
 from typing import Any, Dict, Iterable, List, Optional, Sequence
@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from models.models import (
     DailyMoralSummary,
     EmotionalTrace,
+    ForgivenessEvent,
     MoralStateSnapshot,
 )
 from modules.database.core import SessionLocal
@@ -199,7 +200,7 @@ class MoralMatrixRepository:
         if not character_id:
             return None
         with self._session() as session:
-            trace = EmotionalTrace(
+            trace_kwargs: Dict[str, Any] = dict(
                 character_id=character_id,
                 message_id=message_id,
                 trigger_role=payload.get("trigger_role", "assistant"),
@@ -217,6 +218,17 @@ class MoralMatrixRepository:
                     else payload.get("notes")
                 ),
             )
+
+            # Optional scar/decay overrides — only forwarded when explicitly
+            # set by the caller (typically the scar detector). Schema defaults
+            # apply for ordinary traces.
+            for optional_field in ("persistence_floor", "decay_rate"):
+                if optional_field in payload and payload[optional_field] is not None:
+                    trace_kwargs[optional_field] = float(payload[optional_field])
+            if "resolved" in payload and payload["resolved"] is not None:
+                trace_kwargs["resolved"] = bool(payload["resolved"])
+
+            trace = EmotionalTrace(**trace_kwargs)
             session.add(trace)
             session.commit()
             session.refresh(trace)
@@ -230,12 +242,241 @@ class MoralMatrixRepository:
                     "message_id": message_id,
                     "primary": payload.get("primary_emotion"),
                     "intensity": payload.get("intensity"),
+                    "persistence_floor": payload.get("persistence_floor"),
+                    "scar_label": payload.get("scar_label"),
                 },
             )
             print(
                 f"[MoralMatrix] Trace saved id: {trace.id} ",
             )
             return trace.id
+
+    def decay_emotional_traces(
+        self,
+        character_id: str,
+        *,
+        global_rate: float = 0.05,
+        now: Optional[datetime] = None,
+    ) -> Dict[str, Any]:
+        """Apply daily decay to every unresolved trace for ``character_id``.
+
+        Per row: ``new_intensity = max(persistence_floor,
+            intensity - effective_rate * days_elapsed)`` where ``effective_rate``
+        comes from the row's own ``decay_rate`` (falling back to ``global_rate``
+        when the row hasn't been migrated yet).
+
+        ``days_elapsed`` is measured from ``last_decayed_at`` (or ``created_at``
+        if the worker never touched this row yet). Always >= 0, so running the
+        job twice on the same day is idempotent.
+        """
+        if not character_id:
+            return {"updated": 0, "skipped": 0}
+
+        now = now or datetime.now(timezone.utc)
+        updated = 0
+        floored = 0
+        skipped_no_age = 0
+
+        with self._session() as session:
+            from models.models import EmotionalTrace  # local import to avoid cycles
+
+            rows = (
+                session.query(EmotionalTrace)
+                .filter(
+                    EmotionalTrace.character_id == character_id,
+                    EmotionalTrace.resolved.is_(False) | EmotionalTrace.resolved.is_(None),
+                )
+                .all()
+            )
+
+            for row in rows:
+                base_time = row.last_decayed_at or row.created_at
+                if base_time is None:
+                    skipped_no_age += 1
+                    continue
+                if base_time.tzinfo is None:
+                    base_time = base_time.replace(tzinfo=timezone.utc)
+
+                days_elapsed = max(0.0, (now - base_time).total_seconds() / 86400.0)
+                # Decay has daily granularity. Running the worker twice in the
+                # same calendar window must be idempotent — clock skew of a
+                # few seconds shouldn't move the value.
+                if days_elapsed < 1.0:
+                    continue
+
+                effective_rate = float(row.decay_rate or global_rate)
+                floor = float(row.persistence_floor or 0.0)
+                current = float(row.intensity or 0.0)
+                new_intensity = current - effective_rate * days_elapsed
+                if new_intensity < floor:
+                    new_intensity = floor
+                    if current > floor:
+                        floored += 1
+
+                if abs(new_intensity - current) < 1e-9:
+                    # Already at floor and no further movement — still bump
+                    # last_decayed_at so we don't repeatedly scan this row.
+                    row.last_decayed_at = now
+                    continue
+
+                row.intensity = new_intensity
+                row.last_decayed_at = now
+                updated += 1
+
+            session.commit()
+
+        return {
+            "updated": updated,
+            "floored": floored,
+            "skipped_no_age": skipped_no_age,
+            "scanned": len(rows),
+        }
+
+    # ------------------------------------------------------------------ #
+    # Forgiveness
+    # ------------------------------------------------------------------ #
+    def register_forgiveness(
+        self,
+        character_id: str,
+        *,
+        trace_id: str,
+        cause: Optional[str],
+        compensating_action: Optional[str],
+        delta_intensity: float,
+    ) -> Optional[Dict[str, Any]]:
+        """Apply a compensating action to a target EmotionalTrace.
+
+        Clamps the resulting intensity to ``persistence_floor`` (never below).
+        Marks the trace ``resolved=True`` when intensity reaches the floor —
+        emotion is processed, no further decay, will not affect future blends
+        unless explicitly resurfaced.
+
+        Returns the event payload (id, delta_applied, new_intensity, triggered_resolve)
+        or None on missing target.
+        """
+        if not character_id or not trace_id or delta_intensity <= 0:
+            return None
+
+        with self._session() as session:
+            trace = (
+                session.query(EmotionalTrace)
+                .filter(
+                    EmotionalTrace.id == trace_id,
+                    EmotionalTrace.character_id == character_id,
+                )
+                .first()
+            )
+            if not trace:
+                return None
+
+            floor = float(trace.persistence_floor or 0.0)
+            current = float(trace.intensity or 0.0)
+            requested = float(delta_intensity)
+            applied = min(requested, max(0.0, current - floor))
+            new_intensity = current - applied
+            triggered_resolve = False
+            if new_intensity <= floor + 1e-9:
+                new_intensity = floor
+                if not trace.resolved:
+                    trace.resolved = True
+                    triggered_resolve = True
+
+            trace.intensity = new_intensity
+
+            event = ForgivenessEvent(
+                character_id=character_id,
+                trace_id=trace_id,
+                cause=cause,
+                compensating_action=compensating_action,
+                delta_intensity=applied,
+                triggered_resolve=triggered_resolve,
+            )
+            session.add(event)
+            session.commit()
+            session.refresh(event)
+
+            log_audit_entry(
+                "moral_matrix_forgiveness_registered",
+                "[MoralMatrix] Forgiveness event recorded.",
+                AuditStatus.SUCCESS,
+                details={
+                    "event_id": event.id,
+                    "trace_id": trace_id,
+                    "character_id": character_id,
+                    "delta_requested": requested,
+                    "delta_applied": applied,
+                    "new_intensity": new_intensity,
+                    "triggered_resolve": triggered_resolve,
+                },
+            )
+            return {
+                "id": event.id,
+                "trace_id": trace_id,
+                "delta_applied": applied,
+                "new_intensity": new_intensity,
+                "triggered_resolve": triggered_resolve,
+            }
+
+    def fetch_forgiveness_events(
+        self, character_id: str, *, trace_id: Optional[str] = None, limit: int = 50
+    ) -> List[Dict[str, Any]]:
+        """List forgiveness events for diagnostics / UI timeline."""
+        if not character_id:
+            return []
+        with self._session() as session:
+            query = session.query(ForgivenessEvent).filter(
+                ForgivenessEvent.character_id == character_id
+            )
+            if trace_id:
+                query = query.filter(ForgivenessEvent.trace_id == trace_id)
+            rows = query.order_by(ForgivenessEvent.created_at.desc()).limit(limit).all()
+            return [
+                {
+                    "id": row.id,
+                    "trace_id": row.trace_id,
+                    "cause": row.cause,
+                    "compensating_action": row.compensating_action,
+                    "delta_intensity": float(row.delta_intensity or 0.0),
+                    "triggered_resolve": bool(row.triggered_resolve),
+                    "created_at": (
+                        row.created_at.isoformat()
+                        if hasattr(row.created_at, "isoformat")
+                        else None
+                    ),
+                }
+                for row in rows
+            ]
+
+    def fetch_unresolved_negative_traces(
+        self,
+        character_id: str,
+        *,
+        emotions: Sequence[str],
+        within_days: int = 30,
+        limit: int = 10,
+    ) -> List[Dict[str, Any]]:
+        """Candidates for forgiveness: unresolved negative traces from recent days.
+
+        Used by service-level heuristics: when the user shows a warm/apologetic
+        tone, the system looks here to decide which trace to soften.
+        """
+        if not character_id or not emotions:
+            return []
+        since = datetime.now(timezone.utc) - timedelta(days=int(within_days))
+        with self._session() as session:
+            rows = (
+                session.query(EmotionalTrace)
+                .filter(
+                    EmotionalTrace.character_id == character_id,
+                    EmotionalTrace.primary_emotion.in_(list(emotions)),
+                    EmotionalTrace.created_at >= since,
+                    EmotionalTrace.resolved.is_(False) | EmotionalTrace.resolved.is_(None),
+                )
+                .order_by(EmotionalTrace.created_at.desc())
+                .limit(limit)
+                .all()
+            )
+            return [self._serialize_trace(row) for row in rows]
 
     def annotate_previous_trace_outcome(
         self,

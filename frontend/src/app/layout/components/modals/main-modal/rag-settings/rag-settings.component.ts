@@ -1,6 +1,8 @@
 import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
 import { UntypedFormBuilder, UntypedFormGroup, UntypedFormArray } from '@angular/forms';
+import { take } from 'rxjs/operators';
 import { ConfigService } from '../../../../../core/services/config.service';
+import { ApiService } from '../../../../../core/services/api.service';
 import { LocalizationService } from '../../../../../shared/pipes/translation/localization.service';
 import { RagConfig, RagVectorProfile } from '../../../../../core/models/project-config.model';
 import { UiSelectOption } from '../../../../../shared/ui/components/ui-select/ui-select.component';
@@ -38,13 +40,52 @@ export class RagSettingsComponent implements OnInit {
         },
     };
 
+    judgeProviderOptions: UiSelectOption[] = [
+        { value: 'ollama', label: 'Ollama' },
+        { value: 'llama_cpp', label: 'llama.cpp' },
+    ];
+    ollamaModelOptions: UiSelectOption[] = [
+        { value: '', label: 'Модели не найдены', disabled: true },
+    ];
+
     constructor(
         private fb: UntypedFormBuilder,
         private configService: ConfigService,
+        private apiService: ApiService,
         private localizationService: LocalizationService,
         private cdr: ChangeDetectorRef
     ) {
         this.ragForm = this.createForm();
+    }
+
+    private loadOllamaModels(): void {
+        this.apiService.getOllamaModels$().pipe(take(1)).subscribe({
+            next: (models: string[]) => {
+                const cleaned = (Array.isArray(models) ? models : [])
+                    .map((item) => String(item || '').trim())
+                    .filter((item) => item.length > 0);
+                if (cleaned.length > 0) {
+                    this.ollamaModelOptions = cleaned.map((model) => ({ value: model, label: model }));
+                } else {
+                    this.ollamaModelOptions = [{ value: '', label: 'Модели не найдены', disabled: true }];
+                }
+                this.ensureCurrentJudgeModelOption();
+                this.cdr.markForCheck();
+            },
+            error: () => {
+                this.ollamaModelOptions = [{ value: '', label: 'Модели не найдены', disabled: true }];
+                this.ensureCurrentJudgeModelOption();
+                this.cdr.markForCheck();
+            },
+        });
+    }
+
+    private ensureCurrentJudgeModelOption(): void {
+        const current = String(this.ragForm.get('consolidationJudgeModel')?.value || '').trim();
+        if (!current || this.ollamaModelOptions.some((item) => item.value === current)) {
+            return;
+        }
+        this.ollamaModelOptions = [{ value: current, label: current }, ...this.ollamaModelOptions];
     }
 
     get vectorProfiles(): UntypedFormArray {
@@ -65,6 +106,7 @@ export class RagSettingsComponent implements OnInit {
 
     ngOnInit(): void {
         this.loadConfig();
+        this.loadOllamaModels();
         this.localizationService.init();
     }
 
@@ -113,6 +155,20 @@ export class RagSettingsComponent implements OnInit {
             loreSimilarityThreshold: [0.7],
             vectorProfiles: this.fb.array([]),
 
+            // 0.7.2 — Memory consolidation (importance threshold + LLM judge)
+            consolidationImportanceThreshold: [0.2],
+            consolidationJudgeEnabled: [false],
+            consolidationJudgeProvider: ['ollama'],
+            consolidationJudgeModel: [''],
+            consolidationJudgeTemperature: [0.0],
+            consolidationJudgeMaxTokens: [512],
+            consolidationJudgeRequestTimeout: [60],
+
+            // 0.9.0 — Narrative diary (§3.9-bis)
+            narrativeEnabled: [true],
+            narrativeMinChars: [80],
+            narrativeMaxChars: [3000],
+
             // Search strategy settings
             sessionContextEnabled: [true],
             sessionContextMaxMessages: [32],
@@ -146,7 +202,64 @@ export class RagSettingsComponent implements OnInit {
             if (config && config.rag) {
                 this.patchFormWithRagConfig(config.rag as RagConfig);
             }
+            this.patchMemorySections(config?.memory as any);
         });
+    }
+
+    private patchMemorySections(memory: any): void {
+        const m = memory || {};
+        const consolidation = m.consolidation || {};
+        const judge = consolidation.judge || {};
+        const diary = m.diary || {};
+        const narrative = diary.narrative || {};
+
+        this.ragForm.patchValue({
+            consolidationImportanceThreshold:
+                consolidation.importanceThreshold ?? consolidation.importance_threshold ?? 0.2,
+            consolidationJudgeEnabled: judge.enabled ?? false,
+            consolidationJudgeProvider: judge.provider ?? 'ollama',
+            consolidationJudgeModel: judge.model ?? '',
+            consolidationJudgeTemperature: judge.temperature ?? 0.0,
+            consolidationJudgeMaxTokens: judge.maxTokens ?? judge.max_tokens ?? 512,
+            consolidationJudgeRequestTimeout:
+                judge.requestTimeout ?? judge.request_timeout ?? 60,
+            narrativeEnabled: narrative.enabled ?? true,
+            narrativeMinChars: narrative.minChars ?? narrative.min_chars ?? 80,
+            narrativeMaxChars: narrative.maxChars ?? narrative.max_chars ?? 3000,
+        });
+
+        this.originalMemorySnapshot = this.buildMemoryPayload();
+        this.ensureCurrentJudgeModelOption();
+    }
+
+    private buildMemoryPayload(): any {
+        const v = this.ragForm.value;
+        return {
+            consolidation: {
+                importanceThreshold: Number(v.consolidationImportanceThreshold ?? 0.2),
+                judge: {
+                    enabled: !!v.consolidationJudgeEnabled,
+                    provider: String(v.consolidationJudgeProvider || 'ollama'),
+                    model: String(v.consolidationJudgeModel || ''),
+                    temperature: Number(v.consolidationJudgeTemperature ?? 0),
+                    maxTokens: Number(v.consolidationJudgeMaxTokens ?? 512),
+                    requestTimeout: Number(v.consolidationJudgeRequestTimeout ?? 60),
+                },
+            },
+            diary: {
+                narrative: {
+                    enabled: !!v.narrativeEnabled,
+                    minChars: Number(v.narrativeMinChars ?? 80),
+                    maxChars: Number(v.narrativeMaxChars ?? 3000),
+                },
+            },
+        };
+    }
+
+    private originalMemorySnapshot: any = {};
+
+    private memoryHasChanges(): boolean {
+        return JSON.stringify(this.buildMemoryPayload()) !== JSON.stringify(this.originalMemorySnapshot);
     }
 
     private patchFormWithRagConfig(ragConfig: RagConfig): void {
@@ -470,12 +583,17 @@ export class RagSettingsComponent implements OnInit {
     saveChanges(): void {
         const changes = this.getChanges();
         const modules = this.buildModulesPayload();
+        const memoryPayload = this.buildMemoryPayload();
+        const memoryChanged = this.memoryHasChanges();
         const updateData: any = {};
         if (Object.keys(changes).length > 0) {
             updateData.rag = this.expandPathMap(changes);
         }
         if (JSON.stringify(modules) !== JSON.stringify(this.originalModules)) {
             updateData.modules = modules;
+        }
+        if (memoryChanged) {
+            updateData.memory = memoryPayload;
         }
         if (Object.keys(updateData).length > 0) {
             this.configService.updateConfig$(updateData).subscribe({
@@ -485,6 +603,9 @@ export class RagSettingsComponent implements OnInit {
                         JSON.stringify(this.buildRagConfigFromForm())
                     );
                     this.originalModules = modules;
+                    if (memoryChanged) {
+                        this.originalMemorySnapshot = JSON.parse(JSON.stringify(memoryPayload));
+                    }
                 },
                 error: (error) => {
                     console.error('Error updating RAG settings:', error);
@@ -519,7 +640,8 @@ export class RagSettingsComponent implements OnInit {
         const modules = this.buildModulesPayload();
         return (
             Object.keys(this.getChanges()).length > 0 ||
-            JSON.stringify(modules) !== JSON.stringify(this.originalModules)
+            JSON.stringify(modules) !== JSON.stringify(this.originalModules) ||
+            this.memoryHasChanges()
         );
     }
 

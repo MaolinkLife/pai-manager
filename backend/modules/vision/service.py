@@ -16,7 +16,7 @@ from modules.system.logger import log_audit_entry, AuditStatus
 
 
 class VisionService:
-    """Main vision service for LIM."""
+    """Main vision service for PAI."""
 
     _instance = None
     _lock = threading.Lock()

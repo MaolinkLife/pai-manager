@@ -1,5 +1,6 @@
 import { NgModule } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 
 import { DebugRoutingModule } from './debug-routing.module';
 import { DebugComponent } from './debug.component';
@@ -13,6 +14,7 @@ import { SharedModule } from '../../shared/shared.module';
     ],
     imports: [
         CommonModule,
+        FormsModule,
         DebugRoutingModule,
         SharedModule
     ],
