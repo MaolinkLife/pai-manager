@@ -91,6 +91,7 @@ from routes.synthesis_routes import router as synthesis_router
 from routes.sandbox_routes import router as sandbox_router
 from routes.web_runtime_routes import router as web_runtime_router
 from routes.debug_vault_routes import router as debug_vault_router
+from routes.self_watcher_routes import router as self_watcher_router
 
 from loops.loop_core import run_loop
 from modules.system import tunnel as tunnel_service
@@ -188,6 +189,7 @@ app.include_router(synthesis_router)
 app.include_router(sandbox_router)
 app.include_router(web_runtime_router)
 app.include_router(debug_vault_router)
+app.include_router(self_watcher_router)
 
 # Start background loops
 run_loop()

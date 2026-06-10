@@ -717,7 +717,8 @@
         "subtitle": "Personal AI notes and session reflections",
         "create": "Create entry",
         "mood": "Mood",
-        "empty": "Diary is empty"
+        "empty": "Diary is empty",
+        "selfReflection": "Self-reflection"
     },
     "audit": {
         "title": "Audit Journal",
