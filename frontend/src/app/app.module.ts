@@ -12,7 +12,6 @@ import { HTTP_INTERCEPTORS, provideHttpClient, withInterceptorsFromDi } from '@a
 import { ConfigService } from './core/services/config.service';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { MemoryModalComponent } from './layout/components/modals/memory-modal/memory-modal.component';
-import { MainModalComponent } from './layout/components/modals/main-modal/main-modal.component';
 import { SettingsComponentsModule } from './layout/components/modals/main-modal/settings-components.module';
 import { MonitorSelectionModalComponent } from './layout/components/modals/monitor-selection-modal/monitor-selection-modal.component';
 import { AiEntityVisualizerComponent } from './layout/components/ai-entity-visualizer/ai-entity-visualizer.component';
@@ -25,7 +24,6 @@ import { AuthInterceptor } from './core/interceptors/auth.interceptor';
         HeaderComponent,
         LayoutComponent,
         MemoryModalComponent,
-        MainModalComponent,
         MonitorSelectionModalComponent,
         AiEntityVisualizerComponent,
     ],
