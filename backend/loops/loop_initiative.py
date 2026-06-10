@@ -238,6 +238,28 @@ def initiative_monitor():
     while True:
         try:
             now = datetime.now(timezone.utc)
+
+            # §3.9-quinquies — fire due user reminders (every tick, before the
+            # diary branch: «разбуди в 7» must not wait for nightly jobs).
+            try:
+                from modules.reminders import fire_due_reminders
+
+                fire_summary = fire_due_reminders(now=now)
+                if fire_summary.get("fired") or fire_summary.get("failed"):
+                    log_audit_entry(
+                        event_type="reminders_fired",
+                        msg="[Initiative] Due reminders processed.",
+                        status=AuditStatus.INFO,
+                        details=fire_summary,
+                    )
+            except Exception as reminders_exc:
+                log_audit_entry(
+                    event_type="reminders_pass_error",
+                    msg="[Initiative] Reminders pass failed.",
+                    status=AuditStatus.WARNING,
+                    details={"error": str(reminders_exc)},
+                )
+
             diary_day = (now - timedelta(days=1)).date()
             diary_day_iso = diary_day.isoformat()
             if (

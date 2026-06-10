@@ -47,6 +47,7 @@ def create_database():
     _ensure_audit_logs_table()
     _ensure_debug_vault_table()
     _ensure_expectation_events_table()
+    _ensure_user_reminders_table()
     _log_console("Схема базы данных готова.")
 
 
@@ -348,6 +349,48 @@ def _ensure_expectation_events_table() -> None:
             text(
                 "CREATE INDEX IF NOT EXISTS ix_expectation_events_char_created "
                 "ON expectation_events(character_id, created_at)"
+            )
+        )
+
+
+def _ensure_user_reminders_table() -> None:
+    """§3.9-quinquies — user reminders («разбуди в 10», «напомни …»).
+
+    Written by the chat capture hook and the /api/reminders REST surface;
+    polled by the initiative loop once a minute for due rows.
+    """
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS user_reminders (
+                    id TEXT PRIMARY KEY,
+                    character_id TEXT NOT NULL,
+                    user_uuid TEXT,
+                    text TEXT NOT NULL,
+                    due_at DATETIME NOT NULL,
+                    recurrence TEXT NOT NULL DEFAULT 'none',
+                    channel TEXT NOT NULL DEFAULT 'main_chat',
+                    status TEXT NOT NULL DEFAULT 'pending',
+                    source TEXT NOT NULL DEFAULT 'chat',
+                    source_message_id TEXT,
+                    fired_at DATETIME,
+                    meta TEXT DEFAULT '{}',
+                    created_at DATETIME
+                )
+                """
+            )
+        )
+        conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_user_reminders_status_due "
+                "ON user_reminders(status, due_at)"
+            )
+        )
+        conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_user_reminders_char_created "
+                "ON user_reminders(character_id, created_at)"
             )
         )
 

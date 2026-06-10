@@ -618,6 +618,40 @@ class MoralStateSnapshot(Base):
     message = relationship("History")
 
 
+class UserReminder(Base):
+    """§3.9-quinquies Tasks/Reminders — user-requested wake-ups and reminders.
+
+    Rows are created either by the in-chat capture hook (decision layer
+    detects «напомни/разбуди…» and the service LLM extracts a structured
+    {text, due_at}) or manually through the /api/reminders REST surface.
+    The initiative loop polls due rows once a minute and delivers them to
+    ``channel`` (v1: main_chat — assistant message persisted to history and
+    broadcast over WS).
+
+    Status flow: pending → fired | cancelled | failed. Recurrence is stored
+    but v1 only implements 'none' (one-shot); the field exists so recurring
+    reminders don't need a schema change later.
+    """
+
+    __tablename__ = "user_reminders"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    character_id = Column(String, ForeignKey("characters.id"), nullable=False, index=True)
+    user_uuid = Column(String, nullable=True, index=True)
+    text = Column(Text, nullable=False)
+    due_at = Column(DateTime, nullable=False, index=True)  # naive UTC
+    recurrence = Column(String, nullable=False, default="none")
+    channel = Column(String, nullable=False, default="main_chat")
+    status = Column(String, nullable=False, default="pending", index=True)
+    source = Column(String, nullable=False, default="chat")  # chat | api
+    source_message_id = Column(String, nullable=True)
+    fired_at = Column(DateTime, nullable=True)
+    meta = Column(Text, default="{}")
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+
+    character = relationship("Character")
+
+
 class ConversationStateLog(Base):
     __tablename__ = "conversation_state_logs"
 

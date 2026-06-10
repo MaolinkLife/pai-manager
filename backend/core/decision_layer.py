@@ -417,6 +417,42 @@ class DecisionLayer:
         )
 
         # --------------------------------------------------------------- #
+        # 1️⃣-bis  Reminder capture (§3.9-quinquies)
+        # --------------------------------------------------------------- #
+        # Cheap regex gate inside maybe_capture_reminder; the service-LLM
+        # extraction call runs in a thread so the loop is never blocked.
+        reminder_capture = None
+        if str(safe_user_message.get("message_type") or "") != "reminder_trigger":
+            try:
+                from modules.reminders import maybe_capture_reminder
+                from modules.system.service import get_active_character_name
+                from modules.system import character as character_module
+
+                char_name = get_active_character_name(default="default_waifu")
+                character = character_module.get_or_create_character(char_name)
+                reminder_capture = await asyncio.to_thread(
+                    maybe_capture_reminder,
+                    safe_user_message,
+                    character_id=character.id,
+                    character_name=char_name,
+                )
+                if reminder_capture:
+                    self._console_log(
+                        "Напоминание зафиксировано.",
+                        {
+                            "reminder_id": reminder_capture.get("reminder_id"),
+                            "due_at_local": reminder_capture.get("due_at_local"),
+                        },
+                    )
+            except Exception as exc:
+                log_audit_entry(
+                    "decision_layer_reminder_capture_error",
+                    "[DecisionLayer] Reminder capture hook failed (non-fatal).",
+                    AuditStatus.WARNING,
+                    details={"error": str(exc)},
+                )
+
+        # --------------------------------------------------------------- #
         # 2️⃣  Decision‑making
         # --------------------------------------------------------------- #
         decision_started = time.perf_counter()
@@ -785,6 +821,15 @@ class DecisionLayer:
             moral_state,
             visual_context=visual_context,
         )
+        if reminder_capture:
+            system_prompt += (
+                "\n\n[REMINDER MODULE]\n"
+                "You have JUST successfully scheduled a reminder the user asked for: "
+                f"«{reminder_capture.get('text')}» at {reminder_capture.get('due_at_local')} "
+                f"({reminder_capture.get('timezone')}). "
+                "Acknowledge it naturally in your reply (one short confirmation), "
+                "do not ask to set it again."
+            )
         task_plan.mark(
             "instructor",
             TASK_COMPLETE,
@@ -861,6 +906,7 @@ class DecisionLayer:
             "memory_context": memory_context,
             "memory_meta": memory_meta,
             "image_generation": image_generation_decision,
+            "reminder_capture": reminder_capture,
             "module_tasks": module_tasks,
             "interaction_policy": {
                 "actor_role": interaction_policy.actor_role,

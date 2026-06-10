@@ -131,6 +131,14 @@ class SelfWatcherConfig(BaseModel):
     llm_temperature: float = 0.5
 
 
+class RemindersConfig(BaseModel):
+    # §3.9-quinquies Tasks/Reminders. Capture hook in the decision layer
+    # (regex gate + one extraction LLM call when matched); delivery via the
+    # initiative loop once a minute. Quiet hours are ignored by design.
+    enabled: bool = True
+    max_active: int = 50
+
+
 class DecisionLayerCapabilitiesConfig(BaseModel):
     tool: bool = False
     vision: bool = False

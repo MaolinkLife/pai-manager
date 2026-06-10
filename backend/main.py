@@ -92,6 +92,7 @@ from routes.sandbox_routes import router as sandbox_router
 from routes.web_runtime_routes import router as web_runtime_router
 from routes.debug_vault_routes import router as debug_vault_router
 from routes.self_watcher_routes import router as self_watcher_router
+from routes.reminder_routes import router as reminder_router
 
 from loops.loop_core import run_loop
 from modules.system import tunnel as tunnel_service
@@ -190,6 +191,7 @@ app.include_router(sandbox_router)
 app.include_router(web_runtime_router)
 app.include_router(debug_vault_router)
 app.include_router(self_watcher_router)
+app.include_router(reminder_router)
 
 # Start background loops
 run_loop()
@@ -198,6 +200,9 @@ run_loop()
 @app.on_event("startup")
 def app_startup() -> None:
     _install_asyncio_exception_filter()
+    from core.event_loop_registry import register_main_loop
+
+    register_main_loop()
     start_async_warmups()
     tunnel_service.autostart_owner_tunnel()
     autostart_telegram_bridge()

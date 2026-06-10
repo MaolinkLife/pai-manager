@@ -76,6 +76,15 @@ DEFAULT_CONFIG = {
         "llm_max_tokens": 220,
         "llm_temperature": 0.5,
     },
+    "reminders": {
+        # §3.9-quinquies Tasks/Reminders. Capture: regex gate in the decision
+        # layer + one LLM extraction call only when the gate matches.
+        # Delivery: initiative loop polls due rows once a minute and posts an
+        # assistant message to main_chat (one LLM call per fired reminder,
+        # canned «⏰ …» fallback). Quiet hours are ignored by design.
+        "enabled": True,
+        "max_active": 50,
+    },
     "validator": {
         # Off by default — turning it on adds one LLM call per sync generation
         # (no streaming impact). Concept: Pai_Updated_Concept.md > 3.5.
