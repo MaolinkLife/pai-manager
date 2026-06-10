@@ -127,6 +127,16 @@ export class VoiceSettingsComponent implements OnInit, OnDestroy {
         { value: 'edge', label: 'Edge TTS', available: true, disabled: false },
         { value: 'gtts', label: 'gTTS (Google)', available: true, disabled: false },
         { value: 'offline', label: 'Offline (pyttsx3)', available: true, disabled: false },
+        { value: 'qwen', label: 'Qwen3-TTS (local)', available: true, disabled: false },
+    ];
+    readonly qwenDeviceOptions: UiSelectOption<string>[] = [
+        { value: 'cuda', label: 'CUDA' },
+        { value: 'cpu', label: 'CPU' },
+    ];
+    readonly qwenDtypeOptions: UiSelectOption<string>[] = [
+        { value: 'bfloat16', label: 'bfloat16' },
+        { value: 'float16', label: 'float16' },
+        { value: 'float32', label: 'float32' },
     ];
     readonly coquiDeviceOptions: UiSelectOption<string>[] = [
         { value: 'cpu', label: 'CPU' },
@@ -392,6 +402,18 @@ export class VoiceSettingsComponent implements OnInit, OnDestroy {
                         embedderModel: ['hubert'],
                     }),
                 }),
+                qwen: this.fb.group({
+                    modelName: ['Qwen/Qwen3-TTS-Flash'],
+                    device: ['cuda'],
+                    dtype: ['bfloat16'],
+                    maxSeqLen: [2048],
+                    language: ['English'],
+                    temperature: [0.9],
+                    topK: [50],
+                    repetitionPenalty: [1.05],
+                    maxNewTokens: [2048],
+                    doSample: [true],
+                }),
             }),
         });
     }
@@ -466,6 +488,7 @@ export class VoiceSettingsComponent implements OnInit, OnDestroy {
         const edge = voiceModules.edge || {};
         const gtts = voiceModules.gtts || {};
         const offline = voiceModules.offline || {};
+        const qwen = voiceModules.qwen || {};
         const normalizedActiveModule = String(config.voice.activeModule || 'coqui').trim().toLowerCase();
         const activeModule = this.baseVoiceModules.some((module) => module.value === normalizedActiveModule)
             ? normalizedActiveModule
@@ -545,6 +568,18 @@ export class VoiceSettingsComponent implements OnInit, OnDestroy {
                         autotune: rvc.autotune ?? false,
                         embedderModel: rvc.embedderModel || 'hubert',
                     },
+                },
+                qwen: {
+                    modelName: qwen.modelName || qwen.model_name || 'Qwen/Qwen3-TTS-Flash',
+                    device: qwen.device || 'cuda',
+                    dtype: qwen.dtype || 'bfloat16',
+                    maxSeqLen: qwen.maxSeqLen ?? qwen.max_seq_len ?? 2048,
+                    language: qwen.language || 'English',
+                    temperature: qwen.temperature ?? 0.9,
+                    topK: qwen.topK ?? qwen.top_k ?? 50,
+                    repetitionPenalty: qwen.repetitionPenalty ?? qwen.repetition_penalty ?? 1.05,
+                    maxNewTokens: qwen.maxNewTokens ?? qwen.max_new_tokens ?? 2048,
+                    doSample: qwen.doSample ?? qwen.do_sample ?? true,
                 }
             }
         };
@@ -1248,6 +1283,10 @@ export class VoiceSettingsComponent implements OnInit, OnDestroy {
 
     showOfflineFields(): boolean {
         return this.isActiveModule('offline');
+    }
+
+    showQwenFields(): boolean {
+        return this.isActiveModule('qwen');
     }
 
     getCoquiField(field: string) {

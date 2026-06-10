@@ -86,7 +86,14 @@ export class ConfigService {
             body.moral ||
             body.system ||
             body.memory ||
-            body.generateSettings
+            body.generateSettings ||
+            body.validator ||
+            body.languageGuard ||
+            body.confidence ||
+            body.factuality ||
+            body.selfWatcher ||
+            body.auditLogs ||
+            body.stt
         ) {
             return this.http.patch(`${this.apiUrl}/config/`, mapPartialModelToDto(body)).pipe(
                 tap(() => this.invalidateConfig())

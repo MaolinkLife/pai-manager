@@ -27,6 +27,7 @@ import { SystemSettingsComponent } from './layout/components/modals/main-modal/s
 import { SocialSettingsComponent } from './layout/components/modals/main-modal/social-settings/social-settings.component';
 import { MediaSettingsComponent } from './layout/components/modals/main-modal/media-settings/media-settings.component';
 import { PersonaSettingsComponent } from './layout/components/modals/main-modal/persona-settings/persona-settings.component';
+import { ComplianceSettingsComponent } from './layout/components/modals/main-modal/compliance-settings/compliance-settings.component';
 import { AiEntityVisualizerComponent } from './layout/components/ai-entity-visualizer/ai-entity-visualizer.component';
 import { AuthInterceptor } from './core/interceptors/auth.interceptor';
 
@@ -49,6 +50,7 @@ import { AuthInterceptor } from './core/interceptors/auth.interceptor';
         SocialSettingsComponent,
         MediaSettingsComponent,
         PersonaSettingsComponent,
+        ComplianceSettingsComponent,
         MonitorSelectionModalComponent,
         CoreSettingsComponent,
         SystemSettingsComponent,

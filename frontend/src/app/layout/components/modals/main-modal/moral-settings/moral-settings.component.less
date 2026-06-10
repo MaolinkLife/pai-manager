@@ -166,3 +166,74 @@
     color: var(--color-text-secondary);
     font-size: 13px;
 }
+
+.scars-triggers {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.trigger-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+
+    .trigger-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 4px;
+    }
+
+    .trigger-index {
+        font-weight: 600;
+        color: var(--color-accent);
+        font-size: 14px;
+    }
+
+    .trigger-remove {
+        background: transparent;
+        border: 1px solid var(--color-border);
+        color: var(--color-text-secondary);
+        width: 28px;
+        height: 28px;
+        border-radius: var(--radius);
+        cursor: pointer;
+        font-size: 14px;
+        line-height: 1;
+        padding: 0;
+        transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+
+        &:hover {
+            background: var(--color-bg);
+            color: #d9534f;
+            border-color: #d9534f;
+        }
+    }
+
+    .form-group {
+        margin-bottom: 8px;
+    }
+}
+
+.add-trigger-btn {
+    background: transparent;
+    border: 1px dashed var(--color-border);
+    color: var(--color-accent);
+    padding: 10px 16px;
+    border-radius: var(--radius);
+    cursor: pointer;
+    font-family: var(--font-family);
+    font-size: 14px;
+    transition: background 0.15s ease, border-color 0.15s ease;
+    align-self: flex-start;
+
+    &:hover {
+        background: var(--color-bg);
+        border-color: var(--color-accent);
+    }
+}

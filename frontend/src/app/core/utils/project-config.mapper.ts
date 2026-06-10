@@ -45,6 +45,26 @@ import {
     mapDecisionLayerDtoToModel,
     mapDecisionLayerModelToDto
 } from './decision-layer-config-mapper';
+import {
+    mapValidatorDtoToModel,
+    mapValidatorModelToDto,
+    mapLanguageGuardDtoToModel,
+    mapLanguageGuardModelToDto,
+    mapConfidenceDtoToModel,
+    mapConfidenceModelToDto,
+    mapFactualityDtoToModel,
+    mapFactualityModelToDto,
+    mapSelfWatcherDtoToModel,
+    mapSelfWatcherModelToDto,
+} from './compliance-config-mapper';
+import {
+    mapAuditLogsDtoToModel,
+    mapAuditLogsModelToDto,
+} from './audit-logs-config-mapper';
+import {
+    mapSttDtoToModel,
+    mapSttModelToDto,
+} from './stt-config-mapper';
 
 
 export const mapProjectConfigDtoToModel = (dto: ProjectConfigDto): ProjectConfig => ({
@@ -63,7 +83,14 @@ export const mapProjectConfigDtoToModel = (dto: ProjectConfigDto): ProjectConfig
     memory: mapMemoryDtoToModel(dto.memory),
     api: mapApiDtoToModel(dto.api),
     generateSettings: mapGenerationDtoToModel(dto.generate_settings),
-    system: mapSystemDtoToModel(dto.system, dto.language)
+    system: mapSystemDtoToModel(dto.system, dto.language),
+    validator: mapValidatorDtoToModel(dto.validator),
+    languageGuard: mapLanguageGuardDtoToModel(dto.language_guard),
+    confidence: mapConfidenceDtoToModel(dto.confidence),
+    factuality: mapFactualityDtoToModel(dto.factuality),
+    selfWatcher: mapSelfWatcherDtoToModel(dto.self_watcher),
+    auditLogs: mapAuditLogsDtoToModel(dto.audit_logs),
+    stt: mapSttDtoToModel(dto.stt),
 });
 
 export const mapProjectConfigModelToDto = (model: ProjectConfig): ProjectConfigDto => ({
@@ -83,6 +110,13 @@ export const mapProjectConfigModelToDto = (model: ProjectConfig): ProjectConfigD
     api: mapApiModelToDto(model.api),
     generate_settings: mapGenerationModelToDto(model.generateSettings),
     system: mapSystemModelToDto(model.system) as ProjectConfigDto['system'],
+    validator: mapValidatorModelToDto(model.validator),
+    language_guard: mapLanguageGuardModelToDto(model.languageGuard),
+    confidence: mapConfidenceModelToDto(model.confidence),
+    factuality: mapFactualityModelToDto(model.factuality),
+    self_watcher: mapSelfWatcherModelToDto(model.selfWatcher),
+    audit_logs: mapAuditLogsModelToDto(model.auditLogs),
+    stt: mapSttModelToDto(model.stt),
 });
 
 export const mapPartialModelToDto = (
@@ -172,6 +206,27 @@ export const mapPartialModelToDto = (
                 break;
             case 'system':
                 dto.system = mapSystemModelToDto(model.system!) as ProjectConfigDto['system'];
+                break;
+            case 'validator':
+                dto.validator = mapValidatorModelToDto(model.validator);
+                break;
+            case 'languageGuard':
+                dto.language_guard = mapLanguageGuardModelToDto(model.languageGuard);
+                break;
+            case 'confidence':
+                dto.confidence = mapConfidenceModelToDto(model.confidence);
+                break;
+            case 'factuality':
+                dto.factuality = mapFactualityModelToDto(model.factuality);
+                break;
+            case 'selfWatcher':
+                dto.self_watcher = mapSelfWatcherModelToDto(model.selfWatcher);
+                break;
+            case 'auditLogs':
+                dto.audit_logs = mapAuditLogsModelToDto(model.auditLogs);
+                break;
+            case 'stt':
+                dto.stt = mapSttModelToDto(model.stt);
                 break;
         }
     });

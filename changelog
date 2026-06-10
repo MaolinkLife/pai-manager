@@ -1,3 +1,56 @@
+version: 0.9.1
+- UI Settings Pass (every Wave 1/2 + 0.7.2 backend setting now manageable from the UI)
+  - moral-settings: four new sections — Emotional Decay, Forgiveness, Emotional Scars (FormArray CRUD for triggers: intents/tones/keywords/persistence_floor/intensity_boost), Inner Voice — plus a llama.cpp provider block (active-provider option + fallback checkbox).
+  - rag-settings: Memory Consolidation section (importance threshold + LLM judge with provider select Ollama/llama.cpp and model select fed from the shared Ollama model pool) and Narrative Diary section (enabled/min_chars/max_chars). Saved via a separate `{memory: ...}` PATCH payload with its own dirty-snapshot.
+  - compliance-settings: new main-modal tab with five sections — Validator, Language guard, Confidence, Factuality, Self-Watcher. All checkboxes via `app-ui-checkbox`; multi-key PATCH body (validator/language_guard/confidence/factuality/self_watcher).
+  - analyzer-settings: llama.cpp provider (enabled/base_url/model/temperature/max_tokens/request_timeout) + fallback option, normalizing `llama_cpp` <-> `llamaCpp` key shapes on load.
+  - voice-settings: Qwen3-TTS module block (model_name, device, dtype, max_seq_len, language, temperature, top_k, repetition_penalty, max_new_tokens, do_sample).
+  - audio-settings: STT block — default language, auto-detect, provider select (faster-whisper / sherpa-onnx) and conditional sherpa fields per model_type (transducer/paraformer/whisper/moonshine) with paths relative to STT_MODELS_DIR.
+  - system-settings: audit_logs retention editor (per-severity age_days + hard_cap grids), read-only MODE env info block, and a split between "UI language (system.language)" and "Generation language (User.language)" with explanatory hints.
+- User Language Endpoint
+  - Added `PATCH /api/auth/me/settings` and `auth.update_user_settings(user_uuid, language, timezone)` so the generation-language source of truth (`UserSettings.language`, consumed by `resolve_user_language`) is editable from the UI. Frontend: `AuthService.updateMeSettings$()` keeps the cached user in sync.
+- Frontend Config Infrastructure
+  - Extended `project-config.{dto,model}.ts` with ~20 interfaces covering moral decay/forgiveness/scars/inner_voice, memory consolidation + diary.narrative, validator, language_guard, confidence, factuality, self_watcher, audit_logs.retention, and stt/sherpa_onnx.
+  - New mappers `compliance-config-mapper.ts`, `audit-logs-config-mapper.ts`, `stt-config-mapper.ts`; extended moral/memory mappers; `config.service.ts` PATCH whitelist gained seven new top-level keys.
+  - Locales (ru-RU/en-US): new blocks `complianceSettings`, `ragSettings`, `voiceSettings`, `audioSettings`, `systemSettings`, extended `moralSettings`, sidebar tab `compliance`.
+
+version: 0.9.0
+- Audit Logs in DB (replaces JSONL as the primary store)
+  - New `audit_logs` table; `log_audit_entry` writes DB-first with a JSONL fallback for the boot window before initialize. `get_debug_log()` reads DB-first with JSONL fallback, preserving None-for-404 semantics.
+  - `MODE` env var (read before initialize, hence env not DB-config): `dev` (default) writes everything, `prod` drops info/success severities.
+  - Nightly per-severity retention (`prune_audit_logs`): age_days (debug/info 7d, warning 30d, error/audit_fail 90d) + hard caps (info 50K, warning 10K, error 5K). Config: `audit_logs.retention.*`.
+- Validator (LLM-as-judge output compliance)
+  - New `modules/validator/`: `validate_output(output, instructions)` scores compliance 0-1 against instructor directives via the active generation provider. Never raises — any failure returns `skipped=True`. Prompt: `VALIDATOR_COMPLIANCE_PROMPT` (strict JSON).
+  - Wired into sync `generate_standard` via `_maybe_run_validator`; compliance below `validator.threshold` writes a DebugVault entry (`kind=validation_failed`). Auto-reroll deferred to a follow-up.
+- DebugVault (curated anomaly store)
+  - New `debug_vault_entries` table + `modules/debug_vault/` (insert/list/get/mark_reviewed) + REST (`GET /api/debug_vault`, `GET /{id}`, `POST /{id}/review`).
+  - Every vault write mirrors an `audit_logs` row (`event_type=debug_vault_entry_recorded`, `details.vault_entry_id`) for cross-lookup.
+- Language Guard
+  - New `modules/language_guard/`: CPU-only unicode-script counter (8 script buckets, no external deps). Compares output's dominant script against `User.language`; mixed-language outputs below `min_dominance` are skipped as legitimate code-switching. Mismatch writes DebugVault (`kind=language_mismatch`).
+  - New canonical resolver `modules.system.user.resolve_user_language(user_uuid, character_id, fallback)`: UserSettings.language -> system.language -> static. Diary and moral inner-voice migrated onto it (fixes the inner_voice fallback that wrongly used system.language).
+- Confidence Estimation
+  - New `modules/confidence/`: one mini LLM call scoring 0-1 whether the output addressed the user message. Score persists on `History.runtime_meta.confidence` (+threshold +low flag). Low confidence logs WARNING — deliberately NOT DebugVault (signal, not anomaly).
+  - `update_history_runtime_meta` gained `merge: bool = False` for shallow-merge partial updates that keep upstream metadata intact.
+- Factuality Check
+  - New `modules/factuality/`: regex claim extractor (years, dates, numbers+units latin/cyrillic, capitalized phrases with sentence-initial drop) + lorebook lookup per claim. Gated on `confidence_low` by default. No web access — local memory only. Result persists on `runtime_meta.factuality = {supported, sources_found, claims}`; output text is never modified.
+- Self-Watcher / Meta-cognition
+  - New `expectation_events` table + `modules/self_watcher/`: per-turn comparison of PAI's predicted emotion (stamped on the previous assistant message's runtime_meta from moral_state) vs the user's actual analyzer tone. Valence classifier (RU/EN) + mismatch scorer; rows recorded above `mismatch_threshold`.
+  - Nightly reflection: LLM clusters recent events into 2-4 first-person sentences written to `daily_activity_diary.payload.self_reflection` (wired into loop_initiative after audit retention). Observation-only — never influences the current turn.
+- Narrative Diary
+  - The daily diary LLM call now returns an extra `narrative` field (200-400 words, first person, in the user's language) in the same JSON pass — no second LLM call. Stored top-level at `payload.narrative` with configurable min/max chars; rendered in `features/diary` as an italic lead block.
+  - Removed "LIM" from all system prompts and module docstrings (PAI is the system identity; LIM remains character data only). Dead commented-out code dropped from loop_initiative.
+- Scope Decision
+  - Skill Training pipeline (+SkillConnector/Injector/Collector), DAMP, and MetaLIM are explicitly OUT of the core build. No web-fallback in the hot path anywhere.
+- Tests: 111 new across the wave (audit logs db/reader/retention, validator + integration, debug vault, language guard, confidence, factuality, narrative diary, self-watcher). Regressions: 0.
+
+version: 0.8.0
+- Emotional Core (Wave 1)
+  - Emotional decay: `EmotionalTrace` gained `decay_rate`, `persistence_floor`, `resolved`, `last_decayed_at`; nightly idempotent decay job in loop_initiative (`moral.decay.{enabled, global_rate}`).
+  - Forgiveness: new `forgiveness_events` table + analyzer-tone heuristic (`moral.forgiveness.*`) — compensating user behaviour softens old negative traces, never below `persistence_floor`.
+  - Emotional scars: `moral.scars.triggers[]` (intents/tones/keywords) create traces with elevated `persistence_floor` + intensity boost; first matching trigger wins.
+  - Inner voice: one short first-person sentence per turn explaining the current feeling (`moral.inner_voice.*`), persisted in trace notes and surfaced via `result.meta.inner_voice` on the WS moral_state event.
+- Tests: test_emotional_decay, test_forgiveness, test_emotional_scars, test_inner_voice.
+
 version: 0.7.2
 - Tunnel-Aware API Access Guard
   - Replaced the implicit "CORS *" policy with a positive access check in `core/access_guard.py`, ordered inside the request logger so 403 rejections still show up in console logs.

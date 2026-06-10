@@ -388,3 +388,42 @@
         margin-top: 8px;
     }
 }
+
+.form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 12px;
+    margin-bottom: 8px;
+
+    .form-group {
+        margin-bottom: 0;
+    }
+
+    label {
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--color-text-secondary);
+    }
+}
+
+.info-block {
+    margin-top: 12px;
+    padding: 12px 14px;
+    background: var(--color-surface);
+    border: 1px dashed var(--color-border);
+    border-radius: var(--radius);
+
+    strong {
+        display: block;
+        margin-bottom: 4px;
+        color: var(--color-accent);
+        font-size: 14px;
+    }
+
+    p {
+        margin: 0;
+        font-size: 13px;
+        color: var(--color-text-secondary);
+        line-height: 1.5;
+    }
+}

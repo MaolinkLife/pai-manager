@@ -735,6 +735,63 @@
                     </div>
                     </ng-template>
                 </div>
+
+                <div *ngIf="showQwenFields()" formGroupName="qwen" class="provider-block">
+                    <h3>Qwen3-TTS</h3>
+                    <p class="hint">{{ "voiceSettings.qwenHint" | translate }}</p>
+
+                    <div class="form-group">
+                        <label for="qwenModelName">{{ "voiceSettings.qwenModelName" | translate }}</label>
+                        <app-ui-input id="qwenModelName" type="text" formControlName="modelName"></app-ui-input>
+                        <p class="hint">{{ "voiceSettings.qwenModelHint" | translate }}</p>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="qwenDevice">{{ "voiceSettings.qwenDevice" | translate }}</label>
+                        <app-ui-select id="qwenDevice" formControlName="device" [options]="qwenDeviceOptions"></app-ui-select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="qwenDtype">{{ "voiceSettings.qwenDtype" | translate }}</label>
+                        <app-ui-select id="qwenDtype" formControlName="dtype" [options]="qwenDtypeOptions"></app-ui-select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="qwenMaxSeqLen">{{ "voiceSettings.qwenMaxSeqLen" | translate }}</label>
+                        <app-ui-input id="qwenMaxSeqLen" type="number" min="64" max="32768" formControlName="maxSeqLen"></app-ui-input>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="qwenLanguage">{{ "voiceSettings.qwenLanguage" | translate }}</label>
+                        <app-ui-input id="qwenLanguage" type="text" formControlName="language" placeholder="English / Russian"></app-ui-input>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="qwenTemperature">{{ "settings.temperature" | translate }}</label>
+                        <app-ui-input id="qwenTemperature" type="number" step="0.05" min="0" max="2" formControlName="temperature"></app-ui-input>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="qwenTopK">Top K</label>
+                        <app-ui-input id="qwenTopK" type="number" min="1" max="500" formControlName="topK"></app-ui-input>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="qwenRepetition">{{ "voiceSettings.qwenRepetitionPenalty" | translate }}</label>
+                        <app-ui-input id="qwenRepetition" type="number" step="0.05" min="0.5" max="3" formControlName="repetitionPenalty"></app-ui-input>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="qwenMaxNew">{{ "voiceSettings.qwenMaxNewTokens" | translate }}</label>
+                        <app-ui-input id="qwenMaxNew" type="number" min="64" max="32768" formControlName="maxNewTokens"></app-ui-input>
+                    </div>
+
+                    <div class="form-group">
+                        <app-ui-checkbox formControlName="doSample">
+                            {{ "voiceSettings.qwenDoSample" | translate }}
+                        </app-ui-checkbox>
+                    </div>
+                </div>
             </div>
 
             <div class="section">

@@ -15,6 +15,14 @@ export interface ProjectConfig {
     memory: MemoryConfig;
     generateSettings: GenerationConfig;
     system: SystemConfig;
+    // 0.9.0 — compliance pipeline + audit logs retention
+    validator?: ValidatorConfig;
+    languageGuard?: LanguageGuardConfig;
+    confidence?: ConfidenceConfig;
+    factuality?: FactualityConfig;
+    selfWatcher?: SelfWatcherConfig;
+    auditLogs?: AuditLogsConfig;
+    stt?: SttConfig;
 }
 
 export interface DecisionLayerConfig {
@@ -134,6 +142,9 @@ export interface AnalyzerProviderConfig {
     model?: string;
     temperature?: number;
     maxTokens?: number;
+    enabled?: boolean;
+    baseUrl?: string;
+    requestTimeout?: number;
 }
 
 export interface AnalyzerConfig {
@@ -153,12 +164,50 @@ export interface MoralProviderConfig {
     maxTokens?: number;
     apiKey?: string;
     thinking?: boolean;
+    enabled?: boolean;
+    baseUrl?: string;
+    requestTimeout?: number;
 }
 
 export interface MoralProvidersConfig {
     heuristic?: Record<string, any>;
     ollama?: MoralProviderConfig;
     openrouter?: MoralProviderConfig;
+    llamaCpp?: MoralProviderConfig;
+}
+
+export interface MoralDecayConfig {
+    enabled: boolean;
+    globalRate: number;
+}
+
+export interface MoralForgivenessConfig {
+    enabled: boolean;
+    compensatingTones: string[];
+    softenableEmotions: string[];
+    deltaPerEvent: number;
+    lookbackDays: number;
+}
+
+export interface MoralScarTrigger {
+    name: string;
+    intents: string[];
+    tones: string[];
+    keywords: string[];
+    persistenceFloor: number;
+    intensityBoost: number;
+}
+
+export interface MoralScarsConfig {
+    enabled: boolean;
+    triggers: MoralScarTrigger[];
+}
+
+export interface MoralInnerVoiceConfig {
+    enabled: boolean;
+    maxTokens: number;
+    temperature: number;
+    language: string;
 }
 
 export interface MoralConfig {
@@ -168,6 +217,34 @@ export interface MoralConfig {
     releaseAfterUse?: boolean;
     systemPrompt?: string;
     providers: MoralProvidersConfig;
+    decay?: MoralDecayConfig;
+    forgiveness?: MoralForgivenessConfig;
+    scars?: MoralScarsConfig;
+    innerVoice?: MoralInnerVoiceConfig;
+}
+
+export interface MemoryDiaryNarrativeConfig {
+    enabled: boolean;
+    minChars: number;
+    maxChars: number;
+}
+
+export interface MemoryDiaryConfig {
+    narrative: MemoryDiaryNarrativeConfig;
+}
+
+export interface MemoryConsolidationJudgeConfig {
+    enabled: boolean;
+    provider: string;
+    model: string;
+    temperature: number;
+    maxTokens: number;
+    requestTimeout: number;
+}
+
+export interface MemoryConsolidationConfig {
+    importanceThreshold: number;
+    judge: MemoryConsolidationJudgeConfig;
 }
 
 export interface MemoryConfig {
@@ -178,6 +255,91 @@ export interface MemoryConfig {
     sessionEnabled: boolean;
     embeddingProvider: string;
     embeddingModel: string;
+    consolidation?: MemoryConsolidationConfig;
+    diary?: MemoryDiaryConfig;
+}
+
+// --- STT (0.7.2) -----------------------------------------------------------
+
+export interface SttSherpaOnnxConfig {
+    modelType: string;
+    encoder: string;
+    decoder: string;
+    joiner: string;
+    paraformer: string;
+    whisperEncoder: string;
+    whisperDecoder: string;
+    moonshinePreprocessor: string;
+    moonshineEncoder: string;
+    moonshineUncachedDecoder: string;
+    moonshineCachedDecoder: string;
+    tokens: string;
+    numThreads: number;
+    provider: string;
+}
+
+export interface SttConfig {
+    language: string;
+    autoDetect: boolean;
+    provider: string;
+    sherpaOnnx: SttSherpaOnnxConfig;
+}
+
+// --- Compliance pipeline (0.9.0) -------------------------------------------
+
+export interface ValidatorConfig {
+    enabled: boolean;
+    threshold: number;
+    maxTokens: number;
+    temperature: number;
+    instructionCharLimit: number;
+    outputCharLimit: number;
+}
+
+export interface LanguageGuardConfig {
+    enabled: boolean;
+    minDominance: number;
+    minOutputChars: number;
+}
+
+export interface ConfidenceConfig {
+    enabled: boolean;
+    threshold: number;
+    maxTokens: number;
+    temperature: number;
+    userCharLimit: number;
+    outputCharLimit: number;
+}
+
+export interface FactualityConfig {
+    enabled: boolean;
+    gateOnLowConfidence: boolean;
+    topK: number;
+    minSimilarity: number;
+    maxClaims: number;
+    claimMinLength: number;
+}
+
+export interface SelfWatcherConfig {
+    enabled: boolean;
+    mismatchThreshold: number;
+    nightlyReflectionEnabled: boolean;
+    lookbackDays: number;
+    maxEventsInCluster: number;
+    llmMaxTokens: number;
+    llmTemperature: number;
+}
+
+// --- Audit logs retention (0.9.0 §3.6-bis) ---------------------------------
+
+export interface AuditLogsRetentionConfig {
+    enabled: boolean;
+    ageDays: Record<string, number>;
+    hardCap: Record<string, number>;
+}
+
+export interface AuditLogsConfig {
+    retention: AuditLogsRetentionConfig;
 }
 
 export interface SynthesisSdWebUIConfig {

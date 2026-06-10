@@ -1,6 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { UntypedFormBuilder, UntypedFormGroup } from '@angular/forms';
 import { ConfigService, SystemCharacter } from '../../../../../core/services/config.service';
+import { AuthService } from '../../../../../core/services/auth.service';
 import { ThemeService } from '../../../../../core/services/theme.service';
 import { combineLatest, BehaviorSubject, forkJoin } from 'rxjs';
 import { map, tap, finalize } from 'rxjs/operators';
@@ -51,6 +52,7 @@ export class SystemSettingsComponent implements OnInit {
     constructor(
         private fb: UntypedFormBuilder,
         private configService: ConfigService,
+        private authService: AuthService,
         private themeService: ThemeService,
         private localizationService: LocalizationService,
         private tunnelService: TunnelService,
@@ -65,6 +67,22 @@ export class SystemSettingsComponent implements OnInit {
         this.initLanguageChangeListener();
         this.initCommunicationFormRules();
         this.refreshTunnelStatus();
+        this.loadUserLanguage();
+    }
+
+    private originalUserLanguage = 'en-US';
+
+    private loadUserLanguage(): void {
+        this.authService.me$().subscribe((user) => {
+            const lang = user?.settings?.language || 'en-US';
+            this.originalUserLanguage = lang;
+            this.systemForm.get('userLanguage')?.setValue(lang, { emitEvent: false });
+        });
+    }
+
+    private userLanguageHasChanges(): boolean {
+        const current = String(this.systemForm.get('userLanguage')?.value || '').trim();
+        return current !== this.originalUserLanguage;
     }
 
     initLanguageChangeListener() {
@@ -189,8 +207,81 @@ export class SystemSettingsComponent implements OnInit {
                     commandPath: [''],
                     publicUrl: [''],
                 }),
-            })
+            }),
+            // Source of truth for generation language (User.language).
+            // Loaded separately via /api/auth/me, saved via PATCH /api/auth/me/settings.
+            userLanguage: ['en-US'],
+            // 0.9.0 §3.6-bis — audit_logs retention
+            auditRetention: this.fb.group({
+                enabled: [true],
+                ageDebug: [7],
+                ageInfo: [7],
+                ageSuccess: [14],
+                ageWarning: [30],
+                ageError: [90],
+                ageAuditFail: [90],
+                capInfo: [50000],
+                capSuccess: [50000],
+                capWarning: [10000],
+                capError: [5000],
+                capAuditFail: [5000],
+            }),
         });
+    }
+
+    private originalAuditSnapshot: any = {};
+
+    // MODE env var is intentionally NOT exposed through this form — it's
+    // read by the backend before initialize() so changing it would require
+    // a restart. The HTML shows a read-only info block from locales.
+
+    private buildAuditPayload(): any {
+        const v = this.systemForm.value.auditRetention || {};
+        return {
+            retention: {
+                enabled: !!v.enabled,
+                ageDays: {
+                    debug: Number(v.ageDebug ?? 7),
+                    info: Number(v.ageInfo ?? 7),
+                    success: Number(v.ageSuccess ?? 14),
+                    warning: Number(v.ageWarning ?? 30),
+                    error: Number(v.ageError ?? 90),
+                    audit_fail: Number(v.ageAuditFail ?? 90),
+                },
+                hardCap: {
+                    info: Number(v.capInfo ?? 50000),
+                    success: Number(v.capSuccess ?? 50000),
+                    warning: Number(v.capWarning ?? 10000),
+                    error: Number(v.capError ?? 5000),
+                    audit_fail: Number(v.capAuditFail ?? 5000),
+                },
+            },
+        };
+    }
+
+    private patchAuditSection(auditLogs: any): void {
+        const retention = auditLogs?.retention || {};
+        const ageDays = retention.ageDays || retention.age_days || {};
+        const hardCap = retention.hardCap || retention.hard_cap || {};
+        this.systemForm.get('auditRetention')!.patchValue({
+            enabled: retention.enabled ?? true,
+            ageDebug: ageDays.debug ?? 7,
+            ageInfo: ageDays.info ?? 7,
+            ageSuccess: ageDays.success ?? 14,
+            ageWarning: ageDays.warning ?? 30,
+            ageError: ageDays.error ?? 90,
+            ageAuditFail: ageDays.audit_fail ?? 90,
+            capInfo: hardCap.info ?? 50000,
+            capSuccess: hardCap.success ?? 50000,
+            capWarning: hardCap.warning ?? 10000,
+            capError: hardCap.error ?? 5000,
+            capAuditFail: hardCap.audit_fail ?? 5000,
+        });
+        this.originalAuditSnapshot = this.buildAuditPayload();
+    }
+
+    private auditHasChanges(): boolean {
+        return JSON.stringify(this.buildAuditPayload()) !== JSON.stringify(this.originalAuditSnapshot);
     }
 
     private patchFormWithConfig(config: any): void {
@@ -206,6 +297,7 @@ export class SystemSettingsComponent implements OnInit {
             connector: config.connector ?? {},
         });
         this.enforceCommunicationRules(false);
+        this.patchAuditSection(config.auditLogs || config.audit_logs);
     }
 
     private buildConfigFromForm(): any {
@@ -227,7 +319,19 @@ export class SystemSettingsComponent implements OnInit {
     saveChanges(): void {
         this.enforceCommunicationRules(false);
         const changes = this.getChanges();
-        if (Object.keys(changes).length > 0) {
+        const auditDirty = this.auditHasChanges();
+        const userLangDirty = this.userLanguageHasChanges();
+        if (userLangDirty) {
+            const nextUserLang = String(this.systemForm.get('userLanguage')?.value || '').trim();
+            this.authService.updateMeSettings$({ language: nextUserLang }).subscribe((user) => {
+                if (user) {
+                    this.originalUserLanguage = user.settings?.language || nextUserLang;
+                } else {
+                    this.originalUserLanguage = nextUserLang;
+                }
+            });
+        }
+        if (Object.keys(changes).length > 0 || auditDirty) {
             const updateData: any = {};
             const requests = [];
 
@@ -270,6 +374,10 @@ export class SystemSettingsComponent implements OnInit {
             if (changes.connector !== undefined) {
                 updateData.connector = changes.connector;
             }
+            const auditPayload = this.buildAuditPayload();
+            if (auditDirty) {
+                updateData.auditLogs = auditPayload;
+            }
 
             if (Object.keys(updateData).length > 0) {
                 requests.push(this.configService.updateConfig$(updateData));
@@ -282,6 +390,9 @@ export class SystemSettingsComponent implements OnInit {
             forkJoin(requests).subscribe({
                 next: () => {
                     this.originalConfig = this.buildConfigFromForm();
+                    if (auditDirty) {
+                        this.originalAuditSnapshot = auditPayload;
+                    }
                     this.uiNotificationService.success('Settings saved', 'System');
                 },
                 error: (error) => {
@@ -306,7 +417,11 @@ export class SystemSettingsComponent implements OnInit {
     }
 
     hasChanges(): boolean {
-        return Object.keys(this.getChanges()).length > 0;
+        return (
+            Object.keys(this.getChanges()).length > 0
+            || this.auditHasChanges()
+            || this.userLanguageHasChanges()
+        );
     }
 
     onThemeChange(event: any): void {

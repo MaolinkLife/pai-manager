@@ -749,6 +749,121 @@
             </div>
         </div>
 
+        <div class="section">
+            <h3>🧠 {{ "ragSettings.memoryConsolidationTitle" | translate }}</h3>
+            <p class="hint">{{ "ragSettings.memoryConsolidationHint" | translate }}</p>
+
+            <div class="form-group">
+                <label for="ragConsolidationThreshold">
+                    {{ "ragSettings.consolidationImportanceThreshold" | translate }}
+                </label>
+                <app-ui-input
+                    id="ragConsolidationThreshold"
+                    type="number"
+                    step="0.05"
+                    min="0"
+                    max="1"
+                    formControlName="consolidationImportanceThreshold"
+                ></app-ui-input>
+                <p class="hint">{{ "ragSettings.consolidationImportanceHint" | translate }}</p>
+            </div>
+
+            <h4>{{ "ragSettings.consolidationJudgeTitle" | translate }}</h4>
+            <p class="hint">{{ "ragSettings.consolidationJudgeHint" | translate }}</p>
+
+            <div class="form-group">
+                <app-ui-checkbox formControlName="consolidationJudgeEnabled">
+                    {{ "ragSettings.consolidationJudgeEnable" | translate }}
+                </app-ui-checkbox>
+            </div>
+
+            <div class="form-group">
+                <label for="ragJudgeProvider">{{ "settings.provider" | translate }}</label>
+                <app-ui-select
+                    id="ragJudgeProvider"
+                    [options]="judgeProviderOptions"
+                    formControlName="consolidationJudgeProvider"
+                ></app-ui-select>
+            </div>
+
+            <div class="form-group">
+                <label for="ragJudgeModel">{{ "settings.textModel" | translate }}</label>
+                <app-ui-select
+                    id="ragJudgeModel"
+                    [options]="ollamaModelOptions"
+                    formControlName="consolidationJudgeModel"
+                ></app-ui-select>
+                <p class="hint">{{ "ragSettings.consolidationJudgeModelHint" | translate }}</p>
+            </div>
+
+            <div class="form-group">
+                <label for="ragJudgeTemp">{{ "settings.temperature" | translate }}</label>
+                <app-ui-input
+                    id="ragJudgeTemp"
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    max="2"
+                    formControlName="consolidationJudgeTemperature"
+                ></app-ui-input>
+            </div>
+
+            <div class="form-group">
+                <label for="ragJudgeMaxTokens">{{ "settings.maxTokens" | translate }}</label>
+                <app-ui-input
+                    id="ragJudgeMaxTokens"
+                    type="number"
+                    min="1"
+                    max="4096"
+                    formControlName="consolidationJudgeMaxTokens"
+                ></app-ui-input>
+            </div>
+
+            <div class="form-group">
+                <label for="ragJudgeTimeout">{{ "ragSettings.consolidationJudgeTimeout" | translate }}</label>
+                <app-ui-input
+                    id="ragJudgeTimeout"
+                    type="number"
+                    min="1"
+                    max="600"
+                    formControlName="consolidationJudgeRequestTimeout"
+                ></app-ui-input>
+            </div>
+        </div>
+
+        <div class="section">
+            <h3>📖 {{ "ragSettings.narrativeDiaryTitle" | translate }}</h3>
+            <p class="hint">{{ "ragSettings.narrativeDiaryHint" | translate }}</p>
+
+            <div class="form-group">
+                <app-ui-checkbox formControlName="narrativeEnabled">
+                    {{ "ragSettings.narrativeEnable" | translate }}
+                </app-ui-checkbox>
+            </div>
+
+            <div class="form-group">
+                <label for="ragNarrativeMin">{{ "ragSettings.narrativeMinChars" | translate }}</label>
+                <app-ui-input
+                    id="ragNarrativeMin"
+                    type="number"
+                    min="0"
+                    max="10000"
+                    formControlName="narrativeMinChars"
+                ></app-ui-input>
+            </div>
+
+            <div class="form-group">
+                <label for="ragNarrativeMax">{{ "ragSettings.narrativeMaxChars" | translate }}</label>
+                <app-ui-input
+                    id="ragNarrativeMax"
+                    type="number"
+                    min="0"
+                    max="20000"
+                    formControlName="narrativeMaxChars"
+                ></app-ui-input>
+            </div>
+        </div>
+
         <div class="button-row">
             <button type="submit" [disabled]="!hasChanges()">
                 💾 {{ "general.saveRAGSettings" | translate }}

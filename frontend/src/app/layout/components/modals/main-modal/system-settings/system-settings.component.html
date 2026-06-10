@@ -147,14 +147,23 @@
                 </div>
 
                 <div class="form-group">
-                    <label for="language">{{
-                        "settings.systemLanguage" | translate
-                    }}</label>
+                    <label for="language">{{ "systemSettings.uiLanguageLabel" | translate }}</label>
                     <app-ui-select
                         id="language"
                         formControlName="language"
                         [options]="languageOptions"
                     ></app-ui-select>
+                    <p class="hint">{{ "systemSettings.uiLanguageHint" | translate }}</p>
+                </div>
+
+                <div class="form-group">
+                    <label for="userLanguage">{{ "systemSettings.generationLanguageLabel" | translate }}</label>
+                    <app-ui-select
+                        id="userLanguage"
+                        formControlName="userLanguage"
+                        [options]="languageOptions"
+                    ></app-ui-select>
+                    <p class="hint">{{ "systemSettings.generationLanguageHint" | translate }}</p>
                 </div>
 
                 <div class="form-group">
@@ -319,6 +328,78 @@
                     <button type="button" [disabled]="isTunnelBusy" (click)="refreshTunnelStatus()">
                         {{ "settings.tunnelRefreshStatus" | translate }}
                     </button>
+                </div>
+            </div>
+
+            <div class="section" formGroupName="auditRetention">
+                <h3>📜 {{ "systemSettings.auditRetentionTitle" | translate }}</h3>
+                <p class="hint">{{ "systemSettings.auditRetentionHint" | translate }}</p>
+
+                <div class="form-group">
+                    <app-ui-checkbox formControlName="enabled">
+                        {{ "systemSettings.auditRetentionEnable" | translate }}
+                    </app-ui-checkbox>
+                </div>
+
+                <h4>{{ "systemSettings.auditAgeDays" | translate }}</h4>
+                <p class="hint">{{ "systemSettings.auditAgeHint" | translate }}</p>
+
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>debug</label>
+                        <app-ui-input type="number" min="0" max="3650" formControlName="ageDebug"></app-ui-input>
+                    </div>
+                    <div class="form-group">
+                        <label>info</label>
+                        <app-ui-input type="number" min="0" max="3650" formControlName="ageInfo"></app-ui-input>
+                    </div>
+                    <div class="form-group">
+                        <label>success</label>
+                        <app-ui-input type="number" min="0" max="3650" formControlName="ageSuccess"></app-ui-input>
+                    </div>
+                    <div class="form-group">
+                        <label>warning</label>
+                        <app-ui-input type="number" min="0" max="3650" formControlName="ageWarning"></app-ui-input>
+                    </div>
+                    <div class="form-group">
+                        <label>error</label>
+                        <app-ui-input type="number" min="0" max="3650" formControlName="ageError"></app-ui-input>
+                    </div>
+                    <div class="form-group">
+                        <label>audit_fail</label>
+                        <app-ui-input type="number" min="0" max="3650" formControlName="ageAuditFail"></app-ui-input>
+                    </div>
+                </div>
+
+                <h4>{{ "systemSettings.auditHardCap" | translate }}</h4>
+                <p class="hint">{{ "systemSettings.auditCapHint" | translate }}</p>
+
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>info</label>
+                        <app-ui-input type="number" min="0" max="10000000" formControlName="capInfo"></app-ui-input>
+                    </div>
+                    <div class="form-group">
+                        <label>success</label>
+                        <app-ui-input type="number" min="0" max="10000000" formControlName="capSuccess"></app-ui-input>
+                    </div>
+                    <div class="form-group">
+                        <label>warning</label>
+                        <app-ui-input type="number" min="0" max="10000000" formControlName="capWarning"></app-ui-input>
+                    </div>
+                    <div class="form-group">
+                        <label>error</label>
+                        <app-ui-input type="number" min="0" max="10000000" formControlName="capError"></app-ui-input>
+                    </div>
+                    <div class="form-group">
+                        <label>audit_fail</label>
+                        <app-ui-input type="number" min="0" max="10000000" formControlName="capAuditFail"></app-ui-input>
+                    </div>
+                </div>
+
+                <div class="info-block">
+                    <strong>{{ "systemSettings.modeEnvTitle" | translate }}</strong>
+                    <p>{{ "systemSettings.modeEnvHint" | translate }}</p>
                 </div>
             </div>
 
