@@ -381,7 +381,32 @@
             "channels": "Channels"
         },
         "tabs": {
-            "connections": "Connections"
+            "connections": "Connections",
+            "models": "Models"
+        },
+        "models": {
+            "title": "Models",
+            "subtitle": "Installed Ollama models: registry pulls, updates, memory unload and removal.",
+            "pullTitle": "Pull a model",
+            "pullPlaceholder": "e.g. qwen3.5:14b or llama3.2:3b",
+            "pull": "Pull",
+            "pullHint": "A model name from the Ollama registry. Pulls run in the background — you can leave the page.",
+            "pullStartError": "Failed to start the pull",
+            "installedTitle": "Installed",
+            "refresh": "Refresh list",
+            "loading": "Loading...",
+            "empty": "No models found. Make sure Ollama is running.",
+            "loaded": "In memory",
+            "unload": "Unload",
+            "update": "Update",
+            "updateHint": "Re-pull the latest version from the registry",
+            "delete": "Delete",
+            "deleted": "Model deleted",
+            "deleteError": "Failed to delete the model",
+            "deleteConfirmTitle": "Delete model?",
+            "deleteConfirmText": "The model will be removed from disk:",
+            "cancel": "Cancel",
+            "dismiss": "Dismiss"
         },
         "connections": {
             "title": "Connections",

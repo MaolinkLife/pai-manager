@@ -5,9 +5,10 @@ import { SettingsComponentsModule } from '../../layout/components/modals/main-mo
 import { SettingsRoutingModule } from './settings-routing.module';
 import { SettingsComponent } from './settings.component';
 import { ConnectionsSettingsComponent } from './components/connections-settings/connections-settings.component';
+import { ModelsSettingsComponent } from './components/models-settings/models-settings.component';
 
 @NgModule({
-    declarations: [SettingsComponent, ConnectionsSettingsComponent],
+    declarations: [SettingsComponent, ConnectionsSettingsComponent, ModelsSettingsComponent],
     imports: [CommonModule, SharedModule, SettingsComponentsModule, SettingsRoutingModule],
 })
 export class SettingsModule {}

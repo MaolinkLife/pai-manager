@@ -1,0 +1,126 @@
+<div class="models">
+    <header class="models-header">
+        <h2>{{ "settingsPage.models.title" | translate }}</h2>
+        <p class="models-subtitle">{{ "settingsPage.models.subtitle" | translate }}</p>
+    </header>
+
+    <section class="pull-card">
+        <h3>{{ "settingsPage.models.pullTitle" | translate }}</h3>
+        <div class="pull-form">
+            <app-ui-input
+                type="text"
+                [placeholder]="'settingsPage.models.pullPlaceholder' | translate"
+                [(ngModel)]="pullName"
+                (keydown.enter)="startPull()"
+            ></app-ui-input>
+            <app-ui-button
+                [disabled]="!pullName.trim() || pullStartPending"
+                [loading]="pullStartPending"
+                (pressed)="startPull()"
+            >
+                {{ "settingsPage.models.pull" | translate }}
+            </app-ui-button>
+        </div>
+        <div class="pull-hint">{{ "settingsPage.models.pullHint" | translate }}</div>
+
+        <div class="pull-list" *ngIf="pulls.length">
+            <div class="pull-item" *ngFor="let pull of pulls; trackBy: trackByPull">
+                <div class="pull-item-head">
+                    <span class="pull-item-name">{{ pull.model }}</span>
+                    <span class="pull-item-status" [class.error]="pull.error">
+                        {{ pull.error ? pull.error : pull.status }}
+                    </span>
+                </div>
+                <div class="pull-progress" *ngIf="!pull.done">
+                    <div class="pull-progress-bar">
+                        <div class="pull-progress-fill" [style.width.%]="pullPercent(pull)"></div>
+                    </div>
+                    <span class="pull-progress-meta">
+                        {{ formatSize(pull.completed) }} / {{ formatSize(pull.total) }}
+                        <ng-container *ngIf="pull.total"> · {{ pullPercent(pull) }}%</ng-container>
+                    </span>
+                </div>
+                <div class="pull-item-actions">
+                    <button type="button" class="link-btn" *ngIf="!pull.done" (click)="cancelPull(pull.model)">
+                        {{ "settingsPage.models.cancel" | translate }}
+                    </button>
+                    <button type="button" class="link-btn" *ngIf="pull.done" (click)="dismissPull(pull.model)">
+                        {{ "settingsPage.models.dismiss" | translate }}
+                    </button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="list-card">
+        <div class="list-head">
+            <h3>{{ "settingsPage.models.installedTitle" | translate }}</h3>
+            <button type="button" class="link-btn" (click)="refresh()" [disabled]="loading">
+                {{ "settingsPage.models.refresh" | translate }}
+            </button>
+        </div>
+
+        <div class="models-loading" *ngIf="loading">{{ "settingsPage.models.loading" | translate }}</div>
+
+        <div class="models-empty" *ngIf="!loading && !models.length">
+            {{ "settingsPage.models.empty" | translate }}
+        </div>
+
+        <div class="model-row" *ngFor="let model of models; trackBy: trackByModel">
+            <div class="model-main">
+                <span class="model-name">{{ model.name }}</span>
+                <span class="model-meta">
+                    {{ formatSize(model.size) }}
+                    <ng-container *ngIf="model.loaded">
+                        · <span class="model-loaded">{{ "settingsPage.models.loaded" | translate }}</span>
+                        <ng-container *ngIf="model.size_vram"> ({{ formatSize(model.size_vram) }} VRAM)</ng-container>
+                    </ng-container>
+                </span>
+            </div>
+            <div class="model-actions">
+                <button
+                    type="button"
+                    class="action-btn"
+                    *ngIf="model.loaded"
+                    [disabled]="isBusy(model.name)"
+                    (click)="unload(model.name)"
+                    [attr.title]="t('settingsPage.models.unload')"
+                >
+                    {{ "settingsPage.models.unload" | translate }}
+                </button>
+                <button
+                    type="button"
+                    class="action-btn"
+                    [disabled]="isBusy(model.name)"
+                    (click)="startPull(model.name)"
+                    [attr.title]="t('settingsPage.models.updateHint')"
+                >
+                    {{ "settingsPage.models.update" | translate }}
+                </button>
+                <button
+                    type="button"
+                    class="action-btn danger"
+                    [disabled]="isBusy(model.name)"
+                    (click)="requestDelete(model.name)"
+                >
+                    {{ "settingsPage.models.delete" | translate }}
+                </button>
+            </div>
+        </div>
+    </section>
+
+    <div class="confirm-overlay" *ngIf="confirmDeleteModel" (click)="cancelDelete()">
+        <section class="confirm-dialog" (click)="$event.stopPropagation()">
+            <h3>{{ "settingsPage.models.deleteConfirmTitle" | translate }}</h3>
+            <p>{{ "settingsPage.models.deleteConfirmText" | translate }} <strong>{{ confirmDeleteModel }}</strong></p>
+            <footer>
+                <app-ui-button variant="secondary" size="sm" (pressed)="cancelDelete()">
+                    {{ "settingsPage.models.cancel" | translate }}
+                </app-ui-button>
+                <app-ui-button size="sm" (pressed)="confirmDelete()">
+                    {{ "settingsPage.models.delete" | translate }}
+                </app-ui-button>
+            </footer>
+        </section>
+    </div>
+</div>

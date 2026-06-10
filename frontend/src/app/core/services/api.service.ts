@@ -53,6 +53,17 @@ export interface OllamaRuntimeModelsResponse {
     message?: string;
 }
 
+export interface OllamaPullState {
+    type?: string;
+    model: string;
+    status: string;
+    completed: number;
+    total: number;
+    done: boolean;
+    error: string | null;
+    started_at?: number;
+}
+
 export interface OllamaUnloadResponse {
     status: string;
     model?: string;
@@ -187,6 +198,33 @@ export class ApiService {
     unloadOllamaModel$(model: string): Observable<OllamaUnloadResponse | null> {
         return this.http
             .post<OllamaUnloadResponse>(`${this.apiUrl}/runtime/unload`, { model })
+            .pipe(catchError((_err) => of(null)));
+    }
+
+    getOllamaPulls$(): Observable<OllamaPullState[]> {
+        return this.http
+            .get<{ status: string; pulls: OllamaPullState[] }>(`${this.apiUrl}/models/pulls`)
+            .pipe(
+                map((response) => (Array.isArray(response?.pulls) ? response.pulls : [])),
+                catchError((_err) => of([]))
+            );
+    }
+
+    pullOllamaModel$(model: string): Observable<{ status: string; model?: string } | null> {
+        return this.http
+            .post<{ status: string; model?: string }>(`${this.apiUrl}/models/pull`, { model })
+            .pipe(catchError((_err) => of(null)));
+    }
+
+    cancelOllamaPull$(model: string): Observable<{ status: string } | null> {
+        return this.http
+            .post<{ status: string }>(`${this.apiUrl}/models/pull/cancel`, { model })
+            .pipe(catchError((_err) => of(null)));
+    }
+
+    deleteOllamaModel$(model: string): Observable<{ status: string; message?: string } | null> {
+        return this.http
+            .post<{ status: string; message?: string }>(`${this.apiUrl}/models/delete`, { model })
             .pipe(catchError((_err) => of(null)));
     }
 

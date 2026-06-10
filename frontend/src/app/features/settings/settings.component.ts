@@ -25,6 +25,7 @@ export class SettingsComponent implements OnInit {
             labelKey: 'settingsPage.groups.system',
             tabs: [
                 { key: 'connections', labelKey: 'settingsPage.tabs.connections' },
+                { key: 'models', labelKey: 'settingsPage.tabs.models' },
                 { key: 'generate', labelKey: 'settingsSidebar.generation' },
                 { key: 'core', labelKey: 'settingsSidebar.core' },
                 { key: 'system', labelKey: 'settingsSidebar.system' },

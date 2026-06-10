@@ -18,6 +18,7 @@
 
     <section class="settings-content custom-scrollbar">
         <app-connections-settings *ngIf="activeTab === 'connections'"></app-connections-settings>
+        <app-models-settings *ngIf="activeTab === 'models'"></app-models-settings>
         <app-generation-settings *ngIf="activeTab === 'generate'"></app-generation-settings>
         <app-core-settings *ngIf="activeTab === 'core'"></app-core-settings>
         <app-system-settings *ngIf="activeTab === 'system'"></app-system-settings>
