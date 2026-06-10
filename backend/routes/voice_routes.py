@@ -413,16 +413,51 @@ async def stop_record(request: Request):
     )
 
     async def _process_voice_turn() -> None:
-        # Mirrors the VAD pipeline: streaming generation gives the chat the
-        # same UX as typed messages (reasoning accordion, runtime trace,
-        # chunked output, compliance updates) — generate_standard had none.
+        # Mirrors the chat WS pipeline 1:1: run_id + trace_hook give the chat
+        # the same runtime block (model, modules, traces, timings) as typed
+        # messages; the streaming path gives reasoning/chunks/compliance.
         try:
+            import time as _time
+            import uuid as _uuid
+
             from core.instructor import Instructor
             from modules.database import service as database_service
             from modules.generative.conversation import generate_stream
             from routes.ws_routes import _clean_runtime_meta_payload
 
-            processing_result = await decision_layer.process_message(user_message, None)
+            payload_run_id = str(_uuid.uuid4())
+            run_started = _time.perf_counter()
+            trace_events: list[Dict[str, Any]] = []
+
+            async def trace_hook(trace_payload: dict) -> None:
+                event_payload: Dict[str, Any] = {
+                    "type": "runtime_trace",
+                    "run_id": payload_run_id,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                }
+                event_payload.update(trace_payload or {})
+                trace_events.append(
+                    {
+                        "stage": event_payload.get("stage"),
+                        "state": event_payload.get("state"),
+                        "timestamp": event_payload.get("timestamp"),
+                        "elapsed_ms": event_payload.get("elapsed_ms"),
+                        "details": event_payload.get("details"),
+                    }
+                )
+                await push_ws(event_payload)
+
+            await push_ws(
+                {
+                    "type": "system",
+                    "event": "typing_start",
+                    "run_id": payload_run_id,
+                }
+            )
+
+            processing_result = await decision_layer.process_message(
+                user_message, None, trace_hook=trace_hook
+            )
             raw_media_payload = processing_result.pop("raw_media", None)
             instructor = Instructor()
             formatted_history = await instructor.format_for_api(
@@ -449,6 +484,7 @@ async def stop_record(request: Request):
                             "reasoning_elapsed_ms": payload.get("reasoning_elapsed_ms"),
                             "answer_elapsed_ms": payload.get("answer_elapsed_ms"),
                             "meta": payload.get("meta"),
+                            "stopped": bool(payload.get("stopped")),
                         }
                     )
                 return await push_ws(payload)
@@ -460,10 +496,13 @@ async def stop_record(request: Request):
                 last_user_message=processing_result.get("user_message", user_message),
                 raw_user_media=raw_media_payload,
                 store=interaction_policy.can_affect_global_memory,
+                run_id=payload_run_id,
+                trace_hook=trace_hook,
             )
 
-            # Persist generation details so the info popup survives reloads
-            # (the chat WS route does the same after its streams).
+            # Persist generation details (run_id + traces included) so the
+            # runtime block and info popup survive reloads — same shape as
+            # the chat WS route writes after its streams.
             message_id = final_meta.pop("id", None)
             if interaction_policy.can_affect_global_memory and message_id:
                 database_service.update_history_runtime_meta(
@@ -471,6 +510,11 @@ async def stop_record(request: Request):
                     _clean_runtime_meta_payload(
                         {
                             **final_meta,
+                            "run_id": payload_run_id,
+                            "traces": trace_events,
+                            "elapsed_ms": round(
+                                (_time.perf_counter() - run_started) * 1000, 2
+                            ),
                             "actor_user_uuid": actor_user_uuid,
                             "source": "voice_record",
                             "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -478,6 +522,14 @@ async def stop_record(request: Request):
                     ),
                     merge=True,
                 )
+            await push_ws(
+                {
+                    "type": "run_status",
+                    "run_id": payload_run_id,
+                    "status": "completed",
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                }
+            )
         except Exception as exc:
             log_audit_entry(
                 "voice_record_processing_failed",
