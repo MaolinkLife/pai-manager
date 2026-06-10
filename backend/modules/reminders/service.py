@@ -160,17 +160,29 @@ def maybe_capture_reminder(
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": content},
                 ],
-                options={"temperature": 0.0, "num_predict": 200},
+                # __think=False: reasoning models must not burn the token
+                # budget on <think> — we need the strict JSON itself.
+                options={"temperature": 0.0, "num_predict": 400, "__think": False},
                 metadata={"mode": "reminder_extraction"},
             )
         )
-        payload = _parse_llm_json(getattr(result, "content", "") or "")
+        raw_content = str(getattr(result, "content", "") or "")
+        payload = _parse_llm_json(raw_content)
+        if payload is None:
+            # Some providers still route everything into reasoning — try it
+            # before giving up.
+            payload = _parse_llm_json(str(getattr(result, "reasoning", "") or ""))
         if not payload or not bool(payload.get("is_reminder")):
             log_audit_entry(
                 "reminder_capture_not_a_reminder",
                 "[Reminders] Gate matched but extractor said no.",
                 AuditStatus.INFO,
-                details={"message_id": user_message.get("id")},
+                details={
+                    "message_id": user_message.get("id"),
+                    "raw_content": raw_content[:500],
+                    "raw_reasoning": str(getattr(result, "reasoning", "") or "")[:300],
+                    "parsed": payload,
+                },
             )
             return None
 
@@ -271,7 +283,7 @@ def _compose_delivery_text(reminder: Dict[str, Any]) -> str:
         result = generation_manager.generate(
             GenerateRequest(
                 messages=[{"role": "system", "content": prompt}],
-                options={"temperature": 0.6, "num_predict": 160},
+                options={"temperature": 0.6, "num_predict": 220, "__think": False},
                 metadata={"mode": "reminder_delivery"},
             )
         )
