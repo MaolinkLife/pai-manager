@@ -619,8 +619,18 @@ class MemoryDiaryNarrativeConfig(BaseModel):
     max_chars: int = 3000
 
 
+class MemoryDiaryContextConfig(BaseModel):
+    # §3.9-bis-retrieval: recent diary days (narrative + self_reflection)
+    # injected into generation context. DB read only — no LLM calls.
+    enabled: bool = True
+    days: int = 7
+    max_entries: int = 3
+    max_chars_per_entry: int = 600
+
+
 class MemoryDiaryConfig(BaseModel):
     narrative: MemoryDiaryNarrativeConfig = MemoryDiaryNarrativeConfig()
+    context: MemoryDiaryContextConfig = MemoryDiaryContextConfig()
 
 
 class MemoryConfig(BaseModel):

@@ -574,6 +574,16 @@ DEFAULT_CONFIG = {
                 "min_chars": 80,
                 "max_chars": 3000,
             },
+            # §3.9-bis-retrieval: recent diary days (narrative +
+            # self_reflection) injected into generation context as a
+            # `diary.recent` tool block. Pure DB read — no LLM calls,
+            # cost is prompt tokens only.
+            "context": {
+                "enabled": True,
+                "days": 7,
+                "max_entries": 3,
+                "max_chars_per_entry": 600,
+            },
         },
     },
     "synthesis": {
