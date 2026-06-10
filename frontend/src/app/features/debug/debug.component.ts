@@ -1,5 +1,6 @@
 import { AfterViewInit, Component, ElementRef, HostListener, OnInit, ViewChild } from '@angular/core';
 import { LoggerService } from '../../core/services/logger.service';
+import { DebugVaultEntry, DebugVaultService } from '../../core/services/debug-vault.service';
 
 const TAG_RE = /\[([^\]]+)\]/g;
 const JSON_LIKE_RE = /^\s*[\[{]/;
@@ -30,10 +31,126 @@ export class DebugComponent implements OnInit, AfterViewInit {
     availableStatuses: string[] = [];
     activeStatuses: string[] = [];
 
-    constructor(private loggerService: LoggerService) {}
+    // DebugVault tab (0.9.x P10-B)
+    activeTab: 'logs' | 'vault' = 'logs';
+    vaultEntries: DebugVaultEntry[] = [];
+    vaultTotal = 0;
+    vaultOffset = 0;
+    readonly vaultPageSize = 25;
+    vaultLoading = false;
+    vaultKinds: string[] = [];
+    vaultKindFilter = '';
+    vaultReviewedFilter: 'all' | 'reviewed' | 'unreviewed' = 'all';
+    vaultExpanded: Set<string> = new Set();
+    vaultReviewNotes: Record<string, string> = {};
+    vaultReviewBusy: Set<string> = new Set();
+
+    constructor(
+        private loggerService: LoggerService,
+        private debugVaultService: DebugVaultService,
+    ) {}
 
     ngOnInit(): void {
         this.loadAllLogs();
+    }
+
+    selectTab(tab: 'logs' | 'vault'): void {
+        this.activeTab = tab;
+        if (tab === 'vault' && !this.vaultEntries.length && !this.vaultLoading) {
+            this.loadVault(true);
+        }
+    }
+
+    loadVault(reset = false): void {
+        if (reset) {
+            this.vaultOffset = 0;
+            this.vaultEntries = [];
+            this.vaultExpanded.clear();
+        }
+        this.vaultLoading = true;
+        const reviewed =
+            this.vaultReviewedFilter === 'all'
+                ? undefined
+                : this.vaultReviewedFilter === 'reviewed';
+        this.debugVaultService
+            .list$({
+                kind: this.vaultKindFilter || undefined,
+                reviewed,
+                limit: this.vaultPageSize,
+                offset: this.vaultOffset,
+            })
+            .subscribe({
+                next: (response) => {
+                    const incoming = response?.entries || [];
+                    this.vaultEntries = reset
+                        ? incoming
+                        : [...this.vaultEntries, ...incoming];
+                    this.vaultTotal = response?.total ?? this.vaultEntries.length;
+                    this.vaultOffset = this.vaultEntries.length;
+                    this.collectVaultKinds(incoming);
+                    this.vaultLoading = false;
+                },
+                error: () => {
+                    this.vaultLoading = false;
+                },
+            });
+    }
+
+    get vaultHasMore(): boolean {
+        return this.vaultEntries.length < this.vaultTotal;
+    }
+
+    onVaultFilterChanged(): void {
+        this.loadVault(true);
+    }
+
+    toggleVaultEntry(entryId: string): void {
+        if (this.vaultExpanded.has(entryId)) {
+            this.vaultExpanded.delete(entryId);
+        } else {
+            this.vaultExpanded.add(entryId);
+        }
+    }
+
+    markVaultReviewed(entry: DebugVaultEntry): void {
+        if (this.vaultReviewBusy.has(entry.id)) {
+            return;
+        }
+        this.vaultReviewBusy.add(entry.id);
+        const note = (this.vaultReviewNotes[entry.id] || '').trim() || undefined;
+        this.debugVaultService.markReviewed$(entry.id, note).subscribe({
+            next: () => {
+                entry.reviewed = true;
+                entry.reviewed_note = note || entry.reviewed_note;
+                entry.reviewed_at = new Date().toISOString();
+                this.vaultReviewBusy.delete(entry.id);
+                delete this.vaultReviewNotes[entry.id];
+            },
+            error: () => {
+                this.vaultReviewBusy.delete(entry.id);
+            },
+        });
+    }
+
+    formatVaultJson(value: any): string {
+        if (value === null || value === undefined) {
+            return '';
+        }
+        try {
+            return JSON.stringify(value, null, 2);
+        } catch {
+            return String(value);
+        }
+    }
+
+    private collectVaultKinds(entries: DebugVaultEntry[]): void {
+        const kinds = new Set(this.vaultKinds);
+        for (const entry of entries) {
+            if (entry.kind) {
+                kinds.add(entry.kind);
+            }
+        }
+        this.vaultKinds = Array.from(kinds).sort();
     }
 
     ngAfterViewInit(): void {

@@ -1,4 +1,23 @@
-<div class="filters">
+<div class="debug-tabs">
+    <button
+        type="button"
+        class="debug-tab"
+        [class.active]="activeTab === 'logs'"
+        (click)="selectTab('logs')"
+    >
+        Логи
+    </button>
+    <button
+        type="button"
+        class="debug-tab"
+        [class.active]="activeTab === 'vault'"
+        (click)="selectTab('vault')"
+    >
+        DebugVault
+    </button>
+</div>
+
+<div class="filters" *ngIf="activeTab === 'logs'">
     <div class="debug-session" *ngIf="currentSessionId">
         Session: {{ currentSessionId }}
     </div>
@@ -46,7 +65,7 @@
     </div>
 </div>
 
-<div class="debug-log" #debugLogContainer (scroll)="onLogScroll(debugLogContainer)">
+<div class="debug-log" *ngIf="activeTab === 'logs'" #debugLogContainer (scroll)="onLogScroll(debugLogContainer)">
     <div
         *ngFor="let log of visibleLogs; let i = index"
         class="log-entry"
@@ -113,3 +132,110 @@
         End of log list.
     </div>
 </div>
+
+<ng-container *ngIf="activeTab === 'vault'">
+    <div class="filters vault-filters">
+        <div class="vault-filter-group">
+            <label>Kind</label>
+            <select [(ngModel)]="vaultKindFilter" (change)="onVaultFilterChanged()">
+                <option value="">Все</option>
+                <option *ngFor="let kind of vaultKinds" [value]="kind">{{ kind }}</option>
+            </select>
+        </div>
+        <div class="vault-filter-group">
+            <label>Статус</label>
+            <select [(ngModel)]="vaultReviewedFilter" (change)="onVaultFilterChanged()">
+                <option value="all">Все</option>
+                <option value="unreviewed">Непросмотренные</option>
+                <option value="reviewed">Просмотренные</option>
+            </select>
+        </div>
+        <div class="vault-total" *ngIf="vaultTotal">
+            Всего: {{ vaultTotal }}
+        </div>
+    </div>
+
+    <div class="debug-log vault-list">
+        <div
+            *ngFor="let entry of vaultEntries"
+            class="log-entry vault-entry"
+            [class.reviewed]="entry.reviewed"
+        >
+            <div class="log-header">
+                <span class="tag">{{ entry.kind }}</span>
+                <span class="vault-severity" [ngClass]="entry.severity">{{ entry.severity }}</span>
+                <span class="timestamp">
+                    {{ entry.created_at | date : "dd.MM.yyyy HH:mm:ss" }}
+                </span>
+                <span class="vault-reviewed-mark" *ngIf="entry.reviewed">✓ reviewed</span>
+            </div>
+
+            <div class="log-body">
+                <div class="log-message">{{ entry.summary }}</div>
+
+                <div
+                    class="log-toggle"
+                    [class.open]="vaultExpanded.has(entry.id)"
+                    (click)="toggleVaultEntry(entry.id)"
+                >
+                    <span class="caret" aria-hidden="true"></span>
+                    <span class="toggle-label">
+                        {{ vaultExpanded.has(entry.id) ? "Hide details" : "Show details" }}
+                    </span>
+                </div>
+
+                <div class="log-details" [class.open]="vaultExpanded.has(entry.id)">
+                    <div class="log-details-inner" *ngIf="vaultExpanded.has(entry.id)">
+                        <div class="vault-detail-block" *ngIf="entry.violations?.length">
+                            <h4>Violations</h4>
+                            <ul>
+                                <li *ngFor="let violation of entry.violations">{{ violation }}</li>
+                            </ul>
+                        </div>
+                        <div class="vault-detail-block" *ngIf="entry.output">
+                            <h4>Output</h4>
+                            <pre>{{ entry.output }}</pre>
+                        </div>
+                        <div class="vault-detail-block" *ngIf="entry.context">
+                            <h4>Context</h4>
+                            <pre>{{ formatVaultJson(entry.context) }}</pre>
+                        </div>
+                        <div class="vault-detail-block" *ngIf="entry.runtime_meta">
+                            <h4>Runtime meta</h4>
+                            <pre>{{ formatVaultJson(entry.runtime_meta) }}</pre>
+                        </div>
+                        <div class="vault-detail-block" *ngIf="entry.reviewed_note">
+                            <h4>Review note</h4>
+                            <p>{{ entry.reviewed_note }}</p>
+                        </div>
+
+                        <div class="vault-review-row" *ngIf="!entry.reviewed">
+                            <input
+                                type="text"
+                                class="vault-review-note"
+                                placeholder="Заметка (опционально)"
+                                [(ngModel)]="vaultReviewNotes[entry.id]"
+                            />
+                            <button
+                                type="button"
+                                class="vault-review-btn"
+                                [disabled]="vaultReviewBusy.has(entry.id)"
+                                (click)="markVaultReviewed(entry)"
+                            >
+                                ✓ Отметить просмотренным
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="log-loading" *ngIf="vaultLoading">Loading vault entries...</div>
+        <div class="log-loading" *ngIf="!vaultLoading && !vaultEntries.length">
+            DebugVault пуст — аномалий не зафиксировано.
+        </div>
+        <div class="vault-load-more" *ngIf="!vaultLoading && vaultHasMore">
+            <button type="button" (click)="loadVault()">Загрузить ещё</button>
+        </div>
+    </div>
+</ng-container>
