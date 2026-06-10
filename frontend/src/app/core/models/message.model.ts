@@ -12,12 +12,38 @@ export interface MessageMedia {
     dataUrl?: string;
 }
 
+export interface MessageCompliance {
+    validator?: {
+        compliance?: number;
+        acceptable?: boolean;
+        threshold?: number;
+        violations?: string[];
+    };
+    languageGuard?: {
+        ok?: boolean;
+        detected?: string;
+        expected?: string;
+        dominance?: number;
+    };
+    confidence?: {
+        score?: number;
+        threshold?: number;
+        low?: boolean;
+    };
+    factuality?: {
+        supported?: boolean;
+        sourcesFound?: number;
+        claims?: string[];
+    };
+}
+
 export interface Message {
     id: string;
     role: 'user' | 'assistant';
     content: string;
     timestamp: string;
     isPending?: boolean;
+    compliance?: MessageCompliance | null;
     media?: MessageMedia[];
     runId?: string;
     provider?: string;

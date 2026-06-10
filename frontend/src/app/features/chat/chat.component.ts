@@ -4,7 +4,7 @@ import { UntypedFormControl } from '@angular/forms';
 import { Observable } from 'rxjs';
 import { finalize, map } from 'rxjs/operators';
 import { LibraryItem } from '../../core/models/library.model';
-import { Message, MessageMedia, MessageMediaCategory } from '../../core/models/message.model';
+import { Message, MessageCompliance, MessageMedia, MessageMediaCategory } from '../../core/models/message.model';
 import { ProjectConfig } from '../../core/models/project-config.model';
 import { ApiService } from '../../core/services/api.service';
 import { AuthService } from '../../core/services/auth.service';
@@ -359,6 +359,17 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy {
                     break;
                 }
 
+                case 'compliance_update': {
+                    // Post-stream compliance results (§3.5/3.5-bis/3.8/3.9)
+                    // for the just-finished assistant message.
+                    const compliance = this.normalizeComplianceEvent(event.compliance);
+                    if (event.id && compliance) {
+                        this.chatMessageStore.patchById(event.id, { compliance });
+                    }
+                    shouldScrollAfterEvent = false;
+                    break;
+                }
+
                 case 'history':
                     const newMessages = (event.items || []).filter((m: any) => {
                         const role = String(m?.role || '').toLowerCase();
@@ -377,6 +388,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy {
                             runId: runId || undefined,
                             runtime: runtime || undefined,
                             provider: m.provider || runtime?.model || undefined,
+                            compliance: this.extractComplianceFromMeta(m.runtime_meta),
                         };
                     }).sort(
                         (a: any, b: any) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
@@ -2274,6 +2286,104 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy {
 
     private hydrateRuntimeFromHistory(raw: any): RuntimeState | undefined {
         return this.chatRunStore.hydrateRuntimeFromHistory(raw);
+    }
+
+    /** Rebuild compliance badges from a persisted runtime_meta blob
+     *  (history reload path). Shapes are the snake_case summaries written
+     *  by _build_compliance_meta_update on the backend. */
+    private extractComplianceFromMeta(raw: any): MessageCompliance | null {
+        if (!raw || typeof raw !== 'object') {
+            return null;
+        }
+        const compliance: MessageCompliance = {};
+
+        const validator = raw.validator;
+        if (validator && typeof validator === 'object' && validator.compliance !== undefined) {
+            compliance.validator = {
+                compliance: Number(validator.compliance),
+                acceptable: validator.acceptable ?? undefined,
+                threshold: validator.threshold ?? undefined,
+                violations: Array.isArray(validator.violations) ? validator.violations : [],
+            };
+        }
+
+        const lang = raw.language_guard;
+        if (lang && typeof lang === 'object' && lang.ok !== undefined) {
+            compliance.languageGuard = {
+                ok: !!lang.ok,
+                detected: lang.detected || undefined,
+                expected: lang.expected || undefined,
+                dominance: lang.dominance ?? undefined,
+            };
+        }
+
+        if (typeof raw.confidence === 'number') {
+            compliance.confidence = {
+                score: raw.confidence,
+                threshold: raw.confidence_threshold ?? undefined,
+                low: !!raw.confidence_low,
+            };
+        }
+
+        const factuality = raw.factuality;
+        if (factuality && typeof factuality === 'object' && factuality.supported !== undefined) {
+            compliance.factuality = {
+                supported: !!factuality.supported,
+                sourcesFound: factuality.sources_found ?? undefined,
+                claims: Array.isArray(factuality.claims) ? factuality.claims : [],
+            };
+        }
+
+        return Object.keys(compliance).length > 0 ? compliance : null;
+    }
+
+    /** Normalize a live compliance_update WS payload (raw check payloads,
+     *  camel-agnostic) into the Message.compliance shape. */
+    private normalizeComplianceEvent(raw: any): MessageCompliance | null {
+        if (!raw || typeof raw !== 'object') {
+            return null;
+        }
+        const compliance: MessageCompliance = {};
+
+        const validator = raw.validator;
+        if (validator && typeof validator === 'object' && validator.compliance !== undefined) {
+            compliance.validator = {
+                compliance: Number(validator.compliance),
+                acceptable: validator.acceptable ?? undefined,
+                threshold: validator.threshold ?? undefined,
+                violations: Array.isArray(validator.violations) ? validator.violations : [],
+            };
+        }
+
+        const lang = raw.language_guard;
+        if (lang && typeof lang === 'object' && lang.ok !== undefined) {
+            compliance.languageGuard = {
+                ok: !!lang.ok,
+                detected: lang.detected || undefined,
+                expected: lang.expected || undefined,
+                dominance: lang.dominance ?? undefined,
+            };
+        }
+
+        const confidence = raw.confidence;
+        if (confidence && typeof confidence === 'object' && confidence.score !== undefined) {
+            compliance.confidence = {
+                score: Number(confidence.score),
+                threshold: confidence.threshold ?? undefined,
+                low: !!confidence.low,
+            };
+        }
+
+        const factuality = raw.factuality;
+        if (factuality && typeof factuality === 'object' && factuality.supported !== undefined) {
+            compliance.factuality = {
+                supported: !!factuality.supported,
+                sourcesFound: factuality.sources_found ?? undefined,
+                claims: Array.isArray(factuality.claims) ? factuality.claims : [],
+            };
+        }
+
+        return Object.keys(compliance).length > 0 ? compliance : null;
     }
 
     trackByLibraryItem(_index: number, item: LibraryItem): string {

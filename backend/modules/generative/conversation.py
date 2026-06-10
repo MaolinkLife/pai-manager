@@ -778,6 +778,133 @@ def _maybe_run_factuality(
     return payload
 
 
+def _run_compliance_pipeline(
+    *,
+    decision_context: Dict[str, Any],
+    last_user_message: Dict[str, Any],
+    assistant_content: str,
+    provider: Any,
+    metadata: Dict[str, Any] | None,
+    history: list,
+) -> Dict[str, Any]:
+    """Run all five post-generation checks in order.
+
+    Shared by sync ``generate_standard`` and streaming ``generate_stream``
+    (the latter calls it via asyncio.to_thread after message_end so the
+    user-visible stream is never delayed). Every check is never-raise and
+    opt-in via its own config flag.
+    """
+    validator_payload = _maybe_run_validator(
+        decision_context=decision_context,
+        last_user_message=last_user_message,
+        assistant_content=assistant_content,
+        provider=provider,
+        metadata=metadata,
+    )
+    language_guard_payload = _maybe_run_language_guard(
+        last_user_message=last_user_message,
+        assistant_content=assistant_content,
+        provider=provider,
+        metadata=metadata,
+    )
+    confidence_payload = _maybe_run_confidence(
+        last_user_message=last_user_message,
+        assistant_content=assistant_content,
+    )
+    factuality_payload = _maybe_run_factuality(
+        assistant_content=assistant_content,
+        confidence_payload=confidence_payload,
+    )
+    self_watcher_payload = _maybe_run_self_watcher(
+        decision_context=decision_context,
+        last_user_message=last_user_message,
+        history=history,
+    )
+    return {
+        "validator": validator_payload,
+        "language_guard": language_guard_payload,
+        "confidence": confidence_payload,
+        "factuality": factuality_payload,
+        "self_watcher": self_watcher_payload,
+    }
+
+
+def _build_compliance_meta_update(
+    compliance: Dict[str, Any],
+    decision_context: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Compose the runtime_meta merge-payload from compliance results.
+
+    Persists summaries for ALL checks (not just confidence/factuality) so
+    the chat compliance bar can rehydrate badges from history reloads.
+    Skipped checks leave no trace in runtime_meta.
+    """
+    meta_update: Dict[str, Any] = {}
+
+    confidence_payload = compliance.get("confidence") or {}
+    if (
+        confidence_payload
+        and not confidence_payload.get("skipped")
+        and "score" in confidence_payload
+    ):
+        meta_update["confidence"] = confidence_payload["score"]
+        meta_update["confidence_threshold"] = confidence_payload.get("threshold")
+        meta_update["confidence_low"] = confidence_payload.get("low", False)
+
+    factuality_payload = compliance.get("factuality") or {}
+    if (
+        factuality_payload
+        and not factuality_payload.get("skipped")
+        and factuality_payload.get("checked")
+    ):
+        meta_update["factuality"] = {
+            "supported": factuality_payload.get("supported"),
+            "sources_found": factuality_payload.get("sources_found"),
+            "claims": factuality_payload.get("claims", []),
+        }
+
+    validator_payload = compliance.get("validator") or {}
+    if (
+        validator_payload
+        and not validator_payload.get("skipped")
+        and "compliance" in validator_payload
+    ):
+        meta_update["validator"] = {
+            "compliance": validator_payload.get("compliance"),
+            "acceptable": validator_payload.get("acceptable"),
+            "threshold": validator_payload.get("threshold"),
+            "violations": list(validator_payload.get("violations") or [])[:10],
+        }
+
+    language_guard_payload = compliance.get("language_guard") or {}
+    if language_guard_payload and not language_guard_payload.get("skipped"):
+        meta_update["language_guard"] = {
+            "ok": language_guard_payload.get("ok"),
+            "detected": language_guard_payload.get("detected"),
+            "expected": language_guard_payload.get("expected"),
+            "dominance": language_guard_payload.get("dominance"),
+        }
+
+    # §3.7 — stamp PAI's prediction on THIS assistant message so the
+    # NEXT turn's Self-Watcher pass has something to compare against.
+    meta_update.update(_extract_predicted_emotion_meta(decision_context))
+    return meta_update
+
+
+def _compliance_ws_payload(compliance: Dict[str, Any]) -> Dict[str, Any]:
+    """Subset of compliance results worth pushing to the chat UI.
+
+    Skipped checks are dropped entirely — the badge bar renders only what
+    actually ran.
+    """
+    visible: Dict[str, Any] = {}
+    for key in ("validator", "language_guard", "confidence", "factuality"):
+        payload = compliance.get(key)
+        if isinstance(payload, dict) and payload and not payload.get("skipped"):
+            visible[key] = payload
+    return visible
+
+
 def _build_generation_options() -> dict:
     exclude = ["name", "description"]
     full_settings = config_service.get_config_value("generate_settings", {})
@@ -1582,55 +1709,22 @@ async def generate_standard(
     )
     print("[Generator] Обработан ответ провайдера (standard).")
 
-    # Validator pass (§3.5). Opt-in via validator.enabled. On low-compliance
-    # the output still flows downstream — we just record the anomaly in
-    # DebugVault for later human review. Auto-reroll is intentionally NOT
-    # part of this commit; it lands as a follow-up so the seam can be
-    # observed under load before adding retry latency.
-    validator_payload = _maybe_run_validator(
+    # Compliance pipeline (§3.5/3.5-bis/3.7/3.8/3.9). All opt-in, all
+    # never-raise. Output is never modified — results go to runtime_meta,
+    # audit log, DebugVault. Auto-reroll is a deferred follow-up.
+    compliance_results = _run_compliance_pipeline(
         decision_context=decision_context,
         last_user_message=last_user_message,
         assistant_content=assistant_content,
         provider=generate_result.provider,
         metadata=generate_result.metadata,
-    )
-
-    # Language guard (§3.5-bis). Opt-in via language_guard.enabled. No LLM
-    # cost — pure CPU script-ratio counter. Auto-reroll is a follow-up.
-    language_guard_payload = _maybe_run_language_guard(
-        last_user_message=last_user_message,
-        assistant_content=assistant_content,
-        provider=generate_result.provider,
-        metadata=generate_result.metadata,
-    )
-
-    # Confidence estimation (§3.8). Opt-in. One mini LLM call per sync
-    # generation. Low confidence is a SIGNAL — written to History.runtime_meta
-    # and surfaces as a WARNING audit log, but does NOT land in DebugVault.
-    confidence_payload = _maybe_run_confidence(
-        last_user_message=last_user_message,
-        assistant_content=assistant_content,
-    )
-
-    # Factuality check (§3.9). Opt-in, CPU-only (no extra LLM call).
-    # By default gated on confidence_low — runs only when §3.8 already
-    # flagged the output. Looks each extracted claim up against PAI's
-    # OWN memory (lorebook). Web/internet check belongs to §3.10 which
-    # is OUT OF CORE.
-    factuality_payload = _maybe_run_factuality(
-        assistant_content=assistant_content,
-        confidence_payload=confidence_payload,
-    )
-
-    # Self-Watcher (§3.7). Compares PAI's prediction on the previous
-    # turn (stored in History.runtime_meta) with the user's actual
-    # emotional tone on this turn (from analyzer). Records mismatches
-    # for nightly diary reflection. Does NOT influence the current turn.
-    self_watcher_payload = _maybe_run_self_watcher(
-        decision_context=decision_context,
-        last_user_message=last_user_message,
         history=history,
     )
+    validator_payload = compliance_results["validator"]
+    language_guard_payload = compliance_results["language_guard"]
+    confidence_payload = compliance_results["confidence"]
+    factuality_payload = compliance_results["factuality"]
+    self_watcher_payload = compliance_results["self_watcher"]
 
     assistant_message_obj = None
     suppress_user_echo = bool(last_user_message.get("suppress_user_echo")) if last_user_message else False
@@ -1673,34 +1767,10 @@ async def generate_standard(
                 assistant_reasoning,
             )
 
-        # Persist compliance metadata (§3.8 confidence, §3.9 factuality,
-        # §3.7 self-watcher prediction) onto the message's runtime_meta
-        # so the UI / downstream tools can read it without re-running
-        # anything. merge=True keeps any upstream metadata intact.
-        meta_update: Dict[str, Any] = {}
-        if (
-            confidence_payload
-            and not confidence_payload.get("skipped")
-            and "score" in confidence_payload
-        ):
-            meta_update["confidence"] = confidence_payload["score"]
-            meta_update["confidence_threshold"] = confidence_payload.get("threshold")
-            meta_update["confidence_low"] = confidence_payload.get("low", False)
-
-        if (
-            factuality_payload
-            and not factuality_payload.get("skipped")
-            and factuality_payload.get("checked")
-        ):
-            meta_update["factuality"] = {
-                "supported": factuality_payload.get("supported"),
-                "sources_found": factuality_payload.get("sources_found"),
-                "claims": factuality_payload.get("claims", []),
-            }
-
-        # §3.7 — stamp PAI's prediction on THIS assistant message so the
-        # NEXT turn's Self-Watcher pass has something to compare against.
-        meta_update.update(_extract_predicted_emotion_meta(decision_context))
+        # Persist compliance metadata onto the message's runtime_meta so the
+        # UI / downstream tools can read it without re-running anything.
+        # merge=True keeps any upstream metadata intact.
+        meta_update = _build_compliance_meta_update(compliance_results, decision_context)
 
         if meta_update and getattr(assistant_message_obj, "id", None):
             try:
@@ -2575,6 +2645,46 @@ async def generate_stream(
         )
     )
     await emit_fn(_with_run({"type": "system", "event": "typing_end"}))
+
+    # Compliance pipeline for the streaming path (§3.5/3.5-bis/3.7/3.8/3.9).
+    # Runs AFTER message_end + typing_end so the user-visible stream is never
+    # delayed by judge/confidence LLM calls. Results persist on runtime_meta
+    # (merge) and are pushed to the open chat via a compliance_update event
+    # so badges appear on the just-finished bubble without a reload.
+    if assistant_content and not stopped and store and not append_to_message_id:
+        try:
+            compliance_results = await asyncio.to_thread(
+                _run_compliance_pipeline,
+                decision_context=decision_context,
+                last_user_message=last_user_message or {},
+                assistant_content=assistant_content,
+                provider=provider_used_stream,
+                metadata=final_chunk_metadata if isinstance(final_chunk_metadata, dict) else {},
+                history=history,
+            )
+            meta_update = _build_compliance_meta_update(compliance_results, decision_context)
+            if meta_update and assistant_message_id:
+                database_service.update_history_runtime_meta(
+                    assistant_message_id, meta_update, merge=True
+                )
+            visible = _compliance_ws_payload(compliance_results)
+            if visible and assistant_message_id:
+                await emit_fn(
+                    _with_run(
+                        {
+                            "type": "compliance_update",
+                            "id": assistant_message_id,
+                            "compliance": visible,
+                        }
+                    )
+                )
+        except Exception as exc:
+            log_audit_entry(
+                "compliance_stream_failed",
+                "[Compliance] Streaming compliance pass failed.",
+                AuditStatus.WARNING,
+                details={"error": str(exc), "message_id": assistant_message_id},
+            )
 
 
 def play_message(msg_id: str):
