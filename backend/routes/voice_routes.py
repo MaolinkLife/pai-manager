@@ -418,7 +418,9 @@ async def stop_record(request: Request):
         # chunked output, compliance updates) — generate_standard had none.
         try:
             from core.instructor import Instructor
+            from modules.database import service as database_service
             from modules.generative.conversation import generate_stream
+            from routes.ws_routes import _clean_runtime_meta_payload
 
             processing_result = await decision_layer.process_message(user_message, None)
             raw_media_payload = processing_result.pop("raw_media", None)
@@ -433,14 +435,49 @@ async def stop_record(request: Request):
                 visual_context=processing_result.get("visual_context"),
                 module_tasks=processing_result.get("module_tasks"),
             )
+
+            final_meta: Dict[str, Any] = {}
+
+            async def emit(payload: dict) -> bool:
+                if payload.get("type") == "message_end":
+                    final_meta.update(
+                        {
+                            "id": payload.get("id"),
+                            "model": payload.get("model"),
+                            "usage": payload.get("usage"),
+                            "provider": payload.get("provider"),
+                            "reasoning_elapsed_ms": payload.get("reasoning_elapsed_ms"),
+                            "answer_elapsed_ms": payload.get("answer_elapsed_ms"),
+                            "meta": payload.get("meta"),
+                        }
+                    )
+                return await push_ws(payload)
+
             await generate_stream(
                 processing_result,
                 formatted_history,
-                emit_fn=push_ws,
+                emit_fn=emit,
                 last_user_message=processing_result.get("user_message", user_message),
                 raw_user_media=raw_media_payload,
                 store=interaction_policy.can_affect_global_memory,
             )
+
+            # Persist generation details so the info popup survives reloads
+            # (the chat WS route does the same after its streams).
+            message_id = final_meta.pop("id", None)
+            if interaction_policy.can_affect_global_memory and message_id:
+                database_service.update_history_runtime_meta(
+                    message_id,
+                    _clean_runtime_meta_payload(
+                        {
+                            **final_meta,
+                            "actor_user_uuid": actor_user_uuid,
+                            "source": "voice_record",
+                            "timestamp": datetime.now(timezone.utc).isoformat(),
+                        }
+                    ),
+                    merge=True,
+                )
         except Exception as exc:
             log_audit_entry(
                 "voice_record_processing_failed",
