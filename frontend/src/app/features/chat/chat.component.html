@@ -2,7 +2,7 @@
     <div class="chat-shell">
         <main class="chat-main" #messagesContainer>
             <div class="chat-main-inner">
-                <div class="load-more-container" *ngIf="hasMoreMessages">
+                <div class="load-more-container" *ngIf="hasMoreMessages || hiddenOlderCount > 0">
                     <button
                         class="load-more-btn"
                         (click)="loadMoreHistory()"

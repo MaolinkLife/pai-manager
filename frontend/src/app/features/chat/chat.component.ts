@@ -155,6 +155,15 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy {
     currentOffset = 0;
     readonly MESSAGES_PER_PAGE = 32;
 
+    // Render window: only the tail of the loaded history is materialized in
+    // the DOM. Older messages stay in chatHistory and are revealed on demand
+    // (wheel-up near the top or the load-more button) before any server fetch.
+    private static readonly RENDER_WINDOW_INITIAL = 48;
+    private static readonly RENDER_WINDOW_STEP = 32;
+    private renderWindowSize = ChatComponent.RENDER_WINDOW_INITIAL;
+    private revealThrottleUntil = 0;
+    hiddenOlderCount = 0;
+
     showEmojiPicker = false;
     emojiDropdownPosition: { x: number; y: number } = { x: 0, y: 0 };
     emojiPickerMode: 'dropdown' | 'side-panel' = 'side-panel';
@@ -399,6 +408,9 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy {
                         this.currentOffset += newMessages.length;
                         this.hasMoreMessages = newMessages.length === this.MESSAGES_PER_PAGE;
                         this.isLoadingHistory = false;
+                        // Grow the render window so the freshly fetched page
+                        // is actually visible instead of hidden by the cap.
+                        this.renderWindowSize += newMessages.length;
                         this.chatMessageStore.prependHistory(newMessages);
                         this.restoreScrollAfterHistoryPrepend();
                     } else {
@@ -570,12 +582,30 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy {
                 this.scheduleInitialHistoryScrollToBottom();
             }
         });
+        this.messagesContainerRef?.nativeElement.addEventListener('wheel', this.onMessagesWheel, { passive: true });
     }
 
     ngOnDestroy(): void {
+        this.messagesContainerRef?.nativeElement.removeEventListener('wheel', this.onMessagesWheel);
         this.stopPlaybackTracking();
         this.resetAttachments();
     }
+
+    // Wheel-up near the top reveals older messages / fetches the next page,
+    // mirroring the load-more button. Bound to user intent (deltaY < 0) so
+    // programmatic scrollTop changes can't trigger it.
+    private readonly onMessagesWheel = (event: WheelEvent): void => {
+        if (event.deltaY >= 0) {
+            return;
+        }
+        const element = this.messagesContainerRef?.nativeElement;
+        if (!element || element.scrollTop > 120 || this.isLoadingHistory || !this.historyLoaded) {
+            return;
+        }
+        if (this.hiddenOlderCount > 0 || this.hasMoreMessages) {
+            this.loadMoreHistory();
+        }
+    };
 
     private claimBufferedWebsocketMessage(event: BufferedWebsocketMessage): boolean {
         const cursor = this.websocketService.getConsumerCursor('chat');
@@ -649,9 +679,27 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy {
         }
     }
 
-    // Load more messages with cumulative offset
+    // Load more messages: first reveal already-loaded ones hidden by the
+    // render window (no server round-trip), then fall back to server paging.
     loadMoreHistory(): void {
-        if (!this.hasMoreMessages || this.isLoadingHistory) return;
+        if (this.isLoadingHistory) return;
+
+        if (this.hiddenOlderCount > 0) {
+            const now = Date.now();
+            if (now < this.revealThrottleUntil) return;
+            this.revealThrottleUntil = now + 250;
+
+            const container = this.messagesContainerRef?.nativeElement;
+            this.pendingHistoryPrependScroll = container
+                ? { scrollHeight: container.scrollHeight, scrollTop: container.scrollTop }
+                : null;
+            this.renderWindowSize += ChatComponent.RENDER_WINDOW_STEP;
+            this.rebuildChatMessageViews(this.chatHistory);
+            this.restoreScrollAfterHistoryPrepend();
+            return;
+        }
+
+        if (!this.hasMoreMessages) return;
 
         const element = this.messagesContainerRef?.nativeElement;
         this.pendingHistoryPrependScroll = element
@@ -686,6 +734,8 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy {
         this.hasMoreMessages = true;
         this.isLoadingHistory = false;
         this.historyLoaded = false;
+        this.renderWindowSize = ChatComponent.RENDER_WINDOW_INITIAL;
+        this.hiddenOlderCount = 0;
 
         this.websocketService.send(JSON.stringify({
             action: 'fetch_history',
@@ -1287,8 +1337,14 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy {
     private rebuildChatMessageViews(messages: Message[]): void {
         const latestUserIndex = this.findLatestUserIndex(messages);
         const total = messages.length;
+        const windowOffset = Math.max(0, total - this.renderWindowSize);
+        this.hiddenOlderCount = windowOffset;
+        const visibleMessages = windowOffset > 0 ? messages.slice(windowOffset) : messages;
         const activeIds = new Set<string>();
-        const views = messages.map((msg, index) => {
+        const views = visibleMessages.map((msg, visibleIndex) => {
+            // index stays global (into chatHistory) so edit/delete/reroll
+            // handlers keep working on the full array.
+            const index = windowOffset + visibleIndex;
             const id = msg.id || `index-${index}`;
             activeIds.add(id);
             const cached = this.chatMessageViewCache.get(id);
