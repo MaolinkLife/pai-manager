@@ -169,12 +169,24 @@ export class DebugComponent implements OnInit, AfterViewInit {
         }
     }
 
+    // Server-side paging (0.9.x P10-C): with the DB-backed store a 24/7
+    // session can hold tens of thousands of rows — never fetch unbounded.
+    private readonly SERVER_PAGE_SIZE = 500;
+    private serverOffset = 0;
+    private serverHasMore = false;
+    private serverLoading = false;
+    serverTotal = 0;
+
     private loadAllLogs(): void {
         this.isInitialLoading = true;
-        this.loggerService.getAllDebugLogs$(this.currentSessionId || undefined).subscribe({
-            next: (response) => {
+        this.serverOffset = 0;
+        this.loggerService.getDebugLogPage$(this.SERVER_PAGE_SIZE, 0, this.currentSessionId || undefined).subscribe({
+            next: (response: any) => {
                 this.logs = (response?.logs || []).map((l: any) => this.enrichLog(l));
                 this.currentSessionId = String(response?.session_id || this.currentSessionId || '');
+                this.serverOffset = this.logs.length;
+                this.serverTotal = Number(response?.total ?? this.logs.length);
+                this.serverHasMore = !!response?.has_more;
                 this.rebuildAvailableFilters();
                 this.applyFilters();
             },
@@ -183,12 +195,65 @@ export class DebugComponent implements OnInit, AfterViewInit {
                 this.filteredLogs = [];
                 this.visibleLogs = [];
                 this.hasMoreLogs = false;
+                this.serverHasMore = false;
             },
             complete: () => {
                 this.isInitialLoading = false;
                 setTimeout(() => this.ensureViewportFilled(), 0);
             },
         });
+    }
+
+    private loadNextServerPage(): void {
+        if (!this.serverHasMore || this.serverLoading) {
+            return;
+        }
+        this.serverLoading = true;
+        this.isLoadingMore = true;
+        this.loggerService
+            .getDebugLogPage$(this.SERVER_PAGE_SIZE, this.serverOffset, this.currentSessionId || undefined)
+            .subscribe({
+                next: (response: any) => {
+                    const incoming = (response?.logs || []).map((l: any) => this.enrichLog(l));
+                    this.logs = [...this.logs, ...incoming];
+                    this.serverOffset = this.logs.length;
+                    this.serverTotal = Number(response?.total ?? this.serverTotal);
+                    this.serverHasMore = !!response?.has_more;
+                    this.rebuildAvailableFilters();
+                    this.applyFilters();
+                    this.serverLoading = false;
+                    this.isLoadingMore = false;
+                },
+                error: () => {
+                    this.serverLoading = false;
+                    this.isLoadingMore = false;
+                    this.serverHasMore = false;
+                },
+            });
+    }
+
+    exportLogsAsJsonl(): void {
+        if (!this.filteredLogs.length) {
+            return;
+        }
+        const lines = this.filteredLogs
+            .map((log) => {
+                const { tags, statusLabel, ...raw } = log;
+                try {
+                    return JSON.stringify(raw);
+                } catch {
+                    return '';
+                }
+            })
+            .filter(Boolean)
+            .join('\n');
+        const blob = new Blob([lines], { type: 'application/x-ndjson' });
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = `debug_${this.currentSessionId || 'session'}.jsonl`;
+        anchor.click();
+        URL.revokeObjectURL(url);
     }
 
     private tryExtendVisibleWindow(): void {
@@ -229,6 +294,12 @@ export class DebugComponent implements OnInit, AfterViewInit {
         if (!this.hasMoreLogs) {
             return;
         }
+        // Client window exhausted but the server has more rows — pull the
+        // next page before extending the visible slice.
+        if (this.visibleCount >= this.filteredLogs.length && this.serverHasMore) {
+            this.loadNextServerPage();
+            return;
+        }
         this.isLoadingMore = true;
         this.visibleCount = Math.min(this.visibleCount + this.PAGE_SIZE, this.filteredLogs.length);
         this.rebuildVisibleLogs();
@@ -248,7 +319,7 @@ export class DebugComponent implements OnInit, AfterViewInit {
 
     private rebuildVisibleLogs(): void {
         this.visibleLogs = this.filteredLogs.slice(0, this.visibleCount);
-        this.hasMoreLogs = this.visibleCount < this.filteredLogs.length;
+        this.hasMoreLogs = this.visibleCount < this.filteredLogs.length || this.serverHasMore;
     }
 
     private enrichLog(log: any) {

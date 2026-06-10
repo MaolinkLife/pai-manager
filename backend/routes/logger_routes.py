@@ -6,9 +6,25 @@ router = APIRouter(prefix="/api/log", tags=["Logs"])
 
 
 @router.get("/")
-def get_current_session_log(limit: int | None = None, offset: int = 0, session_id: str | None = None):
+def get_current_session_log(
+    limit: int | None = None,
+    offset: int = 0,
+    session_id: str | None = None,
+    severity: str | None = None,
+    event_type: str | None = None,
+    since: str | None = None,
+    until: str | None = None,
+):
     try:
-        logs, resolved_session_id, total = get_debug_log(limit=limit, offset=offset, session_id=session_id)
+        logs, resolved_session_id, total = get_debug_log(
+            limit=limit,
+            offset=offset,
+            session_id=session_id,
+            severity=severity,
+            event_type=event_type,
+            since=since,
+            until=until,
+        )
         if logs is None:
             return JSONResponse(
                 status_code=404, content={"error": "Log file not found"}

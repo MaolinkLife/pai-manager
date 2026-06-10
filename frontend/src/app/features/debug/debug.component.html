@@ -20,6 +20,16 @@
 <div class="filters" *ngIf="activeTab === 'logs'">
     <div class="debug-session" *ngIf="currentSessionId">
         Session: {{ currentSessionId }}
+        <span class="debug-total" *ngIf="serverTotal"> · {{ serverTotal }} записей</span>
+        <button
+            type="button"
+            class="debug-export-btn"
+            (click)="exportLogsAsJsonl()"
+            [disabled]="!filteredLogs.length"
+            title="Экспорт загруженных записей в JSONL"
+        >
+            ⬇ JSONL
+        </button>
     </div>
     <!-- первая строка: источники -->
     <div class="chips">

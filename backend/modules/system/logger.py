@@ -371,9 +371,18 @@ def _audit_row_to_legacy_dict(row: Any) -> dict:
 
 
 def _fetch_audit_logs_from_db(
-    session_id: str, limit: Optional[int], offset: int
+    session_id: str,
+    limit: Optional[int],
+    offset: int,
+    *,
+    severity: Optional[str] = None,
+    event_type: Optional[str] = None,
+    since: Optional[str] = None,
+    until: Optional[str] = None,
 ) -> tuple[list[dict], int]:
-    """Page through audit_logs newest-first. Returns (rows, total)."""
+    """Page through audit_logs newest-first with optional server-side
+    filters (severity / event_type / ISO time range). ``total`` counts the
+    FILTERED set so has_more pagination stays correct."""
     from models.models import AuditLogRecord
     from modules.database.core import SessionLocal
 
@@ -384,6 +393,22 @@ def _fetch_audit_logs_from_db(
         base_query = session.query(AuditLogRecord).filter(
             AuditLogRecord.session_id == session_id
         )
+        if severity:
+            base_query = base_query.filter(
+                AuditLogRecord.severity == str(severity).strip().lower()
+            )
+        if event_type:
+            base_query = base_query.filter(
+                AuditLogRecord.event_type == str(event_type).strip()
+            )
+        if since:
+            parsed_since = _parse_iso_utc(since)
+            if parsed_since is not None:
+                base_query = base_query.filter(AuditLogRecord.created_at >= parsed_since)
+        if until:
+            parsed_until = _parse_iso_utc(until)
+            if parsed_until is not None:
+                base_query = base_query.filter(AuditLogRecord.created_at <= parsed_until)
         total = base_query.count()
 
         ordered = base_query.order_by(AuditLogRecord.created_at.desc())
@@ -392,6 +417,23 @@ def _fetch_audit_logs_from_db(
         rows = ordered.all()
 
     return [_audit_row_to_legacy_dict(row) for row in rows], total
+
+
+def _parse_iso_utc(value: str):
+    """Best-effort ISO-8601 → naive UTC datetime (matching column storage).
+    Returns None when unparseable — caller skips that filter."""
+    from datetime import datetime, timezone
+
+    text = str(value or "").strip()
+    if not text:
+        return None
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is not None:
+        parsed = parsed.astimezone(timezone.utc).replace(tzinfo=None)
+    return parsed
 
 
 # ---------------------------------------------------------------------------
@@ -568,25 +610,48 @@ def _fetch_audit_logs_from_jsonl(
     return logs, total
 
 
-def get_debug_log(limit: Optional[int] = None, offset: int = 0, session_id: Optional[str] = None):
+def get_debug_log(
+    limit: Optional[int] = None,
+    offset: int = 0,
+    session_id: Optional[str] = None,
+    *,
+    severity: Optional[str] = None,
+    event_type: Optional[str] = None,
+    since: Optional[str] = None,
+    until: Optional[str] = None,
+):
     """Page through audit logs. Returns ``(rows | None, session_id, total)``.
 
     Reads from the DB first. If the DB query throws (table missing during
     early boot, transient error), falls back to the JSONL file. If neither
     has anything, returns ``(None, session_id, 0)`` so the route can render
     a 404 like before.
+
+    Server-side filters (severity / event_type / since / until) apply to the
+    DB path only — the JSONL fallback is an emergency dump and ignores them.
     """
     resolved_session_id = str(session_id or get_session_id()).strip()
+    filters_requested = bool(severity or event_type or since or until)
 
     try:
-        rows, total = _fetch_audit_logs_from_db(resolved_session_id, limit, offset)
+        rows, total = _fetch_audit_logs_from_db(
+            resolved_session_id,
+            limit,
+            offset,
+            severity=severity,
+            event_type=event_type,
+            since=since,
+            until=until,
+        )
     except Exception:
         rows, total = [], 0
         db_query_succeeded = False
     else:
         db_query_succeeded = True
 
-    if db_query_succeeded and total > 0:
+    if db_query_succeeded and (total > 0 or filters_requested):
+        # With active filters an empty result is a legitimate answer —
+        # don't fall back to unfiltered JSONL and surprise the caller.
         return rows, resolved_session_id, total
 
     # DB had nothing (or the query failed) — try the JSONL fallback. This
