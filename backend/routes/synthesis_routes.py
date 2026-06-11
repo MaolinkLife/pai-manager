@@ -116,11 +116,13 @@ def get_synthesis_models(refresh: bool = False):
 
 @router.post("/message/illustrate")
 async def illustrate_message(payload: dict):
-    """Generate an image for an existing chat message and attach it as media.
+    """Force image generation for the user request behind an assistant reply.
 
-    Post-hoc counterpart of the in-flow image_generation toggle: the message
-    text goes through the same media pipeline (visual intent included) and the
-    result is persisted on the message + pushed to the UI via WS.
+    Fallback for the analyzer's image-intent detection: when PAI missed a
+    «создай изображение» request, this re-runs the USER message (the actual
+    request, with subject self/other detection via visual intent) through the
+    media pipeline and attaches the result to the assistant reply + pushes a
+    message_media_update WS event.
     """
     import base64 as _b64
     import json as _json
@@ -128,7 +130,12 @@ async def illustrate_message(payload: dict):
     import uuid as _uuid
 
     from core.websocket_manager import manager
-    from modules.memory.history import get_message_by_id
+    from modules.database.core import SessionLocal
+    from modules.memory.history import (
+        get_last_user_message_before,
+        get_message_by_id,
+        get_message_from_database,
+    )
     from modules.storage.service import save_media_for_message
     from modules.system.config import get_config_value
 
@@ -136,12 +143,31 @@ async def illustrate_message(payload: dict):
     if not message_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="message_id is required")
 
-    message = get_message_by_id(message_id)
-    if not message:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Message not found")
-    content = str(message.get("content") or "").strip()
+    # The prompt comes from the user's request, not from the reply text.
+    session = SessionLocal()
+    try:
+        try:
+            assistant_msg = get_message_from_database(
+                session, filters={"id": message_id}, expected_role="assistant"
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        try:
+            user_msg = get_last_user_message_before(
+                session,
+                character_id=assistant_msg.character_id,
+                before_timestamp=assistant_msg.timestamp,
+            )
+            content = str(getattr(user_msg, "content", "") or "").strip()
+        except ValueError:
+            content = ""
+        if not content:
+            content = str(getattr(assistant_msg, "content", "") or "").strip()
+    finally:
+        session.close()
+
     if not content:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Message has no text to illustrate")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No request text to generate from")
 
     image_cfg = get_config_value("telegram.image", {}) or {}
     try:
