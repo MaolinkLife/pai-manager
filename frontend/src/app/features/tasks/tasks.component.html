@@ -42,11 +42,10 @@
                 </div>
                 <div class="create-field">
                     <label>{{ 'tasks.dueLabel' | translate }}</label>
-                    <input
-                        type="datetime-local"
-                        class="due-input"
+                    <app-ui-input-date-time
                         [(ngModel)]="newDueAt"
-                    />
+                        [min]="minDueDate"
+                    ></app-ui-input-date-time>
                 </div>
                 <app-ui-button (pressed)="create()" [disabled]="saving">
                     {{ 'tasks.create' | translate }}

@@ -40,7 +40,8 @@ export class TasksComponent implements OnInit {
 
     statusFilter = '';
     newText = '';
-    newDueAt = '';
+    newDueAt: Date | null = null;
+    readonly minDueDate = new Date();
 
     viewMode: 'list' | 'calendar' = 'list';
     calendarMonth = new Date();
@@ -133,8 +134,8 @@ export class TasksComponent implements OnInit {
         this.selectedDayKey = day.key;
         this.selectedDayItems = day.items;
         // Prefill the create form with the picked date (next morning slot).
-        const prefill = `${day.key}T09:00`;
-        if (new Date(prefill).getTime() > Date.now()) {
+        const prefill = new Date(`${day.key}T09:00`);
+        if (prefill.getTime() > Date.now()) {
             this.newDueAt = prefill;
         }
     }
@@ -142,13 +143,8 @@ export class TasksComponent implements OnInit {
     create(): void {
         this.formError = '';
         const text = this.newText.trim();
-        const dueLocal = this.newDueAt.trim();
-        if (!text || !dueLocal) {
-            this.formError = this.t('tasks.invalidForm');
-            return;
-        }
-        const due = new Date(dueLocal);
-        if (Number.isNaN(due.getTime()) || due.getTime() <= Date.now()) {
+        const due = this.newDueAt;
+        if (!text || !due || due.getTime() <= Date.now()) {
             this.formError = this.t('tasks.invalidForm');
             return;
         }
@@ -157,7 +153,7 @@ export class TasksComponent implements OnInit {
             next: () => {
                 this.saving = false;
                 this.newText = '';
-                this.newDueAt = '';
+                this.newDueAt = null;
                 this.load();
             },
             error: () => {

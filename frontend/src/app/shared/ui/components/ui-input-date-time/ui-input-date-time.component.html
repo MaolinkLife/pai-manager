@@ -1,0 +1,57 @@
+<div class="datetime" [class.datetime--open]="open" [class.datetime--disabled]="disabled">
+    <div class="datetime-field" [class.datetime-field--invalid]="invalid">
+        <input
+            #field
+            type="text"
+            class="datetime-input"
+            inputmode="numeric"
+            autocomplete="off"
+            spellcheck="false"
+            [placeholder]="placeholder"
+            [disabled]="disabled"
+            [value]="text"
+            (input)="onInput($event)"
+            (blur)="onBlur()"
+            (keydown)="onFieldKeydown($event)"
+        />
+        <button
+            type="button"
+            class="datetime-toggle"
+            [disabled]="disabled"
+            (click)="toggleCalendar()"
+            tabindex="-1"
+            aria-label="Calendar"
+        >
+            <app-custom-svg name="alarm" [size]="16"></app-custom-svg>
+        </button>
+    </div>
+
+    <div class="datetime-popup" *ngIf="open">
+        <div class="datetime-nav">
+            <div class="datetime-nav-month">
+                <button type="button" class="datetime-nav-btn" (click)="previousMonth($event)" aria-label="Previous month">‹</button>
+                <span class="datetime-month-label">{{ monthLabel }}</span>
+                <button type="button" class="datetime-nav-btn" (click)="nextMonth($event)" aria-label="Next month">›</button>
+            </div>
+            <button type="button" class="datetime-today-btn" (click)="goToCurrentMonth($event)">•</button>
+        </div>
+
+        <div class="datetime-grid">
+            <div class="datetime-weekday" *ngFor="let label of weekdayLabels">{{ label }}</div>
+            <ng-container *ngFor="let week of weeks; trackBy: trackByWeek">
+                <button
+                    type="button"
+                    class="datetime-day"
+                    *ngFor="let cell of week; trackBy: trackByCell"
+                    [class.out-month]="!cell.inMonth"
+                    [class.today]="cell.isToday"
+                    [class.selected]="cell.isSelected"
+                    [disabled]="cell.isDisabled"
+                    (click)="pickDay(cell, $event)"
+                >
+                    {{ cell.dayNumber }}
+                </button>
+            </ng-container>
+        </div>
+    </div>
+</div>

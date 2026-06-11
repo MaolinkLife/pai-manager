@@ -1,0 +1,191 @@
+:host {
+    display: block;
+}
+
+.datetime {
+    position: relative;
+}
+
+.datetime-field {
+    display: flex;
+    align-items: center;
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    transition: border-color 0.15s ease;
+
+    &:focus-within {
+        border-color: var(--color-accent);
+    }
+
+    &.datetime-field--invalid {
+        border-color: #ff5b62;
+    }
+}
+
+.datetime-input {
+    flex: 1 1 auto;
+    min-width: 0;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--color-text);
+    font-family: 'JetBrains Mono', var(--font-family), monospace;
+    font-size: 13px;
+    padding: 9px 0 9px 12px;
+
+    &::placeholder {
+        color: color-mix(in srgb, var(--color-text) 40%, transparent);
+        font-family: var(--font-family);
+    }
+
+    &:disabled {
+        opacity: 0.5;
+        cursor: default;
+    }
+}
+
+.datetime-toggle {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    color: color-mix(in srgb, var(--color-text) 65%, transparent);
+    cursor: pointer;
+    padding: 8px 10px;
+    transition: color 0.15s ease;
+
+    &:hover:not(:disabled) {
+        color: var(--color-accent);
+    }
+
+    &:disabled {
+        opacity: 0.5;
+        cursor: default;
+    }
+}
+
+.datetime--open .datetime-toggle {
+    color: var(--color-accent);
+}
+
+.datetime-popup {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    z-index: 40;
+    min-width: 264px;
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-soft), 0 12px 32px rgba(0, 0, 0, 0.35);
+    padding: 12px;
+    animation: datetimePopupIn 0.15s ease;
+}
+
+@keyframes datetimePopupIn {
+    from {
+        opacity: 0;
+        transform: translateY(-6px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.datetime-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+}
+
+.datetime-nav-month {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.datetime-month-label {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--color-text-active);
+    text-transform: capitalize;
+    min-width: 130px;
+    text-align: center;
+}
+
+.datetime-nav-btn,
+.datetime-today-btn {
+    background: transparent;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    color: var(--color-text);
+    width: 26px;
+    height: 26px;
+    font-size: 14px;
+    line-height: 1;
+    cursor: pointer;
+    transition: border-color 0.15s ease, color 0.15s ease;
+
+    &:hover {
+        border-color: var(--color-accent);
+        color: var(--color-text-active);
+    }
+}
+
+.datetime-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 2px;
+}
+
+.datetime-weekday {
+    font-size: 9px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: color-mix(in srgb, var(--color-text) 50%, transparent);
+    text-align: center;
+    padding: 2px 0 6px;
+}
+
+.datetime-day {
+    background: transparent;
+    border: none;
+    border-radius: var(--radius);
+    color: var(--color-text);
+    font-family: var(--font-family);
+    font-size: 12px;
+    width: 32px;
+    height: 30px;
+    cursor: pointer;
+    transition: background-color 0.12s ease, color 0.12s ease;
+
+    &:hover:not(:disabled) {
+        background-color: color-mix(in srgb, var(--color-accent) 16%, transparent);
+        color: var(--color-text-active);
+    }
+
+    &.out-month {
+        opacity: 0.35;
+    }
+
+    &.today {
+        box-shadow: inset 0 0 0 1px var(--color-accent);
+    }
+
+    &.selected {
+        background-color: var(--color-accent);
+        color: var(--color-bg);
+        font-weight: 700;
+    }
+
+    &:disabled {
+        opacity: 0.25;
+        cursor: default;
+    }
+}
