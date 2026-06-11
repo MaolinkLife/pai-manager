@@ -302,6 +302,12 @@ export class ApiService {
             .pipe(catchError((_err) => of(null)));
     }
 
+    deleteLocalModelFile$(path: string): Observable<{ status: string; message?: string } | null> {
+        return this.http
+            .post<{ status: string; message?: string }>(`${this.resourcesApiUrl}/local-models/delete`, { path })
+            .pipe(catchError((_err) => of(null)));
+    }
+
     sendMessage$(request: any): Observable<any> {
         return this.http.post<{ response: string }>(`${this.apiUrl}/chat`, request)
     }

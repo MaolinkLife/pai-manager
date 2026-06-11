@@ -427,6 +427,21 @@
                 "tts": "TTS (синтез речи)",
                 "vision": "Vision",
                 "rvc": "RVC"
+            },
+            "storageTitle": "Локальное хранилище",
+            "storageEmpty": "В storage/models пока нет файлов.",
+            "storageDeleted": "Файл удалён",
+            "storageDeleteConfirmTitle": "Удалить файл из хранилища?",
+            "storageGroups": {
+                "gguf": "GGUF (текст)",
+                "diffusers": "Diffusers-пайплайны",
+                "generation": "Генерация",
+                "vision": "Vision",
+                "tts": "TTS",
+                "stt": "STT",
+                "rvc": "RVC",
+                "image_generation": "Генерация изображений",
+                "image_generation_legacy": "Генерация изображений (legacy-каталоги)"
             }
         },
         "connections": {

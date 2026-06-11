@@ -5,6 +5,7 @@ import {
     HfDownloadState,
     HfRepoFile,
     HfSearchResult,
+    LocalModelResourceItem,
     OllamaPullState,
     OllamaRuntimeModel,
 } from '../../../../core/services/api.service';
@@ -51,6 +52,10 @@ export class ModelsSettingsComponent implements OnInit {
     ];
     hfCategoryOptions: Array<{ label: string; value: string }> = [];
 
+    storageGroups: Array<{ key: string; items: LocalModelResourceItem[] }> = [];
+    storageLoading = false;
+    confirmStorageDelete: LocalModelResourceItem | null = null;
+
     constructor(
         private apiService: ApiService,
         private websocketService: WebsocketService,
@@ -68,6 +73,7 @@ export class ModelsSettingsComponent implements OnInit {
         this.refresh();
         this.loadPulls();
         this.loadHfDownloads();
+        this.refreshStorage();
 
         this.websocketService.messages$
             .pipe(takeUntilDestroyed(this.destroyRef))
@@ -339,6 +345,63 @@ export class ModelsSettingsComponent implements OnInit {
         return String(count);
     }
 
+    refreshStorage(): void {
+        this.storageLoading = true;
+        this.apiService.getLocalModels$().subscribe((response) => {
+            const groups = response?.groups || {};
+            this.storageGroups = Object.keys(groups)
+                .map((key) => ({ key, items: groups[key] || [] }))
+                .filter((group) => group.items.length > 0);
+            this.storageLoading = false;
+            this.cdr.markForCheck();
+        });
+    }
+
+    storageGroupLabel(key: string): string {
+        const label = this.t(`settingsPage.models.storageGroups.${key}`);
+        return label.startsWith('settingsPage.') ? key : label;
+    }
+
+    requestStorageDelete(item: LocalModelResourceItem): void {
+        this.confirmStorageDelete = item;
+    }
+
+    cancelStorageDelete(): void {
+        this.confirmStorageDelete = null;
+    }
+
+    confirmStorageDeleteAction(): void {
+        const item = this.confirmStorageDelete;
+        this.confirmStorageDelete = null;
+        if (!item?.absolute_path) {
+            return;
+        }
+        this.apiService.deleteLocalModelFile$(item.absolute_path).subscribe((response) => {
+            if (!response || response.status !== 'ok') {
+                this.notificationService.open({
+                    type: 'error',
+                    message: response?.message || this.t('settingsPage.models.deleteError'),
+                    autoClose: true,
+                });
+            } else {
+                this.notificationService.open({
+                    type: 'success',
+                    message: this.t('settingsPage.models.storageDeleted'),
+                    autoClose: true,
+                });
+            }
+            this.refreshStorage();
+        });
+    }
+
+    trackByStorageGroup(_index: number, group: { key: string }): string {
+        return group.key;
+    }
+
+    trackByStorageItem(_index: number, item: LocalModelResourceItem): string {
+        return item.absolute_path || item.id;
+    }
+
     private loadHfDownloads(): void {
         this.apiService.getHfDownloads$().subscribe((downloads) => {
             this.hfDownloads = downloads;
@@ -361,6 +424,7 @@ export class ModelsSettingsComponent implements OnInit {
                 message: `${this.t('settingsPage.models.hfDownloaded')}: ${this.hfFileName(event.path)}`,
                 autoClose: true,
             });
+            this.refreshStorage();
         }
         this.cdr.markForCheck();
     }

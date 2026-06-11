@@ -207,6 +207,52 @@
         </div>
     </section>
 
+    <section class="list-card">
+        <div class="list-head">
+            <h3>{{ "settingsPage.models.storageTitle" | translate }}</h3>
+            <button type="button" class="link-btn" (click)="refreshStorage()" [disabled]="storageLoading">
+                {{ "settingsPage.models.refresh" | translate }}
+            </button>
+        </div>
+        <div class="models-loading" *ngIf="storageLoading">{{ "settingsPage.models.loading" | translate }}</div>
+        <div class="models-empty" *ngIf="!storageLoading && !storageGroups.length">
+            {{ "settingsPage.models.storageEmpty" | translate }}
+        </div>
+
+        <div class="storage-group" *ngFor="let group of storageGroups; trackBy: trackByStorageGroup">
+            <div class="storage-group-label">
+                {{ storageGroupLabel(group.key) }}
+                <span class="storage-group-count">{{ group.items.length }}</span>
+            </div>
+            <div class="model-row" *ngFor="let item of group.items; trackBy: trackByStorageItem">
+                <div class="model-main">
+                    <span class="model-name" [title]="item.absolute_path || item.path">{{ item.path }}</span>
+                    <span class="model-meta">{{ formatSize(item.size_bytes) }}</span>
+                </div>
+                <div class="model-actions" *ngIf="item.absolute_path && item.type !== 'diffusers_pipeline'">
+                    <button type="button" class="action-btn danger" (click)="requestStorageDelete(item)">
+                        {{ "settingsPage.models.delete" | translate }}
+                    </button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <div class="confirm-overlay" *ngIf="confirmStorageDelete" (click)="cancelStorageDelete()">
+        <section class="confirm-dialog" (click)="$event.stopPropagation()">
+            <h3>{{ "settingsPage.models.storageDeleteConfirmTitle" | translate }}</h3>
+            <p>{{ "settingsPage.models.deleteConfirmText" | translate }} <strong>{{ confirmStorageDelete.path }}</strong></p>
+            <footer>
+                <app-ui-button variant="secondary" size="sm" (pressed)="cancelStorageDelete()">
+                    {{ "settingsPage.models.cancel" | translate }}
+                </app-ui-button>
+                <app-ui-button size="sm" (pressed)="confirmStorageDeleteAction()">
+                    {{ "settingsPage.models.delete" | translate }}
+                </app-ui-button>
+            </footer>
+        </section>
+    </div>
+
     <div class="confirm-overlay" *ngIf="confirmDeleteModel" (click)="cancelDelete()">
         <section class="confirm-dialog" (click)="$event.stopPropagation()">
             <h3>{{ "settingsPage.models.deleteConfirmTitle" | translate }}</h3>

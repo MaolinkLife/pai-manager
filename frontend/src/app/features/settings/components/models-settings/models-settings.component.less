@@ -344,6 +344,31 @@
     }
 }
 
+.storage-group {
+    display: flex;
+    flex-direction: column;
+}
+
+.storage-group-label {
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: color-mix(in srgb, var(--color-text) 55%, transparent);
+    padding: 10px 0 4px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.storage-group-count {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    background: color-mix(in srgb, var(--color-border) 70%, transparent);
+    border-radius: 999px;
+    padding: 1px 8px;
+}
+
 .confirm-overlay {
     position: fixed;
     inset: 0;

@@ -426,6 +426,21 @@
                 "tts": "TTS (speech synthesis)",
                 "vision": "Vision",
                 "rvc": "RVC"
+            },
+            "storageTitle": "Local storage",
+            "storageEmpty": "No files in storage/models yet.",
+            "storageDeleted": "File deleted",
+            "storageDeleteConfirmTitle": "Delete file from storage?",
+            "storageGroups": {
+                "gguf": "GGUF (text)",
+                "diffusers": "Diffusers pipelines",
+                "generation": "Generation",
+                "vision": "Vision",
+                "tts": "TTS",
+                "stt": "STT",
+                "rvc": "RVC",
+                "image_generation": "Image generation",
+                "image_generation_legacy": "Image generation (legacy dirs)"
             }
         },
         "connections": {
