@@ -19,6 +19,13 @@ DEFAULT_CONFIG = {
         "runtime": {
             "model_memory_profile": "low_memory_strict",
         },
+        "update": {
+            # Self-update source. check: local changelog version vs GitHub
+            # (latest release + raw changelog on the branch). run: git
+            # fast-forward only — dirty tree / diverged history refuse safely.
+            "repo": "MaolinkLife/pai-manager",
+            "branch": "master",
+        },
     },
     "core": {
         "version": "1.0.0",

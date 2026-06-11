@@ -95,6 +95,7 @@ from routes.self_watcher_routes import router as self_watcher_router
 from routes.reminder_routes import router as reminder_router
 from routes.hf_routes import router as hf_router
 from routes.knowledge_routes import router as knowledge_router
+from routes.update_routes import router as update_router
 
 from loops.loop_core import run_loop
 from modules.system import tunnel as tunnel_service
@@ -196,6 +197,7 @@ app.include_router(self_watcher_router)
 app.include_router(reminder_router)
 app.include_router(hf_router)
 app.include_router(knowledge_router)
+app.include_router(update_router)
 
 # Start background loops
 run_loop()

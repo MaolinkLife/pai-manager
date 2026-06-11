@@ -427,3 +427,57 @@
         line-height: 1.5;
     }
 }
+
+.update-status-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+
+    button {
+        margin-left: auto;
+    }
+}
+
+.update-chip {
+    padding: 6px 12px;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    font-size: 13px;
+    color: var(--color-text-secondary);
+
+    strong {
+        color: var(--color-text);
+    }
+
+    em {
+        color: var(--color-warning, #e0a93e);
+        font-style: normal;
+    }
+}
+
+.info-block.update-available {
+    border-style: solid;
+    border-color: var(--color-accent);
+
+    button {
+        margin-top: 8px;
+    }
+
+    a {
+        color: var(--color-accent);
+    }
+}
+
+.info-block.update-result {
+    border-style: solid;
+
+    &.error {
+        border-color: var(--color-error, #d9534f);
+
+        strong {
+            color: var(--color-error, #d9534f);
+        }
+    }
+}
