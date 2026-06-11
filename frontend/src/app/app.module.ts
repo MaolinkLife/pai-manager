@@ -16,6 +16,7 @@ import { SettingsComponentsModule } from './layout/components/modals/main-modal/
 import { MonitorSelectionModalComponent } from './layout/components/modals/monitor-selection-modal/monitor-selection-modal.component';
 import { AiEntityVisualizerComponent } from './layout/components/ai-entity-visualizer/ai-entity-visualizer.component';
 import { AuthInterceptor } from './core/interceptors/auth.interceptor';
+import { UI_EVENT_MODIFIER_PLUGINS } from './shared/ui/event-plugins/event-modifier.plugins';
 
 
 @NgModule({ declarations: [
@@ -35,5 +36,8 @@ import { AuthInterceptor } from './core/interceptors/auth.interceptor';
             provide: HTTP_INTERCEPTORS,
             useClass: AuthInterceptor,
             multi: true
-        }] })
+        },
+        // Event-name modifiers (.prevent/.stop/.silent) for our UI kit:
+        // keyboard navigation handlers, zone-free listeners.
+        ...UI_EVENT_MODIFIER_PLUGINS] })
 export class AppModule { }

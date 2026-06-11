@@ -120,3 +120,4 @@ backend/**/z-waif.session-journal
 
 CLAUDE.md
 CONCEPT_GAP_REPORT.md
+.claude/
