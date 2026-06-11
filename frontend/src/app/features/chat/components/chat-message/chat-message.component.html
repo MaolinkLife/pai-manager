@@ -163,6 +163,17 @@
         </button>
         <button
             class="btn-icon"
+            (click)="illustrate.emit(msg.id)"
+            *ngIf="msg.role === 'assistant' && msg.id && !msg.isPending"
+            [disabled]="isIllustrating"
+            [class.active]="isIllustrating"
+            [attr.data-tooltip]="isIllustrating ? 'Генерирую изображение...' : 'Проиллюстрировать ответ'"
+            aria-label="Проиллюстрировать ответ"
+        >
+            <app-custom-svg name="image" [size]="18"></app-custom-svg>
+        </button>
+        <button
+            class="btn-icon"
             (click)="continueResponse.emit(msg.id)"
             *ngIf="msg.role === 'assistant' && canContinue"
             [disabled]="loading && !!activeGenerationRunId"

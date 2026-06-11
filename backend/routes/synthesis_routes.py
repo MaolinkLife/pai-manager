@@ -114,6 +114,107 @@ def get_synthesis_models(refresh: bool = False):
     }
 
 
+@router.post("/message/illustrate")
+async def illustrate_message(payload: dict):
+    """Generate an image for an existing chat message and attach it as media.
+
+    Post-hoc counterpart of the in-flow image_generation toggle: the message
+    text goes through the same media pipeline (visual intent included) and the
+    result is persisted on the message + pushed to the UI via WS.
+    """
+    import base64 as _b64
+    import json as _json
+    import time as _time
+    import uuid as _uuid
+
+    from core.websocket_manager import manager
+    from modules.memory.history import get_message_by_id
+    from modules.storage.service import save_media_for_message
+    from modules.system.config import get_config_value
+
+    message_id = str(payload.get("message_id") or "").strip()
+    if not message_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="message_id is required")
+
+    message = get_message_by_id(message_id)
+    if not message:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Message not found")
+    content = str(message.get("content") or "").strip()
+    if not content:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Message has no text to illustrate")
+
+    image_cfg = get_config_value("telegram.image", {}) or {}
+    try:
+        result = await media_generation_pipeline.run_image(
+            MediaPipelineRequest(
+                mode="chat_auto",
+                prompt=content[:2000],
+                scenario_key="main_chat",
+                negative_prompt=str(image_cfg.get("negative_prompt") or ""),
+                image_provider="auto",
+                image_model=str(image_cfg.get("default_model") or "").strip() or None,
+                width=max(64, int(image_cfg.get("width", 1024) or 1024)),
+                height=max(64, int(image_cfg.get("height", 1024) or 1024)),
+                num_inference_steps=max(1, int(image_cfg.get("num_inference_steps", 9) or 9)),
+                guidance_scale=float(image_cfg.get("guidance_scale", 0.0) or 0.0),
+                use_prompt_builder=False,
+                review_generated_image=False,
+                use_visual_intent=True,
+                source="main_chat_illustrate",
+                character_name=get_active_character_name(default="PAI"),
+                metadata={"allow_scenario_controls": True},
+            )
+        )
+    except ImageProviderError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except Exception as exc:
+        log_audit_entry(
+            "message_illustrate_failed",
+            "[Synthesis] Message illustration failed.",
+            AuditStatus.WARNING,
+            details={"message_id": message_id, "error": str(exc)},
+        )
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+    if not getattr(result, "image_bytes", b""):
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Image generation returned no data")
+
+    media_item = {
+        "id": str(_uuid.uuid4()),
+        "name": f"illustration_{int(_time.time())}.png",
+        "mimeType": str(getattr(result, "mime_type", "") or "image/png"),
+        "category": "image",
+        "size": len(result.image_bytes),
+        "description": (getattr(result, "vision_description", "") or result.image_prompt or content)[:900],
+        "data": result.image_base64 or _b64.b64encode(result.image_bytes).decode("ascii"),
+    }
+    save_media_for_message(message_id, [media_item])
+
+    updated = get_message_by_id(message_id)
+    media_payload = (updated or {}).get("media") or []
+    try:
+        await manager.send_message(_json.dumps({
+            "type": "message_media_update",
+            "id": message_id,
+            "media": media_payload,
+        }, ensure_ascii=False))
+    except Exception:
+        pass
+
+    log_audit_entry(
+        "message_illustrated",
+        "[Synthesis] Message illustrated.",
+        AuditStatus.INFO,
+        details={
+            "message_id": message_id,
+            "provider": getattr(result, "provider", None),
+            "model": getattr(result, "model", None),
+            "bytes": media_item["size"],
+        },
+    )
+    return {"status": "ok", "media": media_payload}
+
+
 @router.get("/comfyui/status")
 def get_comfyui_status():
     try:

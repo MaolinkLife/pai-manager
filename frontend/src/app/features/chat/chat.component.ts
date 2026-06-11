@@ -10,6 +10,7 @@ import { ApiService } from '../../core/services/api.service';
 import { AuthService } from '../../core/services/auth.service';
 import { ConfigService } from '../../core/services/config.service';
 import { LibraryService } from '../../core/services/library.service';
+import { SynthesisService } from '../../core/services/synthesis.service';
 import { VoiceModeResponse, VoiceService } from '../../core/services/voice.service';
 import { BufferedWebsocketMessage, WebsocketService } from '../../core/services/websocket.service';
 import { NotificationService } from '../../shared/components/notification/notification.service';
@@ -205,6 +206,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy {
     activeDropdown: string | null = null;
     currentPlayingMessage: string | null = null;
     activeGenerationRunId: string | null = null;
+    illustratingMessageId: string | null = null;
     refreshHistoryAfterRunId: string | null = null;
     ttsEnabled = false;
     isComposerScrollable = false;
@@ -225,6 +227,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy {
         private authService: AuthService,
         private configService: ConfigService,
         private libraryService: LibraryService,
+        private synthesisService: SynthesisService,
         private voiceService: VoiceService,
         private websocketService: WebsocketService,
         private notificationService: NotificationService,
@@ -427,6 +430,17 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy {
                 case 'deleted':
                     this.chatMessageStore.deleteMessage(event.message_id, !!event.chain);
                     break;
+
+                case 'message_media_update': {
+                    const mediaList = this.normalizeMediaList(event.media);
+                    if (event.id && mediaList.length) {
+                        this.chatMessageStore.patchById(String(event.id), { media: mediaList });
+                    }
+                    if (this.illustratingMessageId === event.id) {
+                        this.illustratingMessageId = null;
+                    }
+                    break;
+                }
 
                 case 'system':
                     if (event.event === 'typing_start') {
@@ -1168,6 +1182,28 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy {
             return String(detail.message);
         }
         return fallback;
+    }
+
+    illustrateMessage(messageId: string | null | undefined): void {
+        if (!messageId || this.illustratingMessageId) {
+            return;
+        }
+        this.illustratingMessageId = messageId;
+        this.synthesisService.illustrateMessage$(messageId).subscribe({
+            next: () => {
+                // Media lands via the message_media_update WS event; the HTTP
+                // response only confirms completion.
+                this.illustratingMessageId = null;
+            },
+            error: (err) => {
+                this.illustratingMessageId = null;
+                this.notificationService.open({
+                    type: 'error',
+                    message: err?.error?.detail || 'Не удалось сгенерировать изображение',
+                    autoClose: true,
+                });
+            },
+        });
     }
 
     toggleVoice(msgId: string | null | undefined): void {

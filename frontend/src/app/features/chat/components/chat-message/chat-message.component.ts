@@ -49,6 +49,7 @@ export class ChatMessageComponent {
     @Input() hasUsageMeta = false;
     @Input() usageOpen = false;
     @Input() usageLines: UsageDetailLine[] = [];
+    @Input() isIllustrating = false;
 
     @Output() toggleRuntimeDetails = new EventEmitter<Message>();
     @Output() saveEdit = new EventEmitter<Message>();
@@ -59,6 +60,7 @@ export class ChatMessageComponent {
     @Output() edit = new EventEmitter<Message>();
     @Output() delete = new EventEmitter<Message>();
     @Output() toggleVoice = new EventEmitter<string>();
+    @Output() illustrate = new EventEmitter<string>();
     @Output() reroll = new EventEmitter<string>();
     @Output() continueResponse = new EventEmitter<string>();
     @Output() activateVariant = new EventEmitter<string>();
