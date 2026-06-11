@@ -36,19 +36,27 @@
 }
 
 .header-actions {
-    min-width: 180px;
     display: flex;
     align-items: center;
     gap: 10px;
+    flex-shrink: 0;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+
+    .status-filter {
+        min-width: 180px;
+    }
 }
 
 .view-toggle {
     display: flex;
+    flex-shrink: 0;
     border: 1px solid var(--color-border);
     border-radius: var(--radius);
     overflow: hidden;
 
     button {
+        white-space: nowrap;
         background: transparent;
         border: none;
         color: var(--color-text);
