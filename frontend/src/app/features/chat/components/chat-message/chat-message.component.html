@@ -112,6 +112,17 @@
                 <span class="compliance-badge__label" *ngIf="badge.label">{{ badge.label }}</span>
             </span>
         </div>
+
+        <div class="knowledge-sources" *ngIf="knowledgeSources.length">
+            <span class="knowledge-sources__label">Источники:</span>
+            <span
+                class="knowledge-source"
+                *ngFor="let source of knowledgeSources; trackBy: trackBySource"
+                [attr.data-tooltip]="sourceTooltip(source)"
+            >
+                📄 {{ source.fileName }}
+            </span>
+        </div>
     </div>
 
     <div class="actions" *ngIf="actionsVisible">

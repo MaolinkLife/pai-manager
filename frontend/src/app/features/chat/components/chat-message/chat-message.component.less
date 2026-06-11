@@ -521,6 +521,26 @@
     }
 }
 
+// §7.3.3 — document citations under the compliance bar
+.knowledge-sources {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin-top: 6px;
+
+    &__label {
+        font-size: 0.72rem;
+        color: var(--color-text-secondary);
+    }
+}
+
+.knowledge-source {
+    .compliance-badge();
+    border-color: color-mix(in srgb, var(--color-accent) 35%, transparent);
+    color: var(--color-text-secondary);
+}
+
 @media (max-width: 900px) {
     .message {
         margin-bottom: 0.95rem;

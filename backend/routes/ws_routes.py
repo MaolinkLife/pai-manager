@@ -831,6 +831,18 @@ async def websocket_endpoint(websocket: WebSocket):
                                     # after a page reload.
                                     merge=True,
                                 )
+                            knowledge_sources = _knowledge_sources_from(processing_result)
+                            if knowledge_sources and final_message_id:
+                                # §7.3.3: let the live bubble show its document
+                                # citations without waiting for a reload.
+                                await _safe_send_json(
+                                    websocket,
+                                    {
+                                        "type": "message_meta_update",
+                                        "id": final_message_id,
+                                        "knowledge_sources": knowledge_sources,
+                                    },
+                                )
                             status = "stopped" if stop_event.is_set() else "completed"
                             await _safe_send_json(
                                 websocket,

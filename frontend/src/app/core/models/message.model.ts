@@ -37,6 +37,12 @@ export interface MessageCompliance {
     };
 }
 
+export interface MessageKnowledgeSource {
+    fileName: string;
+    collectionName: string;
+    similarity?: number;
+}
+
 export interface Message {
     id: string;
     role: 'user' | 'assistant';
@@ -44,6 +50,8 @@ export interface Message {
     timestamp: string;
     isPending?: boolean;
     compliance?: MessageCompliance | null;
+    /** §7.3.3 — files behind the knowledge.documents context block. */
+    knowledgeSources?: MessageKnowledgeSource[] | null;
     media?: MessageMedia[];
     runId?: string;
     provider?: string;

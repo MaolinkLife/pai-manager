@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, EventEmitter, Input, Output } from '@angular/core';
 import { UntypedFormControl } from '@angular/forms';
-import { Message, MessageMedia } from '../../../../core/models/message.model';
+import { Message, MessageKnowledgeSource, MessageMedia } from '../../../../core/models/message.model';
 import { RuntimeStageView } from '../../store';
 
 export interface UsageDetailLine {
@@ -142,6 +142,29 @@ export class ChatMessageComponent {
 
     trackByBadge(_index: number, badge: ComplianceBadgeView): string {
         return badge.key;
+    }
+
+    private static readonly EMPTY_SOURCES: MessageKnowledgeSource[] = [];
+
+    /** §7.3.3 — document citations row (assistant bubbles only).
+     *  Returns the array stored on the message (stable identity, gotcha #26). */
+    get knowledgeSources(): MessageKnowledgeSource[] {
+        if (this.msg.role !== 'assistant') {
+            return ChatMessageComponent.EMPTY_SOURCES;
+        }
+        return this.msg.knowledgeSources || ChatMessageComponent.EMPTY_SOURCES;
+    }
+
+    sourceTooltip(source: MessageKnowledgeSource): string {
+        const parts = [source.collectionName].filter(Boolean);
+        if (typeof source.similarity === 'number') {
+            parts.push(`релевантность ${Math.round(source.similarity * 100)}%`);
+        }
+        return parts.length ? parts.join(' · ') : source.fileName;
+    }
+
+    trackBySource(_index: number, source: MessageKnowledgeSource): string {
+        return source.fileName;
     }
 
     get canSaveEdit(): boolean {

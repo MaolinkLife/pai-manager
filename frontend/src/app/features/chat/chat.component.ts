@@ -4,7 +4,7 @@ import { UntypedFormControl } from '@angular/forms';
 import { Observable } from 'rxjs';
 import { finalize, map } from 'rxjs/operators';
 import { LibraryItem } from '../../core/models/library.model';
-import { Message, MessageCompliance, MessageMedia, MessageMediaCategory } from '../../core/models/message.model';
+import { Message, MessageCompliance, MessageKnowledgeSource, MessageMedia, MessageMediaCategory } from '../../core/models/message.model';
 import { ProjectConfig } from '../../core/models/project-config.model';
 import { ApiService } from '../../core/services/api.service';
 import { AuthService } from '../../core/services/auth.service';
@@ -401,6 +401,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy {
                             runtime: runtime || undefined,
                             provider: m.provider || runtime?.model || undefined,
                             compliance: this.extractComplianceFromMeta(m.runtime_meta),
+                            knowledgeSources: this.extractKnowledgeSources(m.runtime_meta),
                         };
                     }).sort(
                         (a: any, b: any) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
@@ -430,6 +431,15 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy {
                 case 'deleted':
                     this.chatMessageStore.deleteMessage(event.message_id, !!event.chain);
                     break;
+
+                case 'message_meta_update': {
+                    const sources = this.extractKnowledgeSources(event);
+                    if (event.id && sources?.length) {
+                        this.chatMessageStore.patchById(String(event.id), { knowledgeSources: sources });
+                    }
+                    shouldScrollAfterEvent = false;
+                    break;
+                }
 
                 case 'message_media_update': {
                     const mediaList = this.normalizeMediaList(event.media);
@@ -2427,6 +2437,30 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy {
         }
 
         return Object.keys(compliance).length > 0 ? compliance : null;
+    }
+
+    /** §7.3.3 — knowledge_sources from runtime_meta (history reload) or a
+     *  message_meta_update WS payload. Deduped by file name. */
+    private extractKnowledgeSources(raw: any): MessageKnowledgeSource[] | null {
+        const list = raw?.knowledge_sources;
+        if (!Array.isArray(list) || !list.length) {
+            return null;
+        }
+        const seen = new Set<string>();
+        const sources: MessageKnowledgeSource[] = [];
+        for (const entry of list) {
+            const fileName = String(entry?.file_name || '').trim();
+            if (!fileName || seen.has(fileName)) {
+                continue;
+            }
+            seen.add(fileName);
+            sources.push({
+                fileName,
+                collectionName: String(entry?.collection_name || '').trim(),
+                similarity: typeof entry?.similarity === 'number' ? entry.similarity : undefined,
+            });
+        }
+        return sources.length ? sources : null;
     }
 
     /** Normalize a live compliance_update WS payload (raw check payloads,
