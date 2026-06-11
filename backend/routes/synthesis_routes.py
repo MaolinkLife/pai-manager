@@ -129,10 +129,8 @@ def _safe_model_filename(filename: str) -> str:
     source_name = Path(str(filename or "")).name
     stem = re.sub(r"[^A-Za-z0-9._-]+", "_", Path(source_name).stem).strip("._-")
     suffix = Path(source_name).suffix.lower()
-    if suffix in GGUF_EXTENSIONS:
-        raise ValueError("GGUF image diffusion models are not supported by the internal Diffusers provider yet")
-    if suffix not in CHECKPOINT_EXTENSIONS:
-        raise ValueError("Only .safetensors and .ckpt checkpoints are supported for now")
+    if suffix not in CHECKPOINT_EXTENSIONS | GGUF_EXTENSIONS:
+        raise ValueError("Only .safetensors, .ckpt and .gguf checkpoints are supported for now")
     return f"{stem or 'checkpoint'}{suffix}"
 
 

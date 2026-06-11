@@ -95,10 +95,17 @@ class SynthesisService:
                 "z_image_pipeline": False,
                 "error": str(exc),
             }
+        try:
+            import gguf  # noqa: F401
+
+            gguf_available = hasattr(diffusers, "GGUFQuantizationConfig")
+        except Exception:
+            gguf_available = False
         return {
             "available": True,
             "version": getattr(diffusers, "__version__", None),
             "z_image_pipeline": hasattr(diffusers, "ZImagePipeline"),
+            "gguf": gguf_available,
             "error": "",
         }
 
@@ -132,6 +139,14 @@ class SynthesisService:
                 "provider": "core",
                 "required_pipeline": "from_single_file",
                 "pipeline_available": bool(self._diffusers_capabilities().get("available")),
+            }
+        if model.family in {"flux-gguf", "sd3-gguf", "qwen-image-gguf", "gguf-checkpoint"}:
+            capabilities = self._diffusers_capabilities()
+            return {
+                "provider": "core",
+                "required_pipeline": "gguf_single_file",
+                "pipeline_available": bool(capabilities.get("available")) and bool(capabilities.get("gguf")),
+                "diffusers": capabilities,
             }
         return {
             "provider": "core",

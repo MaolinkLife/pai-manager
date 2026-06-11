@@ -699,6 +699,8 @@ class SynthesisDiffusersConfig(BaseModel):
     height: int = 1024
     aspect_ratio: str = "1:1"
     allow_comfyui_fallback: bool = True
+    gguf_cpu_offload: bool = True
+    gguf_base_repos: dict = Field(default_factory=dict)
 
 
 class SynthesisPromptingConfig(BaseModel):

@@ -645,6 +645,10 @@ DEFAULT_CONFIG = {
             "height": 1024,
             "aspect_ratio": "1:1",
             "allow_comfyui_fallback": True,
+            # GGUF checkpoints: only the transformer is quantized, the rest of
+            # the pipeline comes from a HF base repo (per family, overridable).
+            "gguf_cpu_offload": True,
+            "gguf_base_repos": {},
         },
         "prompting": {
             "enabled": True,
