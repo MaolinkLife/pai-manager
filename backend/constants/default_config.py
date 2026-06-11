@@ -88,6 +88,19 @@ DEFAULT_CONFIG = {
         # deleted (pending rows are never touched).
         "retention_days": 30,
     },
+    "documents": {
+        # §7.3.3 Document indexing: named knowledge collections over Chroma
+        # (kb_<id> per collection). Files come from the library; indexing is
+        # extract → chunk → embed with the provider pinned per collection.
+        # Retrieval injects top chunks as a knowledge.documents tool block
+        # with file-level sources for citations.
+        "enabled": True,
+        "chunk_size": 1200,
+        "chunk_overlap": 150,
+        "top_k": 4,
+        "min_similarity": 0.35,
+        "max_context_chars": 2400,
+    },
     "auto_reroll": {
         # Joint auto-reroll for Validator (§3.5) + LanguageGuard (§3.5-bis):
         # when a sync generation fails a gating check, regenerate with a

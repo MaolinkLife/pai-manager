@@ -48,7 +48,63 @@ def create_database():
     _ensure_debug_vault_table()
     _ensure_expectation_events_table()
     _ensure_user_reminders_table()
+    _ensure_knowledge_tables()
     _log_console("Схема базы данных готова.")
+
+
+def _ensure_knowledge_tables() -> None:
+    """§7.3.3 Document indexing — named collections of indexed files.
+
+    Collections map 1:1 to Chroma collections (kb_<id>); knowledge_files keeps
+    per-file indexing state (pending → indexed | error) and chunk counts.
+    """
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS knowledge_collections (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    description TEXT NOT NULL DEFAULT '',
+                    enabled BOOLEAN NOT NULL DEFAULT 1,
+                    embedding_provider TEXT NOT NULL DEFAULT '',
+                    created_at DATETIME,
+                    updated_at DATETIME
+                )
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS knowledge_files (
+                    id TEXT PRIMARY KEY,
+                    collection_id TEXT NOT NULL,
+                    media_id TEXT,
+                    name TEXT NOT NULL,
+                    mime_type TEXT NOT NULL DEFAULT 'text/plain',
+                    size INTEGER NOT NULL DEFAULT 0,
+                    status TEXT NOT NULL DEFAULT 'pending',
+                    error TEXT NOT NULL DEFAULT '',
+                    chunk_count INTEGER NOT NULL DEFAULT 0,
+                    indexed_at DATETIME,
+                    created_at DATETIME
+                )
+                """
+            )
+        )
+        conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_knowledge_files_collection "
+                "ON knowledge_files(collection_id)"
+            )
+        )
+        conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_knowledge_files_status "
+                "ON knowledge_files(status)"
+            )
+        )
 
 
 def _ensure_conversation_state_logs_table() -> None:

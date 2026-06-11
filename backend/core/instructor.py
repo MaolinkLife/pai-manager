@@ -548,6 +548,26 @@ class Instructor:
                 }
             )
 
+        # §7.3.3: chunks retrieved from indexed knowledge collections, with
+        # file-level sources. Prepared by the decision layer (rides on
+        # memory_context to avoid widening every caller signature).
+        knowledge_documents = (memory_context or {}).get("knowledge_documents")
+        if isinstance(knowledge_documents, dict):
+            documents_content = str(knowledge_documents.get("content") or "").strip()
+            if documents_content:
+                dynamic_messages.append(
+                    {
+                        "role": "tool",
+                        "name": "knowledge.documents",
+                        "content": (
+                            "Fragments from the user's indexed documents relevant to the "
+                            "current request. Each fragment is prefixed with its source "
+                            "file in brackets — mention the source naturally when you "
+                            "rely on it:\n" + documents_content
+                        ),
+                    }
+                )
+
         emotion_info = self._build_emotion_tool_content(moral_state or {}).strip()
         moral_disabled = bool((moral_state or {}).get("meta", {}).get("disabled")) or not bool(moral_state)
         if emotion_info and not moral_disabled:

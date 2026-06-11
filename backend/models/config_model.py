@@ -149,6 +149,16 @@ class RemindersConfig(BaseModel):
     retention_days: int = 30
 
 
+class DocumentsConfig(BaseModel):
+    # §7.3.3 Document indexing — knowledge collections over the vector store.
+    enabled: bool = True
+    chunk_size: int = 1200
+    chunk_overlap: int = 150
+    top_k: int = 4
+    min_similarity: float = 0.35
+    max_context_chars: int = 2400
+
+
 class DecisionLayerCapabilitiesConfig(BaseModel):
     tool: bool = False
     vision: bool = False
