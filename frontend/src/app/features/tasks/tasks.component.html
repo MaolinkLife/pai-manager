@@ -6,6 +6,22 @@
                 <p>{{ 'tasks.subtitle' | translate }}</p>
             </div>
             <div class="header-actions">
+                <div class="view-toggle">
+                    <button
+                        type="button"
+                        [class.active]="viewMode === 'list'"
+                        (click)="setViewMode('list')"
+                    >
+                        {{ 'tasks.viewList' | translate }}
+                    </button>
+                    <button
+                        type="button"
+                        [class.active]="viewMode === 'calendar'"
+                        (click)="setViewMode('calendar')"
+                    >
+                        {{ 'tasks.viewCalendar' | translate }}
+                    </button>
+                </div>
                 <app-ui-select
                     class="status-filter"
                     [options]="statusSelectOptions"
@@ -39,7 +55,73 @@
             <p class="form-error" *ngIf="formError">{{ formError }}</p>
         </section>
 
-        <section class="reminder-list" *ngIf="items.length; else emptyState">
+        <section class="calendar-card" *ngIf="viewMode === 'calendar'">
+            <div class="calendar-nav">
+                <div class="calendar-nav-month">
+                    <button type="button" class="nav-btn" (click)="previousMonth()" aria-label="Previous month">‹</button>
+                    <span class="calendar-month-label">{{ monthLabel }}</span>
+                    <button type="button" class="nav-btn" (click)="nextMonth()" aria-label="Next month">›</button>
+                </div>
+                <button type="button" class="today-btn" (click)="goToCurrentMonth()">
+                    {{ 'tasks.today' | translate }}
+                </button>
+            </div>
+
+            <div class="calendar-grid">
+                <div class="calendar-weekday" *ngFor="let label of weekdayLabels">{{ label }}</div>
+                <ng-container *ngFor="let week of calendarWeeks; trackBy: trackByWeek">
+                    <button
+                        type="button"
+                        class="calendar-day"
+                        *ngFor="let day of week; trackBy: trackByDay"
+                        [class.out-month]="!day.inMonth"
+                        [class.today]="day.isToday"
+                        [class.selected]="selectedDayKey === day.key"
+                        (click)="selectDay(day)"
+                    >
+                        <span class="calendar-day-number">{{ day.dayNumber }}</span>
+                        <span class="calendar-day-dots" *ngIf="day.items.length">
+                            <span
+                                class="calendar-dot"
+                                *ngFor="let item of day.items.slice(0, 3); trackBy: trackById"
+                                [ngClass]="'calendar-dot--' + item.status"
+                            ></span>
+                            <span class="calendar-day-count" *ngIf="day.items.length > 3">+{{ day.items.length - 3 }}</span>
+                        </span>
+                    </button>
+                </ng-container>
+            </div>
+
+            <div class="calendar-day-panel" *ngIf="selectedDayKey">
+                <div class="calendar-day-panel-title">{{ selectedDayKey }}</div>
+                <p class="calendar-day-empty" *ngIf="!selectedDayItems.length">{{ 'tasks.dayEmpty' | translate }}</p>
+                <article
+                    class="reminder-item reminder-item--compact"
+                    *ngFor="let item of selectedDayItems; trackBy: trackById"
+                    [class.reminder-item--done]="item.status !== 'pending'"
+                >
+                    <div class="reminder-main">
+                        <span class="status-chip" [ngClass]="'status-chip--' + item.status">
+                            {{ statusLabel(item.status) }}
+                        </span>
+                        <span class="reminder-text">{{ item.text }}</span>
+                    </div>
+                    <div class="reminder-meta">
+                        <span>{{ 'tasks.due' | translate }}: <strong>{{ item.dueLabel }}</strong></span>
+                        <button
+                            type="button"
+                            class="cancel-btn"
+                            *ngIf="item.canCancel"
+                            (click)="cancelReminder(item.id)"
+                        >
+                            {{ 'tasks.cancel' | translate }}
+                        </button>
+                    </div>
+                </article>
+            </div>
+        </section>
+
+        <section class="reminder-list" *ngIf="viewMode === 'list' && items.length">
             <article
                 class="reminder-item"
                 *ngFor="let item of items; trackBy: trackById"
@@ -67,13 +149,11 @@
             </article>
         </section>
 
-        <ng-template #emptyState>
-            <section class="empty-state">
-                <app-skeleton *ngIf="loading" width="100%" height="80px"></app-skeleton>
-                <p *ngIf="!loading && error">{{ error }}</p>
-                <p *ngIf="!loading && !error">{{ 'tasks.empty' | translate }}</p>
-            </section>
-        </ng-template>
+        <section class="empty-state" *ngIf="viewMode === 'list' && !items.length">
+            <app-skeleton *ngIf="loading" width="100%" height="80px"></app-skeleton>
+            <p *ngIf="!loading && error">{{ error }}</p>
+            <p *ngIf="!loading && !error">{{ 'tasks.empty' | translate }}</p>
+        </section>
     </div>
 
     <ng-template #tasksWip>

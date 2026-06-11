@@ -840,7 +840,11 @@
         "source": "Source",
         "sourceChat": "from chat",
         "sourceApi": "manual",
-        "invalidForm": "Provide text and a future time"
+        "invalidForm": "Provide text and a future time",
+        "viewList": "List",
+        "viewCalendar": "Calendar",
+        "today": "Today",
+        "dayEmpty": "Nothing scheduled for this day."
     },
     "audit": {
         "title": "Audit Journal",
