@@ -53,20 +53,11 @@ export class AiEntityVisualizerComponent implements OnInit, OnDestroy {
         return Math.sin(time) * 4;
     });
 
-    // Pseudo-amplitude while TTS is speaking: layered sines read as natural
-    // speech cadence (the backend plays audio itself, so no analyser node).
-    readonly talk = computed(() => {
-        this.tick();
-        if (!this.speaking()) {
-            return 0;
-        }
-        const time = performance.now() / 1000;
-        const wave =
-            Math.sin(time * 9.7) * 0.5 +
-            Math.sin(time * 15.3 + 1.7) * 0.3 +
-            Math.sin(time * 23.1 + 0.6) * 0.2;
-        return (wave + 1) / 2;
-    });
+    // Real loudness from the backend playback loop (voice_amplitude events,
+    // ~10/s RMS values). Smoothed towards the latest target every tick so the
+    // orb glides between updates instead of stepping.
+    private targetAmplitude = 0;
+    readonly talk = signal(0);
 
     readonly entityColor = computed(() => {
         return this.resolveMoodColor();
@@ -118,8 +109,8 @@ export class AiEntityVisualizerComponent implements OnInit, OnDestroy {
             .subscribe((raw) => {
                 try {
                     const event = JSON.parse(raw);
-                    if (event?.type === 'voice_state') {
-                        this.setSpeaking(event.stage === 'speaking');
+                    if (event?.type === 'voice_amplitude') {
+                        this.onAmplitude(Number(event.value) || 0, event.done === true);
                     }
                 } catch {
                     // ignore non-json ws payloads
@@ -128,6 +119,10 @@ export class AiEntityVisualizerComponent implements OnInit, OnDestroy {
 
         const animate = () => {
             this.tick.update((v) => v + 1);
+            this.talk.update((value) => {
+                const next = value + (this.targetAmplitude - value) * 0.45;
+                return next < 0.005 ? 0 : next;
+            });
             this.animationId = window.setTimeout(animate, 80);
         };
         animate();
@@ -144,19 +139,21 @@ export class AiEntityVisualizerComponent implements OnInit, OnDestroy {
         }
     }
 
-    // A "listening" transition can be lost across a WS reconnect; the guard
-    // keeps the orb from pulsing forever on a stale "speaking" state.
-    private setSpeaking(value: boolean): void {
-        this.speaking.set(value);
+    // The guard zeroes the amplitude if the event stream stalls (WS drop,
+    // backend kill) so the orb cannot keep talking on stale data.
+    private onAmplitude(value: number, done: boolean): void {
+        this.targetAmplitude = done ? 0 : Math.max(0, Math.min(1, value));
+        this.speaking.set(!done && this.targetAmplitude > 0.015);
         if (this.speakingGuardId !== null) {
             window.clearTimeout(this.speakingGuardId);
             this.speakingGuardId = null;
         }
-        if (value) {
+        if (!done) {
             this.speakingGuardId = window.setTimeout(() => {
+                this.targetAmplitude = 0;
                 this.speaking.set(false);
                 this.speakingGuardId = null;
-            }, 180_000);
+            }, 700);
         }
     }
 

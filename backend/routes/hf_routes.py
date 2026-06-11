@@ -4,7 +4,7 @@
 # Used in: /settings → Models (HF import section)
 # ========================================================
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Header, HTTPException, Query
 
 from modules.hf_hub import service as hf_service
 
@@ -17,8 +17,11 @@ async def search_models(q: str = Query(..., min_length=2), limit: int = Query(20
 
 
 @router.get("/files")
-async def list_repo_files(repo: str = Query(..., min_length=3)):
-    return await hf_service.list_repo_files(repo)
+async def list_repo_files(
+    repo: str = Query(..., min_length=3),
+    x_hf_token: str | None = Header(default=None, alias="X-HF-Token"),
+):
+    return await hf_service.list_repo_files(repo, token=x_hf_token)
 
 
 @router.get("/downloads")
@@ -33,7 +36,9 @@ async def start_download(payload: dict):
     category = str(payload.get("category") or "").strip()
     if not repo or not path or not category:
         raise HTTPException(status_code=400, detail="repo, path and category are required")
-    result = hf_service.start_download(repo, path, category)
+    result = hf_service.start_download(
+        repo, path, category, token=str(payload.get("token") or "") or None
+    )
     if result.get("status") == "error":
         raise HTTPException(status_code=400, detail=result.get("message"))
     return result

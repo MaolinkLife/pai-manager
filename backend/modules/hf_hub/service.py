@@ -93,7 +93,12 @@ async def search_models(query: str, limit: int = 20) -> Dict[str, Any]:
     return {"status": "ok", "results": results}
 
 
-async def list_repo_files(repo_id: str) -> Dict[str, Any]:
+def _auth_headers(token: str | None) -> Dict[str, str]:
+    token = str(token or "").strip()
+    return {"Authorization": f"Bearer {token}"} if token else {}
+
+
+async def list_repo_files(repo_id: str, token: str | None = None) -> Dict[str, Any]:
     repo_id = str(repo_id or "").strip().strip("/")
     if not repo_id or repo_id.count("/") > 1:
         return {"status": "error", "message": "Invalid repo id", "files": []}
@@ -101,11 +106,17 @@ async def list_repo_files(repo_id: str) -> Dict[str, Any]:
     timeout = aiohttp.ClientTimeout(total=30)
     try:
         async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.get(url, params={"recursive": "true"}) as resp:
+            async with session.get(
+                url, params={"recursive": "true"}, headers=_auth_headers(token)
+            ) as resp:
                 if resp.status == 404:
                     return {"status": "error", "message": "Repository not found", "files": []}
                 if resp.status in (401, 403):
-                    return {"status": "error", "message": "Repository is gated or private", "files": []}
+                    return {
+                        "status": "error",
+                        "code": "gated",
+                        "message": "Repository is gated or private", "files": [],
+                    }
                 resp.raise_for_status()
                 data = await resp.json()
     except Exception as exc:
@@ -159,7 +170,9 @@ def is_running(key: str) -> bool:
     return task is not None and not task.done()
 
 
-def start_download(repo_id: str, file_path: str, category: str) -> Dict[str, Any]:
+def start_download(
+    repo_id: str, file_path: str, category: str, token: str | None = None
+) -> Dict[str, Any]:
     repo_id = str(repo_id or "").strip().strip("/")
     file_path = str(file_path or "").strip().lstrip("/")
     category = str(category or "").strip()
@@ -192,7 +205,7 @@ def start_download(repo_id: str, file_path: str, category: str) -> Dict[str, Any
         "error": None,
         "started_at": time.time(),
     }
-    _tasks[key] = asyncio.create_task(_run_download(key, repo_id, file_path, target))
+    _tasks[key] = asyncio.create_task(_run_download(key, repo_id, file_path, target, token))
     log_audit_entry(
         "hf_download_started",
         "[HF] Model file download started.",
@@ -219,7 +232,9 @@ async def _broadcast(state: Dict[str, Any]) -> None:
         pass
 
 
-async def _run_download(key: str, repo_id: str, file_path: str, target: Path) -> None:
+async def _run_download(
+    key: str, repo_id: str, file_path: str, target: Path, token: str | None = None
+) -> None:
     state = _states[key]
     part_path = target.with_name(target.name + ".part")
     url = f"{HF_RESOLVE_BASE}/{repo_id}/resolve/main/{file_path}"
@@ -228,9 +243,15 @@ async def _run_download(key: str, repo_id: str, file_path: str, target: Path) ->
         target.parent.mkdir(parents=True, exist_ok=True)
         timeout = aiohttp.ClientTimeout(total=None, sock_read=300)
         async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.get(url, allow_redirects=True) as resp:
+            async with session.get(
+                url, allow_redirects=True, headers=_auth_headers(token)
+            ) as resp:
                 if resp.status in (401, 403):
-                    state.update(status="error", error="Repository is gated or private", done=True)
+                    state.update(
+                        status="error",
+                        error="Repository is gated or private (invalid or missing HF token)",
+                        done=True,
+                    )
                     return
                 if resp.status == 404:
                     state.update(status="error", error="File not found", done=True)

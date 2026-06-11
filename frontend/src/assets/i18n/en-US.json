@@ -427,6 +427,11 @@
                 "vision": "Vision",
                 "rvc": "RVC"
             },
+            "hfTokenTitle": "HF Token required",
+            "hfTokenText": "This repository is gated. Enter a HuggingFace token with access — it is used for this session only and never stored.",
+            "hfTokenPlaceholder": "hf_...",
+            "hfTokenContinue": "Continue",
+            "hfGatedHint": "The repository is gated — an HF token is required.",
             "storageTitle": "Local storage",
             "storageEmpty": "No files in storage/models yet.",
             "storageDeleted": "File deleted",

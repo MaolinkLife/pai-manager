@@ -267,10 +267,15 @@ export class ApiService {
             );
     }
 
-    getHfRepoFiles$(repo: string): Observable<{ status: string; message?: string; files: HfRepoFile[] } | null> {
+    getHfRepoFiles$(
+        repo: string,
+        token?: string,
+    ): Observable<{ status: string; code?: string; message?: string; files: HfRepoFile[] } | null> {
+        const options = token ? { headers: { 'X-HF-Token': token } } : {};
         return this.http
-            .get<{ status: string; message?: string; files: HfRepoFile[] }>(
-                `${this.hfApiUrl}/files?repo=${encodeURIComponent(repo)}`
+            .get<{ status: string; code?: string; message?: string; files: HfRepoFile[] }>(
+                `${this.hfApiUrl}/files?repo=${encodeURIComponent(repo)}`,
+                options
             )
             .pipe(catchError((_err) => of(null)));
     }
@@ -284,9 +289,19 @@ export class ApiService {
             );
     }
 
-    startHfDownload$(repo: string, path: string, category: string): Observable<{ status: string; id?: string } | null> {
+    startHfDownload$(
+        repo: string,
+        path: string,
+        category: string,
+        token?: string,
+    ): Observable<{ status: string; id?: string } | null> {
         return this.http
-            .post<{ status: string; id?: string }>(`${this.hfApiUrl}/download`, { repo, path, category })
+            .post<{ status: string; id?: string }>(`${this.hfApiUrl}/download`, {
+                repo,
+                path,
+                category,
+                ...(token ? { token } : {}),
+            })
             .pipe(catchError((_err) => of(null)));
     }
 

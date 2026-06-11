@@ -56,6 +56,12 @@ export class ModelsSettingsComponent implements OnInit {
     storageLoading = false;
     confirmStorageDelete: LocalModelResourceItem | null = null;
 
+    // Session-only HF token for gated/private repos (never persisted).
+    hfToken = '';
+    hfTokenPromptOpen = false;
+    hfTokenInput = '';
+    private hfTokenRetryRepo: string | null = null;
+
     constructor(
         private apiService: ApiService,
         private websocketService: WebsocketService,
@@ -256,13 +262,26 @@ export class ModelsSettingsComponent implements OnInit {
             return;
         }
         this.hfSelectedRepo = repo;
+        this.loadHfFiles(repo);
+    }
+
+    private loadHfFiles(repo: string): void {
         this.hfFiles = [];
         this.hfFilesError = '';
         this.hfFilesLoading = true;
-        this.apiService.getHfRepoFiles$(repo).subscribe((response) => {
+        this.apiService.getHfRepoFiles$(repo, this.hfToken || undefined).subscribe((response) => {
             this.hfFilesLoading = false;
             if (!response || response.status !== 'ok') {
-                this.hfFilesError = response?.message || this.t('settingsPage.models.hfFilesError');
+                if (response?.code === 'gated') {
+                    // Token prompt: a valid token makes the listing succeed,
+                    // which doubles as token validation.
+                    this.hfTokenRetryRepo = repo;
+                    this.hfTokenInput = this.hfToken;
+                    this.hfTokenPromptOpen = true;
+                    this.hfFilesError = this.t('settingsPage.models.hfGatedHint');
+                } else {
+                    this.hfFilesError = response?.message || this.t('settingsPage.models.hfFilesError');
+                }
             } else {
                 this.hfFiles = response.files;
                 for (const file of this.hfFiles) {
@@ -273,13 +292,32 @@ export class ModelsSettingsComponent implements OnInit {
         });
     }
 
+    submitHfToken(): void {
+        const token = this.hfTokenInput.trim();
+        this.hfTokenPromptOpen = false;
+        if (!token) {
+            return;
+        }
+        this.hfToken = token;
+        const repo = this.hfTokenRetryRepo;
+        this.hfTokenRetryRepo = null;
+        if (repo && this.hfSelectedRepo === repo) {
+            this.loadHfFiles(repo);
+        }
+    }
+
+    cancelHfToken(): void {
+        this.hfTokenPromptOpen = false;
+        this.hfTokenRetryRepo = null;
+    }
+
     hfDownloadFile(file: HfRepoFile): void {
         const repo = this.hfSelectedRepo;
         if (!repo) {
             return;
         }
         const category = this.hfFileCategories[file.path] || file.suggested_category;
-        this.apiService.startHfDownload$(repo, file.path, category).subscribe((response) => {
+        this.apiService.startHfDownload$(repo, file.path, category, this.hfToken || undefined).subscribe((response) => {
             if (!response) {
                 this.notificationService.open({
                     type: 'error',

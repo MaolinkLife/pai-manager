@@ -15,6 +15,30 @@ from modules.system.localization import get_text
 cut_voice = False
 
 
+def _broadcast_amplitude(value: float, *, done: bool = False) -> None:
+    """Fire-and-forget WS push of the playback loudness (0..1).
+
+    Runs in the playback worker thread; events drive the entity visualizer
+    so the orb pulses with the actual sound, not with synthesis stages.
+    """
+    try:
+        import asyncio
+        import json
+
+        from core.event_loop_registry import get_main_loop
+        from core.websocket_manager import manager
+
+        loop = get_main_loop()
+        if loop is None:
+            return
+        payload = {"type": "voice_amplitude", "value": round(float(value), 3), "done": done}
+        asyncio.run_coroutine_threadsafe(
+            manager.send_message(json.dumps(payload)), loop
+        )
+    except Exception:
+        pass
+
+
 class AudioPlayback:
     def __init__(self) -> None:
         self._active_streams: List[sd.OutputStream] = []
@@ -135,6 +159,9 @@ class AudioPlayback:
 
         threads: List[threading.Thread] = []
         finished = threading.Event()
+        # Only one playback thread reports amplitude — parallel devices play
+        # the same samples, duplicate events would just double the traffic.
+        amplitude_source_id = devices[0]
 
         def _play(device_id: int) -> None:
             message_thread_start = get_text(
@@ -178,7 +205,11 @@ class AudioPlayback:
                             )
                             break
                         end = min(idx + chunk_size, len(samples))
-                        stream.write(samples[idx:end])
+                        chunk = samples[idx:end]
+                        stream.write(chunk)
+                        if device_id == amplitude_source_id and len(chunk):
+                            rms = float(np.sqrt(np.mean(np.square(chunk))))
+                            _broadcast_amplitude(min(1.0, rms * 4.0))
                         idx = end
                     stream.stop()
             except Exception as exc:
@@ -196,6 +227,8 @@ class AudioPlayback:
                     message_args={"device_id": device_id},
                 )
             finally:
+                if device_id == amplitude_source_id:
+                    _broadcast_amplitude(0.0, done=True)
                 finished.set()
                 message_thread_finished = get_text(
                     "logger.voice_thread_finished",

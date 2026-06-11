@@ -238,6 +238,27 @@
         </div>
     </section>
 
+    <div class="confirm-overlay" *ngIf="hfTokenPromptOpen" (click)="cancelHfToken()">
+        <section class="confirm-dialog" (click)="$event.stopPropagation()">
+            <h3>{{ "settingsPage.models.hfTokenTitle" | translate }}</h3>
+            <p>{{ "settingsPage.models.hfTokenText" | translate }}</p>
+            <app-ui-input
+                type="password"
+                [placeholder]="'settingsPage.models.hfTokenPlaceholder' | translate"
+                [(ngModel)]="hfTokenInput"
+                (keydown.enter)="submitHfToken()"
+            ></app-ui-input>
+            <footer>
+                <app-ui-button variant="secondary" size="sm" (pressed)="cancelHfToken()">
+                    {{ "settingsPage.models.cancel" | translate }}
+                </app-ui-button>
+                <app-ui-button size="sm" [disabled]="!hfTokenInput.trim()" (pressed)="submitHfToken()">
+                    {{ "settingsPage.models.hfTokenContinue" | translate }}
+                </app-ui-button>
+            </footer>
+        </section>
+    </div>
+
     <div class="confirm-overlay" *ngIf="confirmStorageDelete" (click)="cancelStorageDelete()">
         <section class="confirm-dialog" (click)="$event.stopPropagation()">
             <h3>{{ "settingsPage.models.storageDeleteConfirmTitle" | translate }}</h3>

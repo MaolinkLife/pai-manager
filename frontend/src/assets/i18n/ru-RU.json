@@ -428,6 +428,11 @@
                 "vision": "Vision",
                 "rvc": "RVC"
             },
+            "hfTokenTitle": "Требуется HF Token",
+            "hfTokenText": "Этот репозиторий закрыт (gated). Введите HuggingFace-токен с доступом — он используется только в текущей сессии и не сохраняется.",
+            "hfTokenPlaceholder": "hf_...",
+            "hfTokenContinue": "Продолжить",
+            "hfGatedHint": "Репозиторий закрыт — нужен HF-токен.",
             "storageTitle": "Локальное хранилище",
             "storageEmpty": "В storage/models пока нет файлов.",
             "storageDeleted": "Файл удалён",
