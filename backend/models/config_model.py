@@ -149,6 +149,21 @@ class RemindersConfig(BaseModel):
     retention_days: int = 30
 
 
+class InitiativeChatConfig(BaseModel):
+    enabled: bool = True
+
+
+class InitiativeSelfieConfig(BaseModel):
+    enabled: bool = True
+    chance: float = 0.4
+
+
+class InitiativeConfig(BaseModel):
+    # Chat initiative (блок C): PAI пишет первой + опциональное селфи.
+    chat: InitiativeChatConfig = InitiativeChatConfig()
+    selfie: InitiativeSelfieConfig = InitiativeSelfieConfig()
+
+
 class DocumentsConfig(BaseModel):
     # §7.3.3 Document indexing — knowledge collections over the vector store.
     enabled: bool = True

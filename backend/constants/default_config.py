@@ -95,6 +95,22 @@ DEFAULT_CONFIG = {
         # deleted (pending rows are never touched).
         "retention_days": 30,
     },
+    "initiative": {
+        # Chat initiative: PAI writes to main_chat first when the loop's
+        # idle/emotion pattern fires (30m/60m/24h silence tiers). The text is
+        # composed by the generation LLM with the persona attached; on
+        # compose failure the initiative is skipped (no canned lines).
+        "chat": {
+            "enabled": True,
+        },
+        # Selfie attached to the initiative message with the given chance.
+        # Rides the chat illustrate machinery (visual intent + appearance
+        # anchor + time/emotion cues); a failed selfie never cancels the text.
+        "selfie": {
+            "enabled": True,
+            "chance": 0.4,
+        },
+    },
     "documents": {
         # §7.3.3 Document indexing: named knowledge collections over Chroma
         # (kb_<id> per collection). Files come from the library; indexing is
