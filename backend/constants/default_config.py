@@ -675,8 +675,12 @@ DEFAULT_CONFIG = {
             "keep_loaded": True,
             "sampler": "euler",
             "scheduler": "normal",
-            "steps": 30,
-            "cfg": 7.0,
+            # Must match the default z_image_turbo model: turbo wants few
+            # steps and zero cfg. These values override model defaults, so a
+            # generic 30/7.0 here made out-of-the-box generations slow and
+            # overbaked.
+            "steps": 9,
+            "cfg": 0.0,
             "width": 1024,
             "height": 1024,
             "aspect_ratio": "1:1",
