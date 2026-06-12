@@ -538,7 +538,14 @@
     "entityVisualizer": {
         "title": "Neural State",
         "cognitiveState": "Cognitive State",
-        "stability": "Stability"
+        "stability": "Stability",
+        "callStart": "Call",
+        "callEnd": "Hang up",
+        "callStage": {
+            "listening": "Listening…",
+            "waiting": "Thinking…",
+            "speaking": "Speaking"
+        }
     },
     "auth": {
         "logout": "Logout",

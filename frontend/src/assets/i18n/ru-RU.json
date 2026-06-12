@@ -539,7 +539,14 @@
     "entityVisualizer": {
         "title": "Нейронное состояние",
         "cognitiveState": "Когнитивное состояние",
-        "stability": "Стабильность"
+        "stability": "Стабильность",
+        "callStart": "Позвонить",
+        "callEnd": "Завершить",
+        "callStage": {
+            "listening": "Слушаю…",
+            "waiting": "Думаю…",
+            "speaking": "Говорю"
+        }
     },
     "auth": {
         "logout": "Выйти",

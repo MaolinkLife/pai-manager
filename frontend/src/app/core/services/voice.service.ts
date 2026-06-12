@@ -19,6 +19,15 @@ export interface VoicePlaybackStatusResponse {
     timestamp?: string;
 }
 
+export interface VoiceCallResponse {
+    status: string;
+    active: boolean;
+    message?: string;
+    stage?: string;
+    vad_running?: boolean;
+    started_at?: string | null;
+}
+
 export interface VoiceProvidersResponse {
     status: string;
     providers: {
@@ -125,6 +134,18 @@ export class VoiceService {
 
     stopRecord$(): Observable<{ data: Message }> {
         return this.http.post<{ data: Message }>(`${this.apiUrl}/record/stop`, {});
+    }
+
+    callStart$(): Observable<VoiceCallResponse> {
+        return this.http.post<VoiceCallResponse>(`${this.apiUrl}/call/start`, {});
+    }
+
+    callStop$(): Observable<VoiceCallResponse> {
+        return this.http.post<VoiceCallResponse>(`${this.apiUrl}/call/stop`, {});
+    }
+
+    callStatus$(): Observable<VoiceCallResponse> {
+        return this.http.get<VoiceCallResponse>(`${this.apiUrl}/call/status`);
     }
 
     voiceModeStatus$(): Observable<VoiceModeResponse> {

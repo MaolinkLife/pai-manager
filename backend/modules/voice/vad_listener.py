@@ -53,7 +53,9 @@ class VADListener:
 
     async def start_voice_vad_loop(self):
         """Entry point for the main listening loop."""
-        if not config_service.get_config_value("voice.enabled", False):
+        from modules.voice.call_state import is_call_active
+
+        if not config_service.get_config_value("voice.enabled", False) and not is_call_active():
             message_disabled = get_text(
                 "logger.vad_info",
                 default="[VAD] Voice detection disabled in config",
@@ -597,6 +599,11 @@ class VADListener:
                 self.last_processed_at = datetime.utcnow()
 
     def _should_bypass_triggers(self) -> bool:
+        from modules.voice.call_state import is_call_active
+
+        # An explicit call is a continuous conversation — no wake words.
+        if is_call_active():
+            return True
         if config_service.get_config_value("audio.ignore_trigger_words", False):
             return True
         trigger_words = config_service.get_config_value("audio.trigger_words", []) or []
@@ -657,12 +664,17 @@ async def start_voice_vad_loop():
 _vad_task = None
 
 
-async def start_vad_background():
-    """Start VAD loop once in background. Returns (started: bool, message)."""
+async def start_vad_background(force: bool = False):
+    """Start VAD loop once in background. Returns (started: bool, message).
+
+    ``force=True`` skips the config gates — used by an explicit voice call,
+    which must work even when background voice mode is off.
+    """
     global _vad_task
     # Respect config flags before spawning
-    if not config_service.get_config_value("voice.enabled", False) or not config_service.get_config_value(
-        "audio.enable_vad", False
+    if not force and (
+        not config_service.get_config_value("voice.enabled", False)
+        or not config_service.get_config_value("audio.enable_vad", False)
     ):
         return (
             False,

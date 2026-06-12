@@ -1037,7 +1037,10 @@ class DecisionLayer:
             AuditStatus.INFO,
             details={"text": text},
         )
-        if not config_service.get_config_value("voice.enabled", False):
+        from modules.voice.call_state import is_call_active
+
+        # An active call must be voiced even when background voice mode is off.
+        if not config_service.get_config_value("voice.enabled", False) and not is_call_active():
             print("[DecisionLayer] Озвучка отключена в конфигурации.")
             log_audit_entry(
                 "decision_layer_tts_disabled",
