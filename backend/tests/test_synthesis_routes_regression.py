@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 from fastapi import HTTPException
 
@@ -31,7 +33,7 @@ def test_generate_image_emits_ok_tool_event(monkeypatch):
     monkeypatch.setattr(synthesis_routes.synthesis_service, "generate_image", fake_generate_image)
 
     payload = {"prompt": "test image", "aspect_ratio": "1:1"}
-    response = synthesis_routes.generate_image(payload)
+    response = asyncio.run(synthesis_routes.generate_image(payload))
 
     assert response["status"] == "ok"
     assert any(event.get("status") == "ok" and event.get("tool_name") == "image.generate" for event in emitted)
@@ -55,12 +57,12 @@ def test_generate_image_normalizes_legacy_provider_model(monkeypatch):
     monkeypatch.setattr(synthesis_routes.tool_event_bus, "emit_tool_event", fake_emit_tool_event)
     monkeypatch.setattr(synthesis_routes.synthesis_service, "generate_image", fake_generate_image)
 
-    response = synthesis_routes.generate_image(
-        {"prompt": "test image", "provider": "z_image_turbo"}
+    response = asyncio.run(
+        synthesis_routes.generate_image({"prompt": "test image", "provider": "z_image_turbo"})
     )
 
     assert response["status"] == "ok"
-    assert captured == {"provider": "diffusers", "model": "z_image_turbo"}
+    assert captured == {"provider": "core", "model": "z_image_turbo"}
 
 
 def test_generate_image_emits_error_tool_event_on_provider_error(monkeypatch):
@@ -82,10 +84,10 @@ def test_generate_image_emits_error_tool_event_on_provider_error(monkeypatch):
     monkeypatch.setattr(synthesis_routes.synthesis_service, "generate_image", fake_generate_image)
 
     with pytest.raises(HTTPException) as exc_info:
-        synthesis_routes.generate_image({"prompt": "test image"})
+        asyncio.run(synthesis_routes.generate_image({"prompt": "test image"}))
 
     assert exc_info.value.status_code == 400
     assert any(event.get("status") == "error" and event.get("tool_name") == "image.generate" for event in emitted)
     assert audited
     assert audited[0]["args"][0] == "synthesis_api_image_generate_error"
-    assert emitted[0]["runtime_meta"]["request"]["allow_fallback"] is False
+    assert emitted[0]["runtime_meta"]["request"]["allow_fallback"] is True

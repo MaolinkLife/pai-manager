@@ -6,10 +6,21 @@ from modules.telegram.service import TelegramBridgeService
 class _FakeImageResult:
     image_bytes = b"fake-image"
     mime_type = "image/png"
+    image_prompt = "night city"
     provider = "diffusers"
-    model_id = "z-image-turbo"
-    width = 512
-    height = 512
+    model = "z-image-turbo"
+    image_parameters = {"width": 512, "height": 512}
+
+
+class _FakeMediaPipelineRequest:
+    def __init__(self, **kwargs):
+        self.kwargs = kwargs
+
+
+class _FakeMediaPipeline:
+    @staticmethod
+    async def run_image(_request):
+        return _FakeImageResult()
 
 
 def test_take_photo_stores_artifact_metadata():
@@ -20,13 +31,9 @@ def test_take_photo_stores_artifact_metadata():
         return "soft neon room"
 
     service._describe_image_bytes = _fake_describe
-    service._synthesis_modules = lambda: (
-        type(
-            "_Svc",
-            (),
-            {"generate_image": staticmethod(lambda request: _FakeImageResult())},
-        )(),
-        type("_Req", (), {"__init__": lambda self, **kwargs: None}),
+    service._media_pipeline_modules = lambda: (
+        _FakeMediaPipelineRequest,
+        _FakeMediaPipeline,
     )
 
     async def _run():

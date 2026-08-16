@@ -186,8 +186,8 @@ def test_diffusers_provider_selects_requested_model(monkeypatch):
         )
     )
 
-    assert calls == [("diffusers", "z_image_turbo", "z_image_turbo")]
-    assert result.provider == "diffusers"
+    assert calls == [("core", "z_image_turbo", "z_image_turbo")]
+    assert result.provider == "core"
     assert result.model_id == "z_image_turbo"
 
 
@@ -215,5 +215,5 @@ def test_legacy_model_id_provider_still_selects_model(monkeypatch):
         )
     )
 
-    assert calls == [("diffusers", "z_image_turbo", "z_image_turbo")]
-    assert result.provider == "diffusers"
+    assert calls == [("core", "z_image_turbo", "z_image_turbo")]
+    assert result.provider == "core"
