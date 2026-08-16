@@ -4,12 +4,13 @@ import { UntypedFormControl } from '@angular/forms';
 import { Observable } from 'rxjs';
 import { finalize, map } from 'rxjs/operators';
 import { LibraryItem } from '../../core/models/library.model';
-import { Message, MessageCompliance, MessageMedia, MessageMediaCategory } from '../../core/models/message.model';
+import { Message, MessageCompliance, MessageKnowledgeSource, MessageMedia, MessageMediaCategory } from '../../core/models/message.model';
 import { ProjectConfig } from '../../core/models/project-config.model';
 import { ApiService } from '../../core/services/api.service';
 import { AuthService } from '../../core/services/auth.service';
 import { ConfigService } from '../../core/services/config.service';
 import { LibraryService } from '../../core/services/library.service';
+import { SynthesisService } from '../../core/services/synthesis.service';
 import { VoiceModeResponse, VoiceService } from '../../core/services/voice.service';
 import { BufferedWebsocketMessage, WebsocketService } from '../../core/services/websocket.service';
 import { NotificationService } from '../../shared/components/notification/notification.service';
@@ -155,6 +156,15 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy {
     currentOffset = 0;
     readonly MESSAGES_PER_PAGE = 32;
 
+    // Render window: only the tail of the loaded history is materialized in
+    // the DOM. Older messages stay in chatHistory and are revealed on demand
+    // (wheel-up near the top or the load-more button) before any server fetch.
+    private static readonly RENDER_WINDOW_INITIAL = 48;
+    private static readonly RENDER_WINDOW_STEP = 32;
+    private renderWindowSize = ChatComponent.RENDER_WINDOW_INITIAL;
+    private revealThrottleUntil = 0;
+    hiddenOlderCount = 0;
+
     showEmojiPicker = false;
     emojiDropdownPosition: { x: number; y: number } = { x: 0, y: 0 };
     emojiPickerMode: 'dropdown' | 'side-panel' = 'side-panel';
@@ -196,6 +206,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy {
     activeDropdown: string | null = null;
     currentPlayingMessage: string | null = null;
     activeGenerationRunId: string | null = null;
+    illustratingMessageId: string | null = null;
     refreshHistoryAfterRunId: string | null = null;
     ttsEnabled = false;
     isComposerScrollable = false;
@@ -216,6 +227,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy {
         private authService: AuthService,
         private configService: ConfigService,
         private libraryService: LibraryService,
+        private synthesisService: SynthesisService,
         private voiceService: VoiceService,
         private websocketService: WebsocketService,
         private notificationService: NotificationService,
@@ -389,6 +401,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy {
                             runtime: runtime || undefined,
                             provider: m.provider || runtime?.model || undefined,
                             compliance: this.extractComplianceFromMeta(m.runtime_meta),
+                            knowledgeSources: this.extractKnowledgeSources(m.runtime_meta),
                         };
                     }).sort(
                         (a: any, b: any) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
@@ -399,6 +412,9 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy {
                         this.currentOffset += newMessages.length;
                         this.hasMoreMessages = newMessages.length === this.MESSAGES_PER_PAGE;
                         this.isLoadingHistory = false;
+                        // Grow the render window so the freshly fetched page
+                        // is actually visible instead of hidden by the cap.
+                        this.renderWindowSize += newMessages.length;
                         this.chatMessageStore.prependHistory(newMessages);
                         this.restoreScrollAfterHistoryPrepend();
                     } else {
@@ -415,6 +431,26 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy {
                 case 'deleted':
                     this.chatMessageStore.deleteMessage(event.message_id, !!event.chain);
                     break;
+
+                case 'message_meta_update': {
+                    const sources = this.extractKnowledgeSources(event);
+                    if (event.id && sources?.length) {
+                        this.chatMessageStore.patchById(String(event.id), { knowledgeSources: sources });
+                    }
+                    shouldScrollAfterEvent = false;
+                    break;
+                }
+
+                case 'message_media_update': {
+                    const mediaList = this.normalizeMediaList(event.media);
+                    if (event.id && mediaList.length) {
+                        this.chatMessageStore.patchById(String(event.id), { media: mediaList });
+                    }
+                    if (this.illustratingMessageId === event.id) {
+                        this.illustratingMessageId = null;
+                    }
+                    break;
+                }
 
                 case 'system':
                     if (event.event === 'typing_start') {
@@ -570,12 +606,30 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy {
                 this.scheduleInitialHistoryScrollToBottom();
             }
         });
+        this.messagesContainerRef?.nativeElement.addEventListener('wheel', this.onMessagesWheel, { passive: true });
     }
 
     ngOnDestroy(): void {
+        this.messagesContainerRef?.nativeElement.removeEventListener('wheel', this.onMessagesWheel);
         this.stopPlaybackTracking();
         this.resetAttachments();
     }
+
+    // Wheel-up near the top reveals older messages / fetches the next page,
+    // mirroring the load-more button. Bound to user intent (deltaY < 0) so
+    // programmatic scrollTop changes can't trigger it.
+    private readonly onMessagesWheel = (event: WheelEvent): void => {
+        if (event.deltaY >= 0) {
+            return;
+        }
+        const element = this.messagesContainerRef?.nativeElement;
+        if (!element || element.scrollTop > 120 || this.isLoadingHistory || !this.historyLoaded) {
+            return;
+        }
+        if (this.hiddenOlderCount > 0 || this.hasMoreMessages) {
+            this.loadMoreHistory();
+        }
+    };
 
     private claimBufferedWebsocketMessage(event: BufferedWebsocketMessage): boolean {
         const cursor = this.websocketService.getConsumerCursor('chat');
@@ -649,9 +703,27 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy {
         }
     }
 
-    // Load more messages with cumulative offset
+    // Load more messages: first reveal already-loaded ones hidden by the
+    // render window (no server round-trip), then fall back to server paging.
     loadMoreHistory(): void {
-        if (!this.hasMoreMessages || this.isLoadingHistory) return;
+        if (this.isLoadingHistory) return;
+
+        if (this.hiddenOlderCount > 0) {
+            const now = Date.now();
+            if (now < this.revealThrottleUntil) return;
+            this.revealThrottleUntil = now + 250;
+
+            const container = this.messagesContainerRef?.nativeElement;
+            this.pendingHistoryPrependScroll = container
+                ? { scrollHeight: container.scrollHeight, scrollTop: container.scrollTop }
+                : null;
+            this.renderWindowSize += ChatComponent.RENDER_WINDOW_STEP;
+            this.rebuildChatMessageViews(this.chatHistory);
+            this.restoreScrollAfterHistoryPrepend();
+            return;
+        }
+
+        if (!this.hasMoreMessages) return;
 
         const element = this.messagesContainerRef?.nativeElement;
         this.pendingHistoryPrependScroll = element
@@ -686,6 +758,8 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy {
         this.hasMoreMessages = true;
         this.isLoadingHistory = false;
         this.historyLoaded = false;
+        this.renderWindowSize = ChatComponent.RENDER_WINDOW_INITIAL;
+        this.hiddenOlderCount = 0;
 
         this.websocketService.send(JSON.stringify({
             action: 'fetch_history',
@@ -1120,6 +1194,28 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy {
         return fallback;
     }
 
+    illustrateMessage(messageId: string | null | undefined): void {
+        if (!messageId || this.illustratingMessageId) {
+            return;
+        }
+        this.illustratingMessageId = messageId;
+        this.synthesisService.illustrateMessage$(messageId).subscribe({
+            next: () => {
+                // Media lands via the message_media_update WS event; the HTTP
+                // response only confirms completion.
+                this.illustratingMessageId = null;
+            },
+            error: (err) => {
+                this.illustratingMessageId = null;
+                this.notificationService.open({
+                    type: 'error',
+                    message: err?.error?.detail || 'Не удалось сгенерировать изображение',
+                    autoClose: true,
+                });
+            },
+        });
+    }
+
     toggleVoice(msgId: string | null | undefined): void {
         if (!msgId) return;
 
@@ -1287,8 +1383,14 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy {
     private rebuildChatMessageViews(messages: Message[]): void {
         const latestUserIndex = this.findLatestUserIndex(messages);
         const total = messages.length;
+        const windowOffset = Math.max(0, total - this.renderWindowSize);
+        this.hiddenOlderCount = windowOffset;
+        const visibleMessages = windowOffset > 0 ? messages.slice(windowOffset) : messages;
         const activeIds = new Set<string>();
-        const views = messages.map((msg, index) => {
+        const views = visibleMessages.map((msg, visibleIndex) => {
+            // index stays global (into chatHistory) so edit/delete/reroll
+            // handlers keep working on the full array.
+            const index = windowOffset + visibleIndex;
             const id = msg.id || `index-${index}`;
             activeIds.add(id);
             const cached = this.chatMessageViewCache.get(id);
@@ -2335,6 +2437,30 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy {
         }
 
         return Object.keys(compliance).length > 0 ? compliance : null;
+    }
+
+    /** §7.3.3 — knowledge_sources from runtime_meta (history reload) or a
+     *  message_meta_update WS payload. Deduped by file name. */
+    private extractKnowledgeSources(raw: any): MessageKnowledgeSource[] | null {
+        const list = raw?.knowledge_sources;
+        if (!Array.isArray(list) || !list.length) {
+            return null;
+        }
+        const seen = new Set<string>();
+        const sources: MessageKnowledgeSource[] = [];
+        for (const entry of list) {
+            const fileName = String(entry?.file_name || '').trim();
+            if (!fileName || seen.has(fileName)) {
+                continue;
+            }
+            seen.add(fileName);
+            sources.push({
+                fileName,
+                collectionName: String(entry?.collection_name || '').trim(),
+                similarity: typeof entry?.similarity === 'number' ? entry.similarity : undefined,
+            });
+        }
+        return sources.length ? sources : null;
     }
 
     /** Normalize a live compliance_update WS payload (raw check payloads,

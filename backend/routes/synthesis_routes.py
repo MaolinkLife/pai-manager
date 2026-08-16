@@ -114,6 +114,133 @@ def get_synthesis_models(refresh: bool = False):
     }
 
 
+@router.post("/message/illustrate")
+async def illustrate_message(payload: dict):
+    """Force image generation for the user request behind an assistant reply.
+
+    Fallback for the analyzer's image-intent detection: when PAI missed a
+    «создай изображение» request, this re-runs the USER message (the actual
+    request, with subject self/other detection via visual intent) through the
+    media pipeline and attaches the result to the assistant reply + pushes a
+    message_media_update WS event.
+    """
+    import base64 as _b64
+    import json as _json
+    import time as _time
+    import uuid as _uuid
+
+    from core.websocket_manager import manager
+    from modules.database.core import SessionLocal
+    from modules.memory.history import (
+        get_last_user_message_before,
+        get_message_by_id,
+        get_message_from_database,
+    )
+    from modules.storage.service import save_media_for_message
+    from modules.system.config import get_config_value
+
+    message_id = str(payload.get("message_id") or "").strip()
+    if not message_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="message_id is required")
+
+    # The prompt comes from the user's request, not from the reply text.
+    session = SessionLocal()
+    try:
+        try:
+            assistant_msg = get_message_from_database(
+                session, filters={"id": message_id}, expected_role="assistant"
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        try:
+            user_msg = get_last_user_message_before(
+                session,
+                character_id=assistant_msg.character_id,
+                before_timestamp=assistant_msg.timestamp,
+            )
+            content = str(getattr(user_msg, "content", "") or "").strip()
+        except ValueError:
+            content = ""
+        if not content:
+            content = str(getattr(assistant_msg, "content", "") or "").strip()
+    finally:
+        session.close()
+
+    if not content:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No request text to generate from")
+
+    image_cfg = get_config_value("telegram.image", {}) or {}
+    try:
+        result = await media_generation_pipeline.run_image(
+            MediaPipelineRequest(
+                mode="chat_auto",
+                prompt=content[:2000],
+                scenario_key="main_chat",
+                negative_prompt=str(image_cfg.get("negative_prompt") or ""),
+                image_provider="auto",
+                image_model=str(image_cfg.get("default_model") or "").strip() or None,
+                width=max(64, int(image_cfg.get("width", 1024) or 1024)),
+                height=max(64, int(image_cfg.get("height", 1024) or 1024)),
+                num_inference_steps=max(1, int(image_cfg.get("num_inference_steps", 9) or 9)),
+                guidance_scale=float(image_cfg.get("guidance_scale", 0.0) or 0.0),
+                use_prompt_builder=False,
+                review_generated_image=False,
+                use_visual_intent=True,
+                source="main_chat_illustrate",
+                character_name=get_active_character_name(default="PAI"),
+                metadata={"allow_scenario_controls": True},
+            )
+        )
+    except ImageProviderError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except Exception as exc:
+        log_audit_entry(
+            "message_illustrate_failed",
+            "[Synthesis] Message illustration failed.",
+            AuditStatus.WARNING,
+            details={"message_id": message_id, "error": str(exc)},
+        )
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+    if not getattr(result, "image_bytes", b""):
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Image generation returned no data")
+
+    media_item = {
+        "id": str(_uuid.uuid4()),
+        "name": f"illustration_{int(_time.time())}.png",
+        "mimeType": str(getattr(result, "mime_type", "") or "image/png"),
+        "category": "image",
+        "size": len(result.image_bytes),
+        "description": (getattr(result, "vision_description", "") or result.image_prompt or content)[:900],
+        "data": result.image_base64 or _b64.b64encode(result.image_bytes).decode("ascii"),
+    }
+    save_media_for_message(message_id, [media_item])
+
+    updated = get_message_by_id(message_id)
+    media_payload = (updated or {}).get("media") or []
+    try:
+        await manager.send_message(_json.dumps({
+            "type": "message_media_update",
+            "id": message_id,
+            "media": media_payload,
+        }, ensure_ascii=False))
+    except Exception:
+        pass
+
+    log_audit_entry(
+        "message_illustrated",
+        "[Synthesis] Message illustrated.",
+        AuditStatus.INFO,
+        details={
+            "message_id": message_id,
+            "provider": getattr(result, "provider", None),
+            "model": getattr(result, "model", None),
+            "bytes": media_item["size"],
+        },
+    )
+    return {"status": "ok", "media": media_payload}
+
+
 @router.get("/comfyui/status")
 def get_comfyui_status():
     try:
@@ -129,10 +256,8 @@ def _safe_model_filename(filename: str) -> str:
     source_name = Path(str(filename or "")).name
     stem = re.sub(r"[^A-Za-z0-9._-]+", "_", Path(source_name).stem).strip("._-")
     suffix = Path(source_name).suffix.lower()
-    if suffix in GGUF_EXTENSIONS:
-        raise ValueError("GGUF image diffusion models are not supported by the internal Diffusers provider yet")
-    if suffix not in CHECKPOINT_EXTENSIONS:
-        raise ValueError("Only .safetensors and .ckpt checkpoints are supported for now")
+    if suffix not in CHECKPOINT_EXTENSIONS | GGUF_EXTENSIONS:
+        raise ValueError("Only .safetensors, .ckpt and .gguf checkpoints are supported for now")
     return f"{stem or 'checkpoint'}{suffix}"
 
 

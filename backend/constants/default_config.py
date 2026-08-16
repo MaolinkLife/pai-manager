@@ -19,6 +19,13 @@ DEFAULT_CONFIG = {
         "runtime": {
             "model_memory_profile": "low_memory_strict",
         },
+        "update": {
+            # Self-update source. check: local changelog version vs GitHub
+            # (latest release + raw changelog on the branch). run: git
+            # fast-forward only — dirty tree / diverged history refuse safely.
+            "repo": "MaolinkLife/pai-manager",
+            "branch": "master",
+        },
     },
     "core": {
         "version": "1.0.0",
@@ -87,6 +94,35 @@ DEFAULT_CONFIG = {
         # Nightly cleanup: fired/cancelled/failed rows older than this are
         # deleted (pending rows are never touched).
         "retention_days": 30,
+    },
+    "initiative": {
+        # Chat initiative: PAI writes to main_chat first when the loop's
+        # idle/emotion pattern fires (30m/60m/24h silence tiers). The text is
+        # composed by the generation LLM with the persona attached; on
+        # compose failure the initiative is skipped (no canned lines).
+        "chat": {
+            "enabled": True,
+        },
+        # Selfie attached to the initiative message with the given chance.
+        # Rides the chat illustrate machinery (visual intent + appearance
+        # anchor + time/emotion cues); a failed selfie never cancels the text.
+        "selfie": {
+            "enabled": True,
+            "chance": 0.4,
+        },
+    },
+    "documents": {
+        # §7.3.3 Document indexing: named knowledge collections over Chroma
+        # (kb_<id> per collection). Files come from the library; indexing is
+        # extract → chunk → embed with the provider pinned per collection.
+        # Retrieval injects top chunks as a knowledge.documents tool block
+        # with file-level sources for citations.
+        "enabled": True,
+        "chunk_size": 1200,
+        "chunk_overlap": 150,
+        "top_k": 4,
+        "min_similarity": 0.35,
+        "max_context_chars": 2400,
     },
     "auto_reroll": {
         # Joint auto-reroll for Validator (§3.5) + LanguageGuard (§3.5-bis):
@@ -639,12 +675,20 @@ DEFAULT_CONFIG = {
             "keep_loaded": True,
             "sampler": "euler",
             "scheduler": "normal",
-            "steps": 30,
-            "cfg": 7.0,
+            # Must match the default z_image_turbo model: turbo wants few
+            # steps and zero cfg. These values override model defaults, so a
+            # generic 30/7.0 here made out-of-the-box generations slow and
+            # overbaked.
+            "steps": 9,
+            "cfg": 0.0,
             "width": 1024,
             "height": 1024,
             "aspect_ratio": "1:1",
             "allow_comfyui_fallback": True,
+            # GGUF checkpoints: only the transformer is quantized, the rest of
+            # the pipeline comes from a HF base repo (per family, overridable).
+            "gguf_cpu_offload": True,
+            "gguf_base_repos": {},
         },
         "prompting": {
             "enabled": True,

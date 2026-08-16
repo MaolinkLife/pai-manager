@@ -116,6 +116,12 @@ export class SynthesisService {
         });
     }
 
+    illustrateMessage$(messageId: string): Observable<{ status: string; media: any[] }> {
+        return this.http.post<{ status: string; media: any[] }>(`${this.apiUrl}/message/illustrate`, {
+            message_id: messageId,
+        });
+    }
+
     getModels$(refresh = false): Observable<SynthesisModelsResponse> {
         if (!refresh && this.modelsCache$) {
             return this.modelsCache$;

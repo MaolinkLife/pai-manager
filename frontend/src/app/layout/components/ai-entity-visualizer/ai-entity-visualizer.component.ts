@@ -10,7 +10,11 @@ import {
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { MoralDashboardState, MoralStateService } from '../../../core/services/moral-state.service';
+import { VoiceService } from '../../../core/services/voice.service';
+import { WebsocketService } from '../../../core/services/websocket.service';
 import { LocalizationService } from '../../../shared/pipes/translation/localization.service';
+
+type CallStage = 'listening' | 'waiting' | 'speaking';
 
 @Component({
     selector: 'app-ai-entity-visualizer',
@@ -32,6 +36,7 @@ export class AiEntityVisualizerComponent implements OnInit, OnDestroy {
 
     readonly state = signal<MoralDashboardState>(this.fallbackState);
     readonly tick = signal(0);
+    readonly speaking = signal(false);
 
     readonly particles = Array.from({ length: 15 }, () => ({
         x: Math.random() * 100,
@@ -50,6 +55,21 @@ export class AiEntityVisualizerComponent implements OnInit, OnDestroy {
         const time = performance.now() / 5000;
         return Math.sin(time) * 4;
     });
+
+    // Real loudness from the backend playback loop (voice_amplitude events,
+    // ~10/s RMS values). Smoothed towards the latest target every tick so the
+    // orb glides between updates instead of stepping.
+    private targetAmplitude = 0;
+    readonly talk = signal(0);
+
+    // Voice call session (блок C): VAD loop on the backend, this panel is
+    // the call surface — stage chip + hang-up around the orb.
+    readonly callActive = signal(false);
+    readonly callBusy = signal(false);
+    readonly callStage = signal<CallStage>('listening');
+    readonly callStageLabel = computed(() =>
+        this.t(`entityVisualizer.callStage.${this.callStage()}`)
+    );
 
     readonly entityColor = computed(() => {
         return this.resolveMoodColor();
@@ -77,10 +97,13 @@ export class AiEntityVisualizerComponent implements OnInit, OnDestroy {
     );
 
     private animationId: number | null = null;
+    private speakingGuardId: number | null = null;
 
     constructor(
         private moralStateService: MoralStateService,
-        private localizationService: LocalizationService
+        private websocketService: WebsocketService,
+        private localizationService: LocalizationService,
+        private voiceService: VoiceService
     ) {}
 
     ngOnInit(): void {
@@ -94,8 +117,48 @@ export class AiEntityVisualizerComponent implements OnInit, OnDestroy {
                 }
             });
 
+        this.websocketService.messages$
+            .pipe(takeUntilDestroyed(this.destroyRef))
+            .subscribe((raw) => {
+                try {
+                    const event = JSON.parse(raw);
+                    if (event?.type === 'voice_amplitude') {
+                        this.onAmplitude(Number(event.value) || 0, event.done === true);
+                    } else if (event?.type === 'call_state') {
+                        this.callActive.set(event.active === true);
+                        if (event.active === true) {
+                            this.callStage.set('listening');
+                        }
+                    } else if (event?.type === 'voice_state' && this.callActive()) {
+                        const stage = String(event.stage || '');
+                        if (stage === 'listening' || stage === 'waiting' || stage === 'speaking') {
+                            this.callStage.set(stage);
+                        }
+                    }
+                } catch {
+                    // ignore non-json ws payloads
+                }
+            });
+
+        this.voiceService.callStatus$()
+            .pipe(takeUntilDestroyed(this.destroyRef))
+            .subscribe({
+                next: (status) => {
+                    this.callActive.set(status?.active === true);
+                    const stage = String(status?.stage || '');
+                    if (stage === 'listening' || stage === 'waiting' || stage === 'speaking') {
+                        this.callStage.set(stage as CallStage);
+                    }
+                },
+                error: () => {},
+            });
+
         const animate = () => {
             this.tick.update((v) => v + 1);
+            this.talk.update((value) => {
+                const next = value + (this.targetAmplitude - value) * 0.45;
+                return next < 0.005 ? 0 : next;
+            });
             this.animationId = window.setTimeout(animate, 80);
         };
         animate();
@@ -106,6 +169,59 @@ export class AiEntityVisualizerComponent implements OnInit, OnDestroy {
             window.clearTimeout(this.animationId);
             this.animationId = null;
         }
+        if (this.speakingGuardId !== null) {
+            window.clearTimeout(this.speakingGuardId);
+            this.speakingGuardId = null;
+        }
+    }
+
+    // The guard zeroes the amplitude if the event stream stalls (WS drop,
+    // backend kill) so the orb cannot keep talking on stale data.
+    private onAmplitude(value: number, done: boolean): void {
+        this.targetAmplitude = done ? 0 : Math.max(0, Math.min(1, value));
+        this.speaking.set(!done && this.targetAmplitude > 0.015);
+        if (this.speakingGuardId !== null) {
+            window.clearTimeout(this.speakingGuardId);
+            this.speakingGuardId = null;
+        }
+        if (!done) {
+            this.speakingGuardId = window.setTimeout(() => {
+                this.targetAmplitude = 0;
+                this.speaking.set(false);
+                this.speakingGuardId = null;
+            }, 700);
+        }
+    }
+
+    startCall(): void {
+        if (this.callBusy() || this.callActive()) {
+            return;
+        }
+        this.callBusy.set(true);
+        this.voiceService.callStart$().subscribe({
+            next: (response) => {
+                this.callBusy.set(false);
+                if (response?.active) {
+                    this.callActive.set(true);
+                    this.callStage.set('listening');
+                }
+            },
+            error: () => this.callBusy.set(false),
+        });
+    }
+
+    endCall(): void {
+        if (this.callBusy()) {
+            return;
+        }
+        this.callBusy.set(true);
+        this.voiceService.callStop$().subscribe({
+            next: () => {
+                this.callBusy.set(false);
+                this.callActive.set(false);
+            },
+            error: () => this.callBusy.set(false),
+        });
     }
 
     private fetchState(): void {

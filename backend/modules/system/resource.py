@@ -8,6 +8,8 @@ from constants.paths import (
     DIFFUSER_MODELS_DIR,
     GENERATION_MODELS_DIR,
     GGUF_MODELS_DIR,
+    IMAGE_GEN_MODELS_DIR,
+    IMAGE_GENERATION_MODELS_DIR,
     MODELS_DIR,
     RVC_MODELS_DIR,
     STT_MODELS_DIR,
@@ -147,6 +149,25 @@ def list_local_model_resources(limit_per_group: int = 300) -> dict[str, Any]:
         source="local.rvc",
         limit=limit,
     )
+    image_generation_models = _scan_model_files(
+        IMAGE_GENERATION_MODELS_DIR,
+        file_extensions=CHECKPOINT_EXTENSIONS | GGUF_EXTENSIONS,
+        source="local.image_generation",
+        limit=limit,
+    )
+    # Legacy imageGen* roots: keep their contents visible so the hub can
+    # surface (and let the user clean up) files left by older versions.
+    image_generation_legacy = _scan_model_files(
+        IMAGE_GEN_MODELS_DIR,
+        file_extensions=CHECKPOINT_EXTENSIONS | GGUF_EXTENSIONS,
+        source="local.image_generation_legacy",
+        limit=limit,
+    ) + _scan_model_files(
+        os.path.join(MODELS_DIR, "imageGenerator"),
+        file_extensions=CHECKPOINT_EXTENSIONS | GGUF_EXTENSIONS,
+        source="local.image_generation_legacy",
+        limit=limit,
+    )
 
     groups = {
         "gguf": gguf_models,
@@ -156,6 +177,8 @@ def list_local_model_resources(limit_per_group: int = 300) -> dict[str, Any]:
         "tts": tts_models,
         "stt": stt_models,
         "rvc": rvc_models,
+        "image_generation": image_generation_models,
+        "image_generation_legacy": image_generation_legacy,
     }
 
     total_count = sum(len(value) for value in groups.values())
@@ -180,6 +203,40 @@ def list_local_model_resources(limit_per_group: int = 300) -> dict[str, Any]:
             key: {"path": value, "exists": os.path.isdir(value)} for key, value in dirs.items()
         },
     }
+
+
+def delete_local_model_file(absolute_path: str) -> dict[str, Any]:
+    """Delete a model file from local storage.
+
+    The path must resolve inside ``storage/models`` — anything else is
+    rejected. Empty parent directories are pruned up to the models root so
+    nested layouts (sherpa/STT) don't leave husks behind.
+    """
+    raw = str(absolute_path or "").strip()
+    if not raw:
+        return {"status": "error", "message": "path is required"}
+
+    models_root = Path(MODELS_DIR).resolve()
+    try:
+        target = Path(raw).resolve()
+    except Exception:
+        return {"status": "error", "message": "Invalid path"}
+
+    if models_root not in target.parents:
+        return {"status": "error", "message": "Path is outside the models storage"}
+    if not target.is_file():
+        return {"status": "error", "message": "File not found"}
+
+    try:
+        target.unlink()
+        parent = target.parent
+        while parent != models_root and parent.is_dir() and not any(parent.iterdir()):
+            parent.rmdir()
+            parent = parent.parent
+    except Exception as exc:
+        return {"status": "error", "message": f"Failed to delete: {exc}"}
+
+    return {"status": "ok", "deleted": str(target)}
 
 
 def get_audio_resources():

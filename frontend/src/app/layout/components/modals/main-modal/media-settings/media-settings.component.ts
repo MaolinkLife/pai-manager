@@ -59,6 +59,18 @@ export class MediaSettingsComponent implements OnInit, OnDestroy {
     ];
     comfyuiModelOptions: UiSelectOption[] = [];
     isComfyuiModelsLoading = false;
+    isDiffusersModelsLoading = false;
+    readonly deviceOptions: UiSelectOption[] = [
+        { value: 'auto', label: 'auto' },
+        { value: 'cuda', label: 'cuda' },
+        { value: 'cpu', label: 'cpu' },
+    ];
+    readonly dtypeOptions: UiSelectOption[] = [
+        { value: 'auto', label: 'auto' },
+        { value: 'float16', label: 'float16' },
+        { value: 'bfloat16', label: 'bfloat16' },
+        { value: 'float32', label: 'float32' },
+    ];
     private synthesisBase: any = {};
     private readonly destroy$ = new Subject<void>();
 
@@ -121,12 +133,17 @@ export class MediaSettingsComponent implements OnInit, OnDestroy {
                 torch_dtype: ['auto'],
                 sampler: ['euler'],
                 scheduler: ['normal'],
-                steps: [30],
-                cfg: [7.0],
+                // Defaults match the default z_image_turbo model (turbo:
+                // few steps, zero cfg) — model defaults are overridden by
+                // these values, so they must not fight each other.
+                steps: [9],
+                cfg: [0.0],
                 width: [1024],
                 height: [1024],
                 aspect_ratio: ['1:1'],
                 allow_comfyui_fallback: [true],
+                keep_loaded: [true],
+                gguf_cpu_offload: [true],
             }),
             prompting: this.fb.group({
                 enabled: [true],
@@ -263,10 +280,15 @@ export class MediaSettingsComponent implements OnInit, OnDestroy {
             });
     }
 
-    private loadLocalModelCatalog(): void {
+    loadLocalModelCatalog(): void {
+        if (this.isDiffusersModelsLoading) {
+            return;
+        }
+        this.isDiffusersModelsLoading = true;
         this.synthesisService.getModels$(true)
             .pipe(takeUntil(this.destroy$))
             .subscribe((payload) => {
+                this.isDiffusersModelsLoading = false;
                 const diffusers = (payload?.models || []).filter((item) => {
                     const provider = String(item.capabilities?.provider || item.provider || '').toLowerCase();
                     return provider === 'core' || provider === 'diffusers';
@@ -503,9 +525,15 @@ export class MediaSettingsComponent implements OnInit, OnDestroy {
             Object.keys(acc[key]).forEach((field) => acc[key][field] === undefined && delete acc[key][field]);
             return acc;
         }, {});
+        // Deep-merge per provider group: the form holds a SUBSET of each
+        // config block — a plain replace would wipe keys the form doesn't
+        // know about (gguf_base_repos, future flags).
         return {
             ...(this.synthesisBase || {}),
             ...synthesis,
+            sd_webui: { ...(this.synthesisBase?.sd_webui || {}), ...(synthesis.sd_webui || {}) },
+            comfyui: { ...(this.synthesisBase?.comfyui || {}), ...(synthesis.comfyui || {}) },
+            diffusers: { ...(this.synthesisBase?.diffusers || {}), ...(synthesis.diffusers || {}) },
             prompting: {
                 ...(this.synthesisBase?.prompting || {}),
                 ...prompting,

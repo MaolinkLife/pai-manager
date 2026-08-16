@@ -9,6 +9,11 @@ import { LocalizationService } from '../../../../../shared/pipes/translation/loc
 import { UiSelectOption } from '../../../../../shared/ui/components/ui-select/ui-select.component';
 import { TunnelService, TunnelStatus } from '../../../../../core/services/tunnel.service';
 import { UiNotificationService } from '../../../../../shared/ui/services/ui-notification.service';
+import {
+    UpdateCheckResult,
+    UpdateRunResult,
+    UpdateService,
+} from '../../../../../core/services/update.service';
 
 @Component({
     selector: 'app-system-settings',
@@ -26,6 +31,10 @@ export class SystemSettingsComponent implements OnInit {
     newCharacterName = '';
     tunnelStatus: TunnelStatus | null = null;
     isTunnelBusy = false;
+    updateInfo: UpdateCheckResult | null = null;
+    updateRunResult: UpdateRunResult | null = null;
+    isUpdateChecking = false;
+    isUpdateRunning = false;
     selectedCharacterFile: File | null = null;
     characterOptions: UiSelectOption[] = [];
     private characterPromptMap = new Map<string, string>();
@@ -57,6 +66,7 @@ export class SystemSettingsComponent implements OnInit {
         private localizationService: LocalizationService,
         private tunnelService: TunnelService,
         private uiNotificationService: UiNotificationService,
+        private updateService: UpdateService,
     ) {
         this.systemForm = this.createForm();
     }
@@ -689,6 +699,64 @@ export class SystemSettingsComponent implements OnInit {
             reader.onerror = () => reject(new Error('Unable to read file'));
             reader.onload = () => resolve(String(reader.result || ''));
             reader.readAsText(file);
+        });
+    }
+
+    checkUpdates(): void {
+        if (this.isUpdateChecking) {
+            return;
+        }
+        this.isUpdateChecking = true;
+        this.updateRunResult = null;
+        this.updateService.check$().subscribe({
+            next: (info) => {
+                this.updateInfo = info;
+                this.isUpdateChecking = false;
+            },
+            error: (error) => {
+                console.error('Update check error:', error);
+                this.isUpdateChecking = false;
+                this.uiNotificationService.error(
+                    error?.error?.detail || 'Failed to check updates',
+                    'Update'
+                );
+            },
+        });
+    }
+
+    runUpdate(target: 'branch' | 'release'): void {
+        if (this.isUpdateRunning) {
+            return;
+        }
+        this.isUpdateRunning = true;
+        this.updateRunResult = null;
+        this.updateService.run$(target).subscribe({
+            next: (result) => {
+                this.updateRunResult = result;
+                this.isUpdateRunning = false;
+                if (result.status === 'ok' && result.updated) {
+                    this.uiNotificationService.success(
+                        result.new_version || result.new_sha || '',
+                        this.localizationService.t('systemSettings.updateApplied')
+                    );
+                    this.checkUpdates();
+                } else if (result.status === 'ok') {
+                    this.uiNotificationService.success(
+                        this.localizationService.t('systemSettings.updateUpToDate'),
+                        'Update'
+                    );
+                } else {
+                    this.uiNotificationService.error(result.message || 'Update failed', 'Update');
+                }
+            },
+            error: (error) => {
+                console.error('Update run error:', error);
+                this.isUpdateRunning = false;
+                this.uiNotificationService.error(
+                    error?.error?.detail || 'Update failed',
+                    'Update'
+                );
+            },
         });
     }
 

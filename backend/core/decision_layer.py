@@ -453,6 +453,38 @@ class DecisionLayer:
                 )
 
         # --------------------------------------------------------------- #
+        # 1️⃣-ter  Knowledge collections retrieval (§7.3.3)
+        # --------------------------------------------------------------- #
+        # Pure vector lookup over indexed documents (one query embedding,
+        # no LLM calls); disabled/empty/erroring → simply no block later.
+        knowledge_context = None
+        try:
+            from modules.documents import service as documents_service
+
+            knowledge_query = str(safe_user_message.get("text") or "").strip()
+            if knowledge_query:
+                knowledge_context = await asyncio.to_thread(
+                    documents_service.build_context_block, knowledge_query
+                )
+                if knowledge_context:
+                    self._console_log(
+                        "Документы из коллекций знаний подмешаны в контекст.",
+                        {
+                            "sources": [
+                                source.get("file_name")
+                                for source in knowledge_context.get("sources", [])
+                            ],
+                        },
+                    )
+        except Exception as exc:
+            log_audit_entry(
+                "decision_layer_knowledge_retrieval_error",
+                "[DecisionLayer] Knowledge retrieval hook failed (non-fatal).",
+                AuditStatus.WARNING,
+                details={"error": str(exc)},
+            )
+
+        # --------------------------------------------------------------- #
         # 2️⃣  Decision‑making
         # --------------------------------------------------------------- #
         decision_started = time.perf_counter()
@@ -618,6 +650,10 @@ class DecisionLayer:
         )
         memory_context = memory_result.context
         memory_meta = memory_result.meta
+        if knowledge_context and isinstance(memory_context, dict):
+            # §7.3.3: rides on memory_context so every format_for_api caller
+            # gets the knowledge.documents block without signature changes.
+            memory_context["knowledge_documents"] = knowledge_context
         lore_context = {
             "lore_matches": memory_context.get("lore_matches", []),
             "lore_block": memory_context.get("lore_block"),
@@ -1001,7 +1037,10 @@ class DecisionLayer:
             AuditStatus.INFO,
             details={"text": text},
         )
-        if not config_service.get_config_value("voice.enabled", False):
+        from modules.voice.call_state import is_call_active
+
+        # An active call must be voiced even when background voice mode is off.
+        if not config_service.get_config_value("voice.enabled", False) and not is_call_active():
             print("[DecisionLayer] Озвучка отключена в конфигурации.")
             log_audit_entry(
                 "decision_layer_tts_disabled",

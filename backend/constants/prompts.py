@@ -717,6 +717,23 @@ language (e.g. «пора вставать»).
 """
 
 
+INITIATIVE_CHAT_PROMPT = """The conversation has gone quiet and YOU decided \
+to write first.
+
+Your current inner state: {emotion}
+The last thing the user said: «{last_user_message}»
+Current local time: {now_local}
+Respond in language: {language}
+
+Write ONE short message (1-3 sentences) in your own voice — like a person \
+who got tired of waiting and decided to check in, share a thought or gently \
+poke the user. Let the inner state color the tone (worry sounds worried, \
+resentment sounds hurt) without naming it explicitly. Do not mention \
+automation, modules, timers or that this message is generated. No prefixes, \
+no JSON — only the message text.
+"""
+
+
 REMINDER_DELIVERY_PROMPT = """A reminder the user previously asked you to \
 deliver is due RIGHT NOW.
 

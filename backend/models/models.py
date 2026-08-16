@@ -652,6 +652,62 @@ class UserReminder(Base):
     character = relationship("Character")
 
 
+class KnowledgeCollection(Base):
+    """§3.9/§7.3.3 Document indexing — a named collection of indexed files.
+
+    Each collection maps to a dedicated Chroma collection (``kb_<id>``);
+    files are ingested through modules/documents (extract → chunk → embed)
+    and retrieved into the generation context with source citations.
+    """
+
+    __tablename__ = "knowledge_collections"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    name = Column(String, nullable=False)
+    description = Column(Text, nullable=False, default="")
+    enabled = Column(Boolean, nullable=False, default=True)
+    # Pinned at first indexing so every chunk in the collection shares the
+    # same embedding space ('ollama' = 768-dim, 'st' = sentence-transformers).
+    embedding_provider = Column(String, nullable=False, default="")
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    files = relationship(
+        "KnowledgeFile",
+        back_populates="collection",
+        cascade="all, delete-orphan",
+    )
+
+
+class KnowledgeFile(Base):
+    """A file inside a knowledge collection with its indexing state.
+
+    ``media_id`` links to the library Storage row when the file came from the
+    library; the extracted text itself is not stored — only chunk vectors in
+    the Chroma collection (ids ``<file_id>::<n>``).
+
+    Status flow: pending → indexed | error.
+    """
+
+    __tablename__ = "knowledge_files"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    collection_id = Column(
+        String, ForeignKey("knowledge_collections.id"), nullable=False, index=True
+    )
+    media_id = Column(String, nullable=True, index=True)
+    name = Column(String, nullable=False)
+    mime_type = Column(String, nullable=False, default="text/plain")
+    size = Column(Integer, nullable=False, default=0)
+    status = Column(String, nullable=False, default="pending", index=True)
+    error = Column(Text, nullable=False, default="")
+    chunk_count = Column(Integer, nullable=False, default=0)
+    indexed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+
+    collection = relationship("KnowledgeCollection", back_populates="files")
+
+
 class ConversationStateLog(Base):
     __tablename__ = "conversation_state_logs"
 

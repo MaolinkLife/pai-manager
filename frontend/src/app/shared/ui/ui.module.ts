@@ -8,6 +8,7 @@ import { UiDropdownMenuDirective } from './components/ui-dropdown/directives/ui-
 import { UiDropdownTriggerDirective } from './components/ui-dropdown/directives/ui-dropdown-trigger.directive';
 import { UiDropdownComponent } from './components/ui-dropdown/ui-dropdown.component';
 import { UiInputComponent } from './components/ui-input/ui-input.component';
+import { UiInputDateTimeComponent } from './components/ui-input-date-time/ui-input-date-time.component';
 import { UiMultiselectComponent } from './components/ui-multiselect/ui-multiselect.component';
 import { UiRangeComponent } from './components/ui-range/ui-range.component';
 import { UiSelectComponent } from './components/ui-select/ui-select.component';
@@ -18,6 +19,7 @@ import { UiTextareaComponent } from './components/ui-textarea/ui-textarea.compon
         UiButtonComponent,
         UiCheckboxComponent,
         UiInputComponent,
+        UiInputDateTimeComponent,
         UiRangeComponent,
         UiSelectComponent,
         UiTextareaComponent,
@@ -31,6 +33,7 @@ import { UiTextareaComponent } from './components/ui-textarea/ui-textarea.compon
         UiButtonComponent,
         UiCheckboxComponent,
         UiInputComponent,
+        UiInputDateTimeComponent,
         UiRangeComponent,
         UiSelectComponent,
         UiTextareaComponent,

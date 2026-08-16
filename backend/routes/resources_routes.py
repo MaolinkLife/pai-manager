@@ -74,6 +74,13 @@ def get_local_models(
         }
 
 
+@router.post("/local-models/delete")
+def delete_local_model(payload: dict):
+    from modules.system.resource import delete_local_model_file
+
+    return delete_local_model_file(str(payload.get("path") or ""))
+
+
 @router.get("/monitors/screens")
 def get_monitor_screens_endpoint():
     try:

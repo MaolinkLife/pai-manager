@@ -155,15 +155,41 @@
             <div class="grid">
                 <div class="form-group">
                     <label for="diffusers-model">{{ 'mediaSettings.defaultModel' | translate }}</label>
-                    <app-ui-select
-                        id="diffusers-model"
-                        [options]="diffusersModelOptions"
-                        formControlName="default_model"
-                    ></app-ui-select>
+                    <div class="select-with-action">
+                        <app-ui-select
+                            id="diffusers-model"
+                            [options]="diffusersModelOptions"
+                            formControlName="default_model"
+                        ></app-ui-select>
+                        <button
+                            type="button"
+                            [disabled]="isDiffusersModelsLoading"
+                            (click)="loadLocalModelCatalog()"
+                        >
+                            {{ isDiffusersModelsLoading ? ('mediaSettings.loading' | translate) : ('mediaSettings.refresh' | translate) }}
+                        </button>
+                    </div>
+                    <p class="hint">{{ 'mediaSettings.diffusersModelsHint' | translate }}</p>
                 </div>
                 <div class="form-group">
                     <label for="diffusers-path">{{ 'mediaSettings.localModelsPath' | translate }}</label>
                     <app-ui-input id="diffusers-path" type="text" formControlName="local_models_path" [readonly]="true"></app-ui-input>
+                </div>
+                <div class="form-group">
+                    <label for="core-device">{{ 'mediaSettings.device' | translate }}</label>
+                    <app-ui-select
+                        id="core-device"
+                        [options]="deviceOptions"
+                        formControlName="device"
+                    ></app-ui-select>
+                </div>
+                <div class="form-group">
+                    <label for="core-dtype">{{ 'mediaSettings.torchDtype' | translate }}</label>
+                    <app-ui-select
+                        id="core-dtype"
+                        [options]="dtypeOptions"
+                        formControlName="torch_dtype"
+                    ></app-ui-select>
                 </div>
                 <div class="form-group">
                     <label for="core-sampler">{{ 'mediaSettings.sampler' | translate }}</label>
@@ -211,6 +237,16 @@
                 <div class="form-group fallback-checkbox">
                     <app-ui-checkbox formControlName="allow_comfyui_fallback">
                         Use ComfyUI as fallback connector
+                    </app-ui-checkbox>
+                </div>
+                <div class="form-group fallback-checkbox">
+                    <app-ui-checkbox formControlName="keep_loaded">
+                        {{ 'mediaSettings.keepLoaded' | translate }}
+                    </app-ui-checkbox>
+                </div>
+                <div class="form-group fallback-checkbox">
+                    <app-ui-checkbox formControlName="gguf_cpu_offload">
+                        {{ 'mediaSettings.ggufCpuOffload' | translate }}
                     </app-ui-checkbox>
                 </div>
             </div>

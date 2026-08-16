@@ -1,4 +1,4 @@
-<div class="entity-wrap" [style.--entity-color]="entityColor()">
+<div class="entity-wrap" [class.speaking]="speaking()" [class.in-call]="callActive()" [style.--entity-color]="entityColor()">
     <div class="panel-title">{{ "entityVisualizer.title" | translate }}</div>
     <div class="ambient" [style.background]="entityGlow()"></div>
 
@@ -10,7 +10,7 @@
             <circle
                 cx="100"
                 cy="100"
-                [attr.r]="80 + breath()"
+                [attr.r]="80 + breath() + (talk() * 4)"
                 fill="none"
                 [attr.stroke]="entityColor()"
                 stroke-width="0.5"
@@ -21,7 +21,7 @@
             <circle
                 cx="100"
                 cy="100"
-                [attr.r]="40 + (breath() * 2)"
+                [attr.r]="40 + (breath() * 2) + (talk() * 9)"
                 [attr.fill]="entityColor()"
                 class="center-orb"
             ></circle>
@@ -55,6 +55,37 @@
             <p class="hud-label">{{ "entityVisualizer.stability" | translate }}</p>
             <p class="hud-value stable">{{ stabilityPercent() }}%</p>
         </div>
+    </div>
+
+    <div class="call-controls">
+        <ng-container *ngIf="!callActive(); else activeCall">
+            <button
+                type="button"
+                class="call-btn call-btn--start"
+                (click)="startCall()"
+                [disabled]="callBusy()"
+                [title]="t('entityVisualizer.callStart')"
+            >
+                <app-custom-svg name="microphone" [size]="18"></app-custom-svg>
+                <span>{{ "entityVisualizer.callStart" | translate }}</span>
+            </button>
+        </ng-container>
+        <ng-template #activeCall>
+            <span class="call-stage" [attr.data-stage]="callStage()">
+                <span class="call-stage__dot"></span>
+                {{ callStageLabel() }}
+            </span>
+            <button
+                type="button"
+                class="call-btn call-btn--end"
+                (click)="endCall()"
+                [disabled]="callBusy()"
+                [title]="t('entityVisualizer.callEnd')"
+            >
+                <app-custom-svg name="stop" [size]="16"></app-custom-svg>
+                <span>{{ "entityVisualizer.callEnd" | translate }}</span>
+            </button>
+        </ng-template>
     </div>
 
     <div class="scan-line"></div>

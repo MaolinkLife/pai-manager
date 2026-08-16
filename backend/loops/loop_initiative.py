@@ -470,7 +470,17 @@ def initiative_monitor():
                         status=AuditStatus.INFO,
                         details={"emotion": emotion},
                     )
-                    # run_initiative(emotion=emotion)
+                    try:
+                        from modules.initiative import run_chat_initiative
+
+                        run_chat_initiative(emotion)
+                    except Exception as exc:
+                        log_audit_entry(
+                            event_type="initiative_run_failed",
+                            msg="[Initiative] Chat initiative failed (non-fatal).",
+                            status=AuditStatus.WARNING,
+                            details={"error": str(exc)},
+                        )
                     last_triggered_phase = emotion
                     last_initiative_time = now
                 else:

@@ -149,6 +149,31 @@ class RemindersConfig(BaseModel):
     retention_days: int = 30
 
 
+class InitiativeChatConfig(BaseModel):
+    enabled: bool = True
+
+
+class InitiativeSelfieConfig(BaseModel):
+    enabled: bool = True
+    chance: float = 0.4
+
+
+class InitiativeConfig(BaseModel):
+    # Chat initiative (блок C): PAI пишет первой + опциональное селфи.
+    chat: InitiativeChatConfig = InitiativeChatConfig()
+    selfie: InitiativeSelfieConfig = InitiativeSelfieConfig()
+
+
+class DocumentsConfig(BaseModel):
+    # §7.3.3 Document indexing — knowledge collections over the vector store.
+    enabled: bool = True
+    chunk_size: int = 1200
+    chunk_overlap: int = 150
+    top_k: int = 4
+    min_similarity: float = 0.35
+    max_context_chars: int = 2400
+
+
 class DecisionLayerCapabilitiesConfig(BaseModel):
     tool: bool = False
     vision: bool = False
@@ -699,6 +724,8 @@ class SynthesisDiffusersConfig(BaseModel):
     height: int = 1024
     aspect_ratio: str = "1:1"
     allow_comfyui_fallback: bool = True
+    gguf_cpu_offload: bool = True
+    gguf_base_repos: dict = Field(default_factory=dict)
 
 
 class SynthesisPromptingConfig(BaseModel):

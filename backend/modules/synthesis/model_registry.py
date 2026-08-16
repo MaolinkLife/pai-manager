@@ -22,7 +22,7 @@ MODEL_MANIFEST_FILE = "synthesis.model.json"
 MODEL_INDEX_FILE = "model_index.json"
 CHECKPOINT_EXTENSIONS = {".safetensors", ".ckpt"}
 GGUF_EXTENSIONS = {".gguf"}
-UNSUPPORTED_IMAGE_MODEL_EXTENSIONS = GGUF_EXTENSIONS
+GGUF_FAMILIES = {"flux-gguf", "sd3-gguf", "qwen-image-gguf"}
 
 
 def _to_bool(value: object, default: bool = False) -> bool:
@@ -65,6 +65,46 @@ def _safe_slug(value: str, fallback: str = "model") -> str:
 def _looks_like_sdxl_checkpoint(value: str) -> bool:
     probe = Path(value or "").stem.lower()
     return "sdxl" in probe or re.search(r"(^|[_.-])xl([_.-]|$)", probe) is not None
+
+
+def _infer_gguf_family(value: str) -> str:
+    """Detect the diffusion family of a GGUF checkpoint from its file name."""
+    probe = Path(value or "").stem.lower()
+    if "flux" in probe:
+        return "flux-gguf"
+    if "sd3" in probe or "stable-diffusion-3" in probe or "stable_diffusion_3" in probe:
+        return "sd3-gguf"
+    if "qwen" in probe:
+        return "qwen-image-gguf"
+    return "gguf-checkpoint"
+
+
+def _gguf_defaults(family: str, name: str) -> dict:
+    probe = (name or "").lower()
+    if family == "flux-gguf":
+        if "schnell" in probe:
+            return {
+                "width": 1024, "height": 1024,
+                "num_inference_steps": 4, "guidance_scale": 0.0,
+            }
+        return {
+            "width": 1024, "height": 1024,
+            "num_inference_steps": 20, "guidance_scale": 3.5,
+        }
+    if family == "sd3-gguf":
+        return {
+            "width": 1024, "height": 1024,
+            "num_inference_steps": 28, "guidance_scale": 4.5,
+        }
+    if family == "qwen-image-gguf":
+        return {
+            "width": 1024, "height": 1024,
+            "num_inference_steps": 30, "guidance_scale": 4.0,
+        }
+    return {
+        "width": 1024, "height": 1024,
+        "num_inference_steps": 20, "guidance_scale": 3.5,
+    }
 
 
 def image_generator_models_root() -> Path:
@@ -288,18 +328,23 @@ class SynthesisModelRegistry:
             if not checkpoints_root.exists():
                 continue
             for path in sorted(checkpoints_root.rglob("*"), key=lambda item: item.as_posix().lower()):
-                if not path.is_file() or path.suffix.lower() not in CHECKPOINT_EXTENSIONS:
+                suffix = path.suffix.lower()
+                if not path.is_file() or suffix not in CHECKPOINT_EXTENSIONS | GGUF_EXTENSIONS:
                     continue
                 name_probe = path.stem.lower()
-                family = "sdxl-checkpoint" if _looks_like_sdxl_checkpoint(name_probe) else "stable-diffusion-checkpoint"
-                defaults = {
-                    "width": 1024 if family == "sdxl-checkpoint" else 768,
-                    "height": 1024 if family == "sdxl-checkpoint" else 768,
-                    "num_inference_steps": 30,
-                    "guidance_scale": 7.0,
-                    "scheduler": "euler",
-                    "sampler": "euler",
-                }
+                if suffix in GGUF_EXTENSIONS:
+                    family = _infer_gguf_family(path.name)
+                    defaults = _gguf_defaults(family, path.name)
+                else:
+                    family = "sdxl-checkpoint" if _looks_like_sdxl_checkpoint(name_probe) else "stable-diffusion-checkpoint"
+                    defaults = {
+                        "width": 1024 if family == "sdxl-checkpoint" else 768,
+                        "height": 1024 if family == "sdxl-checkpoint" else 768,
+                        "num_inference_steps": 30,
+                        "guidance_scale": 7.0,
+                        "scheduler": "euler",
+                        "sampler": "euler",
+                    }
                 items.append(
                     SynthesisModelInfo(
                         model_id=_safe_model_id("image_gen", path.name),
@@ -330,15 +375,15 @@ class SynthesisModelRegistry:
             raise ValueError(f"Model file does not exist: {source}")
 
         suffix = source.suffix.lower()
-        if suffix in UNSUPPORTED_IMAGE_MODEL_EXTENSIONS:
+        if suffix not in CHECKPOINT_EXTENSIONS | GGUF_EXTENSIONS:
             raise ValueError(
-                "GGUF image diffusion models are not supported by the current Diffusers provider. "
-                "Use .safetensors or .ckpt checkpoints."
+                "Only .safetensors, .ckpt and .gguf checkpoints are supported for local image generation."
             )
-        if suffix not in CHECKPOINT_EXTENSIONS:
-            raise ValueError("Only .safetensors and .ckpt checkpoints are supported for local image generation.")
 
-        inferred_family = self._infer_checkpoint_family(source.name, family)
+        if suffix in GGUF_EXTENSIONS:
+            inferred_family = _infer_gguf_family(source.name)
+        else:
+            inferred_family = self._infer_checkpoint_family(source.name, family)
         safe_id = _safe_slug(model_id or source.stem, "checkpoint")
         target_dir = self._image_generation_root / safe_id
         index = 2

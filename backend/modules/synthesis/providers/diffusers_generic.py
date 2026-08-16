@@ -133,14 +133,79 @@ class DiffusersGenericProvider:
                 details={"model_id": model.model_id, "vae_path": vae_path, "error": str(exc)},
             )
 
+    def _gguf_base_repo(self, family: str, file_name: str) -> str:
+        """Pipeline components (text encoders, VAE, tokenizers) for a GGUF
+        transformer come from a HF base repo; quantized weights replace only
+        the transformer. Overridable via synthesis.diffusers.gguf_base_repos."""
+        repos = config_service.get_config_value("synthesis.diffusers.gguf_base_repos", {}) or {}
+        probe = (file_name or "").lower()
+        if family == "flux-gguf":
+            if "schnell" in probe:
+                return str(repos.get("flux_schnell") or "black-forest-labs/FLUX.1-schnell")
+            return str(repos.get("flux") or "black-forest-labs/FLUX.1-dev")
+        if family == "sd3-gguf":
+            return str(repos.get("sd3") or "stabilityai/stable-diffusion-3.5-medium")
+        if family == "qwen-image-gguf":
+            return str(repos.get("qwen_image") or "Qwen/Qwen-Image")
+        raise ImageProviderError(
+            f"Unsupported GGUF diffusion family '{family}'. Supported: FLUX, SD3.x, Qwen-Image "
+            "(the family is detected from the checkpoint file name)."
+        )
+
+    def _build_gguf_pipeline(self, model: SynthesisModelInfo, model_ref: str, dtype: object):
+        try:
+            from diffusers import GGUFQuantizationConfig
+        except ImportError as exc:
+            raise ImageProviderError(
+                "This diffusers version has no GGUF support; upgrade diffusers (>=0.32)."
+            ) from exc
+        try:
+            import gguf  # noqa: F401
+        except ImportError as exc:
+            raise ImageProviderError(
+                "The 'gguf' package is required for GGUF checkpoints: pip install gguf"
+            ) from exc
+
+        family = str(model.family or "")
+        base_repo = self._gguf_base_repo(family, Path(model_ref).name)
+        quantization = GGUFQuantizationConfig(compute_dtype=dtype)
+
+        if family == "flux-gguf":
+            from diffusers import FluxPipeline, FluxTransformer2DModel
+
+            transformer = FluxTransformer2DModel.from_single_file(
+                model_ref, quantization_config=quantization, torch_dtype=dtype
+            )
+            return FluxPipeline.from_pretrained(base_repo, transformer=transformer, torch_dtype=dtype)
+        if family == "sd3-gguf":
+            from diffusers import SD3Transformer2DModel, StableDiffusion3Pipeline
+
+            transformer = SD3Transformer2DModel.from_single_file(
+                model_ref, quantization_config=quantization, torch_dtype=dtype
+            )
+            return StableDiffusion3Pipeline.from_pretrained(base_repo, transformer=transformer, torch_dtype=dtype)
+        if family == "qwen-image-gguf":
+            from diffusers import QwenImagePipeline, QwenImageTransformer2DModel
+
+            transformer = QwenImageTransformer2DModel.from_single_file(
+                model_ref, quantization_config=quantization, torch_dtype=dtype
+            )
+            return QwenImagePipeline.from_pretrained(base_repo, transformer=transformer, torch_dtype=dtype)
+        raise ImageProviderError(
+            f"Unsupported GGUF diffusion family '{family}'."
+        )
+
     def _build_pipeline(self, model: SynthesisModelInfo, model_ref: str | None = None):
         model_ref = model_ref or self._resolve_model_ref(model)
         torch, device, dtype = self._pick_device_dtype()
         model_path = Path(model_ref)
+        is_gguf = model_path.is_file() and model_path.suffix.lower() == ".gguf"
 
         started = time.time()
         try:
-            if model_path.is_file() and model_path.suffix.lower() in {".safetensors", ".ckpt"}:
+            if is_gguf:
+                pipe = self._build_gguf_pipeline(model, model_ref, dtype)
+            elif model_path.is_file() and model_path.suffix.lower() in {".safetensors", ".ckpt"}:
                 if model.family == "sdxl-checkpoint":
                     from diffusers import StableDiffusionXLPipeline
 
@@ -178,7 +243,20 @@ class DiffusersGenericProvider:
             ) from exc
 
         self._apply_vae(pipe, model, dtype)
-        pipe.to(device)
+        # GGUF-quantized pipelines target small-VRAM setups: sequential CPU
+        # offload keeps only the active block on the GPU.
+        gguf_offload = (
+            is_gguf
+            and device == "cuda"
+            and bool(config_service.get_config_value("synthesis.diffusers.gguf_cpu_offload", True))
+        )
+        if gguf_offload:
+            try:
+                pipe.enable_model_cpu_offload()
+            except Exception:
+                pipe.to(device)
+        else:
+            pipe.to(device)
 
         log_audit_entry(
             "synthesis_diffusers_pipeline_loaded",

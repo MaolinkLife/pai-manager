@@ -550,6 +550,27 @@ async def stop_record(request: Request):
     }
 
 
+@router.post("/call/start")
+async def start_call_route():
+    from modules.voice.call import start_call
+
+    return await start_call()
+
+
+@router.post("/call/stop")
+async def stop_call_route():
+    from modules.voice.call import stop_call
+
+    return await stop_call()
+
+
+@router.get("/call/status")
+async def call_status_route():
+    from modules.voice.call import call_status
+
+    return call_status()
+
+
 @router.post("/mode/start")
 async def start_voice_mode():
     started, message = await start_vad_background()

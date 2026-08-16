@@ -53,6 +53,45 @@ export interface OllamaRuntimeModelsResponse {
     message?: string;
 }
 
+export interface HfSearchResult {
+    repo_id: string;
+    downloads: number;
+    likes: number;
+    updated_at?: string | null;
+    tags: string[];
+    gated?: boolean;
+}
+
+export interface HfRepoFile {
+    path: string;
+    size: number;
+    suggested_category: string;
+}
+
+export interface HfDownloadState {
+    type?: string;
+    id: string;
+    repo_id: string;
+    path: string;
+    category: string;
+    status: string;
+    completed: number;
+    total: number;
+    done: boolean;
+    error: string | null;
+}
+
+export interface OllamaPullState {
+    type?: string;
+    model: string;
+    status: string;
+    completed: number;
+    total: number;
+    done: boolean;
+    error: string | null;
+    started_at?: number;
+}
+
 export interface OllamaUnloadResponse {
     status: string;
     model?: string;
@@ -155,6 +194,7 @@ export class ApiService {
     private apiUrl = `${environment.apiBaseUrl}/ollama`;
     private resourcesApiUrl = `${environment.apiBaseUrl}/resources`;
     private sandboxApiUrl = `${environment.apiBaseUrl}/sandbox`;
+    private hfApiUrl = `${environment.apiBaseUrl}/hf`;
 
     constructor(private http: HttpClient) { }
 
@@ -190,9 +230,96 @@ export class ApiService {
             .pipe(catchError((_err) => of(null)));
     }
 
+    getOllamaPulls$(): Observable<OllamaPullState[]> {
+        return this.http
+            .get<{ status: string; pulls: OllamaPullState[] }>(`${this.apiUrl}/models/pulls`)
+            .pipe(
+                map((response) => (Array.isArray(response?.pulls) ? response.pulls : [])),
+                catchError((_err) => of([]))
+            );
+    }
+
+    pullOllamaModel$(model: string): Observable<{ status: string; model?: string } | null> {
+        return this.http
+            .post<{ status: string; model?: string }>(`${this.apiUrl}/models/pull`, { model })
+            .pipe(catchError((_err) => of(null)));
+    }
+
+    cancelOllamaPull$(model: string): Observable<{ status: string } | null> {
+        return this.http
+            .post<{ status: string }>(`${this.apiUrl}/models/pull/cancel`, { model })
+            .pipe(catchError((_err) => of(null)));
+    }
+
+    deleteOllamaModel$(model: string): Observable<{ status: string; message?: string } | null> {
+        return this.http
+            .post<{ status: string; message?: string }>(`${this.apiUrl}/models/delete`, { model })
+            .pipe(catchError((_err) => of(null)));
+    }
+
+    searchHfModels$(query: string, limit = 20): Observable<HfSearchResult[]> {
+        const params = `q=${encodeURIComponent(query)}&limit=${limit}`;
+        return this.http
+            .get<{ status: string; results: HfSearchResult[] }>(`${this.hfApiUrl}/search?${params}`)
+            .pipe(
+                map((response) => (Array.isArray(response?.results) ? response.results : [])),
+                catchError((_err) => of([]))
+            );
+    }
+
+    getHfRepoFiles$(
+        repo: string,
+        token?: string,
+    ): Observable<{ status: string; code?: string; message?: string; files: HfRepoFile[] } | null> {
+        const options = token ? { headers: { 'X-HF-Token': token } } : {};
+        return this.http
+            .get<{ status: string; code?: string; message?: string; files: HfRepoFile[] }>(
+                `${this.hfApiUrl}/files?repo=${encodeURIComponent(repo)}`,
+                options
+            )
+            .pipe(catchError((_err) => of(null)));
+    }
+
+    getHfDownloads$(): Observable<HfDownloadState[]> {
+        return this.http
+            .get<{ status: string; downloads: HfDownloadState[] }>(`${this.hfApiUrl}/downloads`)
+            .pipe(
+                map((response) => (Array.isArray(response?.downloads) ? response.downloads : [])),
+                catchError((_err) => of([]))
+            );
+    }
+
+    startHfDownload$(
+        repo: string,
+        path: string,
+        category: string,
+        token?: string,
+    ): Observable<{ status: string; id?: string } | null> {
+        return this.http
+            .post<{ status: string; id?: string }>(`${this.hfApiUrl}/download`, {
+                repo,
+                path,
+                category,
+                ...(token ? { token } : {}),
+            })
+            .pipe(catchError((_err) => of(null)));
+    }
+
+    cancelHfDownload$(id: string): Observable<{ status: string } | null> {
+        return this.http
+            .post<{ status: string }>(`${this.hfApiUrl}/download/cancel`, { id })
+            .pipe(catchError((_err) => of(null)));
+    }
+
     getLocalModels$(limitPerGroup: number = 300): Observable<LocalModelResourcesResponse | null> {
         return this.http
             .get<LocalModelResourcesResponse>(`${this.resourcesApiUrl}/local-models?limit_per_group=${limitPerGroup}`)
+            .pipe(catchError((_err) => of(null)));
+    }
+
+    deleteLocalModelFile$(path: string): Observable<{ status: string; message?: string } | null> {
+        return this.http
+            .post<{ status: string; message?: string }>(`${this.resourcesApiUrl}/local-models/delete`, { path })
             .pipe(catchError((_err) => of(null)));
     }
 

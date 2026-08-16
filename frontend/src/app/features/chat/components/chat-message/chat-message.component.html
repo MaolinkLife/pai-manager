@@ -112,6 +112,17 @@
                 <span class="compliance-badge__label" *ngIf="badge.label">{{ badge.label }}</span>
             </span>
         </div>
+
+        <div class="knowledge-sources" *ngIf="knowledgeSources.length">
+            <span class="knowledge-sources__label">Источники:</span>
+            <span
+                class="knowledge-source"
+                *ngFor="let source of knowledgeSources; trackBy: trackBySource"
+                [attr.data-tooltip]="sourceTooltip(source)"
+            >
+                📄 {{ source.fileName }}
+            </span>
+        </div>
     </div>
 
     <div class="actions" *ngIf="actionsVisible">
@@ -160,6 +171,17 @@
             [attr.aria-label]="currentPlayingMessage === msg.id ? 'Остановить озвучку' : 'Озвучить ответ'"
         >
             <app-custom-svg [name]="currentPlayingMessage === msg.id ? 'volume-x' : 'volume-2'" [size]="20"></app-custom-svg>
+        </button>
+        <button
+            class="btn-icon"
+            (click)="illustrate.emit(msg.id)"
+            *ngIf="msg.role === 'assistant' && msg.id && !msg.isPending"
+            [disabled]="isIllustrating"
+            [class.active]="isIllustrating"
+            [attr.data-tooltip]="isIllustrating ? 'Создаю изображение...' : 'Создать изображение по запросу'"
+            aria-label="Создать изображение по запросу"
+        >
+            <app-custom-svg name="image" [size]="18"></app-custom-svg>
         </button>
         <button
             class="btn-icon"

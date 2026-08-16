@@ -2,8 +2,18 @@
     <input #uploadInput type="file" hidden multiple (change)="uploadFiles($event)" />
 
     <header class="library-header">
-        <h1>Библиотека</h1>
-        <div class="library-actions">
+        <div class="library-title">
+            <h1>Библиотека</h1>
+            <div class="page-tabs">
+                <button type="button" [class.active]="pageTab === 'files'" (click)="switchTab('files')">
+                    Файлы
+                </button>
+                <button type="button" [class.active]="pageTab === 'collections'" (click)="switchTab('collections')">
+                    Коллекции
+                </button>
+            </div>
+        </div>
+        <div class="library-actions" *ngIf="pageTab === 'files'">
             <app-ui-input
                 type="text"
                 placeholder="Поиск в библиотеке"
@@ -14,89 +24,257 @@
         </div>
     </header>
 
-    <div class="library-toolbar">
-        <div class="category-tabs">
-            <button
-                *ngFor="let item of categories"
-                type="button"
-                [class.active]="category === item.value"
-                (click)="category = item.value; load()"
-            >
-                {{ item.label }}
-            </button>
-        </div>
-
-        <div class="toolbar-right">
-            <span>Выбрано {{ selected.size }}</span>
-            <button
-                type="button"
-                class="view-btn"
-                [class.active]="selectionMode"
-                (click)="toggleSelectionMode()"
-                aria-label="Режим выбора"
-                title="Режим выбора"
-            >
-                <app-custom-svg name="check" [size]="18"></app-custom-svg>
-            </button>
-            <button type="button" class="view-btn" [class.active]="viewMode === 'grid'" (click)="viewMode = 'grid'">
-                <app-custom-svg name="cards" [size]="18"></app-custom-svg>
-            </button>
-            <button type="button" class="view-btn" [class.active]="viewMode === 'list'" (click)="viewMode = 'list'">
-                <app-custom-svg name="view-list" [size]="18"></app-custom-svg>
-            </button>
-        </div>
-    </div>
-
-    <div class="library-empty" *ngIf="!loading && items.length === 0">
-        Файлов пока нет.
-    </div>
-
-    <div class="library-grid" [class.list-mode]="viewMode === 'list'" *ngIf="items.length">
-        <article
-            class="library-card"
-            *ngFor="let item of items; trackBy: trackByItem"
-            [class.selected]="selected.has(item.id)"
-            [class.document]="!isImage(item)"
-            [class.selection-mode]="selectionMode"
-            (click)="selectionMode ? toggleSelected(item, $event) : openItem(item)"
-        >
-            <button
-                *ngIf="selectionMode || selected.has(item.id)"
-                type="button"
-                class="select-dot"
-                [class.checked]="selected.has(item.id)"
-                (click)="toggleSelected(item, $event)"
-                aria-label="Выбрать файл"
-            >
-                <app-custom-svg *ngIf="selected.has(item.id)" name="check" [size]="16"></app-custom-svg>
-            </button>
-
-            <div class="thumb image-thumb" *ngIf="isImage(item); else fileThumb" [style.backgroundImage]="'url(' + getItemUrl(item) + ')'"></div>
-            <ng-template #fileThumb>
-                <div class="thumb file-thumb">
-                    <app-custom-svg name="file" [size]="42"></app-custom-svg>
-                </div>
-            </ng-template>
-
-            <div class="card-title">{{ item.name }}</div>
-            <div class="card-meta">{{ extension(item) }} · {{ formatSize(item.size) }}</div>
-
-            <div class="card-hover">
-                <div>{{ item.mimeType }}</div>
-                <div>Создано: {{ formatDate(item.createdAt) }}</div>
-                <div>Изменено: {{ formatDate(item.updatedAt) }}</div>
-                <div>{{ formatSize(item.size) }}</div>
-                <div class="hover-actions">
-                    <button type="button" (click)="download(item, $event)">
-                        <app-custom-svg name="arrow-down" [size]="15"></app-custom-svg>
-                    </button>
-                    <button type="button" (click)="deleteItem(item, $event)">
-                        <app-custom-svg name="trash" [size]="15"></app-custom-svg>
-                    </button>
-                </div>
+    <!-- ============================== Файлы ============================== -->
+    <ng-container *ngIf="pageTab === 'files'">
+        <div class="library-toolbar">
+            <div class="category-tabs">
+                <button
+                    *ngFor="let item of categories"
+                    type="button"
+                    [class.active]="category === item.value"
+                    (click)="category = item.value; load()"
+                >
+                    {{ item.label }}
+                </button>
             </div>
-        </article>
-    </div>
+
+            <div class="toolbar-right">
+                <span>Выбрано {{ selected.size }}</span>
+                <button
+                    type="button"
+                    class="view-btn"
+                    [class.active]="selectionMode"
+                    (click)="toggleSelectionMode()"
+                    aria-label="Режим выбора"
+                    title="Режим выбора"
+                >
+                    <app-custom-svg name="check" [size]="18"></app-custom-svg>
+                </button>
+                <button type="button" class="view-btn" [class.active]="viewMode === 'grid'" (click)="viewMode = 'grid'">
+                    <app-custom-svg name="cards" [size]="18"></app-custom-svg>
+                </button>
+                <button type="button" class="view-btn" [class.active]="viewMode === 'list'" (click)="viewMode = 'list'">
+                    <app-custom-svg name="view-list" [size]="18"></app-custom-svg>
+                </button>
+            </div>
+        </div>
+
+        <div class="library-empty" *ngIf="!loading && items.length === 0">
+            Файлов пока нет.
+        </div>
+
+        <div class="library-grid" [class.list-mode]="viewMode === 'list'" *ngIf="items.length">
+            <article
+                class="library-card"
+                *ngFor="let item of items; trackBy: trackByItem"
+                [class.selected]="selected.has(item.id)"
+                [class.document]="!isImage(item)"
+                [class.selection-mode]="selectionMode"
+                (click)="selectionMode ? toggleSelected(item, $event) : openItem(item)"
+            >
+                <button
+                    *ngIf="selectionMode || selected.has(item.id)"
+                    type="button"
+                    class="select-dot"
+                    [class.checked]="selected.has(item.id)"
+                    (click)="toggleSelected(item, $event)"
+                    aria-label="Выбрать файл"
+                >
+                    <app-custom-svg *ngIf="selected.has(item.id)" name="check" [size]="16"></app-custom-svg>
+                </button>
+
+                <div class="thumb image-thumb" *ngIf="isImage(item); else fileThumb" [style.backgroundImage]="'url(' + getItemUrl(item) + ')'"></div>
+                <ng-template #fileThumb>
+                    <div class="thumb file-thumb">
+                        <app-custom-svg name="file" [size]="42"></app-custom-svg>
+                    </div>
+                </ng-template>
+
+                <div class="card-title">{{ item.name }}</div>
+                <div class="card-meta">{{ extension(item) }} · {{ formatSize(item.size) }}</div>
+
+                <div class="card-hover">
+                    <div>{{ item.mimeType }}</div>
+                    <div>Создано: {{ formatDate(item.createdAt) }}</div>
+                    <div>Изменено: {{ formatDate(item.updatedAt) }}</div>
+                    <div>{{ formatSize(item.size) }}</div>
+                    <div class="hover-actions">
+                        <button type="button" (click)="download(item, $event)">
+                            <app-custom-svg name="arrow-down" [size]="15"></app-custom-svg>
+                        </button>
+                        <button type="button" (click)="deleteItem(item, $event)">
+                            <app-custom-svg name="trash" [size]="15"></app-custom-svg>
+                        </button>
+                    </div>
+                </div>
+            </article>
+        </div>
+    </ng-container>
+
+    <!-- ============================ Коллекции ============================ -->
+    <ng-container *ngIf="pageTab === 'collections'">
+        <div class="collections-layout">
+            <aside class="collections-list">
+                <div class="collection-create">
+                    <app-ui-input
+                        type="text"
+                        placeholder="Название коллекции"
+                        [(ngModel)]="newCollectionName"
+                        (keydown.enter)="createCollection()"
+                    ></app-ui-input>
+                    <app-ui-input
+                        type="text"
+                        placeholder="Описание (необязательно)"
+                        [(ngModel)]="newCollectionDescription"
+                        (keydown.enter)="createCollection()"
+                    ></app-ui-input>
+                    <app-ui-button
+                        [loading]="creatingCollection"
+                        [disabled]="!newCollectionName.trim()"
+                        (pressed)="createCollection()"
+                    >Создать</app-ui-button>
+                </div>
+
+                <div class="library-empty" *ngIf="!collectionsLoading && collections.length === 0">
+                    Коллекций пока нет. Создайте первую — и добавьте в неё документы из библиотеки.
+                </div>
+
+                <article
+                    class="collection-card"
+                    *ngFor="let collection of collections; trackBy: trackByCollection"
+                    [class.active]="activeCollection?.id === collection.id"
+                    [class.disabled]="!collection.enabled"
+                    (click)="openCollection(collection)"
+                >
+                    <div class="collection-card__head">
+                        <strong>{{ collection.name }}</strong>
+                        <span class="collection-count">{{ collection.file_count }} файл(ов)</span>
+                    </div>
+                    <p class="collection-card__description" *ngIf="collection.description">
+                        {{ collection.description }}
+                    </p>
+                    <div class="collection-card__footer">
+                        <span class="collection-provider" *ngIf="collection.embedding_provider">
+                            {{ collection.embedding_provider }}
+                        </span>
+                        <span class="collection-toggle" (click)="toggleCollectionEnabled(collection, $event)">
+                            {{ collection.enabled ? 'включена' : 'выключена' }}
+                        </span>
+                        <button
+                            type="button"
+                            class="collection-delete"
+                            (click)="deleteCollection(collection, $event)"
+                            aria-label="Удалить коллекцию"
+                            title="Удалить коллекцию"
+                        >
+                            <app-custom-svg name="trash" [size]="14"></app-custom-svg>
+                        </button>
+                    </div>
+                </article>
+            </aside>
+
+            <section class="collection-detail" *ngIf="activeCollection; else collectionPlaceholder">
+                <header class="collection-detail__header">
+                    <div>
+                        <h2>{{ activeCollection.name }}</h2>
+                        <p class="hint" *ngIf="activeCollection.description">{{ activeCollection.description }}</p>
+                    </div>
+                    <div class="collection-detail__actions">
+                        <app-ui-button (pressed)="openPicker()">Добавить из библиотеки</app-ui-button>
+                        <app-ui-button
+                            [loading]="reindexingCollection"
+                            [disabled]="!collectionFiles.length"
+                            (pressed)="reindexCollection()"
+                        >Переиндексировать</app-ui-button>
+                    </div>
+                </header>
+
+                <div class="library-empty" *ngIf="!filesLoading && collectionFiles.length === 0">
+                    В коллекции пока нет файлов. Добавьте документы из библиотеки — они проиндексируются автоматически.
+                </div>
+
+                <div class="knowledge-files" *ngIf="collectionFiles.length">
+                    <div
+                        class="knowledge-file"
+                        *ngFor="let file of collectionFiles; trackBy: trackByKnowledgeFile"
+                        [class.error]="file.status === 'error'"
+                    >
+                        <app-custom-svg name="file" [size]="18"></app-custom-svg>
+                        <div class="knowledge-file__info">
+                            <strong>{{ file.name }}</strong>
+                            <span class="knowledge-file__meta">
+                                {{ formatSize(file.size) }}
+                                <ng-container *ngIf="file.indexed_at"> · {{ formatDate(file.indexed_at) }}</ng-container>
+                            </span>
+                            <span class="knowledge-file__error" *ngIf="file.status === 'error'">{{ file.error }}</span>
+                        </div>
+                        <span class="status-chip" [ngClass]="'status-chip--' + file.status">
+                            {{ fileStatusLabel(file) }}
+                        </span>
+                        <div class="knowledge-file__actions">
+                            <button
+                                type="button"
+                                (click)="reindexFile(file)"
+                                [disabled]="busyFileIds.has(file.id)"
+                                title="Переиндексировать"
+                            >
+                                <app-custom-svg name="reroll" [size]="15"></app-custom-svg>
+                            </button>
+                            <button
+                                type="button"
+                                (click)="removeFile(file)"
+                                [disabled]="busyFileIds.has(file.id)"
+                                title="Убрать из коллекции"
+                            >
+                                <app-custom-svg name="trash" [size]="15"></app-custom-svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <ng-template #collectionPlaceholder>
+                <section class="collection-detail collection-detail--empty">
+                    <p>Выберите коллекцию слева или создайте новую.</p>
+                    <p class="hint">
+                        Документы из коллекций подмешиваются в контекст разговора: PAI отвечает,
+                        опираясь на ваши файлы, и показывает источники под сообщением.
+                    </p>
+                </section>
+            </ng-template>
+        </div>
+
+        <div class="viewer-overlay" *ngIf="pickerOpen" (click)="closePicker()">
+            <section class="viewer picker" (click)="$event.stopPropagation()">
+                <header class="viewer-header">
+                    <app-custom-svg name="file" [size]="22"></app-custom-svg>
+                    <strong>Документы библиотеки</strong>
+                    <button type="button" class="viewer-close" (click)="closePicker()" aria-label="Закрыть" title="Закрыть">
+                        <app-custom-svg name="close" [size]="18"></app-custom-svg>
+                    </button>
+                </header>
+                <div class="viewer-body custom-scrollbar">
+                    <div class="library-empty" *ngIf="!pickerLoading && pickerItems.length === 0">
+                        Нет подходящих документов: загрузите текстовые файлы во вкладке «Файлы».
+                    </div>
+                    <div class="picker-list">
+                        <button
+                            type="button"
+                            class="picker-item"
+                            *ngFor="let item of pickerItems; trackBy: trackByItem"
+                            (click)="addFromPicker(item)"
+                            [disabled]="addingMediaIds.has(item.id)"
+                        >
+                            <app-custom-svg name="file" [size]="18"></app-custom-svg>
+                            <span class="picker-item__name">{{ item.name }}</span>
+                            <span class="picker-item__meta">{{ extension(item) }} · {{ formatSize(item.size) }}</span>
+                            <span class="picker-item__add">{{ addingMediaIds.has(item.id) ? 'Индексирую…' : 'Добавить' }}</span>
+                        </button>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </ng-container>
 
     <div class="viewer-overlay" *ngIf="activeItem" (click)="closeViewer()">
         <section class="viewer" [class.document-viewer]="isDocument(activeItem)" (click)="$event.stopPropagation()">

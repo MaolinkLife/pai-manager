@@ -27,6 +27,7 @@ const routes: Routes = [
             { path: 'audit', loadChildren: () => import('./features/audit/audit.module').then(m => m.AuditModule) },
             { path: 'tasks', loadChildren: () => import('./features/tasks/tasks.module').then(m => m.TasksModule) },
             { path: 'debug', loadChildren: () => import('./features/debug/debug.module').then(m => m.DebugModule) },
+            { path: 'settings', loadChildren: () => import('./features/settings/settings.module').then(m => m.SettingsModule) },
         ]
     },
     { path: '**', redirectTo: 'chat' },

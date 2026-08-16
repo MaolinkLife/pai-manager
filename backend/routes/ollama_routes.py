@@ -78,6 +78,44 @@ async def unload_runtime_model(payload: dict):
     return result
 
 
+@router.get("/models/pulls")
+async def get_model_pulls():
+    from modules.ollama import pulls
+
+    return pulls.snapshot()
+
+
+@router.post("/models/pull")
+async def pull_model(payload: dict):
+    from modules.ollama import pulls
+
+    model = str(payload.get("model") or "").strip()
+    if not model:
+        raise HTTPException(status_code=400, detail="model is required")
+    return pulls.start_pull(model)
+
+
+@router.post("/models/pull/cancel")
+async def cancel_model_pull(payload: dict):
+    from modules.ollama import pulls
+
+    model = str(payload.get("model") or "").strip()
+    if not model:
+        raise HTTPException(status_code=400, detail="model is required")
+    return pulls.cancel_pull(model)
+
+
+@router.post("/models/delete")
+async def delete_model(payload: dict):
+    model = str(payload.get("model") or "").strip()
+    if not model:
+        raise HTTPException(status_code=400, detail="model is required")
+    result = ollama_client.delete_model(model)
+    if result.get("status") != "ok":
+        return JSONResponse(status_code=500, content=result)
+    return result
+
+
 @router.post("/capabilities/check")
 async def check_model_capabilities(payload: dict):
     model = str(payload.get("model") or "").strip()

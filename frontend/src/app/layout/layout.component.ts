@@ -1,9 +1,5 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { NavigationEnd, Router } from '@angular/router';
-import { ModalService } from '../shared/components/modal/modal.service';
-import { MemoryModalComponent } from './components/modals/memory-modal/memory-modal.component';
-import { MOCK_LOREBOOK } from '../shared/mock/lorebook-mock';
-import { MainModalComponent } from './components/modals/main-modal/main-modal.component';
 import { NotificationService } from '../shared/components/notification/notification.service';
 import { ThemeService } from '../core/services/theme.service';
 import { ConfigService } from '../core/services/config.service';
@@ -53,7 +49,6 @@ export class LayoutComponent implements OnInit, OnDestroy {
     private lastNotifiedMessageId = '';
 
     constructor(
-        private modalService: ModalService,
         private notificationService: NotificationService,
         private theme: ThemeService,
         private configService: ConfigService,
@@ -153,24 +148,6 @@ export class LayoutComponent implements OnInit, OnDestroy {
     toggleTheme() {
         this.theme.toggleTheme();
         this.currentTheme = this.theme.getTheme();
-    }
-
-    memoryClick() {
-        this.modalService.open(MainModalComponent, {
-            title: this.t('settingsSidebar.title'),
-            data: { entries: [] }
-        }).afterClosed$.subscribe(updated => {
-            console.log('Сохранено:', updated);
-        });
-    }
-
-    openSettingsModal() {
-        this.modalService.open(MainModalComponent, {
-            title: this.t('settingsSidebar.title'),
-            data: { entries: [] }
-        }).afterClosed$.subscribe(updated => {
-            console.log('Сохранено:', updated);
-        });
     }
 
     t(key: string): string {

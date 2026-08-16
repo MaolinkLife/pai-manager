@@ -523,6 +523,50 @@ def list_models() -> Dict[str, Any]:
         return {"status": "error", "message": f"Ollama error: {exc}"}
 
 
+async def pull_model_stream(model: str) -> AsyncIterator[Dict[str, Any]]:
+    """Stream pull progress objects from the Ollama registry.
+
+    Yields raw /api/pull JSON lines: {"status", "digest", "total", "completed"}
+    and finally {"status": "success"}. Errors surface as {"error": "..."}.
+    """
+    url = f"{OLLAMA_API_URL}/pull"
+    payload = {"model": model, "stream": True}
+    timeout = aiohttp.ClientTimeout(total=None, sock_read=OLLAMA_STREAM_READ_TIMEOUT_SEC)
+    async with aiohttp.ClientSession(timeout=timeout) as session:
+        async with session.post(url, json=payload) as resp:
+            async for line in resp.content:
+                raw = line.decode("utf-8", errors="ignore").strip()
+                if not raw:
+                    continue
+                try:
+                    obj = json.loads(raw)
+                except Exception:
+                    continue
+                yield obj
+                if obj.get("error") or obj.get("status") == "success":
+                    return
+
+
+def delete_model(model: str) -> Dict[str, Any]:
+    """Remove an installed model from the local Ollama store."""
+    try:
+        response = requests.delete(
+            f"{OLLAMA_API_URL}/delete", json={"model": model}, timeout=30
+        )
+        if response.status_code == 404:
+            return {"status": "error", "message": "Model not found"}
+        response.raise_for_status()
+        log_audit_entry(
+            "ollama_model_deleted",
+            "[Ollama] Model removed from local store.",
+            AuditStatus.INFO,
+            details={"model": model},
+        )
+        return {"status": "ok"}
+    except Exception as exc:
+        return {"status": "error", "message": f"Ollama error: {exc}"}
+
+
 def list_runtime_models() -> Dict[str, Any]:
     if not is_available():
         return {

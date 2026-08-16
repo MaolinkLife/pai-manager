@@ -164,6 +164,19 @@ def _clean_runtime_meta_payload(payload: dict) -> dict:
     }
 
 
+def _knowledge_sources_from(processing_result: dict | None) -> list:
+    """§7.3.3: file-level sources of the knowledge.documents block, persisted
+    for citations in the UI. An empty list is dropped by the meta cleaner."""
+    try:
+        knowledge = ((processing_result or {}).get("memory_context") or {}).get(
+            "knowledge_documents"
+        ) or {}
+        sources = knowledge.get("sources")
+        return sources if isinstance(sources, list) else []
+    except Exception:
+        return []
+
+
 def _attach_history_source(item: dict) -> dict:
     if not isinstance(item, dict):
         return item
@@ -801,6 +814,7 @@ async def websocket_endpoint(websocket: WebSocket):
                                         "provider": final_message_provider,
                                         "usage": final_message_usage,
                                         "meta": final_message_meta,
+                                        "knowledge_sources": _knowledge_sources_from(processing_result),
                                         "traces": trace_events,
                                         "elapsed_ms": round(
                                             (time.perf_counter() - run_started) * 1000, 2
@@ -816,6 +830,18 @@ async def websocket_endpoint(websocket: WebSocket):
                                     # row — a plain replace wipes the badges
                                     # after a page reload.
                                     merge=True,
+                                )
+                            knowledge_sources = _knowledge_sources_from(processing_result)
+                            if knowledge_sources and final_message_id:
+                                # §7.3.3: let the live bubble show its document
+                                # citations without waiting for a reload.
+                                await _safe_send_json(
+                                    websocket,
+                                    {
+                                        "type": "message_meta_update",
+                                        "id": final_message_id,
+                                        "knowledge_sources": knowledge_sources,
+                                    },
                                 )
                             status = "stopped" if stop_event.is_set() else "completed"
                             await _safe_send_json(
@@ -1094,6 +1120,7 @@ async def websocket_endpoint(websocket: WebSocket):
                                     "provider": final_message_provider,
                                     "usage": final_message_usage,
                                     "meta": final_message_meta,
+                                    "knowledge_sources": _knowledge_sources_from(prepared.get("processing_result")),
                                     "traces": trace_events,
                                     "elapsed_ms": round((time.perf_counter() - run_started) * 1000, 2),
                                     "reasoning_elapsed_ms": final_message_reasoning_elapsed,

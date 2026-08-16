@@ -1,0 +1,115 @@
+<div class="connections">
+    <header class="connections-header">
+        <h2>{{ "settingsPage.connections.title" | translate }}</h2>
+        <p class="connections-subtitle">{{ "settingsPage.connections.subtitle" | translate }}</p>
+    </header>
+
+    <div class="connections-loading" *ngIf="isLoading$ | async; else formBlock">
+        {{ "settingsPage.connections.loading" | translate }}
+    </div>
+
+    <ng-template #formBlock>
+        <form [formGroup]="form" class="connections-form">
+            <section class="connection-card">
+                <div class="connection-card-head">
+                    <h3>{{ "settingsPage.connections.activeProvider" | translate }}</h3>
+                </div>
+                <div class="field">
+                    <app-ui-select
+                        [options]="providerOptions"
+                        formControlName="activeProvider"
+                    ></app-ui-select>
+                    <div class="field-hint">{{ "settingsPage.connections.activeProviderHint" | translate }}</div>
+                </div>
+            </section>
+
+            <section class="connection-card" formGroupName="ollama">
+                <div class="connection-card-head">
+                    <h3>Ollama</h3>
+                    <span class="provider-badge" *ngIf="form.value.activeProvider === 'ollama'">
+                        {{ "settingsPage.connections.activeBadge" | translate }}
+                    </span>
+                </div>
+                <div class="field">
+                    <label>{{ "settingsPage.connections.baseUrl" | translate }}</label>
+                    <app-ui-input type="text" formControlName="baseUrl" placeholder="http://localhost:11434"></app-ui-input>
+                </div>
+                <div class="field">
+                    <label>{{ "settingsPage.connections.model" | translate }}</label>
+                    <app-ui-input type="text" formControlName="model"></app-ui-input>
+                </div>
+            </section>
+
+            <section class="connection-card" formGroupName="llamaCpp">
+                <div class="connection-card-head">
+                    <h3>llama.cpp</h3>
+                    <span class="provider-badge" *ngIf="form.value.activeProvider === 'llama_cpp'">
+                        {{ "settingsPage.connections.activeBadge" | translate }}
+                    </span>
+                </div>
+                <div class="field">
+                    <app-ui-checkbox formControlName="enabled">
+                        {{ "settingsPage.connections.llamaCppEnabled" | translate }}
+                    </app-ui-checkbox>
+                </div>
+                <div class="field">
+                    <label>{{ "settingsPage.connections.baseUrl" | translate }}</label>
+                    <app-ui-input type="text" formControlName="baseUrl" placeholder="http://127.0.0.1:8080"></app-ui-input>
+                </div>
+                <div class="field">
+                    <label>{{ "settingsPage.connections.model" | translate }}</label>
+                    <app-ui-input type="text" formControlName="model"></app-ui-input>
+                </div>
+            </section>
+
+            <section class="connection-card" formGroupName="openrouter">
+                <div class="connection-card-head">
+                    <h3>OpenRouter</h3>
+                    <span class="provider-badge" *ngIf="form.value.activeProvider === 'openrouter'">
+                        {{ "settingsPage.connections.activeBadge" | translate }}
+                    </span>
+                </div>
+                <div class="field">
+                    <label>{{ "settingsPage.connections.baseUrl" | translate }}</label>
+                    <app-ui-input type="text" formControlName="baseUrl"></app-ui-input>
+                </div>
+                <div class="field">
+                    <label>{{ "settingsPage.connections.apiKey" | translate }}</label>
+                    <app-ui-input type="password" formControlName="apiKey"></app-ui-input>
+                </div>
+                <div class="field">
+                    <label>{{ "settingsPage.connections.model" | translate }}</label>
+                    <app-ui-input type="text" formControlName="model"></app-ui-input>
+                </div>
+            </section>
+
+            <section class="connection-card" formGroupName="transformers">
+                <div class="connection-card-head">
+                    <h3>Transformers</h3>
+                    <span class="provider-badge" *ngIf="form.value.activeProvider === 'transformers'">
+                        {{ "settingsPage.connections.activeBadge" | translate }}
+                    </span>
+                </div>
+                <div class="field">
+                    <label>{{ "settingsPage.connections.model" | translate }}</label>
+                    <app-ui-input type="text" formControlName="model" placeholder="org/model-name"></app-ui-input>
+                    <div class="field-hint">{{ "settingsPage.connections.transformersHint" | translate }}</div>
+                </div>
+            </section>
+
+            <div class="connections-note">
+                {{ "settingsPage.connections.customEndpointNote" | translate }}
+            </div>
+
+            <div class="connections-actions">
+                <app-ui-button
+                    [disabled]="!hasChanges() || isSaving"
+                    [loading]="isSaving"
+                    (pressed)="saveChanges()"
+                >
+                    {{ "settingsPage.connections.save" | translate }}
+                </app-ui-button>
+            </div>
+        </form>
+    </ng-template>
+</div>

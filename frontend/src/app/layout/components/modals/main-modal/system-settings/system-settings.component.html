@@ -403,6 +403,95 @@
                 </div>
             </div>
 
+            <div class="section update-section">
+                <h3>⬆️ {{ "systemSettings.updateTitle" | translate }}</h3>
+                <p class="hint">{{ "systemSettings.updateHint" | translate }}</p>
+
+                <div class="update-status-row">
+                    <span class="update-chip">
+                        {{ "systemSettings.updateCurrent" | translate }}:
+                        <strong>{{ updateInfo?.local_version || '—' }}</strong>
+                    </span>
+                    <span class="update-chip" *ngIf="updateInfo?.git">
+                        {{ updateInfo?.git?.branch }} · {{ updateInfo?.git?.sha }}
+                        <em *ngIf="updateInfo?.git?.dirty"> ({{ "systemSettings.updateDirty" | translate }})</em>
+                    </span>
+                    <button
+                        type="button"
+                        class="secondary"
+                        (click)="checkUpdates()"
+                        [disabled]="isUpdateChecking || isUpdateRunning"
+                    >
+                        {{ (isUpdateChecking ? "systemSettings.updateChecking" : "systemSettings.updateCheck") | translate }}
+                    </button>
+                </div>
+
+                <ng-container *ngIf="updateInfo">
+                    <div class="info-block" *ngIf="!updateInfo.has_branch_update && !updateInfo.has_release_update">
+                        <p>✅ {{ "systemSettings.updateUpToDate" | translate }}</p>
+                    </div>
+
+                    <div class="info-block update-available" *ngIf="updateInfo.has_branch_update">
+                        <strong>{{ "systemSettings.updateBranchAvailable" | translate }}</strong>
+                        <p>
+                            {{ updateInfo.branch }}
+                            <ng-container *ngIf="updateInfo.branch_remote?.version">
+                                → v{{ updateInfo.branch_remote?.version }}
+                            </ng-container>
+                            <ng-container *ngIf="updateInfo.branch_remote?.behind">
+                                · {{ "systemSettings.updateBehind" | translate }}: {{ updateInfo.branch_remote?.behind }}
+                            </ng-container>
+                        </p>
+                        <button
+                            type="button"
+                            *ngIf="updateInfo.git_available"
+                            (click)="runUpdate('branch')"
+                            [disabled]="isUpdateRunning"
+                        >
+                            {{ (isUpdateRunning ? "systemSettings.updateRunning" : "systemSettings.updateRunBranch") | translate }}
+                        </button>
+                    </div>
+
+                    <div class="info-block update-available" *ngIf="updateInfo.has_release_update && updateInfo.release">
+                        <strong>{{ "systemSettings.updateReleaseAvailable" | translate }}: {{ updateInfo.release.tag }}</strong>
+                        <p *ngIf="updateInfo.release.name">{{ updateInfo.release.name }}</p>
+                        <p>
+                            <a [href]="updateInfo.release.url" target="_blank" rel="noopener">
+                                {{ "systemSettings.updateReleaseNotes" | translate }}
+                            </a>
+                        </p>
+                        <button
+                            type="button"
+                            *ngIf="updateInfo.git_available"
+                            (click)="runUpdate('release')"
+                            [disabled]="isUpdateRunning"
+                        >
+                            {{ (isUpdateRunning ? "systemSettings.updateRunning" : "systemSettings.updateRunRelease") | translate }}
+                        </button>
+                    </div>
+
+                    <div class="info-block" *ngIf="!updateInfo.git_available && (updateInfo.has_branch_update || updateInfo.has_release_update)">
+                        <p>{{ "systemSettings.updateNoGit" | translate }}</p>
+                    </div>
+                </ng-container>
+
+                <ng-container *ngIf="updateRunResult as run">
+                    <div class="info-block update-result" *ngIf="run.status === 'ok' && run.updated">
+                        <strong>✅ {{ "systemSettings.updateApplied" | translate }}: v{{ run.new_version || run.new_sha }}</strong>
+                        <p *ngIf="run.needs_install">⚠️ {{ "systemSettings.updateNeedsInstall" | translate }}</p>
+                        <p *ngIf="run.needs_restart">🔄 {{ "systemSettings.updateNeedsRestart" | translate }}</p>
+                    </div>
+                    <div class="info-block update-result error" *ngIf="run.status === 'error'">
+                        <strong>{{ run.message }}</strong>
+                        <p *ngIf="run.download_url">
+                            <a [href]="run.download_url" target="_blank" rel="noopener">
+                                {{ "systemSettings.updateManualDownload" | translate }}
+                            </a>
+                        </p>
+                    </div>
+                </ng-container>
+            </div>
+
             <div class="button-row">
                 <button type="submit" [disabled]="!hasChanges()">
                     💾 {{ "general.saveSystemSettings" | translate }}
