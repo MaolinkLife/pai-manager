@@ -68,38 +68,29 @@ export class ConfigService {
         this.configLoad$ = undefined;
     }
 
+    /**
+     * Partial config update. PATCH merges recursively on the backend
+     * (`update_config_bulk` -> `_recursive_update`), so keys absent from the body
+     * are left untouched — every settings form is safe to call this.
+     *
+     * This used to pick PATCH or POST by matching the body against a hardcoded list
+     * of top-level section names, and POST replaces the whole config. Any section
+     * whose key was missing from that list would therefore overwrite everything else
+     * on save. The list was complete at the time, so the bug never fired — it would
+     * have fired on the next section added. Use `replaceConfig$` when a full
+     * replacement is genuinely intended.
+     */
     updateConfig$(body: any): Observable<any> {
-        // Если передается частичный конфиг - используем PATCH
-        if (
-            body.voice ||
-            body.modules ||
-            body.decisionLayer ||
-            body.connector ||
-            body.telegram ||
-            body.communication ||
-            body.synthesis ||
-            body.api ||
-            body.vision ||
-            body.audio ||
-            body.rag ||
-            body.analyzer ||
-            body.moral ||
-            body.system ||
-            body.memory ||
-            body.generateSettings ||
-            body.validator ||
-            body.languageGuard ||
-            body.confidence ||
-            body.factuality ||
-            body.selfWatcher ||
-            body.auditLogs ||
-            body.stt
-        ) {
-            return this.http.patch(`${this.apiUrl}/config/`, mapPartialModelToDto(body)).pipe(
-                tap(() => this.invalidateConfig())
-            );
-        }
-        // Иначе - используем POST для полной замены
+        return this.http.patch(`${this.apiUrl}/config/`, mapPartialModelToDto(body)).pipe(
+            tap(() => this.invalidateConfig())
+        );
+    }
+
+    /**
+     * Full config replacement — everything not present in `body` is dropped.
+     * Only for deliberate whole-config operations such as import or reset to defaults.
+     */
+    replaceConfig$(body: any): Observable<any> {
         return this.http.post(`${this.apiUrl}/config/`, mapPartialModelToDto(body)).pipe(
             tap(() => this.invalidateConfig())
         );
