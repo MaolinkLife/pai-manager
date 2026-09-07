@@ -724,3 +724,122 @@ class ConversationStateLog(Base):
     created_at = Column(DateTime, default=datetime.now(timezone.utc), index=True)
 
     character = relationship("Character")
+
+
+# ---------------------------------------------------------------------------
+# §7.3.17 Import of interaction history from external services
+#
+# ЛД (personality data) = prompt, appearance, character. What is imported here
+# is NOT that — it is the *interaction history* accumulated with those ЛД on
+# an external service (ChatGPT, Gemini, ...).
+#
+# One archive == one session (a single chat on the source service). Imported
+# material deliberately does NOT go into `history`: that table is ordered by
+# `timestamp` in every query and the column defaults to "now", so imports would
+# either surface as if they just happened or force a fabricated past date.
+# ---------------------------------------------------------------------------
+
+
+class ImportedArchive(Base):
+    """One imported session, plus the provenance of where she used to live.
+
+    Provenance is what makes "remember when I ran on Gemini" answerable from
+    the database instead of guessed by the model. `period_hint_*` is an
+    optional range supplied by the user — never inferred.
+    """
+
+    __tablename__ = "imported_archives"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    character_id = Column(
+        String, ForeignKey("characters.id"), nullable=False, index=True
+    )
+    source_service = Column(String, nullable=False, default="unknown")
+    source_label = Column(String, nullable=False, default="")
+    source_model = Column(String, nullable=True)
+    source_format = Column(String, nullable=False, default="")
+    original_filename = Column(String, nullable=False, default="")
+    # Position among sibling archives of the same source. Known from the user
+    # (their exports are numbered), never inferred: archive 7 came after 6 even
+    # when neither carries a date.
+    archive_sequence = Column(Integer, nullable=True)
+    imported_at = Column(DateTime, default=datetime.now(timezone.utc), index=True)
+    period_hint_start = Column(DateTime, nullable=True)
+    period_hint_end = Column(DateTime, nullable=True)
+    message_count = Column(Integer, nullable=False, default=0)
+    notes = Column(Text, nullable=False, default="")
+
+    character = relationship("Character")
+    messages = relationship(
+        "ImportedMessage",
+        back_populates="archive",
+        cascade="all, delete-orphan",
+    )
+    artifacts = relationship(
+        "ImportedArtifact",
+        back_populates="archive",
+        cascade="all, delete-orphan",
+    )
+
+
+class ImportedMessage(Base):
+    """A single imported turn.
+
+    `role` is user/assistant only — tool output is a separate entity
+    (ImportedArtifact), because some source services have no such concept and
+    it must never leak into the chat UI alongside real turns.
+
+    `occurred_at` is nullable on purpose: an empty value is an honest "unknown"
+    and randomising it is forbidden. `sequence` is always known, so ordering
+    survives even when absolute time does not.
+    """
+
+    __tablename__ = "imported_messages"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    archive_id = Column(
+        String, ForeignKey("imported_archives.id"), nullable=False, index=True
+    )
+    character_id = Column(String, nullable=False, index=True)
+    sequence = Column(Integer, nullable=False, default=0)
+    role = Column(String, nullable=False)  # 'user' | 'assistant'
+    content = Column(Text, nullable=False, default="")
+    occurred_at = Column(DateTime, nullable=True, index=True)
+    time_precision = Column(String, nullable=False, default="unknown")  # exact | unknown
+    external_id = Column(String, nullable=True, index=True)
+    indexed = Column(Boolean, nullable=False, default=False)
+    index_error = Column(Text, nullable=True)
+
+    archive = relationship("ImportedArchive", back_populates="messages")
+
+
+class ImportedArtifact(Base):
+    """What is left of a tool call in the source export.
+
+    Only the text survives — prompts and captions. Files and asset pointers are
+    deliberately not stored: what matters is *what* and *when*, not which image
+    some other service happened to render. That still supports "I drew
+    something like this back then — the file is gone, but I can try again if
+    you want", which hands `content` to the media pipeline as the prompt.
+
+    `lost_at_export` marks payloads destroyed by the extraction script (objects
+    stringified into "[object Object]"). Those are never indexed.
+    """
+
+    __tablename__ = "imported_artifacts"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    archive_id = Column(
+        String, ForeignKey("imported_archives.id"), nullable=False, index=True
+    )
+    message_id = Column(String, nullable=True, index=True)
+    sequence = Column(Integer, nullable=False, default=0)
+    kind = Column(String, nullable=False, default="unknown")
+    content = Column(Text, nullable=False, default="")
+    source_name = Column(String, nullable=True)
+    occurred_at = Column(DateTime, nullable=True)
+    time_precision = Column(String, nullable=False, default="unknown")
+    indexed = Column(Boolean, nullable=False, default=False)
+    index_error = Column(Text, nullable=True)
+
+    archive = relationship("ImportedArchive", back_populates="artifacts")

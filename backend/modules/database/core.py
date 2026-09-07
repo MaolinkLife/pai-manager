@@ -49,6 +49,7 @@ def create_database():
     _ensure_expectation_events_table()
     _ensure_user_reminders_table()
     _ensure_knowledge_tables()
+    _ensure_imported_history_tables()
     _log_console("Схема базы данных готова.")
 
 
@@ -106,6 +107,93 @@ def _ensure_knowledge_tables() -> None:
             )
         )
 
+
+def _ensure_imported_history_tables() -> None:
+    """§7.3.17 Imported interaction history from external services.
+
+    One archive == one session on the source service. Kept out of `history` on
+    purpose: that table is ordered by `timestamp` in every query and defaults
+    to "now", so imports would either look like they just happened or require a
+    fabricated past date.
+
+    `occurred_at` stays nullable — an empty value is an honest "unknown".
+    Ordering survives without it: `sequence` inside an archive is always known,
+    `archive_sequence` orders archives against each other, and `imported_at` is
+    an upper bound (the conversation certainly happened before it was imported).
+    """
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS imported_archives (
+                    id TEXT PRIMARY KEY,
+                    character_id TEXT NOT NULL,
+                    source_service TEXT NOT NULL DEFAULT 'unknown',
+                    source_label TEXT NOT NULL DEFAULT '',
+                    source_model TEXT,
+                    source_format TEXT NOT NULL DEFAULT '',
+                    original_filename TEXT NOT NULL DEFAULT '',
+                    archive_sequence INTEGER,
+                    imported_at DATETIME,
+                    period_hint_start DATETIME,
+                    period_hint_end DATETIME,
+                    message_count INTEGER NOT NULL DEFAULT 0,
+                    notes TEXT NOT NULL DEFAULT ''
+                )
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS imported_messages (
+                    id TEXT PRIMARY KEY,
+                    archive_id TEXT NOT NULL,
+                    character_id TEXT NOT NULL,
+                    sequence INTEGER NOT NULL DEFAULT 0,
+                    role TEXT NOT NULL,
+                    content TEXT NOT NULL DEFAULT '',
+                    occurred_at DATETIME,
+                    time_precision TEXT NOT NULL DEFAULT 'unknown',
+                    external_id TEXT,
+                    indexed BOOLEAN NOT NULL DEFAULT 0,
+                    index_error TEXT
+                )
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS imported_artifacts (
+                    id TEXT PRIMARY KEY,
+                    archive_id TEXT NOT NULL,
+                    message_id TEXT,
+                    sequence INTEGER NOT NULL DEFAULT 0,
+                    kind TEXT NOT NULL DEFAULT 'unknown',
+                    content TEXT NOT NULL DEFAULT '',
+                    source_name TEXT,
+                    occurred_at DATETIME,
+                    time_precision TEXT NOT NULL DEFAULT 'unknown',
+                    indexed BOOLEAN NOT NULL DEFAULT 0,
+                    index_error TEXT
+                )
+                """
+            )
+        )
+        for statement in (
+            "CREATE INDEX IF NOT EXISTS idx_imported_archives_character "
+            "ON imported_archives (character_id)",
+            "CREATE INDEX IF NOT EXISTS idx_imported_messages_archive "
+            "ON imported_messages (archive_id, sequence)",
+            "CREATE INDEX IF NOT EXISTS idx_imported_messages_character "
+            "ON imported_messages (character_id)",
+            "CREATE INDEX IF NOT EXISTS idx_imported_messages_external "
+            "ON imported_messages (external_id)",
+            "CREATE INDEX IF NOT EXISTS idx_imported_artifacts_archive "
+            "ON imported_artifacts (archive_id, sequence)",
+        ):
+            conn.execute(text(statement))
 
 def _ensure_conversation_state_logs_table() -> None:
     with engine.begin() as conn:
