@@ -2,25 +2,31 @@ from pathlib import Path
 
 import pytest
 
+from constants.paths import BASE_DIR, PROJECT_DIR
 from modules.system import logger
 
 
 pytestmark = pytest.mark.regression
 
+# Compare resolved paths instead of looking for the literal "backend" among the
+# path parts: that made both tests depend on the working directory pytest was
+# started from and on the checkout directory being named "backend".
+BACKEND_LOGS = (Path(BASE_DIR) / "logs").resolve()
+ROOT_LOGS = (Path(PROJECT_DIR) / "logs").resolve()
+
 
 def test_traceback_log_path_is_in_root_logs():
     trace_path = Path(logger.TRACEBACK_FILE).resolve()
     assert trace_path.name == "runtime_tracebacks.log"
-    assert "temp" not in {part.lower() for part in trace_path.parts}
-    assert "logs" in {part.lower() for part in trace_path.parts}
-    assert "backend" not in {part.lower() for part in trace_path.parts}
+    assert trace_path.parent == ROOT_LOGS
+    assert trace_path.parent != BACKEND_LOGS
 
 
 def test_debug_log_path_stays_inside_backend_logs():
     debug_path = Path(logger.DEBUG_FILE_CURRENT).resolve()
-    lowered_parts = {part.lower() for part in debug_path.parts}
     assert debug_path.name == "debug_log.jsonl"
-    assert "backend" in lowered_parts
+    assert debug_path.parent == BACKEND_LOGS
+    assert debug_path.parent != ROOT_LOGS
 
 
 def test_log_error_writes_runtime_traceback_file(tmp_path, monkeypatch):

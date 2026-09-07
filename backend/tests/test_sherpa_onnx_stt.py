@@ -152,11 +152,16 @@ def test_sherpa_recognizer_rebuilt_when_settings_change(fake_recognizer, wav_fil
 @pytest.mark.regression
 def test_relative_paths_resolve_against_stt_models_dir():
     """Relative paths must land inside backend/storage/models/stt, not CWD."""
+    from pathlib import Path
+
     from constants.paths import STT_MODELS_DIR
 
-    resolved = sherpa_onnx_engine._resolve_model_path("sherpa-onnx-en/encoder.onnx")
-    assert resolved.startswith(STT_MODELS_DIR)
-    assert resolved.endswith("encoder.onnx")
+    # Compare resolved paths rather than raw string prefixes: startswith() is
+    # sensitive to separators, drive-letter case and to whether either side was
+    # absolutised, which made the test depend on the directory pytest ran from.
+    resolved = Path(sherpa_onnx_engine._resolve_model_path("sherpa-onnx-en/encoder.onnx")).resolve()
+    assert resolved.name == "encoder.onnx"
+    assert Path(STT_MODELS_DIR).resolve() in resolved.parents
 
 
 @pytest.mark.regression

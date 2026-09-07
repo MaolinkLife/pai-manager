@@ -1,9 +1,26 @@
+from collections import Counter
+
+import pytest
+
 from modules.visual_intent_composer import (
     VisualIntentComposerService,
     VisualIntentInput,
     VisualProfile,
 )
 from modules.visual_prompt_builder import visual_prompt_builder_service
+from modules.visual_history_cache import visual_history_cache_service
+
+
+@pytest.fixture(autouse=True)
+def _isolate_visual_history():
+    """The composer reads and writes a module-level history cache (anti-repetition).
+
+    Without this, plans registered by earlier tests shift the weights of later
+    ones and the suite becomes order-dependent.
+    """
+    visual_history_cache_service._history.clear()
+    yield
+    visual_history_cache_service._history.clear()
 
 
 def _payload(**overrides):
@@ -116,10 +133,21 @@ def test_visual_intent_composer_can_choose_environment_only_for_low_intimacy_rai
             allow_symbolic_images=True,
         ),
     )
-    plan = service.compose(payload)
+    # subject_mode is a weighted random pick, not a deterministic mapping: a single
+    # compose() call cannot be asserted. With these inputs environment_only lands
+    # ~68% of the time and self_plus_environment ~28%, so the original one-shot
+    # assertion failed roughly a third of the time. Check dominance over a sample.
+    modes = Counter()
+    plans_by_mode = {}
+    for _ in range(200):
+        visual_history_cache_service._history.clear()
+        plan = service.compose(payload)
+        modes[plan.subject_mode] += 1
+        plans_by_mode.setdefault(plan.subject_mode, plan)
 
-    assert plan.subject_mode == "environment_only"
-    assert plan.generator_mode == "environment_scene"
+    assert modes.most_common(1)[0][0] == "environment_only"
+    assert modes["environment_only"] >= 100, modes
+    assert plans_by_mode["environment_only"].generator_mode == "environment_scene"
 
 
 def test_visual_intent_composer_generates_stable_fallback_appearance_when_missing():
