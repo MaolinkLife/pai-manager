@@ -2,7 +2,13 @@
     <form [formGroup]="socialForm" (ngSubmit)="saveChanges()" class="settings-form">
         <h2>🌐 {{ "socialSettings.title" | translate }}</h2>
 
-        <div class="section" formGroupName="communication">
+        <app-ui-tabs class="social-tabs" [(activeKey)]="activeTab">
+            <app-ui-tab key="general">{{ "socialSettings.tabs.general" | translate }}</app-ui-tab>
+            <app-ui-tab key="telegram_bridge">{{ "socialSettings.tabs.telegramBridge" | translate }}</app-ui-tab>
+        </app-ui-tabs>
+
+        <!-- Tab "general" -->
+        <div class="section" formGroupName="communication" role="tabpanel" [hidden]="activeTab !== 'general'">
             <h3>{{ "socialSettings.communication.channelPriority" | translate }}</h3>
             <p class="hint">{{ "socialSettings.communication.channelPriorityHint" | translate }}</p>
 
@@ -16,7 +22,7 @@
             </div>
         </div>
 
-        <div class="section" formGroupName="modules">
+        <div class="section" formGroupName="modules" role="tabpanel" [hidden]="activeTab !== 'general'">
             <h3>{{ "socialSettings.modules.title" | translate }}</h3>
             <p class="hint">{{ "socialSettings.modules.hint" | translate }}</p>
             <div class="form-group checkbox-group">
@@ -27,7 +33,8 @@
             <p class="hint">{{ "socialSettings.modules.twitchReserved" | translate }}</p>
         </div>
 
-        <div class="section" formGroupName="telegram">
+        <!-- Tab "telegram_bridge": the whole Telegram contour lives in this one section -->
+        <div class="section" formGroupName="telegram" role="tabpanel" [hidden]="activeTab !== 'telegram_bridge'">
             <h3>{{ "socialSettings.telegram.bridge" | translate }}</h3>
             <p class="hint">{{ "socialSettings.telegram.bridgeHint" | translate }}</p>
 

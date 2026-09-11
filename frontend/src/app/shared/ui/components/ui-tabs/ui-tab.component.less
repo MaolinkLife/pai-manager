@@ -1,0 +1,40 @@
+:host {
+    display: inline-flex;
+    flex: 0 0 auto;
+}
+
+.ui-tab {
+    height: 34px;
+    padding: 0 16px;
+    border: 1px solid transparent;
+    border-radius: 9px;
+    background: transparent;
+    color: var(--color-text);
+    font-family: var(--font-family);
+    font-size: 13px;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background-color 0.15s ease, color 0.15s ease;
+
+    &:hover:not(:disabled):not(.ui-tab--active) {
+        color: var(--color-text-active);
+        background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+    }
+
+    &:focus-visible {
+        outline: none;
+        box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-accent) 30%, transparent);
+    }
+
+    &:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+}
+
+.ui-tab--active {
+    background: var(--color-accent);
+    color: var(--color-bg);
+    font-weight: 600;
+    box-shadow: var(--shadow-soft);
+}

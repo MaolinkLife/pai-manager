@@ -889,6 +889,10 @@
     "socialSettings": {
         "title": "Social Settings",
         "save": "Save social settings",
+        "tabs": {
+            "general": "General",
+            "telegramBridge": "Telegram Bridge"
+        },
         "common": {
             "notSelected": "Not selected"
         },
@@ -912,7 +916,7 @@
         },
         "modules": {
             "title": "Social Modules",
-            "hint": "These are top-level source toggles. They enable the social contours themselves, while detailed Telegram behavior is configured below.",
+            "hint": "Top-level source toggles. Each module is configured in its own tab.",
             "discord": "Discord module",
             "twitchReserved": "Twitch screen is reserved for the next step."
         },

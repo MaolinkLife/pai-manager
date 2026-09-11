@@ -10,7 +10,7 @@
     border-radius: var(--radius);
     color: var(--color-text);
     overflow-x: hidden;
-    max-width: 700px;
+    max-width: 980px;
     margin: 0 auto 24px auto;
 
     h2 {
@@ -26,6 +26,14 @@
     flex-direction: column;
     gap: 0;
     min-width: 0;
+}
+
+.social-tabs {
+    margin-bottom: 20px;
+}
+
+.section[hidden] {
+    display: none;
 }
 
 .section {
@@ -71,7 +79,8 @@
 
 .checkbox-group {
     display: grid;
-    gap: 8px;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 8px 16px;
 }
 
 .checkbox {
@@ -82,8 +91,8 @@
 
 .telegram-grid {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0 12px;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 0 16px;
     min-width: 0;
 }
 

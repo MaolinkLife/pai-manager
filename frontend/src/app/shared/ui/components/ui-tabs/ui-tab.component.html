@@ -1,0 +1,13 @@
+<button
+    #button
+    type="button"
+    role="tab"
+    class="ui-tab"
+    [class.ui-tab--active]="active"
+    [disabled]="disabled"
+    [attr.aria-selected]="active"
+    [attr.tabindex]="active ? 0 : -1"
+    (click)="select()"
+>
+    <ng-content></ng-content>
+</button>

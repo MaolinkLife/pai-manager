@@ -12,6 +12,8 @@ import { UiInputDateTimeComponent } from './components/ui-input-date-time/ui-inp
 import { UiMultiselectComponent } from './components/ui-multiselect/ui-multiselect.component';
 import { UiRangeComponent } from './components/ui-range/ui-range.component';
 import { UiSelectComponent } from './components/ui-select/ui-select.component';
+import { UiTabComponent } from './components/ui-tabs/ui-tab.component';
+import { UiTabsComponent } from './components/ui-tabs/ui-tabs.component';
 import { UiTextareaComponent } from './components/ui-textarea/ui-textarea.component';
 
 @NgModule({
@@ -27,6 +29,8 @@ import { UiTextareaComponent } from './components/ui-textarea/ui-textarea.compon
         UiDropdownComponent,
         UiDropdownTriggerDirective,
         UiDropdownMenuDirective,
+        UiTabsComponent,
+        UiTabComponent,
     ],
     imports: [CommonModule, FormsModule, CustomSvgModule],
     exports: [
@@ -41,6 +45,8 @@ import { UiTextareaComponent } from './components/ui-textarea/ui-textarea.compon
         UiDropdownComponent,
         UiDropdownTriggerDirective,
         UiDropdownMenuDirective,
+        UiTabsComponent,
+        UiTabComponent,
     ],
 })
 export class UiModule {}

@@ -12,6 +12,7 @@ import { UiSelectOption } from '../../../../../shared/ui/components/ui-select/ui
     styleUrls: ['./social-settings.component.less']
 })
 export class SocialSettingsComponent implements OnInit {
+    activeTab = 'general';
     socialForm: UntypedFormGroup;
     originalConfig: any = {};
     originalModules: any = {};
