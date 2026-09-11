@@ -39,6 +39,29 @@ def stop_telegram_bridge() -> bool:
     return was_running
 
 
+def sync_telegram_bridge_with_config() -> bool:
+    """Stop a running bridge once `telegram.enabled` is switched off.
+
+    `start()` checks the switch only at launch, so a bridge started earlier
+    would otherwise keep working after the switch is saved as off.
+    Returns True when the bridge was stopped.
+    """
+    from modules.system import config as config_service
+
+    runtime = telegram_bridge_runtime
+    if runtime is None or not runtime.is_running():
+        return False
+    if bool(config_service.get_config_value("telegram.enabled", False)):
+        return False
+    runtime.stop()
+    log_audit_entry(
+        "telegram_bridge_stopped_by_module_switch",
+        "[TelegramBridge] Stopped: Telegram module is switched off.",
+        AuditStatus.INFO,
+    )
+    return True
+
+
 def get_telegram_bridge_status() -> dict:
     runtime = _get_runtime()
     return runtime.get_status()

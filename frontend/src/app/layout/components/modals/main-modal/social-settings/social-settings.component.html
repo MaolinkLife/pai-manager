@@ -14,31 +14,12 @@
                     [options]="communicationPrimaryOptions"
                 ></app-ui-select>
             </div>
-
-            <div class="form-group checkbox-group" formGroupName="channels">
-                <div class="communication-channel" formGroupName="main_chat">
-                    <app-ui-checkbox formControlName="enabled">
-                        {{ "socialSettings.communication.mainChatEnabled" | translate }}
-                    </app-ui-checkbox>
-                </div>
-                <div class="communication-channel" formGroupName="telegram">
-                    <app-ui-checkbox formControlName="enabled">
-                        {{ "socialSettings.communication.telegramEnabled" | translate }}
-                    </app-ui-checkbox>
-                    <app-ui-checkbox formControlName="allow_fallback">
-                        {{ "socialSettings.communication.telegramFallback" | translate }}
-                    </app-ui-checkbox>
-                </div>
-            </div>
         </div>
 
         <div class="section" formGroupName="modules">
             <h3>{{ "socialSettings.modules.title" | translate }}</h3>
             <p class="hint">{{ "socialSettings.modules.hint" | translate }}</p>
             <div class="form-group checkbox-group">
-                <app-ui-checkbox formControlName="telegram">
-                    {{ "socialSettings.modules.telegram" | translate }}
-                </app-ui-checkbox>
                 <app-ui-checkbox formControlName="discord">
                     {{ "socialSettings.modules.discord" | translate }}
                 </app-ui-checkbox>
@@ -50,12 +31,13 @@
             <h3>{{ "socialSettings.telegram.bridge" | translate }}</h3>
             <p class="hint">{{ "socialSettings.telegram.bridgeHint" | translate }}</p>
 
+            <div class="form-group">
+                <app-ui-checkbox formControlName="enabled">
+                    {{ "socialSettings.telegram.enableBridge" | translate }}
+                </app-ui-checkbox>
+            </div>
+
             <div class="telegram-grid">
-                <div class="form-group">
-                    <app-ui-checkbox formControlName="enabled">
-                        {{ "socialSettings.telegram.enableBridge" | translate }}
-                    </app-ui-checkbox>
-                </div>
                 <div class="form-group">
                     <label for="telegram-mode">{{ "socialSettings.telegram.mode" | translate }}</label>
                     <app-ui-select

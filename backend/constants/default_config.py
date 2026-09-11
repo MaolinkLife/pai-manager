@@ -271,7 +271,6 @@ DEFAULT_CONFIG = {
         "gaming": False,
         "alarm": False,
         "discord": False,
-        "telegram": False,
         "rag": True,
         "visual": True,
     },

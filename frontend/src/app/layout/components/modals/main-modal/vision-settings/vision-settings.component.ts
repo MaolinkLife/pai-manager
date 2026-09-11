@@ -291,7 +291,6 @@ export class VisionSettingsComponent implements OnInit, OnDestroy {
             gaming: !!source.gaming,
             alarm: !!source.alarm,
             discord: !!source.discord,
-            telegram: !!source.telegram,
             rag: !!source.rag,
             visual: !!source.visual,
         };

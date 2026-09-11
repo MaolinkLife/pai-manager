@@ -909,22 +909,18 @@
             "channelPriorityHint": "Определяет, какой канал считается основным. Если выбран Telegram, ядро может уйти в main chat только как fallback при ошибке Telegram.",
             "primaryChannel": "Основной канал",
             "mainChatCore": "Main Chat (ядро)",
-            "telegram": "Telegram",
-            "mainChatEnabled": "Включить основной чат",
-            "telegramEnabled": "Включить Telegram",
-            "telegramFallback": "Использовать main chat как fallback при ошибке Telegram"
+            "telegram": "Telegram"
         },
         "modules": {
             "title": "Социальные модули",
             "hint": "Это верхнеуровневые переключатели источников. Здесь включаются сами социальные контуры, а поведение Telegram настраивается ниже.",
-            "telegram": "Модуль Telegram",
             "discord": "Модуль Discord",
             "twitchReserved": "Экран Twitch пока зарезервирован под следующий этап."
         },
         "telegram": {
             "bridge": "Telegram Bridge",
             "bridgeHint": "Здесь настраивается подключение аккаунта или бота Telegram, каталог чатов и базовые лимиты моста.",
-            "enableBridge": "Включить Telegram bridge",
+            "enableBridge": "Включить модуль Telegram Bridge",
             "mode": "Режим",
             "modeMtproto": "MTProto (аккаунт)",
             "modeBot": "Bot Token",
@@ -1123,8 +1119,7 @@
             "codeSubmitFailed": "Не удалось отправить код",
             "passwordRequired": "Нужно ввести пароль",
             "passwordRejected": "Пароль отклонён",
-            "passwordSubmitFailed": "Не удалось отправить пароль",
-            "oneChannelRequired": "Хотя бы один канал связи должен оставаться включённым"
+            "passwordSubmitFailed": "Не удалось отправить пароль"
         }
     },
     "feature": {

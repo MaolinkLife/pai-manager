@@ -20,7 +20,13 @@ def _default_policy() -> Dict[str, Any]:
 
 def get_policy() -> Dict[str, Any]:
     raw = config_service.get_config_value("communication", {}) or {}
-    return normalize_policy(raw if isinstance(raw, dict) else {})
+    policy = normalize_policy(raw if isinstance(raw, dict) else {})
+    # `telegram.enabled` is the only thing that turns Telegram on or off;
+    # `communication.channels.telegram.enabled` is no longer consulted.
+    policy["channels"]["telegram"]["enabled"] = bool(
+        config_service.get_config_value("telegram.enabled", False)
+    )
+    return policy
 
 
 def normalize_policy(policy: Dict[str, Any]) -> Dict[str, Any]:
@@ -40,6 +46,8 @@ def normalize_policy(policy: Dict[str, Any]) -> Dict[str, Any]:
                     normalized["channels"][name]["allow_fallback"],
                 )
             )
+    # Main chat is the central output and cannot be switched off.
+    normalized["channels"]["main_chat"]["enabled"] = True
 
     priority_raw = policy.get("priority")
     if isinstance(priority_raw, list):
@@ -91,6 +99,10 @@ def can_accept_ingress(channel: str, policy: Optional[Dict[str, Any]] = None) ->
     if channel_name not in KNOWN_CHANNELS:
         return False, "unknown_channel"
 
+    # Main chat is the central output and cannot be switched off.
+    if channel_name == "main_chat":
+        return True, "ok"
+
     channels = effective.get("channels") if isinstance(effective, dict) else {}
     channel_cfg = channels.get(channel_name) if isinstance(channels, dict) else {}
     if not isinstance(channel_cfg, dict) or not bool(channel_cfg.get("enabled")):
@@ -122,27 +134,11 @@ def resolve_channel_with_fallback(
     if availability_map.get(preferred_name, True):
         return preferred_name, "ok"
 
-    # Main chat as primary means no fallback to other channels by requirement.
-    if primary_channel(effective) == "main_chat":
-        return None, "main_chat_priority_no_fallback"
-
-    channels = effective.get("channels") if isinstance(effective, dict) else {}
-    preferred_cfg = channels.get(preferred_name) if isinstance(channels, dict) else {}
-    if not isinstance(preferred_cfg, dict) or not bool(preferred_cfg.get("allow_fallback", False)):
-        return None, "fallback_disabled"
-
-    priority = effective.get("priority") if isinstance(effective, dict) else []
-    if not isinstance(priority, list):
-        priority = [name for name in KNOWN_CHANNELS]
-
-    for candidate in priority:
-        candidate_name = str(candidate or "").strip()
-        if candidate_name == preferred_name:
-            continue
-        candidate_ok, _ = can_accept_ingress(candidate_name, effective)
-        if not candidate_ok:
-            continue
-        if availability_map.get(candidate_name, True):
-            return candidate_name, "fallback"
+    # Main chat is the fallback for every other channel, with no opt-out;
+    # there is nowhere further to fall back from main chat itself.
+    if preferred_name == "main_chat":
+        return None, "main_chat_unavailable"
+    if availability_map.get("main_chat", True):
+        return "main_chat", "fallback"
 
     return None, "fallback_unavailable"

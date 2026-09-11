@@ -7042,13 +7042,7 @@ class TelegramBridgeService:
     # Config / routing
     # ------------------------------------------------------------------ #
     def _is_enabled(self) -> bool:
-        modules_cfg = config_service.get_config_value("modules", {}) or {}
-        if isinstance(modules_cfg, dict) and "telegram" in modules_cfg:
-            modules_flag = bool(modules_cfg.get("telegram"))
-        else:
-            modules_flag = True
-        telegram_flag = bool(config_service.get_config_value("telegram.enabled", False))
-        return modules_flag and telegram_flag
+        return bool(config_service.get_config_value("telegram.enabled", False))
 
     @staticmethod
     def _telegram_cfg() -> dict[str, Any]:

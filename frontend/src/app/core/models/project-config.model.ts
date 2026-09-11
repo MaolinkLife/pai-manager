@@ -98,7 +98,6 @@ export interface ModuleConfig {
     gaming: boolean;
     alarm: boolean;
     discord: boolean;
-    telegram?: boolean;
     rag: boolean;
     visual: boolean;
 }

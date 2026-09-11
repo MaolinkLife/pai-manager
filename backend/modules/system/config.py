@@ -255,6 +255,12 @@ def normalize_config_structure(config: dict | None) -> dict:
         telegram_section = copy.deepcopy(telegram_defaults)
     else:
         _merge_missing(telegram_section, telegram_defaults)
+    # `modules.telegram` used to be a second switch: the bridge ran only when both
+    # it and `telegram.enabled` were on. `telegram.enabled` is the only switch now;
+    # fold the old flag in so that nothing which was off turns on.
+    if "telegram" in modules_section:
+        if not bool(modules_section.pop("telegram")):
+            telegram_section["enabled"] = False
     normalized["telegram"] = telegram_section
 
     synthesis_defaults = DEFAULT_CONFIG.get("synthesis", {})
@@ -1359,6 +1365,13 @@ def update_config_bulk(updates: dict, user_uuid: Optional[str] = None):
                 section_dict[field] = updates_prepared[legacy_key]
             updates_prepared[section] = section_dict
             updates_prepared.pop(legacy_key, None)
+
+    # `modules.telegram` is retired and `telegram.enabled` is the only switch.
+    # Ignore writes to the old flag, so a form that still sends it cannot
+    # switch the bridge off through the normalization fold.
+    modules_updates = updates_prepared.get("modules")
+    if isinstance(modules_updates, dict):
+        modules_updates.pop("telegram", None)
 
     config = get_config(user_uuid=user_uuid)
     updated, failed = _recursive_update(config, updates_prepared)

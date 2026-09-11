@@ -654,7 +654,6 @@ export class RagSettingsComponent implements OnInit {
             gaming: !!source.gaming,
             alarm: !!source.alarm,
             discord: !!source.discord,
-            telegram: !!source.telegram,
             rag: !!source.rag,
             visual: !!source.visual,
         };

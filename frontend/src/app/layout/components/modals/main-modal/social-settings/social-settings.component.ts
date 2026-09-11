@@ -55,7 +55,6 @@ export class SocialSettingsComponent implements OnInit {
     ngOnInit(): void {
         this.localizationService.init();
         this.loadConfig();
-        this.initCommunicationFormRules();
         this.refreshTelegramStatus();
     }
 
@@ -81,7 +80,6 @@ export class SocialSettingsComponent implements OnInit {
         return this.fb.group({
             modules: this.fb.group({
                 discord: [false],
-                telegram: [false],
             }),
             telegram: this.fb.group({
                 enabled: [false],
@@ -200,16 +198,6 @@ export class SocialSettingsComponent implements OnInit {
             }),
             communication: this.fb.group({
                 primary_channel: ['main_chat'],
-                channels: this.fb.group({
-                    main_chat: this.fb.group({
-                        enabled: [true],
-                        allow_fallback: [false],
-                    }),
-                    telegram: this.fb.group({
-                        enabled: [true],
-                        allow_fallback: [true],
-                    }),
-                }),
             }),
         });
     }
@@ -220,7 +208,6 @@ export class SocialSettingsComponent implements OnInit {
                 const next = {
                     modules: {
                         discord: !!config?.modules?.discord,
-                        telegram: !!config?.modules?.telegram,
                     },
                     telegram: config?.telegram || {},
                     communication: this.mapCommunicationToForm(config?.communication),
@@ -239,7 +226,6 @@ export class SocialSettingsComponent implements OnInit {
     }
 
     saveChanges(): void {
-        this.enforceCommunicationRules(false);
         this.syncAllowedChatIdsFormFromText();
         this.syncWritePolicyFormFromText();
         this.syncReflectionSourceChatIdsFormFromText();
@@ -306,7 +292,6 @@ export class SocialSettingsComponent implements OnInit {
             gaming: !!source.gaming,
             alarm: !!source.alarm,
             discord: !!source.discord,
-            telegram: !!source.telegram,
             rag: !!source.rag,
             visual: !!source.visual,
         };
@@ -317,7 +302,6 @@ export class SocialSettingsComponent implements OnInit {
         return {
             ...this.originalModules,
             discord: !!source.discord,
-            telegram: !!source.telegram,
         };
     }
 
@@ -699,61 +683,7 @@ export class SocialSettingsComponent implements OnInit {
         });
     }
 
-    private initCommunicationFormRules(): void {
-        const primaryControl = this.socialForm.get('communication.primary_channel');
-        const mainEnabledControl = this.socialForm.get('communication.channels.main_chat.enabled');
-        const telegramEnabledControl = this.socialForm.get('communication.channels.telegram.enabled');
-
-        this.syncTelegramFallbackControlState();
-        primaryControl?.valueChanges.subscribe(() => this.enforceCommunicationRules(true));
-        mainEnabledControl?.valueChanges.subscribe(() => this.enforceCommunicationRules(true));
-        telegramEnabledControl?.valueChanges.subscribe(() => this.enforceCommunicationRules(true));
-    }
-
-    private enforceCommunicationRules(notify: boolean): void {
-        const primary = String(this.socialForm.get('communication.primary_channel')?.value || 'main_chat');
-        const mainPath = 'communication.channels.main_chat.enabled';
-        const telegramPath = 'communication.channels.telegram.enabled';
-        const telegramFallbackPath = 'communication.channels.telegram.allow_fallback';
-
-        const mainEnabled = !!this.socialForm.get(mainPath)?.value;
-        const telegramEnabled = !!this.socialForm.get(telegramPath)?.value;
-
-        if (!mainEnabled && !telegramEnabled) {
-            const fallbackChannel = primary === 'telegram' ? telegramPath : mainPath;
-            this.socialForm.get(fallbackChannel)?.setValue(true, { emitEvent: false });
-            if (notify) {
-                this.uiNotificationService.error(
-                    this.t('socialSettings.notifications.oneChannelRequired'),
-                    this.t('socialSettings.communication.channelPriority')
-                );
-            }
-        }
-
-        if (primary === 'main_chat') {
-            this.socialForm.get(telegramFallbackPath)?.setValue(false, { emitEvent: false });
-        }
-        this.syncTelegramFallbackControlState();
-    }
-
-    private syncTelegramFallbackControlState(): void {
-        const primary = String(this.socialForm.get('communication.primary_channel')?.value || 'main_chat');
-        const fallbackControl = this.socialForm.get('communication.channels.telegram.allow_fallback');
-        if (!fallbackControl) {
-            return;
-        }
-
-        if (primary === 'main_chat') {
-            fallbackControl.disable({ emitEvent: false });
-            fallbackControl.setValue(false, { emitEvent: false });
-            return;
-        }
-
-        fallbackControl.enable({ emitEvent: false });
-    }
-
     private prepareCurrentConfigForSave(): any {
-        this.enforceCommunicationRules(false);
         this.syncAllowedChatIdsFormFromText();
         this.syncWritePolicyFormFromText();
         this.syncReflectionSourceChatIdsFormFromText();
@@ -781,50 +711,16 @@ export class SocialSettingsComponent implements OnInit {
         const source = communication && typeof communication === 'object' ? communication : {};
         const priorityRaw = Array.isArray(source.priority) ? source.priority : [];
         const primary = String(priorityRaw[0] || 'main_chat') === 'telegram' ? 'telegram' : 'main_chat';
-        const channels = source.channels && typeof source.channels === 'object' ? source.channels : {};
-        const mainCfg = channels.main_chat && typeof channels.main_chat === 'object' ? channels.main_chat : {};
-        const telegramCfg = channels.telegram && typeof channels.telegram === 'object' ? channels.telegram : {};
-        return {
-            primary_channel: primary,
-            channels: {
-                main_chat: {
-                    enabled: mainCfg.enabled !== undefined ? !!mainCfg.enabled : true,
-                    allow_fallback: false,
-                },
-                telegram: {
-                    enabled: telegramCfg.enabled !== undefined ? !!telegramCfg.enabled : true,
-                    allow_fallback:
-                        primary === 'main_chat'
-                            ? false
-                            : telegramCfg.allow_fallback !== undefined
-                              ? !!telegramCfg.allow_fallback
-                              : true,
-                },
-            },
-        };
+        return { primary_channel: primary };
     }
 
+    // Only the priority is edited here: main chat is always on, and Telegram is
+    // switched by `telegram.enabled` alone, so channel flags are not sent.
     private mapCommunicationFromForm(formValue: any): any {
         const data = formValue && typeof formValue === 'object' ? formValue : {};
         const primary = String(data.primary_channel || 'main_chat') === 'telegram' ? 'telegram' : 'main_chat';
-        const channels = data.channels && typeof data.channels === 'object' ? data.channels : {};
-        const mainCfg = channels.main_chat && typeof channels.main_chat === 'object' ? channels.main_chat : {};
-        const telegramCfg = channels.telegram && typeof channels.telegram === 'object' ? channels.telegram : {};
-        const mainEnabled = mainCfg.enabled !== undefined ? !!mainCfg.enabled : true;
-        const telegramEnabled = telegramCfg.enabled !== undefined ? !!telegramCfg.enabled : true;
-
         return {
             priority: primary === 'telegram' ? ['telegram', 'main_chat'] : ['main_chat', 'telegram'],
-            channels: {
-                main_chat: {
-                    enabled: mainEnabled || !telegramEnabled,
-                    allow_fallback: false,
-                },
-                telegram: {
-                    enabled: telegramEnabled || !mainEnabled,
-                    allow_fallback: primary === 'main_chat' ? false : !!telegramCfg.allow_fallback,
-                },
-            },
         };
     }
 

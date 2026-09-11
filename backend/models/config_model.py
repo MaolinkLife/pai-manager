@@ -299,7 +299,6 @@ class ModulesConfig(BaseModel):
     gaming: bool = False
     alarm: bool = False
     discord: bool = False
-    telegram: bool = False
     rag: bool = True
     visual: bool = True
 

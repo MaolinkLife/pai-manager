@@ -42,7 +42,6 @@ export interface ModuleConfigDto {
     gaming: boolean;
     alarm: boolean;
     discord: boolean;
-    telegram?: boolean;
     rag: boolean;
     visual: boolean;
 }

@@ -8,6 +8,7 @@
 # ========================================================
 
 import ast
+import asyncio
 
 from fastapi import APIRouter, HTTPException, Request, status
 from modules.system.character import (
@@ -81,6 +82,13 @@ def _config_error_detail(error: ValueError) -> str:
     return message
 
 
+async def _apply_module_switches() -> None:
+    # A social module switched off in settings must stop right away, not on next launch.
+    from modules.telegram.runtime import sync_telegram_bridge_with_config
+
+    await asyncio.to_thread(sync_telegram_bridge_with_config)
+
+
 # Returns the entire config
 @router.get("")
 @router.get("/")
@@ -106,6 +114,7 @@ async def overwrite_config(request: Request):
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=_config_error_detail(exc),
         ) from exc
+    await _apply_module_switches()
     return {"status": "ok", "message": "The config has been updated."}
 
 
@@ -123,6 +132,7 @@ async def update_config_bulk_route(request: Request):
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=_config_error_detail(exc),
         ) from exc
+    await _apply_module_switches()
 
     return {
         "status": "partial" if failed else "ok",
@@ -144,6 +154,7 @@ async def apply_preset(request: Request):
     apply_preset_fn = _require_config_fn("apply_preset_by_name")
     success = apply_preset_fn(preset_name, user_uuid=user_uuid)
     if success:
+        await _apply_module_switches()
         return {"status": "ok", "message": f"Preset '{preset_name}' applied."}
     else:
         return {"status": "error", "message": "Preset not found"}

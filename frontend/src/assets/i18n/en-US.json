@@ -908,22 +908,18 @@
             "channelPriorityHint": "Defines which channel is treated as primary. If Telegram is primary, the core can fall back to main chat only when Telegram fails.",
             "primaryChannel": "Primary channel",
             "mainChatCore": "Main Chat (core)",
-            "telegram": "Telegram",
-            "mainChatEnabled": "Main chat enabled",
-            "telegramEnabled": "Telegram enabled",
-            "telegramFallback": "Use main chat as fallback on Telegram failure"
+            "telegram": "Telegram"
         },
         "modules": {
             "title": "Social Modules",
             "hint": "These are top-level source toggles. They enable the social contours themselves, while detailed Telegram behavior is configured below.",
-            "telegram": "Telegram module",
             "discord": "Discord module",
             "twitchReserved": "Twitch screen is reserved for the next step."
         },
         "telegram": {
             "bridge": "Telegram Bridge",
             "bridgeHint": "Configure Telegram account or bot access, chat catalog loading, and the base bridge limits here.",
-            "enableBridge": "Enable Telegram bridge",
+            "enableBridge": "Enable Telegram Bridge module",
             "mode": "Mode",
             "modeMtproto": "MTProto (Account)",
             "modeBot": "Bot Token",
@@ -1122,8 +1118,7 @@
             "codeSubmitFailed": "Failed to submit code",
             "passwordRequired": "Password is required",
             "passwordRejected": "Password rejected",
-            "passwordSubmitFailed": "Failed to submit password",
-            "oneChannelRequired": "At least one communication channel must stay enabled"
+            "passwordSubmitFailed": "Failed to submit password"
         }
     },
     "feature": {
