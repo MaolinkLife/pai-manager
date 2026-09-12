@@ -4,7 +4,7 @@ import shutil
 import tempfile
 from pathlib import Path
 
-from constants.paths import RVC_MODELS_DIR, TEMP_DIR, TTS_MODELS_DIR
+from constants.paths import RVC_MODELS_DIR, STORAGE_OVERRIDE, TEMP_DIR, TTS_MODELS_DIR
 
 
 _legacy_paths_migrated = False
@@ -63,6 +63,10 @@ def _copy_audio_files_tree(source: Path, target: Path) -> None:
 def _migrate_legacy_paths_once() -> None:
     global _legacy_paths_migrated
     if _legacy_paths_migrated:
+        return
+    if STORAGE_OVERRIDE:
+        # A redirected storage tree must never swallow the live voices.
+        _legacy_paths_migrated = True
         return
 
     _migrate_legacy_tree(project_root() / "outputs", Path(TEMP_DIR) / "output")

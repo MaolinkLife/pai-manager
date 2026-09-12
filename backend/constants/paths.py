@@ -5,7 +5,15 @@ PROJECT_DIR = os.path.dirname(BASE_DIR)
 CONFIG_DIR = os.path.join(BASE_DIR, "config")
 LOGS_DIR = os.path.join(BASE_DIR, "logs")
 TRACEBACK_LOGS_DIR = os.path.join(PROJECT_DIR, "logs")
-STORAGE_DIR = os.path.join(BASE_DIR, "storage")
+# PAI_STORAGE_DIR moves the whole storage tree (database, vector store, models)
+# elsewhere. Contour tests run on a throwaway tree this way; while it is set,
+# legacy migrations that would pull live files into storage are disabled.
+STORAGE_OVERRIDE = (os.environ.get("PAI_STORAGE_DIR") or "").strip()
+STORAGE_DIR = (
+    os.path.abspath(STORAGE_OVERRIDE)
+    if STORAGE_OVERRIDE
+    else os.path.join(BASE_DIR, "storage")
+)
 TEMP_DIR = os.path.join(BASE_DIR, "temp")
 
 MODELS_DIR = os.path.join(STORAGE_DIR, "models")

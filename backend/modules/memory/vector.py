@@ -6,7 +6,7 @@ import uuid
 import chromadb
 from chromadb.config import Settings
 
-from constants.paths import STORAGE_DIR
+from constants.paths import STORAGE_DIR, STORAGE_OVERRIDE
 
 os.environ.setdefault("ANONYMIZED_TELEMETRY", "FALSE")
 
@@ -25,6 +25,9 @@ def _migrate_legacy_root_store() -> None:
     Move legacy root-level storage/vector_store/chroma.sqlite3 to backend/storage/vector_store
     if backend target file is missing.
     """
+    if STORAGE_OVERRIDE:
+        # A redirected storage tree must never swallow the live vector store.
+        return
     legacy_file = os.path.join(LEGACY_CHROMA_DIR, "chroma.sqlite3")
     target_file = os.path.join(CHROMA_DIR, "chroma.sqlite3")
     if not os.path.isfile(legacy_file):
