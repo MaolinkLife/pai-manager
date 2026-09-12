@@ -45,6 +45,8 @@
     position: absolute;
     border: 1px solid color-mix(in srgb, var(--color-border) 60%, transparent);
     border-radius: 50%;
+    // Decorative: a ring's whole square box would otherwise swallow clicks, the call button included.
+    pointer-events: none;
 }
 
 .ring-one {
@@ -112,6 +114,7 @@
 .hud-line {
     position: absolute;
     bottom: 24px;
+    pointer-events: none;
     left: 20px;
     right: 20px;
     display: flex;
@@ -157,6 +160,7 @@
 .scan-line {
     position: absolute;
     top: 0;
+    pointer-events: none;
     left: 0;
     width: 100%;
     height: 1px;
@@ -250,6 +254,8 @@
 // ============================ Звонок (блок C) ============================
 
 .call-controls {
+    position: relative;
+    z-index: 2;
     display: flex;
     align-items: center;
     justify-content: center;

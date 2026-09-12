@@ -7,6 +7,8 @@
 # - Has endpoints for getting the list of models and history
 # ========================================================
 
+import asyncio
+
 from fastapi import APIRouter, Query, Request, HTTPException, status
 from fastapi.responses import JSONResponse
 
@@ -57,14 +59,16 @@ async def chat(payload: dict, request: Request):
 
 
 # Returns a list of available Ollama models.
+# The Ollama client is synchronous, so its calls run in a worker thread: on the
+# event loop a stopped Ollama would freeze every other request until timeout.
 @router.get("/models")
 async def get_available_models():
-    return ollama_client.list_models()
+    return await asyncio.to_thread(ollama_client.list_models)
 
 
 @router.get("/runtime/models")
 async def get_runtime_models():
-    return ollama_client.list_runtime_models()
+    return await asyncio.to_thread(ollama_client.list_runtime_models)
 
 
 @router.post("/runtime/unload")
@@ -72,7 +76,7 @@ async def unload_runtime_model(payload: dict):
     model = str(payload.get("model") or "").strip()
     if not model:
         raise HTTPException(status_code=400, detail="model is required")
-    result = ollama_client.release_model(model)
+    result = await asyncio.to_thread(ollama_client.release_model, model)
     if result.get("status") != "ok":
         return JSONResponse(status_code=500, content=result)
     return result
@@ -110,7 +114,7 @@ async def delete_model(payload: dict):
     model = str(payload.get("model") or "").strip()
     if not model:
         raise HTTPException(status_code=400, detail="model is required")
-    result = ollama_client.delete_model(model)
+    result = await asyncio.to_thread(ollama_client.delete_model, model)
     if result.get("status") != "ok":
         return JSONResponse(status_code=500, content=result)
     return result
@@ -198,7 +202,7 @@ async def _probe_tool_support(model: str) -> dict:
 async def _probe_vision_support(model: str) -> dict:
     import asyncio
 
-    metadata_support = ollama_client.model_supports_vision(model)
+    metadata_support = await asyncio.to_thread(ollama_client.model_supports_vision, model)
     if not metadata_support.get("supported"):
         return {
             "supported": False,

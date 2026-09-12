@@ -14,8 +14,14 @@ from modules.system import config as config_service
 from modules.system.logger import AuditStatus, log_audit_entry, log_error
 from modules.system.localization import get_text
 
-OLLAMA_API_URL = "http://localhost:11434/api"
+# 127.0.0.1, not localhost: on Windows "localhost" tries IPv6 first, which
+# doubles the wait whenever Ollama is not running.
+OLLAMA_API_URL = "http://127.0.0.1:11434/api"
 OLLAMA_STREAM_READ_TIMEOUT_SEC = 900
+# A stopped Ollama costs a whole connection timeout per probe (about 2 s on
+# Windows), so once it is found unreachable that is remembered for a while.
+OLLAMA_UNAVAILABLE_TTL_SEC = 30.0
+_unavailable_until = 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -499,11 +505,16 @@ async def stream_chat_image(
 # ---------------------------------------------------------------------------
 
 def is_available() -> bool:
+    global _unavailable_until
+    if time.monotonic() < _unavailable_until:
+        return False
     try:
         response = requests.get(f"{OLLAMA_API_URL}/tags", timeout=5)
-        return response.status_code == 200
+        available = response.status_code == 200
     except Exception:
-        return False
+        available = False
+    _unavailable_until = 0.0 if available else time.monotonic() + OLLAMA_UNAVAILABLE_TTL_SEC
+    return available
 
 
 def list_models() -> Dict[str, Any]:
