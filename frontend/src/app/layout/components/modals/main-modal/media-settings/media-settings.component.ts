@@ -11,6 +11,7 @@ import {
     normalizeImageCheck,
 } from './image-check-settings';
 import { ConfigService } from '../../../../../core/services/config.service';
+import { pickChangedFields } from '../../../../../core/utils/changed-fields';
 import { SynthesisService } from '../../../../../core/services/synthesis.service';
 import { UiNotificationService } from '../../../../../shared/ui/services/ui-notification.service';
 import { UiSelectOption } from '../../../../../shared/ui/components/ui-select/ui-select.component';
@@ -26,6 +27,8 @@ import { take, takeUntil } from 'rxjs/operators';
 export class MediaSettingsComponent implements OnInit, OnDestroy {
     mediaForm: UntypedFormGroup;
     originalSynthesis: any = {};
+    /** Without the stored values a save could not tell what changed. */
+    loadFailed = false;
     readonly imageProviderOptions: UiSelectOption[] = [
         { value: 'core', label: 'pai-image-gen' },
         { value: 'comfyui', label: 'ComfyUI' },
@@ -387,6 +390,7 @@ export class MediaSettingsComponent implements OnInit, OnDestroy {
                     this.cdr.markForCheck();
                 },
                 error: () => {
+                    this.loadFailed = true;
                     this.cdr.markForCheck();
                 },
             });
@@ -569,11 +573,14 @@ export class MediaSettingsComponent implements OnInit, OnDestroy {
     }
 
     saveChanges(): void {
-        const synthesis = this.buildSynthesisForSave();
-        if (JSON.stringify(synthesis) === JSON.stringify(this.originalSynthesis)) {
+        if (!this.hasChanges()) {
             return;
         }
-        this.configService.updateConfig$({ synthesis }).pipe(takeUntil(this.destroy$)).subscribe({
+        const synthesis = this.buildSynthesisForSave();
+        // Only what differs from the loaded settings goes out: keys the form does
+        // not know and values changed elsewhere stay as they are on the server.
+        const changes = pickChangedFields(synthesis, this.originalSynthesis);
+        this.configService.updateConfig$({ synthesis: changes }).pipe(takeUntil(this.destroy$)).subscribe({
             next: () => {
                 this.synthesisService.invalidateCache();
                 this.synthesisBase = synthesis;
@@ -596,7 +603,8 @@ export class MediaSettingsComponent implements OnInit, OnDestroy {
     }
 
     hasChanges(): boolean {
-        return JSON.stringify(this.buildSynthesisForSave()) !== JSON.stringify(this.originalSynthesis);
+        return !this.loadFailed
+            && Object.keys(pickChangedFields(this.buildSynthesisForSave(), this.originalSynthesis)).length > 0;
     }
 
     private buildSynthesisForSave(): any {

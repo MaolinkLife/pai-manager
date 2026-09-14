@@ -1,5 +1,5 @@
 import { UntypedFormBuilder } from '@angular/forms';
-import { of } from 'rxjs';
+import { Observable, of, throwError } from 'rxjs';
 import { IMAGE_CHECK_DEFAULTS } from './image-check-settings';
 import { MediaSettingsComponent } from './media-settings.component';
 
@@ -11,10 +11,10 @@ const BUILT_IN: Record<string, string> = {
 describe('MediaSettingsComponent image check', () => {
     let saved: any[];
 
-    function create(synthesis: any): MediaSettingsComponent {
+    function create(synthesis: any, config$?: Observable<any>): MediaSettingsComponent {
         saved = [];
         const configService: any = {
-            getConfig$: () => of({ synthesis }),
+            getConfig$: () => config$ ?? of({ synthesis }),
             getDefaultValue$: (path: string) => of(BUILT_IN[path] ?? null),
             updateConfig$: (payload: any) => {
                 saved.push(payload);
@@ -81,13 +81,13 @@ describe('MediaSettingsComponent image check', () => {
         expect(component.showGenerationsWarning).toBeFalse();
     });
 
-    it('falls back to the owner defaults when the config has no check', () => {
+    it('falls back to the defaults when the config has no check', () => {
         const component = create({});
 
         expect(component.mediaForm.getRawValue().image_check).toEqual(IMAGE_CHECK_DEFAULTS);
     });
 
-    it('saves the check in range, with locked values and keys the form does not know', () => {
+    it('saves only the changed check values, in range, without keys the form does not know', () => {
         const component = create({
             image_check: { ...IMAGE_CHECK_DEFAULTS, system_prompt: 'Judge.', future_flag: true },
         });
@@ -97,29 +97,27 @@ describe('MediaSettingsComponent image check', () => {
         control(component, 'max_generations').setValue(99);
         component.saveChanges();
 
-        expect(saved.length).toBe(1);
-        expect(saved[0].synthesis.image_check).toEqual({
-            future_flag: true,
-            relevance: { enabled: true, threshold: 0.57, reroll: true },
-            quality: { enabled: false, threshold: 0.82, reroll: false },
-            max_generations: 10,
-            describe_prompt: '',
-            system_prompt: 'Judge.',
-            user_template: '',
-        });
+        expect(saved).toEqual([{
+            synthesis: {
+                image_check: {
+                    relevance: { threshold: 0.57, reroll: true },
+                    max_generations: 10,
+                },
+            },
+        }]);
     });
 
-    it('loads and saves the scene answer format with keys the form does not know', () => {
+    it('loads the scene answer format and saves only its change', () => {
         const component = create({ image_scene: { format_prompt: 'Return JSON.', future_flag: true } });
 
         expect(component.mediaForm.get('image_scene.format_prompt')!.value).toBe('Return JSON.');
         component.mediaForm.get('image_scene.format_prompt')!.setValue('Return strict JSON.');
         component.saveChanges();
 
-        expect(saved[0].synthesis.image_scene).toEqual({ format_prompt: 'Return strict JSON.', future_flag: true });
+        expect(saved).toEqual([{ synthesis: { image_scene: { format_prompt: 'Return strict JSON.' } } }]);
     });
 
-    it('has no old assessment fields and keeps the hidden prompt-engineering switch', () => {
+    it('has no old assessment fields and leaves the hidden prompt-engineering switch alone', () => {
         const component = create({ prompting: { enabled: false, default_negative_prompt: 'x' } });
 
         ['assess_enabled', 'quality_threshold', 'max_attempts', 'retry_enabled', 'enabled'].forEach((key) => {
@@ -129,12 +127,10 @@ describe('MediaSettingsComponent image check', () => {
         control(component, 'relevance.threshold').setValue(0.7);
         component.saveChanges();
 
-        const prompting = saved[0].synthesis.prompting;
-        expect(prompting.enabled).toBeFalse();
-        expect('assess_enabled' in prompting).toBeFalse();
+        expect(saved).toEqual([{ synthesis: { image_check: { relevance: { threshold: 0.7 } } } }]);
     });
 
-    it('loads and saves the image prompt builder prompts with the rest of prompting', () => {
+    it('loads the image prompt builder prompts and saves only the edited one', () => {
         const component = create({
             prompting: { default_negative_prompt: 'x', image_prompt_builder_system_prompt: 'Compose.', future_flag: true },
         });
@@ -143,10 +139,25 @@ describe('MediaSettingsComponent image check', () => {
         component.mediaForm.get('prompting.image_prompt_builder_user_template')!.setValue('Context: {tool_context}');
         component.saveChanges();
 
-        const prompting = saved[0].synthesis.prompting;
-        expect(prompting.image_prompt_builder_system_prompt).toBe('Compose.');
-        expect(prompting.image_prompt_builder_user_template).toBe('Context: {tool_context}');
-        expect(prompting.future_flag).toBeTrue();
+        expect(saved).toEqual([{ synthesis: { prompting: { image_prompt_builder_user_template: 'Context: {tool_context}' } } }]);
+    });
+
+    it('does not send a request when nothing changed', () => {
+        const component = create({ image_check: { ...IMAGE_CHECK_DEFAULTS } });
+
+        component.saveChanges();
+
+        expect(saved).toEqual([]);
+    });
+
+    it('does not save when the settings could not be loaded', () => {
+        const component = create({}, throwError(() => new Error('offline')));
+
+        control(component, 'relevance.threshold').setValue(0.7);
+        component.saveChanges();
+
+        expect(component.hasChanges()).toBeFalse();
+        expect(saved).toEqual([]);
     });
 
     it('puts the built-in prompt back on reset', () => {
