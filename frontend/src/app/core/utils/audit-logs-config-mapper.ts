@@ -33,18 +33,31 @@ const mapRetentionDtoToModel = (
     hardCap: { ...DEFAULT_HARD_CAP, ...(dto?.hard_cap ?? {}) },
 });
 
+/** A settings save sends only the fields it carries — nothing is filled with defaults. */
 const mapRetentionModelToDto = (
-    model?: AuditLogsRetentionConfig,
-): AuditLogsRetentionConfigDto => ({
-    enabled: model?.enabled ?? true,
-    age_days: model?.ageDays ?? DEFAULT_AGE_DAYS,
-    hard_cap: model?.hardCap ?? DEFAULT_HARD_CAP,
-});
+    model?: Partial<AuditLogsRetentionConfig>,
+): AuditLogsRetentionConfigDto => {
+    const dto: Record<string, unknown> = {};
+    if (model?.enabled !== undefined) {
+        dto['enabled'] = model.enabled;
+    }
+    if (model?.ageDays !== undefined) {
+        dto['age_days'] = model.ageDays;
+    }
+    if (model?.hardCap !== undefined) {
+        dto['hard_cap'] = model.hardCap;
+    }
+    return dto as unknown as AuditLogsRetentionConfigDto;
+};
 
 export const mapAuditLogsDtoToModel = (dto?: AuditLogsConfigDto): AuditLogsConfig => ({
     retention: mapRetentionDtoToModel(dto?.retention),
 });
 
-export const mapAuditLogsModelToDto = (model?: AuditLogsConfig): AuditLogsConfigDto => ({
-    retention: mapRetentionModelToDto(model?.retention),
-});
+export const mapAuditLogsModelToDto = (model?: Partial<AuditLogsConfig>): AuditLogsConfigDto => {
+    const dto: Record<string, unknown> = {};
+    if (model?.retention !== undefined) {
+        dto['retention'] = mapRetentionModelToDto(model.retention);
+    }
+    return dto as unknown as AuditLogsConfigDto;
+};

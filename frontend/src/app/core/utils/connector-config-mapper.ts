@@ -27,19 +27,35 @@ export const mapConnectorDtoToModel = (
     tunneling: mapTunnelingDtoToModel(dto?.tunneling),
 });
 
+const TUNNELING_FIELD_NAMES: Array<[keyof TunnelingConfig, string]> = [
+    ['enabled', 'enabled'],
+    ['provider', 'provider'],
+    ['localUrl', 'local_url'],
+    ['localPort', 'local_port'],
+    ['commandPath', 'command_path'],
+    ['publicUrl', 'public_url'],
+];
+
+/** A settings save sends only the fields it carries — nothing is filled with defaults. */
 export const mapTunnelingModelToDto = (
     model: Partial<TunnelingConfig> | undefined
-): TunnelingConfigDto => ({
-    enabled: model?.enabled ?? DEFAULT_TUNNELING.enabled,
-    provider: model?.provider ?? DEFAULT_TUNNELING.provider,
-    local_url: model?.localUrl ?? DEFAULT_TUNNELING.localUrl,
-    local_port: model?.localPort ?? DEFAULT_TUNNELING.localPort,
-    command_path: model?.commandPath ?? DEFAULT_TUNNELING.commandPath,
-    public_url: model?.publicUrl ?? DEFAULT_TUNNELING.publicUrl,
-});
+): TunnelingConfigDto => {
+    const dto: Record<string, unknown> = {};
+    TUNNELING_FIELD_NAMES.forEach(([from, to]) => {
+        const value = model?.[from];
+        if (value !== undefined) {
+            dto[to] = value;
+        }
+    });
+    return dto as unknown as TunnelingConfigDto;
+};
 
 export const mapConnectorModelToDto = (
     model: Partial<ConnectorConfig> | undefined
-): ConnectorConfigDto => ({
-    tunneling: mapTunnelingModelToDto(model?.tunneling),
-});
+): ConnectorConfigDto => {
+    const dto: Record<string, unknown> = {};
+    if (model?.tunneling !== undefined) {
+        dto['tunneling'] = mapTunnelingModelToDto(model.tunneling);
+    }
+    return dto as unknown as ConnectorConfigDto;
+};

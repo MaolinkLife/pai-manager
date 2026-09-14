@@ -74,3 +74,93 @@ describe('SystemSettingsComponent password change', () => {
         expect(errors).toEqual(['The current password is wrong']);
     });
 });
+
+describe('SystemSettingsComponent partial saves', () => {
+    let saved: any[];
+
+    const stored = () => ({
+        system: { userName: 'You', language: 'en-US', runtime: { modelMemoryProfile: 'balanced' } },
+        modules: { vtubeStudio: false, whisper: true, minecraft: false, gaming: false, alarm: false, discord: false, rag: true, visual: true },
+        communication: { priority: ['main_chat', 'telegram'] },
+        connector: {
+            tunneling: {
+                enabled: false,
+                provider: 'cloudflared',
+                localUrl: 'http://127.0.0.1:3880',
+                localPort: 3880,
+                commandPath: '',
+                publicUrl: '',
+            },
+        },
+    });
+
+    function create(): SystemSettingsComponent {
+        saved = [];
+        const configService: any = {
+            getConfig$: () => of(stored()),
+            getSystem$: () => of({ system: { prompt: 'A prompt', active_character_id: 'c1', char_name: 'Test' } }),
+            getSystemCharacters$: () => of({ characters: [{ id: 'c1', name: 'Test', prompt: 'A prompt' }], active_character_id: 'c1' }),
+            updateConfig$: (payload: any) => {
+                saved.push(payload);
+                return of({});
+            },
+            updateSystem$: () => of({}),
+        };
+        const authService: any = {
+            me$: () => of({ role: 'owner', settings: { language: 'en-US' } }),
+            updateMeSettings$: () => of(null),
+        };
+        const themeService: any = { getTheme: () => 'dark', setTheme: () => undefined };
+        const localization: any = { init: () => undefined, t: (key: string) => key, setLanguage: () => undefined };
+        const tunnelService: any = {
+            getStatus$: () => of({ running: false, public_url: '', config: { local_url: 'http://127.0.0.1:3880', local_port: 3880 } }),
+        };
+        const notifications: any = { success: () => undefined, error: () => undefined };
+        const component = new SystemSettingsComponent(
+            new UntypedFormBuilder(), configService, authService, themeService, localization, tunnelService, notifications, {} as any,
+        );
+        component.ngOnInit();
+        return component;
+    }
+
+    it('has nothing to save right after loading', () => {
+        const component = create();
+
+        expect(component.hasChanges()).toBeFalse();
+    });
+
+    it('saves one tunnel field without the rest of the tunnel settings', () => {
+        const component = create();
+
+        component.systemForm.get('connector.tunneling.enabled')!.setValue(true);
+        component.saveChanges();
+
+        expect(saved).toEqual([{ connector: { tunneling: { enabled: true } } }]);
+    });
+
+    it('switching VTube Studio sends only that module flag', () => {
+        const component = create();
+
+        component.systemForm.get('modules.vtube_studio')!.setValue(true);
+        component.saveChanges();
+
+        expect(saved).toEqual([{ modules: { vtubeStudio: true } }]);
+    });
+
+    it('saves one log retention value alone', () => {
+        const component = create();
+
+        component.systemForm.get('auditRetention.ageInfo')!.setValue(10);
+        component.saveChanges();
+
+        expect(saved).toEqual([{ auditLogs: { retention: { ageDays: { info: 10 } } } }]);
+    });
+
+    it('does not send a request when nothing changed', () => {
+        const component = create();
+
+        component.saveChanges();
+
+        expect(saved).toEqual([]);
+    });
+});

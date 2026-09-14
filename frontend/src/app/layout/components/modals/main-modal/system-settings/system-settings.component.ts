@@ -1,6 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { UntypedFormBuilder, UntypedFormGroup } from '@angular/forms';
 import { ConfigService, SystemCharacter } from '../../../../../core/services/config.service';
+import { pickChangedFields } from '../../../../../core/utils/changed-fields';
 import { AuthService } from '../../../../../core/services/auth.service';
 import { ThemeService } from '../../../../../core/services/theme.service';
 import { combineLatest, BehaviorSubject, forkJoin } from 'rxjs';
@@ -325,7 +326,7 @@ export class SystemSettingsComponent implements OnInit {
     }
 
     private auditHasChanges(): boolean {
-        return JSON.stringify(this.buildAuditPayload()) !== JSON.stringify(this.originalAuditSnapshot);
+        return Object.keys(pickChangedFields(this.buildAuditPayload(), this.originalAuditSnapshot)).length > 0;
     }
 
     private patchFormWithConfig(config: any): void {
@@ -361,7 +362,9 @@ export class SystemSettingsComponent implements OnInit {
 
     saveChanges(): void {
         const changes = this.getChanges();
-        const auditDirty = this.auditHasChanges();
+        const auditPayload = this.buildAuditPayload();
+        const auditChanges = pickChangedFields(auditPayload, this.originalAuditSnapshot);
+        const auditDirty = Object.keys(auditChanges).length > 0;
         const userLangDirty = this.userLanguageHasChanges();
         if (userLangDirty) {
             const nextUserLang = String(this.systemForm.get('userLanguage')?.value || '').trim();
@@ -416,9 +419,8 @@ export class SystemSettingsComponent implements OnInit {
             if (changes.connector !== undefined) {
                 updateData.connector = changes.connector;
             }
-            const auditPayload = this.buildAuditPayload();
             if (auditDirty) {
-                updateData.auditLogs = auditPayload;
+                updateData.auditLogs = auditChanges;
             }
 
             if (Object.keys(updateData).length > 0) {
@@ -445,17 +447,9 @@ export class SystemSettingsComponent implements OnInit {
         }
     }
 
+    /** Only the fields that differ from what the tab loaded: a save sends nothing else. */
     private getChanges(): any {
-        const current = this.buildConfigFromForm();
-        const changes: any = {};
-
-        for (const key in current) {
-            if (JSON.stringify(current[key]) !== JSON.stringify(this.originalConfig[key])) {
-                changes[key] = current[key];
-            }
-        }
-
-        return changes;
+        return pickChangedFields(this.buildConfigFromForm(), this.originalConfig);
     }
 
     hasChanges(): boolean {
