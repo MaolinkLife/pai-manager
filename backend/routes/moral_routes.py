@@ -106,6 +106,7 @@ async def get_moral_state(
                 "emotion_intensity": 0.0,
                 "emotion_vector": {},
                 "trigger": "moral state unavailable",
+                "inner_voice": "",
                 "associated_events": [],
                 "influence": {},
                 "affective_state": {},
@@ -150,6 +151,9 @@ async def get_moral_state(
         "trigger": (latest_trace.get("notes") or {}).get("affective_state", {}).get("trigger")
         if isinstance(latest_trace.get("notes"), dict)
         else None,
+        "inner_voice": str((latest_trace.get("notes") or {}).get("inner_voice") or "")
+        if isinstance(latest_trace.get("notes"), dict)
+        else "",
         "associated_events": (latest_trace.get("notes") or {}).get("affective_state", {}).get("associated_events", [])
         if isinstance(latest_trace.get("notes"), dict)
         else [],

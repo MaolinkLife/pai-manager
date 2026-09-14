@@ -709,6 +709,7 @@
         "latestSnapshot": "Последний слепок",
         "affectiveState": "Текущее состояние",
         "trigger": "Причина",
+        "innerVoice": "Внутренний голос",
         "associatedEvents": "Связанные события",
         "outcomes": "Исходы",
         "tracesLoaded": "Загружено следов",

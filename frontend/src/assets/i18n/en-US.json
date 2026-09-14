@@ -708,6 +708,7 @@
         "latestSnapshot": "Latest Snapshot",
         "affectiveState": "Current State",
         "trigger": "Trigger",
+        "innerVoice": "Inner voice",
         "associatedEvents": "Associated events",
         "outcomes": "Outcomes",
         "tracesLoaded": "Loaded traces",

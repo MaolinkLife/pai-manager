@@ -79,7 +79,11 @@
             <div class="matrix-data-grid">
                 <section class="data-card">
                     <h4>{{ "matrix.affectiveState" | translate }}</h4>
-                    <div class="data-row" *ngIf="affectiveTrigger">
+                    <div class="data-row data-row--stacked" *ngIf="innerVoice">
+                        <span>{{ "matrix.innerVoice" | translate }}</span>
+                        <strong>{{ innerVoice }}</strong>
+                    </div>
+                    <div class="data-row" *ngIf="!innerVoice && affectiveTrigger">
                         <span>{{ "matrix.trigger" | translate }}</span>
                         <strong>{{ affectiveTrigger }}</strong>
                     </div>
@@ -111,7 +115,11 @@
                         <span>{{ "matrix.updated" | translate }}</span>
                         <strong>{{ formatUpdatedAt(latestTrace.created_at) }}</strong>
                     </div>
-                    <div class="data-row data-row--stacked" *ngIf="latestTraceCause">
+                    <div class="data-row data-row--stacked" *ngIf="latestTraceVoice">
+                        <span>{{ "matrix.innerVoice" | translate }}</span>
+                        <strong>{{ latestTraceVoice }}</strong>
+                    </div>
+                    <div class="data-row data-row--stacked" *ngIf="!latestTraceVoice && latestTraceCause">
                         <span>{{ "matrix.trigger" | translate }}</span>
                         <strong>{{ latestTraceCause }}</strong>
                     </div>

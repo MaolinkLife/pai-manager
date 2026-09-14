@@ -14,6 +14,7 @@ export interface MoralDashboardState {
     emotion_intensity: number;
     emotion_vector: Record<string, number>;
     trigger?: string;
+    inner_voice?: string;
     associated_events?: string[];
     influence?: Record<string, any>;
     affective_state?: Record<string, any>;
@@ -113,6 +114,7 @@ export class MoralStateService {
             emotion_intensity: this.num(raw.emotion_intensity, 0),
             emotion_vector: raw.emotion_vector || {},
             trigger: raw.trigger || raw.affective_state?.trigger,
+            inner_voice: raw.inner_voice || raw.meta?.inner_voice || '',
             associated_events: Array.isArray(raw.associated_events)
                 ? raw.associated_events
                 : Array.isArray(raw.affective_state?.associated_events)

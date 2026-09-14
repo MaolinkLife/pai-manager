@@ -107,9 +107,11 @@ export class MatrixComponent implements OnInit {
     latestTrace: any = null;
     traceCount = 0;
     affectiveTrigger = '';
+    innerVoice = '';
     influenceEntries: Array<{ key: string; value: any }> = [];
     associatedEvents: string[] = [];
     latestTraceCause = '';
+    latestTraceVoice = '';
     latestTraceOutcomes: any[] = [];
 
     trackByInfluence(_index: number, item: { key: string; value: any }): string {
@@ -183,6 +185,7 @@ export class MatrixComponent implements OnInit {
         this.affectiveTrigger = String(
             this.state?.trigger || this.state?.affective_state?.['trigger'] || ''
         ).trim();
+        this.innerVoice = String(this.state?.inner_voice || '').trim();
 
         const influence = this.state?.influence || this.state?.affective_state?.['influence'] || {};
         this.influenceEntries =
@@ -196,6 +199,7 @@ export class MatrixComponent implements OnInit {
         this.latestTraceCause = this.formatTraceCause(this.latestTrace?.cause);
 
         const notes = this.latestTrace?.notes;
+        this.latestTraceVoice = String((notes && typeof notes === 'object' ? notes.inner_voice : '') || '').trim();
         const outcomes = notes && typeof notes === 'object' ? notes.outcomes : [];
         this.latestTraceOutcomes = Array.isArray(outcomes) ? outcomes : [];
     }
