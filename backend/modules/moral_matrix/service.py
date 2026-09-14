@@ -1266,6 +1266,15 @@ class MoralMatrixModule:
 
         desired = str(behavior.get("desired_behavior") or "").strip().lower()
         influence = {"behavior": desired} if desired and desired != "unclear" else {}
+        # What the matrix wants right now, kept as it answered: numbers in 0–1 only.
+        desires: Dict[str, float] = {}
+        raw_desires = behavior.get("desire_vector")
+        if isinstance(raw_desires, dict):
+            for key, value in raw_desires.items():
+                name = str(key or "").strip()
+                if not name or isinstance(value, bool) or not isinstance(value, (int, float)):
+                    continue
+                desires[name] = self._clamp_float(value, 0.0, 1.0)
         memory_recommendation = payload.get("memory_recommendation")
         return {
             "state": {
@@ -1283,6 +1292,7 @@ class MoralMatrixModule:
             + strings(behavior.get("notes_for_generator")),
             # The wanted response travels as influence.behavior: a wish, not a hard directive.
             "hard_directives": [],
+            "desire_vector": desires,
             "memory_recommendation": (
                 memory_recommendation if isinstance(memory_recommendation, dict) else None
             ),
