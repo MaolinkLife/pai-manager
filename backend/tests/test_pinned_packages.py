@@ -1,8 +1,8 @@
 """Packages pinned in requirements.txt are the ones installed in the backend venv.
 
-Found 2026-09-12: requirements.txt asked for "the latest diffusers from git", so
-the venv and miniconda ended up with different builds and the owner's image
-model crashed on the older one.
+requirements.txt asked for "the latest diffusers from git", so
+two environments ended up with different builds and an image model crashed
+on the older one.
 """
 
 import importlib.metadata

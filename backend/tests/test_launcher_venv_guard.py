@@ -1,6 +1,6 @@
 """PAI runs on the backend venv only.
 
-Found 2026-09-12: activate.bat still pointed at the folder the venv was created
+activate.bat still pointed at the folder the venv was created
 in before the project was renamed, so launch.bat silently ran the live backend
 on miniconda packages while the tests ran on the venv.
 """

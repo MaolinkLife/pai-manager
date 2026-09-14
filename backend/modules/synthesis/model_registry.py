@@ -101,7 +101,7 @@ def _checkpoint_family_from_header(path: Path) -> Optional[str]:
 
 
 def _checkpoint_family(path: Path) -> str:
-    """What the weights are; the file name is only a fallback (2026-09-12: an SDXL
+    """What the weights are; the file name is only a fallback (an SDXL
     checkpoint without "xl" in its name was loaded as SD 1.5 and crashed)."""
     from_header = _checkpoint_family_from_header(path)
     if from_header:

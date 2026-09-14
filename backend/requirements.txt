@@ -28,9 +28,9 @@ sentence-transformers
 openai
 pyttsx3
 timm
-# Pinned: the owner's image models are verified on this diffusers build. An
-# unpinned git install drifts between environments (2026-09-12: 0.37.1 in the
-# venv crashed a checkpoint that works on this commit).
+# Pinned: image models are verified on this diffusers build. An unpinned git
+# install drifts between environments (0.37.1 crashed a checkpoint that works
+# on this commit).
 diffusers @ git+https://github.com/huggingface/diffusers@f3d42be118f9af7ed9697b686fba09a8bdcd71d1
 transformers>=4.46.0
 accelerate>=1.0.0

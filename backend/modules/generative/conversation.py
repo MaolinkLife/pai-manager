@@ -2059,7 +2059,7 @@ async def _confirm_user_message_id(
     The chat shows a sent message at once under a temporary id; the row id exists
     only once it is stored. Until the chat learns it, a reroll, edit or delete of
     that message points at an id the database does not have (a reroll stored the
-    user message a second time, 2026-09-13). Everything after this uses the real
+    user message a second time). Everything after this uses the real
     id, the echo to the chat included.
     """
     real_id = str(getattr(stored_entry, "id", "") or "").strip()

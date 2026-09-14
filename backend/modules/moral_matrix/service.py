@@ -1198,7 +1198,7 @@ class MoralMatrixModule:
         )
 
     def _normalize_structured_answer(self, payload: Dict[str, Any]) -> Dict[str, Any]:
-        """Answer in the structure of the owner's matrix prompt (moral.system_prompt).
+        """Answer in the structure of the configured matrix prompt (moral.system_prompt).
 
         `emotional_reaction` carries the verdict — what I feel, how strongly and
         why — and `state_update.recommended_new_state` the resulting state.

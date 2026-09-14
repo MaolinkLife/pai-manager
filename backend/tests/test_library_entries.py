@@ -1,7 +1,7 @@
 """Library entries: an upload is copied in; a file already in storage is registered in place.
 
 A character archive is written into storage and put into the library without a
-second copy (2026-09-13). Both paths share one way of creating the entry: a
+second copy. Both paths share one way of creating the entry: a
 service history row of the active character carries the file.
 """
 

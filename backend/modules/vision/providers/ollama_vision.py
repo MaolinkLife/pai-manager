@@ -41,7 +41,7 @@ class OllamaVisionProvider:
 
     def _request_options(self, **options: Any) -> Dict[str, Any]:
         # A description needs no reasoning. Left to reason, a thinking model
-        # spends the whole token budget there and answers nothing (2026-09-12).
+        # spends the whole token budget there and answers nothing.
         if self._thinks:
             options["__think"] = False
         return options

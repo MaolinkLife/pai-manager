@@ -99,7 +99,7 @@ def test_normalize_replaces_the_old_image_assessment_with_the_image_check():
     assert not LEGACY_IMAGE_ASSESSMENT_KEYS & set(prompting)
     # Hidden in the UI, kept in the config until it is understood what it was for.
     assert prompting["enabled"] is True
-    # The old values never took effect; the owner's new defaults apply.
+    # The old values never took effect; the new defaults apply.
     assert normalized["synthesis"]["image_check"] == DEFAULT_CONFIG["synthesis"]["image_check"]
 
 

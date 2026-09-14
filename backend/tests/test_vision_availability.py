@@ -1,12 +1,12 @@
 """The system knows whether it can see, and why not.
 
-Found 2026-09-12: a vision model that also thinks declares
+A vision model that also thinks declares
 vision and thinking in Ollama's metadata. The probe let it reason, reasoning
 spent the whole token budget, the answer came back empty and the model was
 marked unavailable as "empty probe response". An image the user attached then
 reached the assistant as nothing at all, so it believed no image was sent.
 
-Since 2026-09-14 no probe is run at all (models are not run to check what
+No probe is run at all now (models are not run to check what
 they can do): readiness is what the metadata declares, and an unusable answer
 names its exact reason when the image is described.
 """

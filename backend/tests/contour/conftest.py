@@ -46,14 +46,14 @@ _TABLES_RESET_PER_TEST = (
     "expectation_events",
 )
 
-# Settings of the owner's live instance that the turn depends on.
+# Settings of a live instance that the turn depends on.
 _BASE_CONFIG = {
     "analyzer.enabled": True,
     "decision_layer.mode": "system",
     "moral.enabled": True,
     "moral.active_provider": "ollama",
     "moral.fallback_order": ["heuristic"],
-    "moral.system_prompt": "contour stand-in for the owner's matrix prompt",
+    "moral.system_prompt": "contour stand-in for a configured matrix prompt",
     "moral.inner_voice.enabled": False,
     "api.message_pair_limit": 10,
     "rag.history_limit": 20,
@@ -147,7 +147,7 @@ _OWNER_PROMPT_EMOTIONS = (
 
 
 def owner_moral_answer(*, dominant: str, strength: float, reason: str) -> Dict[str, Any]:
-    """An answer in the structure the owner's matrix prompt asks the model for."""
+    """An answer in the structure a configured matrix prompt asks the model for."""
     shift = {name: 0.0 for name in _OWNER_PROMPT_EMOTIONS}
     shift[dominant] = strength
     new_state = {name: 0.05 for name in _OWNER_PROMPT_EMOTIONS}

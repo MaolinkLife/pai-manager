@@ -107,8 +107,8 @@ const putDefined = (target: Record<string, any>, key: string, value: unknown): v
 
 /**
  * A settings save sends only the fields it changed. Filling the rest with the
- * frontend defaults overwrote the owner's mode and model on every
- * save of the Core tab (found 2026-09-13).
+ * frontend defaults overwrote the saved mode and model on every
+ * save of the Core tab.
  */
 export const mapDecisionLayerPartialModelToDto = (
     model: Partial<DecisionLayerConfig> | undefined,

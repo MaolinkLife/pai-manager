@@ -1,6 +1,6 @@
 """A local checkpoint's family comes from its safetensors header, not its file name.
 
-Found 2026-09-12: an SDXL checkpoint with no "xl" in
+An SDXL checkpoint with no "xl" in
 its name was registered as SD 1.5, crashed inside StableDiffusionPipeline, and
 every image silently fell back to stock SD 1.5.
 """

@@ -393,7 +393,7 @@ def normalize_config_structure(config: dict | None) -> dict:
     initiative_section = normalized.get("initiative")
     if not isinstance(initiative_section, dict):
         initiative_section = {}
-    # The global initiative switch appeared on 2026-09-13, off on a fresh install.
+    # The global initiative switch is off on a fresh install.
     # A config stored before it keeps doing what it did: if PAI could write first
     # in the main chat or in Telegram, the switch comes on.
     if "enabled" not in initiative_section:
@@ -652,10 +652,10 @@ def _apply_split_settings_overrides(config_data: dict, user_uuid: str) -> None:
         config_data["voice"] = copy.deepcopy(tts_settings)
     if isinstance(vision_settings, dict):
         vision = copy.deepcopy(vision_settings)
-        # Background screen capture got its own switch (2026-09-13). Settings stored
+        # Background screen capture got its own switch. Settings stored
         # before it keep doing what they did: capture follows vision.
         vision.setdefault("screen_capture_enabled", bool(vision.get("enabled", False)))
-        # Vision prompts moved into the settings (2026-09-13): stored settings get
+        # Vision prompts moved into the settings: stored settings get
         # the built-in ones, as a fresh config does.
         for key in ("attachment_prompt", "generated_image_prompt", "screen_prompt"):
             vision.setdefault(key, DEFAULT_CONFIG["vision"][key])

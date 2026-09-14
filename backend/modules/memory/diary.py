@@ -545,8 +545,8 @@ def list_diary_page(
     """One page of the diary screen: every entry of the character, newest first.
 
     Unlike ``list_daily_activity_entries`` there is no day window: the screen
-    asked for the last 30 days only, so older entries never reached it
-    (2026-09-13). Entries hidden by sleep consolidation (``payload.pruned``)
+    asked for the last 30 days only, so older entries never reached it.
+    Entries hidden by sleep consolidation (``payload.pruned``)
     come only with ``include_hidden``; their ``payload.pruned`` says why.
     """
     limit = max(1, min(int(limit or 30), 200))

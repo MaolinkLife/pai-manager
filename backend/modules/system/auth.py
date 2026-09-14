@@ -544,7 +544,7 @@ def get_user_from_access_token(token: str) -> Optional[User]:
     try:
         # An access token lives for years; it is only as good as its session. A
         # revoked session (logout, the other devices after a password change)
-        # signs its access token out too (2026-09-14).
+        # signs its access token out too.
         auth_session = (
             session.query(AuthSession)
             .filter(AuthSession.id == payload.get("sid"))

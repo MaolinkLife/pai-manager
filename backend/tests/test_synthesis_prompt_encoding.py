@@ -1,6 +1,6 @@
 """Core image generation sees the whole prompt and its weights.
 
-Found 2026-09-12: generating through diffusers, a 206-token prompt was cut to
+Generating through diffusers, a 206-token prompt was cut to
 the 77 tokens a CLIP encoder sees, and weights like "(worst quality:2)" reached
 the model as plain text. ComfyUI had encoded both; core now does it itself.
 

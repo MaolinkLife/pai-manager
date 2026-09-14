@@ -146,7 +146,7 @@ const putDefined = (target: Record<string, any>, key: string, value: unknown): v
 /**
  * A settings save sends only the fields it carries. Filling the base memory fields
  * with frontend defaults overwrote recent_limit, the embedding model and the rest on
- * every save of the memory sections (found 2026-09-13).
+ * every save of the memory sections.
  */
 export const mapMemoryPartialModelToDto = (
     model: Partial<MemoryConfig> | undefined,

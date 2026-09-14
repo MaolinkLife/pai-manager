@@ -86,7 +86,7 @@ export class MediaSettingsComponent implements OnInit, OnDestroy {
     ];
     readonly imageCheckThreshold = IMAGE_CHECK_THRESHOLD;
     readonly imageCheckGenerations = IMAGE_CHECK_GENERATIONS;
-    // The owner's order: the strict quality check first, then the match to the request.
+    // Order: the strict quality check first, then the match to the request.
     readonly imageCheckGateRows: { name: ImageCheckGateName; label: string }[] = [
         { name: 'quality', label: 'mediaSettings.imageCheckQuality' },
         { name: 'relevance', label: 'mediaSettings.imageCheckRelevance' },

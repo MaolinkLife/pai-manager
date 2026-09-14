@@ -161,7 +161,7 @@ def _owner_zone() -> tzinfo:
 
 
 def world_state(now: Optional[datetime] = None) -> Dict[str, str]:
-    """Time of day and season at the owner's place (northern hemisphere seasons)."""
+    """Time of day and season in the configured timezone (northern hemisphere seasons)."""
     local = (now or datetime.now(timezone.utc)).astimezone(_owner_zone())
     hour = local.hour
     if 5 <= hour < 12:

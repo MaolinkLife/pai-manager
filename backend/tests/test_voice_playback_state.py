@@ -1,6 +1,6 @@
 """The voice state names the chat message that is sounding.
 
-Found 2026-09-12: the chat button guessed whether a message was sounding (a flag
+The chat button guessed whether a message was sounding (a flag
 only streaming TTS sets, plus a timer by text length), so after a normal answer
 it showed "silent" while the voice spoke and needed two clicks to stop.
 """
