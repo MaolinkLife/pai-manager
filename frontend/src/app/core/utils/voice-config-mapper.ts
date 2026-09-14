@@ -49,19 +49,28 @@ export const mapVoiceDtoToModel = (dto: any) => {
     return model;
 };
 
-export const mapVoiceModelToDto = (voice: ProjectConfig['voice']) => {
-    const dto: any = {
-        enabled: voice.enabled,
-        output_id: voice.outputId,
-        windows_output_id: voice.windowsOutputId,
-        language: voice.language,
-        use_rvc: voice.useRvc,
-        voice_language: voice.voiceLanguage,
-        use_windows_output: voice.useWindowsOutput,
-        streaming_tts: voice.streamingTts,
-        enable_fallback: voice.enableFallback,
-        active_module: voice.activeModule,
-    };
+const VOICE_FIELD_NAMES: Array<[string, string]> = [
+    ['enabled', 'enabled'],
+    ['outputId', 'output_id'],
+    ['windowsOutputId', 'windows_output_id'],
+    ['language', 'language'],
+    ['useRvc', 'use_rvc'],
+    ['voiceLanguage', 'voice_language'],
+    ['useWindowsOutput', 'use_windows_output'],
+    ['streamingTts', 'streaming_tts'],
+    ['enableFallback', 'enable_fallback'],
+    ['activeModule', 'active_module'],
+];
+
+/** A settings save sends only the fields it carries — nothing is filled in. */
+export const mapVoiceModelToDto = (voice: Partial<ProjectConfig['voice']>) => {
+    const dto: any = {};
+    VOICE_FIELD_NAMES.forEach(([from, to]) => {
+        const value = (voice as Record<string, unknown>)[from];
+        if (value !== undefined) {
+            dto[to] = value;
+        }
+    });
 
     if (voice.voiceModules) {
         dto.voice_modules = deepMapKeys(voice.voiceModules, camelToSnake);

@@ -4,6 +4,7 @@ import { BehaviorSubject, Observable, forkJoin, of } from 'rxjs';
 import { finalize, take } from 'rxjs/operators';
 
 import { ConfigService } from '../../../../../core/services/config.service';
+import { pickChangedFields } from '../../../../../core/utils/changed-fields';
 import { ResourcesService } from '../../../../../core/services/resources.service';
 import { VoiceService, ImportVoiceResponse, VoiceProvidersResponse } from '../../../../../core/services/voice.service';
 import { NotificationService } from '../../../../../shared/components/notification/notification.service';
@@ -236,6 +237,8 @@ export class VoiceSettingsComponent implements OnInit, OnDestroy {
     };
     voiceForm: FormGroup;
     originalConfig: any = {};
+    /** Without the stored values a save could not tell what changed. */
+    loadFailed = false;
     previewText = 'Приветик~ Я уже ждала тебя.';
     isGeneratingPreview = false;
     isImportingVoice = false;
@@ -438,6 +441,7 @@ export class VoiceSettingsComponent implements OnInit, OnDestroy {
             },
             error: (error) => {
                 console.error('Error loading voice settings:', error);
+                this.loadFailed = true;
                 this.cdr.markForCheck();
             }
         });
@@ -477,6 +481,7 @@ export class VoiceSettingsComponent implements OnInit, OnDestroy {
     }
 
     loadConfig(config: any): void {
+        this.loadFailed = !config?.voice;
         if (!config?.voice) {
             return;
         }
@@ -615,18 +620,10 @@ export class VoiceSettingsComponent implements OnInit, OnDestroy {
             }
         }
 
-        const changes = this.getChanges();
-        if (Object.keys(changes).length === 0) {
+        const voiceModel = this.buildVoiceChanges();
+        if (!voiceModel) {
             return;
         }
-
-        const voiceModel: any = {};
-        for (const key of ['enabled', 'activeModule', 'streamingTts', 'enableFallback', 'useRvc', 'useWindowsOutput', 'outputId', 'windowsOutputId']) {
-            if (Object.prototype.hasOwnProperty.call(changes, key)) {
-                voiceModel[key] = changes[key];
-            }
-        }
-        voiceModel.voiceModules = this.voiceForm.get('voiceModules')?.value;
 
         this.configService.updateConfig$({ voice: voiceModel }).pipe(take(1)).subscribe({
             next: () => {
@@ -910,19 +907,10 @@ export class VoiceSettingsComponent implements OnInit, OnDestroy {
             }
         }
 
-        const changes = this.getChanges();
-        if (Object.keys(changes).length === 0) {
+        const voiceModel = this.buildVoiceChanges();
+        if (!voiceModel) {
             return;
         }
-
-        const voiceModel: any = {};
-        for (const key of ['enabled', 'activeModule', 'streamingTts', 'enableFallback', 'useRvc', 'useWindowsOutput', 'outputId', 'windowsOutputId']) {
-            if (Object.prototype.hasOwnProperty.call(changes, key)) {
-                voiceModel[key] = changes[key];
-            }
-        }
-
-        voiceModel.voiceModules = this.voiceForm.get('voiceModules')?.value;
 
         this.configService.updateConfig$({ voice: voiceModel }).subscribe({
             next: (response) => {
@@ -972,27 +960,30 @@ export class VoiceSettingsComponent implements OnInit, OnDestroy {
         return fallback;
     }
 
-    private getChanges(): any {
-        const current = this.voiceForm.value;
-        const changes: any = {};
-
-        for (const key of Object.keys(current)) {
-            const currentValue = current[key];
-            const originalValue = this.originalConfig ? this.originalConfig[key] : undefined;
-            const valuesDiffer = originalValue === undefined
-                ? currentValue !== undefined && currentValue !== null && currentValue !== ''
-                : JSON.stringify(currentValue) !== JSON.stringify(originalValue);
-
-            if (valuesDiffer) {
-                changes[key] = currentValue;
+    /** Only the fields that differ from what the tab loaded; null when there is nothing to send. */
+    private buildVoiceChanges(): any | null {
+        if (this.loadFailed) {
+            return null;
+        }
+        const changes = this.getChanges();
+        const voiceModel: any = {};
+        for (const key of ['enabled', 'activeModule', 'streamingTts', 'enableFallback', 'useRvc', 'useWindowsOutput', 'outputId', 'windowsOutputId']) {
+            if (Object.prototype.hasOwnProperty.call(changes, key)) {
+                voiceModel[key] = changes[key];
             }
         }
+        if (changes.voiceModules) {
+            voiceModel.voiceModules = changes.voiceModules;
+        }
+        return Object.keys(voiceModel).length > 0 ? voiceModel : null;
+    }
 
-        return changes;
+    private getChanges(): any {
+        return pickChangedFields(this.voiceForm.value, this.originalConfig);
     }
 
     hasChanges(): boolean {
-        return Object.keys(this.getChanges()).length > 0;
+        return this.buildVoiceChanges() !== null;
     }
 
     resetToDefaults(): void {
