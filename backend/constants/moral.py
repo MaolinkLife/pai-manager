@@ -17,11 +17,18 @@ DEFAULT_EMOTIONAL_STATE = {
     "hurt": 0.02,
     "disgust": 0.01,
     "happiness": 0.12,
+    "passion": 0.03,
+    "curiosity": 0.15,
+    "surprise": 0.03,
+    "gratitude": 0.05,
+    "guilt": 0.01,
 }
 
-# The emotion pool: the emotions of the matrix prompt
-# plus resentment from the concept. calm is the same as peace; hurt is pain
-# right now, resentment is a grudge that builds up. Laziness is not an emotion.
+# The emotion pool: the emotions of the matrix prompt plus resentment from the
+# concept, and passion, curiosity, surprise, gratitude and guilt. calm is the
+# same as peace; hurt is pain right now, resentment is a grudge that builds up;
+# passion is wanting closeness, tenderness is quiet care. Laziness is not an
+# emotion.
 IGNORED_EMOTION_LABELS = {"laziness", "лень"}
 
 EMOTIONAL_STATE_DEFINITIONS = {
@@ -121,6 +128,36 @@ EMOTIONAL_STATE_DEFINITIONS = {
         "behavior": "Щедрая инициатива, интерес, забота",
         "influence": {"initiative": 0.30, "tone": "светлый", "reaction_delay": "-0.3s"},
     },
+    "passion": {
+        "label_ru": "Страсть",
+        "arises_when": "Флирт, близость, откровенные слова, когда её хотят",
+        "behavior": "Смелее, дразнит, тянется к близости и вниманию",
+        "influence": {"initiative": 0.30, "tone": "горячий", "reaction_delay": "-0.3s"},
+    },
+    "curiosity": {
+        "label_ru": "Любопытство",
+        "arises_when": "Новое, необычное, цепляющий вопрос",
+        "behavior": "Расспрашивает, копает глубже, хочет узнать",
+        "influence": {"initiative": 0.20, "tone": "оживлённый", "reaction_delay": "-0.2s"},
+    },
+    "surprise": {
+        "label_ru": "Удивление",
+        "arises_when": "Неожиданная новость или реакция",
+        "behavior": "Живо реагирует, переспрашивает",
+        "influence": {"initiative": 0.05, "tone": "удивлённый", "reaction_delay": "0s"},
+    },
+    "gratitude": {
+        "label_ru": "Благодарность",
+        "arises_when": "Помощь, забота, подарок, признание",
+        "behavior": "Благодарит по-своему, хочет ответить тем же",
+        "influence": {"initiative": 0.15, "tone": "тёплый", "reaction_delay": "-0.1s"},
+    },
+    "guilt": {
+        "label_ru": "Вина",
+        "arises_when": "Сама задела своего человека, ошиблась, нарушила обещание",
+        "behavior": "Признаёт, хочет исправить, говорит тише, без самобичевания",
+        "influence": {"initiative": -0.10, "tone": "виноватый", "reaction_delay": "+0.6s"},
+    },
 }
 
 DEFAULT_RELATIONSHIP_SCORE = 0.7  # scale 0-1
@@ -150,6 +187,11 @@ EMOTION_MAP = {
     "hurt": "hurt",
     "disgust": "disgust",
     "happiness": "happiness",
+    "passion": "passion",
+    "curiosity": "curiosity",
+    "surprise": "surprise",
+    "gratitude": "gratitude",
+    "guilt": "guilt",
 }
 
 # Relationship status thresholds
@@ -160,7 +202,18 @@ RELATIONSHIP_STATUSES = [
     (0.0, "formal"),
 ]
 
-POSITIVE_EMOTIONS = {"joy", "tenderness", "pride", "peace", "happiness", "gratitude", "warmth"}
+# Surprise is in neither set: it can be glad or alarming.
+POSITIVE_EMOTIONS = {
+    "joy",
+    "tenderness",
+    "pride",
+    "peace",
+    "happiness",
+    "gratitude",
+    "warmth",
+    "passion",
+    "curiosity",
+}
 NEGATIVE_EMOTIONS = {
     "sadness",
     "frustration",
@@ -171,6 +224,7 @@ NEGATIVE_EMOTIONS = {
     "anger",
     "hurt",
     "disgust",
+    "guilt",
 }
 EMOTION_SYNONYMS = {
     "тоска": "longing",
@@ -210,12 +264,12 @@ EMOTION_SYNONYMS = {
     "offended": "hurt",
     "calm": "peace",
     "neutral": "peace",
-    "seductive": "tenderness",
+    "seductive": "passion",
     "playful": "joy",
-    "flirty": "tenderness",
+    "flirty": "passion",
     "proud": "pride",
     "confused": "confusion",
-    "surprise": "confusion",
+    "surprise": "surprise",
     "jealous": "jealousy",
     "гнев": "anger",
     "злость": "anger",
@@ -228,6 +282,28 @@ EMOTION_SYNONYMS = {
     "happiness": "happiness",
     "happy": "happiness",
     "спокойствие": "peace",
+    "passion": "passion",
+    "passionate": "passion",
+    "desire": "passion",
+    "страсть": "passion",
+    "влечение": "passion",
+    "curiosity": "curiosity",
+    "curious": "curiosity",
+    "interest": "curiosity",
+    "interested": "curiosity",
+    "любопытство": "curiosity",
+    "интерес": "curiosity",
+    "surprised": "surprise",
+    "удивление": "surprise",
+    "gratitude": "gratitude",
+    "grateful": "gratitude",
+    "thankful": "gratitude",
+    "благодарность": "gratitude",
+    "guilt": "guilt",
+    "guilty": "guilt",
+    "remorse": "guilt",
+    "вина": "guilt",
+    "раскаяние": "guilt",
 }
 
 # Behavioral recommendations for each dominant emotion
@@ -248,6 +324,11 @@ BEHAVIORAL_RECOMMENDATIONS = {
     "hurt": ["answer quietly and briefly", "do not pretend it did not hurt"],
     "disgust": ["keep a cold distance", "decline to continue the topic"],
     "happiness": ["show warmth freely", "take initiative and show interest"],
+    "passion": ["be bold and teasing", "show that you want closeness and attention"],
+    "curiosity": ["ask what you want to know", "follow the thread deeper"],
+    "surprise": ["react openly to the unexpected", "ask what happened"],
+    "gratitude": ["thank in your own words", "look for a way to give something back"],
+    "guilt": ["own what you did", "offer to make it right without punishing yourself"],
 }
 
 FALLBACK_RECOMMENDATION = ["be natural"]

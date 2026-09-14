@@ -1,8 +1,9 @@
 """The emotion pool is one agreement shared by the matrix, its config and the UI.
 
-The emotion pool: the emotions of the matrix prompt plus
-resentment from the concept; calm is the same as peace; laziness is not an
-emotion. These tests keep every place that lists emotions in step.
+The emotion pool: the emotions of the matrix prompt, resentment from the
+concept, and passion, curiosity, surprise, gratitude and guilt; calm is the same
+as peace; laziness is not an emotion. These tests keep every place that lists
+emotions in step.
 """
 
 import json
@@ -37,6 +38,11 @@ AGREED_POOL = {
     "embarrassment",
     "pride",
     "resentment",
+    "passion",
+    "curiosity",
+    "surprise",
+    "gratitude",
+    "guilt",
 }
 
 
@@ -54,9 +60,21 @@ def test_every_emotion_is_defined_and_has_recommendations():
         assert moral.EMOTION_MAP[emotion] == emotion
 
 
+def test_the_added_emotions_have_their_russian_names():
+    labels = {key: moral.EMOTIONAL_STATE_DEFINITIONS[key]["label_ru"] for key in ("passion", "curiosity", "surprise", "gratitude", "guilt")}
+    assert labels == {
+        "passion": "Страсть",
+        "curiosity": "Любопытство",
+        "surprise": "Удивление",
+        "gratitude": "Благодарность",
+        "guilt": "Вина",
+    }
+
+
 def test_polarity_of_the_new_emotions():
-    assert {"anger", "hurt", "disgust"} <= moral.NEGATIVE_EMOTIONS
-    assert "happiness" in moral.POSITIVE_EMOTIONS
+    assert {"anger", "hurt", "disgust", "guilt"} <= moral.NEGATIVE_EMOTIONS
+    assert {"happiness", "passion", "curiosity", "gratitude"} <= moral.POSITIVE_EMOTIONS
+    assert "surprise" not in moral.POSITIVE_EMOTIONS | moral.NEGATIVE_EMOTIONS
     assert not moral.NEGATIVE_EMOTIONS & moral.POSITIVE_EMOTIONS
 
 
@@ -80,6 +98,18 @@ def test_every_synonym_leads_into_the_pool():
         ("гнев", "anger"),
         ("disgust", "disgust"),
         ("happy", "happiness"),
+        ("seductive", "passion"),
+        ("flirty", "passion"),
+        ("страсть", "passion"),
+        ("love", "tenderness"),
+        ("surprise", "surprise"),
+        ("удивление", "surprise"),
+        ("интерес", "curiosity"),
+        ("любопытство", "curiosity"),
+        ("grateful", "gratitude"),
+        ("благодарность", "gratitude"),
+        ("guilty", "guilt"),
+        ("вина", "guilt"),
         ("laziness", ""),
         ("лень", ""),
         ("excited", ""),

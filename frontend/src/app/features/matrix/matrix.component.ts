@@ -44,6 +44,11 @@ export class MatrixComponent implements OnInit {
         { key: 'hurt', color: 'emotion--hurt' },
         { key: 'disgust', color: 'emotion--disgust' },
         { key: 'happiness', color: 'emotion--happiness' },
+        { key: 'passion', color: 'emotion--passion' },
+        { key: 'curiosity', color: 'emotion--curiosity' },
+        { key: 'surprise', color: 'emotion--surprise' },
+        { key: 'gratitude', color: 'emotion--gratitude' },
+        { key: 'guilt', color: 'emotion--guilt' },
     ];
 
     constructor(

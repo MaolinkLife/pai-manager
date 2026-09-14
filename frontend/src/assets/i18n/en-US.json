@@ -753,7 +753,12 @@
             "resentment": "Resentment",
             "calm": "Calm",
             "curious": "Curious",
-            "thoughtful": "Thoughtful"
+            "thoughtful": "Thoughtful",
+            "passion": "Passion",
+            "curiosity": "Curiosity",
+            "surprise": "Surprise",
+            "gratitude": "Gratitude",
+            "guilt": "Guilt"
         }
     },
     "memory": {

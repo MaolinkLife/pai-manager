@@ -754,7 +754,12 @@
             "resentment": "Обида",
             "calm": "Спокойствие",
             "curious": "Любопытство",
-            "thoughtful": "Задумчивость"
+            "thoughtful": "Задумчивость",
+            "passion": "Страсть",
+            "curiosity": "Любопытство",
+            "surprise": "Удивление",
+            "gratitude": "Благодарность",
+            "guilt": "Вина"
         }
     },
     "memory": {
