@@ -60,6 +60,23 @@ describe('RagSettingsComponent memory save', () => {
         expect(updates).toEqual([{ memory: { shortTerm: { startupRefreshEnabled: true } } }]);
     });
 
+    it('switching RAG sends only its own module flag', () => {
+        const component = create();
+        const internals = component as any;
+        component.ragForm.get('enabled')!.setValue(false);
+        internals.originalConfig = JSON.parse(JSON.stringify(internals.buildRagConfigFromForm()));
+        internals.originalModules = {
+            vtubeStudio: false, whisper: true, minecraft: false, gaming: false,
+            alarm: false, discord: true, rag: false, visual: true,
+        };
+
+        component.ragForm.get('enabled')!.setValue(true);
+        component.saveChanges();
+
+        expect(updates.length).toBe(1);
+        expect(updates[0].modules).toEqual({ rag: true });
+    });
+
     it('sends edited stopwords as the whole list, and nothing else of retrieval', () => {
         const component = create();
         component.ragForm.get('retrievalKeywordStopwords')!.setValue('and, the');

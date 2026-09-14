@@ -6,6 +6,7 @@ import { ConfigService } from '../../../../../core/services/config.service';
 import { ResourcesService } from '../../../../../core/services/resources.service';
 import { ApiService, ModelIndexEntry } from '../../../../../core/services/api.service';
 import { buildModelOptions, modelOptionLabels } from '../../../../../core/utils/model-options';
+import { pickChangedFields } from '../../../../../core/utils/changed-fields';
 import { ModalService } from '../../../../../shared/components/modal/modal.service';
 import { MonitorSelectionModalComponent } from '../../monitor-selection-modal/monitor-selection-modal.component';
 import { NotificationService } from '../../../../../shared/components/notification/notification.service';
@@ -234,8 +235,10 @@ export class VisionSettingsComponent implements OnInit, OnDestroy {
         if (changes && Object.keys(changes).length > 0) {
             updateData.vision = JSON.parse(JSON.stringify(changes));
         }
-        if (JSON.stringify(modules) !== JSON.stringify(this.originalModules)) {
-            updateData.modules = modules;
+        // Only this tab's module flag: the others may have been switched elsewhere since.
+        const modulesChanges = pickChangedFields(modules, this.originalModules);
+        if (Object.keys(modulesChanges).length > 0) {
+            updateData.modules = modulesChanges;
         }
         if (Object.keys(updateData).length === 0) {
             return;

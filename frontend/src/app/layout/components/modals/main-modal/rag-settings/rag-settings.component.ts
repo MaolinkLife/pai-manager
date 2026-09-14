@@ -629,8 +629,10 @@ export class RagSettingsComponent implements OnInit {
         if (Object.keys(changes).length > 0) {
             updateData.rag = this.expandPathMap(changes);
         }
-        if (JSON.stringify(modules) !== JSON.stringify(this.originalModules)) {
-            updateData.modules = modules;
+        // Only this tab's module flag: the others may have been switched elsewhere since.
+        const modulesChanges = pickChangedFields(modules, this.originalModules);
+        if (Object.keys(modulesChanges).length > 0) {
+            updateData.modules = modulesChanges;
         }
         if (memoryChanged) {
             updateData.memory = memoryChanges;
