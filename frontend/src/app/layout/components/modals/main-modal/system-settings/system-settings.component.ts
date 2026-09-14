@@ -210,6 +210,7 @@ export class SystemSettingsComponent implements OnInit {
                             publicUrl: '',
                         },
                     },
+                    auditLogs: config?.auditLogs,
                 };
 
                 return combinedConfig;

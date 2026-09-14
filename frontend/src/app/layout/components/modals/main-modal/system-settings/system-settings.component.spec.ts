@@ -94,10 +94,10 @@ describe('SystemSettingsComponent partial saves', () => {
         },
     });
 
-    function create(): SystemSettingsComponent {
+    function create(config: any = stored()): SystemSettingsComponent {
         saved = [];
         const configService: any = {
-            getConfig$: () => of(stored()),
+            getConfig$: () => of(config),
             getSystem$: () => of({ system: { prompt: 'A prompt', active_character_id: 'c1', char_name: 'Test' } }),
             getSystemCharacters$: () => of({ characters: [{ id: 'c1', name: 'Test', prompt: 'A prompt' }], active_character_id: 'c1' }),
             updateConfig$: (payload: any) => {
@@ -154,6 +154,27 @@ describe('SystemSettingsComponent partial saves', () => {
         component.saveChanges();
 
         expect(saved).toEqual([{ auditLogs: { retention: { ageDays: { info: 10 } } } }]);
+    });
+
+    it('shows the stored log retention instead of the form defaults', () => {
+        const component = create({
+            ...stored(),
+            auditLogs: {
+                retention: {
+                    enabled: false,
+                    ageDays: { debug: 7, info: 21, success: 7, warning: 30, error: 90, audit_fail: 90 },
+                    hardCap: { info: 50000, success: 50000, warning: 10000, error: 1000, audit_fail: 5000 },
+                },
+            },
+        });
+
+        expect(component.systemForm.get('auditRetention')!.value).toEqual(jasmine.objectContaining({
+            enabled: false,
+            ageInfo: 21,
+            ageSuccess: 7,
+            capError: 1000,
+        }));
+        expect(component.hasChanges()).toBeFalse();
     });
 
     it('does not send a request when nothing changed', () => {
