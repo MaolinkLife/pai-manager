@@ -1171,7 +1171,7 @@ class MoralMatrixModule:
     @staticmethod
     def recognizes_provider_answer(payload: Any) -> bool:
         """True when an answer carries at least one field some matrix prompt
-        asks for — the owner's prompt (`emotional_reaction`, `state_update`, …)
+        asks for — a prompt set in the settings (`emotional_reaction`, `state_update`, …)
         or the built-in one (`current_state`, deltas, `summary`, directives).
         A partial answer is fine; an answer with none of them is unusable."""
         if not isinstance(payload, dict):

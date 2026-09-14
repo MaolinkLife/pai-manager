@@ -23,7 +23,7 @@ describe('image check settings', () => {
         expect(clampGenerations('')).toBe(2);
     });
 
-    it('fills a missing or partial config with the owner defaults', () => {
+    it('fills a missing or partial config with the defaults', () => {
         expect(normalizeImageCheck(undefined)).toEqual(IMAGE_CHECK_DEFAULTS);
         expect(normalizeImageCheck({ quality: { enabled: true } }).quality).toEqual({
             enabled: true,
