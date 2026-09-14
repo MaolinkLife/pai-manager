@@ -240,6 +240,30 @@ class VisionService:
         return None
 
 
+def sync_screen_capture_with_config() -> None:
+    """Background screen capture follows its switch right away, not on next launch."""
+    from .worker import screen_capture_enabled
+
+    if screen_capture_enabled():
+        try:
+            VisionService().start()
+        except Exception as exc:
+            log_audit_entry(
+                "vision_screen_capture_start_failed",
+                "[Vision] Background screen capture did not start.",
+                AuditStatus.ERROR,
+                details={"error": str(exc)},
+            )
+        return
+
+    instance = VisionService._instance
+    capturer = getattr(instance, "capturer", None)
+    if capturer is not None and capturer.running:
+        instance.stop()
+        # Frames of the screen do not outlive the switch.
+        instance.buffer.clear()
+
+
 _debug_save_lock = threading.Lock()
 _debug_last_saved = 0.0
 

@@ -1,10 +1,27 @@
 from constants.prompts import (
     TELEGRAM_PUBLIC_REFLECTION_PROMPT,
     COGNITIVE_ANALYSIS_PROMPT,
+    IMAGE_SCENE_FORMAT_PROMPT,
     INSTRUCTOR_BUILD_SCHEMA_PROMPT,
     MEDIA_IMAGE_PROMPT_BUILDER_SYSTEM_PROMPT,
     MEDIA_IMAGE_PROMPT_BUILDER_USER_TEMPLATE,
     MORAL_MATRIX_PROVIDER_PROMPT,
+    SYNTHESIS_IMAGE_CHECK_DESCRIBE_PROMPT,
+    SYNTHESIS_IMAGE_CHECK_SYSTEM_PROMPT,
+    SYNTHESIS_IMAGE_CHECK_USER_TEMPLATE,
+    CONFIDENCE_ESTIMATION_PROMPT,
+    SELF_WATCHER_REFLECTION_PROMPT,
+    VALIDATOR_COMPLIANCE_PROMPT,
+    DAILY_ACTIVITY_DIARY_SYSTEM_PROMPT,
+    DAILY_ACTIVITY_DIARY_USER_PROMPT_TEMPLATE,
+    MEMORY_JUDGE_CONTRADICTION_PROMPT,
+    SHORT_TERM_DAILY_SUMMARY_SYSTEM_PROMPT,
+    SHORT_TERM_DAILY_SUMMARY_TASK_PROMPT,
+    MORAL_INNER_VOICE_PROMPT,
+    DECISION_LAYER_ORCHESTRATOR_PROMPT,
+    VISION_ATTACHMENT_PROMPT,
+    VISION_GENERATED_IMAGE_PROMPT,
+    VISION_SCREEN_PROMPT,
 )
 
 # Default configuration as dict (for backward compatibility)
@@ -54,6 +71,8 @@ DEFAULT_CONFIG = {
         "temperature": 0.0,
         "user_char_limit": 2000,
         "output_char_limit": 4000,
+        # Technical prompt, editable in the settings; empty = built-in.
+        "system_prompt": CONFIDENCE_ESTIMATION_PROMPT,
     },
     "factuality": {
         # Factuality check (§3.9). Extracts factual claims from the output
@@ -82,6 +101,8 @@ DEFAULT_CONFIG = {
         "max_events_in_cluster": 20,
         "llm_max_tokens": 220,
         "llm_temperature": 0.5,
+        # Technical prompt, editable in the settings; empty = built-in.
+        "reflection_prompt": SELF_WATCHER_REFLECTION_PROMPT,
     },
     "reminders": {
         # §3.9-quinquies Tasks/Reminders. Capture: regex gate in the decision
@@ -96,6 +117,10 @@ DEFAULT_CONFIG = {
         "retention_days": 30,
     },
     "initiative": {
+        # Global initiative switch: off → PAI writes first nowhere, whatever a
+        # channel's own initiative settings say. Off on a fresh install.
+        # Reminders are tasks, not initiative.
+        "enabled": False,
         # Chat initiative: PAI writes to main_chat first when the loop's
         # idle/emotion pattern fires (30m/60m/24h silence tiers). The text is
         # composed by the generation LLM with the persona attached; on
@@ -148,6 +173,8 @@ DEFAULT_CONFIG = {
         # cheap, not a deep critic.
         "instruction_char_limit": 4000,
         "output_char_limit": 4000,
+        # Technical prompt, editable in the settings; empty = built-in.
+        "system_prompt": VALIDATOR_COMPLIANCE_PROMPT,
     },
     "audit_logs": {
         # Retention policy applied nightly by loop_initiative right after
@@ -178,12 +205,10 @@ DEFAULT_CONFIG = {
         "mode": "system",
         "active_provider": "ollama",
         "max_steps": 4,
+        # Routing prompt of the "llm" mode: technical, editable in the settings;
+        # empty = built-in.
+        "orchestrator_prompt": DECISION_LAYER_ORCHESTRATOR_PROMPT,
         "release_after_use": True,
-        "capabilities": {
-            "tool": False,
-            "vision": False,
-            "thinking": False,
-        },
         "providers": {
             "ollama": {
                 "model": "llama3.2",
@@ -301,7 +326,16 @@ DEFAULT_CONFIG = {
         "ignore_trigger_words": True,
     },
     "vision": {
+        # Vision as a whole: pictures sent to the chat get described.
         "enabled": True,
+        # Background screen capture: PAI looks at the screen on her own. Its own
+        # switch, off on a fresh install.
+        "screen_capture_enabled": False,
+        # What the vision model is asked: technical prompts, editable in the
+        # settings; empty = built-in.
+        "attachment_prompt": VISION_ATTACHMENT_PROMPT,
+        "generated_image_prompt": VISION_GENERATED_IMAGE_PROMPT,
+        "screen_prompt": VISION_SCREEN_PROMPT,
         "active_provider": "apple_vision",
         "monitor_index": 0,
         "fps": 5,
@@ -318,16 +352,15 @@ DEFAULT_CONFIG = {
         "debug_save": False,
         "debug_path": "temp/vision",
         "vision_modules": {
-            "apple_vision": {"model_id": "apple/FastVLM-1.5B", "max_tokens": 128},
-            "llava": {"model_id": "llava-hf/llava-1.5-7b-hf", "max_tokens": 128},
+            # No default models: they are picked in the vision settings.
+            "apple_vision": {"model_id": "", "max_tokens": 128},
+            "llava": {"model_id": "", "max_tokens": 128},
             "ollama_vision": {
-                "model": "llava:latest",
+                # No default model: it is picked in the vision settings.
+                "model": "",
                 "max_tokens": 512,
-                "probe_enabled": True,
-                "probe_cache_seconds": 300,
                 "image_format": "PNG",
                 "keep_alive": "5m",
-                "use_main_model_context": False,
             },
             "llama_cpp_vision": {
                 "enabled": False,
@@ -502,6 +535,8 @@ DEFAULT_CONFIG = {
             "max_tokens": 80,
             "temperature": 0.7,
             "language": "",  # fallback to system.language if blank
+            # Technical prompt, editable in the settings; empty = built-in.
+            "system_prompt": MORAL_INNER_VOICE_PROMPT,
         },
         "scars": {
             # Emotional scars from Архитектура.md > "Что не прощается".
@@ -542,6 +577,8 @@ DEFAULT_CONFIG = {
                 "resentment",
                 "frustration",
                 "anger",
+                "hurt",
+                "disgust",
                 "longing",
                 "fear",
                 "shame",
@@ -567,6 +604,10 @@ DEFAULT_CONFIG = {
                 "resentment": 0.03,
                 "tenderness": 0.22,
                 "jealousy": 0.04,
+                "anger": 0.02,
+                "hurt": 0.02,
+                "disgust": 0.01,
+                "happiness": 0.12,
             },
             "trigger": "начальное спокойное состояние",
             "associated_events": [],
@@ -614,7 +655,17 @@ DEFAULT_CONFIG = {
                 "temperature": 0.0,
                 "max_tokens": 512,
                 "request_timeout": 60,
+                # Technical prompt, editable in the settings; empty = built-in.
+                "system_prompt": MEMORY_JUDGE_CONTRADICTION_PROMPT,
             },
+        },
+        # Day summary of short-term memory: technical prompts, editable in the
+        # settings; empty = built-in.
+        "short_term": {
+            # Build the missing day summaries of the active character on start.
+            "startup_refresh_enabled": False,
+            "summary_system_prompt": SHORT_TERM_DAILY_SUMMARY_SYSTEM_PROMPT,
+            "summary_task_prompt": SHORT_TERM_DAILY_SUMMARY_TASK_PROMPT,
         },
         "diary": {
             # Narrative diary (§3.9-bis): the daily summarisation LLM call
@@ -635,6 +686,10 @@ DEFAULT_CONFIG = {
                 "max_entries": 3,
                 "max_chars_per_entry": 600,
             },
+            # The daily diary call: technical prompts (the JSON fields the code
+            # reads), editable in the settings; empty = built-in.
+            "system_prompt": DAILY_ACTIVITY_DIARY_SYSTEM_PROMPT,
+            "user_template": DAILY_ACTIVITY_DIARY_USER_PROMPT_TEMPLATE,
         },
     },
     "synthesis": {
@@ -689,12 +744,22 @@ DEFAULT_CONFIG = {
             "gguf_cpu_offload": True,
             "gguf_base_repos": {},
         },
+        # After generation vision describes the image and a judge scores it.
+        # Below a threshold the image is still delivered (unless reroll is on)
+        # and always recorded in DebugVault. max_generations is shared by both
+        # rerolls and counts the first generation.
+        "image_check": {
+            "relevance": {"enabled": True, "threshold": 0.6, "reroll": False},
+            "quality": {"enabled": False, "threshold": 0.82, "reroll": False},
+            "max_generations": 2,
+            "describe_prompt": SYNTHESIS_IMAGE_CHECK_DESCRIBE_PROMPT,
+            "system_prompt": SYNTHESIS_IMAGE_CHECK_SYSTEM_PROMPT,
+            "user_template": SYNTHESIS_IMAGE_CHECK_USER_TEMPLATE,
+        },
+        # The answer format of the scene call for chat and proactive images.
+        "image_scene": {"format_prompt": IMAGE_SCENE_FORMAT_PROMPT},
         "prompting": {
             "enabled": True,
-            "max_attempts": 3,
-            "assess_enabled": True,
-            "retry_enabled": True,
-            "quality_threshold": 0.72,
             "appearance_prompt": "",
             "default_negative_prompt": "(text:2), (signature:2), raw photo",
             "image_prompt_builder_system_prompt": MEDIA_IMAGE_PROMPT_BUILDER_SYSTEM_PROMPT,
@@ -945,8 +1010,6 @@ DEFAULT_CONFIG = {
         "type": "Ollama",
         "streaming": True,
         "model": "llama3.2",
-        "visual_model": "apple/FastVLM-1.5B",
-        "visual_model_options": ["apple/FastVLM-1.5B"],
         "token_limit": 4096,
         "message_pair_limit": 4,
         "active_provider": "ollama",

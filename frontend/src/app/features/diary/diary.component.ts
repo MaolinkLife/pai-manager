@@ -1,6 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 import { UiFeatureFlagsService } from '../../core/services/ui-feature-flags.service';
-import { DiaryEntryDto, DiaryService } from '../../core/services/diary.service';
+import { DiaryEntryDto, DiaryListResponse, DiaryService } from '../../core/services/diary.service';
 
 interface DiaryStructuredEmotion {
     valence: string;
@@ -25,6 +25,7 @@ interface DiaryStructuredPayload {
 }
 
 interface DiaryEntry {
+    id: string;
     date: string;
     mood: string;
     summary: string;
@@ -32,7 +33,12 @@ interface DiaryEntry {
     selfReflection: string;
     tags: string[];
     structured: DiaryStructuredPayload | null;
+    // Hidden by sleep consolidation (payload.pruned); shown only on request.
+    hidden: boolean;
+    hiddenReason: string;
 }
+
+const KNOWN_HIDDEN_REASONS = new Set(['low_importance', 'superseded_by', 'user_archived']);
 
 @Component({
     selector: 'app-diary',
@@ -41,11 +47,18 @@ interface DiaryEntry {
 })
 export class DiaryComponent implements OnInit {
     readonly featureEnabled: boolean;
+    readonly pageSize = 30;
     loading = false;
+    loadingMore = false;
     generating = false;
     error = '';
+    hasMore = false;
+    showHidden = false;
 
     entries: DiaryEntry[] = [];
+
+    // A page that arrives after a reload (refresh, hidden switch) is dropped.
+    private loadRequest = 0;
 
     constructor(
         uiFeatureFlags: UiFeatureFlagsService,
@@ -80,20 +93,76 @@ export class DiaryComponent implements OnInit {
         });
     }
 
-    private loadEntries(): void {
-        this.loading = true;
+    setShowHidden(show: boolean): void {
+        if (this.showHidden === show) {
+            return;
+        }
+        this.showHidden = show;
+        this.loadEntries();
+    }
+
+    loadMore(): void {
+        if (this.loading || this.loadingMore || !this.hasMore) {
+            return;
+        }
+        const request = this.loadRequest;
+        this.loadingMore = true;
         this.error = '';
-        this.diaryService.getEntries$(30).subscribe({
+        this.diaryService.getEntries$(this.entries.length, this.pageSize, this.showHidden).subscribe({
             next: (response) => {
-                const rows = Array.isArray(response?.entries) ? response.entries : [];
-                this.entries = rows.map((row) => this.mapEntry(row));
-                this.loading = false;
+                if (request !== this.loadRequest) {
+                    return;
+                }
+                this.entries = this.entries.concat(this.mapRows(response));
+                this.hasMore = !!response?.has_more;
+                this.loadingMore = false;
             },
             error: () => {
-                this.loading = false;
+                if (request !== this.loadRequest) {
+                    return;
+                }
+                this.loadingMore = false;
                 this.error = 'Failed to load diary entries';
             },
         });
+    }
+
+    hiddenReasonKey(reason: string): string | null {
+        return KNOWN_HIDDEN_REASONS.has(reason) ? `diary.hiddenReasons.${reason}` : null;
+    }
+
+    trackEntry(_index: number, entry: DiaryEntry): string {
+        return entry.id || entry.date;
+    }
+
+    private loadEntries(): void {
+        const request = ++this.loadRequest;
+        this.loading = true;
+        this.loadingMore = false;
+        this.error = '';
+        this.diaryService.getEntries$(0, this.pageSize, this.showHidden).subscribe({
+            next: (response) => {
+                if (request !== this.loadRequest) {
+                    return;
+                }
+                this.entries = this.mapRows(response);
+                this.hasMore = !!response?.has_more;
+                this.loading = false;
+            },
+            error: () => {
+                if (request !== this.loadRequest) {
+                    return;
+                }
+                this.loading = false;
+                this.hasMore = false;
+                this.error = 'Failed to load diary entries';
+            },
+        });
+    }
+
+    private mapRows(response: DiaryListResponse | null | undefined): DiaryEntry[] {
+        const rows = Array.isArray(response?.entries) ? response!.entries : [];
+        return rows.map((row) => this.mapEntry(row));
     }
 
     private mapEntry(row: DiaryEntryDto): DiaryEntry {
@@ -107,7 +176,12 @@ export class DiaryComponent implements OnInit {
         const selfReflection = typeof payload?.['self_reflection'] === 'string'
             ? String(payload['self_reflection']).trim()
             : '';
+        const pruned = payload?.['pruned'] && typeof payload['pruned'] === 'object'
+            ? payload['pruned'] as Record<string, any>
+            : null;
+        const hiddenReason = pruned ? String(pruned['reason'] || '').trim() : '';
         return {
+            id: row.id || '',
             date: row.day || row.updated_at || new Date().toISOString(),
             mood: row.mood || 'Neutral',
             summary: row.summary || '',
@@ -115,6 +189,8 @@ export class DiaryComponent implements OnInit {
             selfReflection,
             tags: Array.isArray(row.tags) ? row.tags : [],
             structured: structuredRaw ? this.mapStructured(structuredRaw) : null,
+            hidden: !!hiddenReason,
+            hiddenReason,
         };
     }
 

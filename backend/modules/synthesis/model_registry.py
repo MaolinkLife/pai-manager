@@ -23,6 +23,8 @@ MODEL_INDEX_FILE = "model_index.json"
 CHECKPOINT_EXTENSIONS = {".safetensors", ".ckpt"}
 GGUF_EXTENSIONS = {".gguf"}
 GGUF_FAMILIES = {"flux-gguf", "sd3-gguf", "qwen-image-gguf"}
+# The safetensors format caps its JSON header at 100 MB.
+SAFETENSORS_HEADER_LIMIT = 100 * 1024 * 1024
 
 
 def _to_bool(value: object, default: bool = False) -> bool:
@@ -65,6 +67,46 @@ def _safe_slug(value: str, fallback: str = "model") -> str:
 def _looks_like_sdxl_checkpoint(value: str) -> bool:
     probe = Path(value or "").stem.lower()
     return "sdxl" in probe or re.search(r"(^|[_.-])xl([_.-]|$)", probe) is not None
+
+
+def _checkpoint_family_from_header(path: Path) -> Optional[str]:
+    """Family of a .safetensors checkpoint read from its header; weights are not loaded.
+
+    None when the file is not safetensors or the header says nothing conclusive.
+    """
+    if path.suffix.lower() != ".safetensors":
+        return None
+    try:
+        with open(path, "rb") as handle:
+            header_size = int.from_bytes(handle.read(8), "little")
+            if header_size <= 0 or header_size > SAFETENSORS_HEADER_LIMIT:
+                return None
+            header = json.loads(handle.read(header_size))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(header, dict):
+        return None
+
+    metadata = header.get("__metadata__")
+    architecture = str((metadata or {}).get("modelspec.architecture") or "").lower() if isinstance(metadata, dict) else ""
+    if "stable-diffusion-xl" in architecture:
+        return "sdxl-checkpoint"
+    tensor_names = [name for name in header if name != "__metadata__"]
+    # SDXL carries a second text encoder; SD 1.x/2.x keep theirs under cond_stage_model.
+    if any(name.startswith("conditioner.embedders.1.") for name in tensor_names):
+        return "sdxl-checkpoint"
+    if any(name.startswith("cond_stage_model.") for name in tensor_names):
+        return "stable-diffusion-checkpoint"
+    return None
+
+
+def _checkpoint_family(path: Path) -> str:
+    """What the weights are; the file name is only a fallback (2026-09-12: an SDXL
+    checkpoint without "xl" in its name was loaded as SD 1.5 and crashed)."""
+    from_header = _checkpoint_family_from_header(path)
+    if from_header:
+        return from_header
+    return "sdxl-checkpoint" if _looks_like_sdxl_checkpoint(path.stem.lower()) else "stable-diffusion-checkpoint"
 
 
 def _infer_gguf_family(value: str) -> str:
@@ -331,12 +373,11 @@ class SynthesisModelRegistry:
                 suffix = path.suffix.lower()
                 if not path.is_file() or suffix not in CHECKPOINT_EXTENSIONS | GGUF_EXTENSIONS:
                     continue
-                name_probe = path.stem.lower()
                 if suffix in GGUF_EXTENSIONS:
                     family = _infer_gguf_family(path.name)
                     defaults = _gguf_defaults(family, path.name)
                 else:
-                    family = "sdxl-checkpoint" if _looks_like_sdxl_checkpoint(name_probe) else "stable-diffusion-checkpoint"
+                    family = _checkpoint_family(path)
                     defaults = {
                         "width": 1024 if family == "sdxl-checkpoint" else 768,
                         "height": 1024 if family == "sdxl-checkpoint" else 768,
@@ -383,7 +424,7 @@ class SynthesisModelRegistry:
         if suffix in GGUF_EXTENSIONS:
             inferred_family = _infer_gguf_family(source.name)
         else:
-            inferred_family = self._infer_checkpoint_family(source.name, family)
+            inferred_family = self._infer_checkpoint_family(source, family)
         safe_id = _safe_slug(model_id or source.stem, "checkpoint")
         target_dir = self._image_generation_root / safe_id
         index = 2
@@ -439,7 +480,7 @@ class SynthesisModelRegistry:
         return path
 
     @staticmethod
-    def _infer_checkpoint_family(filename: str, requested_family: str = "auto") -> str:
+    def _infer_checkpoint_family(source: Path, requested_family: str = "auto") -> str:
         family = str(requested_family or "auto").strip().lower()
         aliases = {
             "sd": "stable-diffusion-checkpoint",
@@ -452,10 +493,7 @@ class SynthesisModelRegistry:
         family = aliases.get(family, family)
         if family in {"stable-diffusion-checkpoint", "sdxl-checkpoint"}:
             return family
-        name_probe = Path(filename).stem.lower()
-        if _looks_like_sdxl_checkpoint(name_probe):
-            return "sdxl-checkpoint"
-        return "stable-diffusion-checkpoint"
+        return _checkpoint_family(Path(source))
 
     def _promote_local_over_remote(self) -> None:
         remote = self._models.get("z_image_turbo")

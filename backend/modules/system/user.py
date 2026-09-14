@@ -31,6 +31,33 @@ def get_owner():
         session.close()
 
 
+def resolve_owner_timezone() -> Optional[str]:
+    """IANA timezone of the owner (UserSettings.timezone_name, set from the
+    browser at registration). None when there is no owner or the stored name is
+    not a valid zone. Never raises."""
+    try:
+        from zoneinfo import ZoneInfo
+
+        session: Session = SessionLocal()
+        try:
+            row = (
+                session.query(UserSettings.timezone_name)
+                .join(User, User.uuid == UserSettings.user_uuid)
+                .filter(User.role == "owner", User.is_active.is_(True))
+                .order_by(User.last_login_at.desc())
+                .first()
+            )
+        finally:
+            session.close()
+        zone_name = str((row[0] if row else "") or "").strip()
+        if not zone_name:
+            return None
+        ZoneInfo(zone_name)
+        return zone_name
+    except Exception:
+        return None
+
+
 def resolve_user_language(
     *,
     user_uuid: Optional[str] = None,

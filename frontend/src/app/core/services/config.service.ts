@@ -17,6 +17,18 @@ export interface SystemCharacter {
     updated_at?: string | null;
 }
 
+/** What deleting a character would archive and remove (GET .../deletion-preview). */
+export interface CharacterDeletionPreview {
+    status?: string;
+    character: { id: string; name: string };
+    counts: Record<string, number>;
+    has_data: boolean;
+    files: number;
+    files_bytes: number;
+    library_files: number;
+    blocked: { code: string; message: string } | null;
+}
+
 export interface SystemPayload {
     active_character_id?: string | null;
     char_name: string;
@@ -31,6 +43,7 @@ export class ConfigService {
     private apiUrl = environment.apiBaseUrl;
     private readonly configState = signal<ProjectConfig | null>(null);
     private configLoad$?: Observable<ProjectConfig | null>;
+    private defaultsLoad$?: Observable<Record<string, any> | null>;
 
     constructor(private http: HttpClient) { }
 
@@ -151,6 +164,12 @@ export class ConfigService {
         });
     }
 
+    getCharacterDeletionPreview$(characterId: string): Observable<CharacterDeletionPreview> {
+        return this.http.get<CharacterDeletionPreview>(
+            `${this.apiUrl}/config/system/characters/${encodeURIComponent(characterId)}/deletion-preview`
+        );
+    }
+
     deleteSystemCharacter$(characterId: string): Observable<any> {
         return this.http.delete(`${this.apiUrl}/config/system/characters/${encodeURIComponent(characterId)}`);
     }
@@ -162,6 +181,25 @@ export class ConfigService {
                 if (!config) return null;
                 return this.getNestedValue(config, path);
             })
+        );
+    }
+
+    /**
+     * The built-in value at a snake_case config path, e.g. `validator.system_prompt`.
+     * "Reset to default" on a settings field takes its value from here.
+     */
+    getDefaultValue$(path: string): Observable<any> {
+        if (!this.defaultsLoad$) {
+            this.defaultsLoad$ = this.http.get<Record<string, any>>(`${this.apiUrl}/config/defaults`).pipe(
+                catchError((_err) => {
+                    this.defaultsLoad$ = undefined;
+                    return of(null);
+                }),
+                shareReplay(1),
+            );
+        }
+        return this.defaultsLoad$.pipe(
+            map((defaults) => (defaults ? this.getNestedValue(defaults, path) : null)),
         );
     }
 

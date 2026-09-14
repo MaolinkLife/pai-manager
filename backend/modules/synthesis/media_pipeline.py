@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import re
@@ -16,12 +17,22 @@ from constants.prompts import (
 from modules.generative.manager import generation_manager
 from modules.generative.providers.base import ProviderError
 from modules.generative.types import GenerateRequest
+from modules.synthesis.image_check import (
+    CheckedAttempt,
+    ImageCheckResult,
+    ImageCheckSettings,
+    check_generated_image,
+    record_low_results,
+)
+from modules.synthesis.image_scene import her_prompt, shows_her
 from modules.synthesis.service import synthesis_service
 from modules.synthesis.types import ImageGenerationRequest
 from modules.system import config as config_service
 from modules.system.logger import AuditStatus, log_audit_entry
 from modules.system.runtime_profile import should_release_resources
+from modules.system.technical_prompts import configured_prompt, filled_prompt
 from modules.system.service import get_active_character_name
+from modules.visual_intent_composer import VisualProfile, visual_intent_composer_service
 from modules.visual_profile_store import visual_profile_store_service
 from modules.vision.visual_module import VisualModule
 
@@ -48,13 +59,22 @@ class MediaPipelineRequest:
     sampler: str | None = None
     scheduler: str | None = None
     comfyui_checkpoint: str | None = None
-    use_unified_router: bool | None = None
     use_prompt_builder: bool = False
     prompt_policy: str = ""
     style_prompt: str = ""
     review_generated_image: bool = False
     use_visual_intent: bool = False
     persist_output: bool = False
+    # The user wrote the prompt by hand (synthesis hub, sandbox): the image is
+    # neither checked against the request nor regenerated.
+    manual_prompt: bool = False
+    # Chat and proactive images: `prompt` is the scene
+    # the model wrote for `image_subject`, and the pipeline puts the picture
+    # together before generation; the generator draws what it is given.
+    compose_before_generation: bool = False
+    image_subject: str | None = None
+    subject_roll: str = ""
+    request_text: str = ""
     source: str = "media_pipeline"
     character_name: str = ""
     metadata: dict[str, Any] = field(default_factory=dict)
@@ -457,20 +477,17 @@ def _apply_image_scenario(request: MediaPipelineRequest) -> tuple[MediaPipelineR
     return request, scenario_key, scenario
 
 
-def _direct_vision_enabled(request: MediaPipelineRequest) -> bool:
-    if request.use_unified_router is not None:
-        return bool(request.use_unified_router)
-    if request.llm_provider.strip().lower() != "ollama":
-        return False
-    active_vision = str(config_service.get_config_value("vision.active_provider", "") or "").strip()
-    if active_vision not in {"ollama_vision", "llava"}:
-        return False
-    return bool(
-        config_service.get_config_value(
-            f"vision.vision_modules.{active_vision}.use_main_model_context",
-            False,
-        )
+def _image_prompt_builder_prompts(tool_context: str) -> tuple[str, str]:
+    """The prompt builder's system prompt and request: technical prompts from the settings."""
+    system = configured_prompt(
+        "synthesis.prompting.image_prompt_builder_system_prompt", MEDIA_IMAGE_PROMPT_BUILDER_SYSTEM_PROMPT
     )
+    user = filled_prompt(
+        "synthesis.prompting.image_prompt_builder_user_template",
+        MEDIA_IMAGE_PROMPT_BUILDER_USER_TEMPLATE,
+        tool_context=tool_context,
+    )
+    return system, user
 
 
 class MediaGenerationPipeline:
@@ -527,25 +544,11 @@ class MediaGenerationPipeline:
 
             prompt_started = time.perf_counter()
             await emit({"stage": "image_prompt", "state": "start"})
-            prompt_system = str(
-                config_service.get_config_value(
-                    "synthesis.prompting.image_prompt_builder_system_prompt",
-                    MEDIA_IMAGE_PROMPT_BUILDER_SYSTEM_PROMPT,
-                )
-                or MEDIA_IMAGE_PROMPT_BUILDER_SYSTEM_PROMPT
-            )
             tool_messages = _image_prompt_tool_messages(request.prompt, request.character_name)
             _append_optional_tool_message(tool_messages, name="sandboxPromptPolicy", content=prompt_policy)
             _append_optional_tool_message(tool_messages, name="sandboxStylePrompt", content=style_prompt)
-            user_template = str(
-                config_service.get_config_value(
-                    "synthesis.prompting.image_prompt_builder_user_template",
-                    MEDIA_IMAGE_PROMPT_BUILDER_USER_TEMPLATE,
-                )
-                or MEDIA_IMAGE_PROMPT_BUILDER_USER_TEMPLATE
-            )
-            prompt_user = user_template.format(
-                tool_context=_tool_messages_to_prompt_block(tool_messages)
+            prompt_system, prompt_user = _image_prompt_builder_prompts(
+                _tool_messages_to_prompt_block(tool_messages)
             )
             llm_metadata = {"source": request.source, "mode": f"{request.mode}_image_prompt"}
             if request.llm_model.strip():
@@ -606,6 +609,11 @@ class MediaGenerationPipeline:
             _append_optional_tool_message(tool_messages, name="sandboxPromptPolicy", content=prompt_policy)
             _append_optional_tool_message(tool_messages, name="sandboxStylePrompt", content=style_prompt)
 
+        scene_text = image_prompt
+        her_profile: VisualProfile | None = None
+        if request.compose_before_generation:
+            image_prompt, negative_prompt, her_profile = self._compose_image_prompt(request, scene_text, negative_prompt)
+
         if style_prompt:
             image_prompt = f"{image_prompt}, {style_prompt}" if image_prompt else style_prompt
 
@@ -629,28 +637,99 @@ class MediaGenerationPipeline:
             else False,
         }
 
-        generation_started = time.perf_counter()
-        await emit({"stage": "image_generation", "state": "start", "details": image_params})
-        image_result = synthesis_service.generate_image(
-            ImageGenerationRequest(
-                prompt=image_prompt,
-                negative_prompt=negative_prompt,
-                provider=image_params["provider"],
-                model=image_params["model"],
-                width=width,
-                height=height,
-                num_inference_steps=image_params["num_inference_steps"],
-                guidance_scale=image_params["guidance_scale"],
-                seed=image_params["seed"],
-                sampler=image_params["sampler"],
-                scheduler=image_params["scheduler"],
-                comfyui_checkpoint=image_params["comfyui_checkpoint"],
-                persist_output=request.persist_output,
-                use_prompt_engineering=False,
-                allow_fallback=bool(image_params["allow_fallback"]),
-                use_visual_intent=request.use_visual_intent,
+        # Generate, check, and generate again only while a failed check may reroll
+        # and generations are left; one DebugVault entry records every attempt.
+        check_settings = ImageCheckSettings.from_config()
+        generations_allowed = 1 if request.manual_prompt else check_settings.generations_allowed()
+        attempts: list[CheckedAttempt] = []
+        attempt_prompt, attempt_negative = image_prompt, negative_prompt
+        while True:
+            attempt_number = len(attempts) + 1
+            generation_started = time.perf_counter()
+            await emit({"stage": "image_generation", "state": "start", "details": {**image_params, "attempt": attempt_number}})
+            image_result = synthesis_service.generate_image(
+                ImageGenerationRequest(
+                    prompt=attempt_prompt,
+                    negative_prompt=attempt_negative,
+                    provider=image_params["provider"],
+                    model=image_params["model"],
+                    width=width,
+                    height=height,
+                    num_inference_steps=image_params["num_inference_steps"],
+                    guidance_scale=image_params["guidance_scale"],
+                    seed=image_params["seed"],
+                    sampler=image_params["sampler"],
+                    scheduler=image_params["scheduler"],
+                    comfyui_checkpoint=image_params["comfyui_checkpoint"],
+                    persist_output=request.persist_output,
+                    use_prompt_engineering=False,
+                    allow_fallback=bool(image_params["allow_fallback"]),
+                    use_visual_intent=request.use_visual_intent and not request.compose_before_generation,
+                )
             )
+            await emit(
+                {
+                    "stage": "image_generation",
+                    "state": "end",
+                    "elapsed_ms": round((time.perf_counter() - generation_started) * 1000, 2),
+                    "details": {
+                        "provider": image_result.provider,
+                        "model": image_result.model_id,
+                        "bytes": len(image_result.image_bytes),
+                        "attempt": attempt_number,
+                    },
+                }
+            )
+            if request.manual_prompt:
+                check = ImageCheckResult(status="disabled", reason="manual prompt: the user wrote it by hand")
+            else:
+                check = await self._check_image(emit, image_result.image_bytes, request, attempt_prompt, check_settings)
+            attempts.append(CheckedAttempt(attempt_number, attempt_prompt, attempt_negative, image_result.image_bytes, check))
+            if attempt_number >= generations_allowed or not check.should_reroll(check_settings):
+                break
+            feedback = check.feedback or "; ".join(check.mismatches) or "Match the request more closely."
+            if not request.compose_before_generation:
+                attempt_prompt, attempt_negative = await asyncio.to_thread(
+                    synthesis_service.refine_prompts_from_feedback,
+                    request_prompt=request.prompt,
+                    previous_positive=attempt_prompt,
+                    previous_negative=attempt_negative,
+                    feedback=feedback,
+                )
+                continue
+            # The refined text is a scene: her picture is put together again around it,
+            # anything else is drawn as refined. Her appearance stays out of the rewrite.
+            refined, attempt_negative = await asyncio.to_thread(
+                synthesis_service.refine_prompts_from_feedback,
+                request_prompt=request.request_text or request.prompt,
+                previous_positive=scene_text if her_profile is not None else attempt_prompt,
+                previous_negative=attempt_negative,
+                feedback=feedback,
+                with_appearance=False,
+            )
+            if her_profile is None:
+                attempt_prompt = refined
+            else:
+                scene_text = refined
+                attempt_prompt, _ = her_prompt(
+                    refined, her_profile, purpose_hint=str(request.metadata.get("purpose_hint") or "")
+                )
+        image_prompt, negative_prompt = attempt_prompt, attempt_negative
+        image_check = attempts[-1].check
+        vault_entry_id = record_low_results(
+            attempts,
+            request_text=request.prompt,
+            model_id=image_result.model_id,
+            provider=image_result.provider,
+            source=request.source,
+            settings=check_settings,
         )
+        image_check_meta = {
+            **image_check.as_dict(),
+            "generations": len(attempts),
+            "generations_allowed": generations_allowed,
+            "vault_entry_id": vault_entry_id,
+        }
         encoded_image = base64.b64encode(image_result.image_bytes).decode("ascii")
         image_params.update(
             {
@@ -658,18 +737,6 @@ class MediaGenerationPipeline:
                 "resolved_model": image_result.model_id,
                 "resolved_seed": image_result.seed,
                 "output_path": image_result.output_path,
-            }
-        )
-        await emit(
-            {
-                "stage": "image_generation",
-                "state": "end",
-                "elapsed_ms": round((time.perf_counter() - generation_started) * 1000, 2),
-                "details": {
-                    "provider": image_result.provider,
-                    "model": image_result.model_id,
-                    "bytes": len(image_result.image_bytes),
-                },
             }
         )
 
@@ -685,16 +752,14 @@ class MediaGenerationPipeline:
         ]
 
         final_content = "Image generated."
-        vision_description = ""
+        vision_description = image_check.description
         needs_image_description = bool(prompt_payload.get("needs_image_description", True)) if prompt_payload else request.review_generated_image
-        direct_mode = _direct_vision_enabled(request)
         if request.review_generated_image and needs_image_description:
             review_started = time.perf_counter()
             await emit(
                 {
                     "stage": "image_review",
                     "state": "start",
-                    "details": {"direct_main_model_context": direct_mode},
                 }
             )
             llm_provider_name = request.llm_provider.strip().lower()
@@ -712,36 +777,24 @@ class MediaGenerationPipeline:
                     ),
                 },
             ]
-            if direct_mode and llm_provider_name == "ollama":
-                review_messages.append(
-                    {
-                        "role": "user",
-                        "content": (
-                            "Look at the generated image attached to this message. "
-                            "Say whether it matches the original request, and describe the visible result briefly.\n\n"
-                            f"Original request: {request.prompt}\n"
-                            f"Generation prompt: {image_prompt}"
-                        ),
-                        "images": [encoded_image],
-                    }
-                )
-            else:
+            # The image is described by the vision module only.
+            if not vision_description:
                 visual = VisualModule()
                 described = visual.describe_media_attachments(generated_media) or {}
                 items = list(described.get("items") or [])
                 vision_description = str(items[0].get("description") or "").strip() if items else ""
-                review_messages.append(
-                    {
-                        "role": "user",
-                        "content": (
-                            "Review this generated image using the vision description below. "
-                            "Say whether it matches the original request, and describe the result briefly.\n\n"
-                            f"Original request: {request.prompt}\n"
-                            f"Generation prompt: {image_prompt}\n"
-                            f"Vision description: {vision_description or '<vision unavailable>'}"
-                        ),
-                    }
-                )
+            review_messages.append(
+                {
+                    "role": "user",
+                    "content": (
+                        "Review this generated image using the vision description below. "
+                        "Say whether it matches the original request, and describe the result briefly.\n\n"
+                        f"Original request: {request.prompt}\n"
+                        f"Generation prompt: {image_prompt}\n"
+                        f"Vision description: {vision_description or '<vision unavailable>'}"
+                    ),
+                }
+            )
             try:
                 review_result = provider.generate(
                     GenerateRequest(
@@ -764,7 +817,6 @@ class MediaGenerationPipeline:
                     "details": {
                         "provider": review_result.provider,
                         "model": review_result.metadata.get("model"),
-                        "direct_main_model_context": direct_mode and llm_provider_name == "ollama",
                     },
                 }
             )
@@ -800,14 +852,95 @@ class MediaGenerationPipeline:
                 "prompt_builder_json_parsed": bool(prompt_payload),
                 "prompt_builder_used_fallback": bool(fallback_prompt and image_prompt == fallback_prompt),
                 "tool_context": tool_messages,
-                "direct_main_model_context": direct_mode and request.llm_provider.strip().lower() == "ollama",
                 "needs_image_description": needs_image_description,
                 "pipeline_mode": request.mode,
+                "image_check": image_check_meta,
             },
             usage=prompt_usage,
             traces=traces,
             elapsed_ms=round((time.perf_counter() - started) * 1000, 1),
         )
+
+    @staticmethod
+    def _compose_image_prompt(
+        request: MediaPipelineRequest,
+        scene: str,
+        negative: str,
+    ) -> tuple[str, str, VisualProfile | None]:
+        """Put a chat or proactive picture together from the model's scene, before generation."""
+        scene = str(scene or "").strip()
+        her = bool(request.use_visual_intent) and shows_her(request.image_subject, request.subject_roll)
+        if not her:
+            # Anything else is only what was asked. With the composer switched off in
+            # the scenario, the scene goes as the model wrote it.
+            prompt = scene or str(request.request_text or "").strip()
+            log_audit_entry(
+                "media_pipeline_image_composed",
+                "[MediaPipeline] Image prompt put together before generation.",
+                AuditStatus.INFO,
+                details={
+                    "subject": request.image_subject,
+                    "free_roll": request.subject_roll,
+                    "shows_her": False,
+                    "composer": bool(request.use_visual_intent),
+                    "from_request_text": not scene,
+                },
+            )
+            return prompt, negative, None
+
+        profile = synthesis_service._ensure_visual_profile_anchor(
+            visual_profile_store_service.load_profile(character_name=request.character_name or None)
+        )
+        positive, built_negative = her_prompt(
+            scene, profile, purpose_hint=str(request.metadata.get("purpose_hint") or "")
+        )
+        log_audit_entry(
+            "media_pipeline_image_composed",
+            "[MediaPipeline] Image prompt put together before generation.",
+            AuditStatus.INFO,
+            details={
+                "subject": request.image_subject,
+                "free_roll": request.subject_roll,
+                "shows_her": True,
+                "composer_template": not scene,
+                "pose_from_settings": visual_intent_composer_service.has_selfie_pose(profile),
+            },
+        )
+        return positive, negative or built_negative, profile
+
+    @staticmethod
+    async def _check_image(
+        emit: Callable[[dict], Awaitable[None]],
+        image_bytes: bytes,
+        request: MediaPipelineRequest,
+        prompt: str,
+        settings: ImageCheckSettings,
+    ) -> ImageCheckResult:
+        if not settings.any_enabled:
+            return ImageCheckResult(status="disabled")
+        started = time.perf_counter()
+        await emit({"stage": "image_check", "state": "start"})
+        check = await asyncio.to_thread(
+            check_generated_image,
+            image_bytes,
+            request_text=request.prompt,
+            prompt=prompt,
+            settings=settings,
+        )
+        await emit(
+            {
+                "stage": "image_check",
+                "state": "end",
+                "elapsed_ms": round((time.perf_counter() - started) * 1000, 2),
+                "details": {
+                    "status": check.status,
+                    "relevance": check.relevance,
+                    "quality": check.quality,
+                    "error": check.reason or None,
+                },
+            }
+        )
+        return check
 
     @staticmethod
     def _release_llm_provider(provider: Any, *, stage: str) -> None:

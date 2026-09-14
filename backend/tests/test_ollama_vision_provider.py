@@ -11,57 +11,60 @@ from modules.vision.providers.ollama_vision import OllamaVisionProvider
 pytestmark = pytest.mark.regression
 
 
-def test_ollama_vision_probe_uses_real_png_fixture(monkeypatch):
-    captured = {}
-
-    def fake_chat_image(messages, model=None, options=None, keep_alive=None):
-        captured["messages"] = messages
-        captured["model"] = model
-        captured["options"] = options
-        captured["keep_alive"] = keep_alive
-        return "A red rectangle, a blue circle, and VISION TEST text."
-
+def _vision_model(monkeypatch, *capabilities):
     monkeypatch.setattr(ollama_vision.ollama_client, "is_available", lambda: True)
-    monkeypatch.setattr(ollama_vision.ollama_client, "chat_image", fake_chat_image)
-
-    provider = OllamaVisionProvider(
-        {
-            "model": "qwen-vl:test",
-            "max_tokens": 120,
-            "keep_alive": "5m",
-        }
+    monkeypatch.setattr(
+        ollama_vision.ollama_client,
+        "model_supports_vision",
+        lambda model: {"supported": "vision" in capabilities, "capabilities": list(capabilities)},
     )
 
-    assert provider.is_ready() is True
-    assert captured["model"] == "qwen-vl:test"
-    assert captured["keep_alive"] == "5m"
-    assert captured["options"]["num_predict"] >= 48
 
-    encoded = captured["messages"][0]["images"][0]
-    raw = base64.b64decode(encoded)
-    with Image.open(io.BytesIO(raw)) as image:
-        assert image.format == "PNG"
-        assert image.size == (256, 256)
+def _no_generation(*args, **kwargs):
+    raise AssertionError("a model is not run to check what it can do")
+
+
+def test_readiness_asks_only_the_metadata(monkeypatch):
+    """No test image is sent to find out whether a model can see."""
+    _vision_model(monkeypatch, "completion", "vision")
+    monkeypatch.setattr(ollama_vision.ollama_client, "chat_image_response", _no_generation)
+    monkeypatch.setattr(ollama_vision.ollama_client, "chat_image", _no_generation)
+
+    assert OllamaVisionProvider({"model": "qwen-vl:test"}).is_ready() is True
+
+
+def test_a_model_that_does_not_declare_vision_is_unavailable(monkeypatch):
+    monkeypatch.setattr(ollama_vision.ollama_client, "is_available", lambda: True)
+    monkeypatch.setattr(
+        ollama_vision.ollama_client,
+        "model_supports_vision",
+        lambda model: {"supported": False, "reason": "model metadata does not declare vision", "capabilities": ["completion"]},
+    )
+    monkeypatch.setattr(ollama_vision.ollama_client, "chat_image_response", _no_generation)
+    monkeypatch.setattr(ollama_vision, "log_audit_entry", lambda *args, **kwargs: None)
+    provider = OllamaVisionProvider({"model": "llava:latest"})
+
+    assert provider.is_ready() is False
+    assert provider._last_probe_error == "model metadata does not declare vision"
 
 
 def test_ollama_vision_describe_image_uses_configured_format(monkeypatch):
     captured = {}
 
-    def fake_chat_image(messages, model=None, options=None, keep_alive=None):
+    def fake_chat_image_response(messages, model=None, options=None, keep_alive=None):
         captured["messages"] = messages
         captured["model"] = model
         captured["options"] = options
         captured["keep_alive"] = keep_alive
-        return "The image shows a simple test shape."
+        return {"content": "The image shows a simple test shape.", "thinking": "", "done_reason": "stop"}
 
-    monkeypatch.setattr(ollama_vision.ollama_client, "is_available", lambda: True)
-    monkeypatch.setattr(ollama_vision.ollama_client, "chat_image", fake_chat_image)
+    _vision_model(monkeypatch, "completion", "vision")
+    monkeypatch.setattr(ollama_vision.ollama_client, "chat_image_response", fake_chat_image_response)
 
     provider = OllamaVisionProvider(
         {
             "model": "qwen-vl:test",
             "max_tokens": 88,
-            "probe_enabled": False,
             "image_format": "PNG",
             "keep_alive": "5m",
         }

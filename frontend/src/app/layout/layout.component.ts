@@ -4,6 +4,8 @@ import { NotificationService } from '../shared/components/notification/notificat
 import { ThemeService } from '../core/services/theme.service';
 import { ConfigService } from '../core/services/config.service';
 import { ApiService, OllamaRuntimeModel } from '../core/services/api.service';
+import { buildModelOptions, modelOptionLabels } from '../core/utils/model-options';
+import { UiSelectOption } from '../shared/ui/components/ui-select/ui-select.component';
 import { ProjectConfig } from '../core/models/project-config.model';
 import { filter } from 'rxjs/operators';
 import { UiFeatureFlagsService } from '../core/services/ui-feature-flags.service';
@@ -30,7 +32,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
     generationProvider = 'ollama';
     generationProviderOptions: string[] = [];
     generationModel = '';
-    generationModels: string[] = [];
+    generationModels: UiSelectOption<string>[] = [];
     generationRuntimeModels: OllamaRuntimeModel[] = [];
     generationRuntimeLoading = false;
     generationRuntimeUnloading = false;
@@ -258,27 +260,14 @@ export class LayoutComponent implements OnInit, OnDestroy {
                 this.showAllChatSources = this.readShowAllChatSources();
 
                 if (provider === 'ollama') {
-                    this.apiService.getOllamaModels$().subscribe({
-                        next: (models) => {
-                            const modelSet = new Set(models || []);
-                            if (this.generationModel) {
-                                modelSet.add(this.generationModel);
-                            }
-                            this.generationModels = Array.from(modelSet);
-                            this.generationPanelLoading = false;
-                            this.refreshOllamaRuntimeState();
-                            this.startGenerationRuntimeRefresh();
-                        },
-                        error: () => {
-                            this.generationModels = this.generationModel ? [this.generationModel] : [];
-                            this.generationPanelLoading = false;
-                            this.startGenerationRuntimeRefresh();
-                        }
+                    this.loadQuickOllamaModelOptions(() => {
+                        this.refreshOllamaRuntimeState();
+                        this.startGenerationRuntimeRefresh();
                     });
                     return;
                 }
 
-                this.generationModels = this.generationModel ? [this.generationModel] : [];
+                this.generationModels = this.currentModelOnlyOption();
                 this.generationRuntimeModels = [];
                 this.stopGenerationRuntimeRefresh();
                 this.generationPanelLoading = false;
@@ -431,26 +420,37 @@ export class LayoutComponent implements OnInit, OnDestroy {
     private loadQuickProviderModels(provider: string): void {
         if (provider === 'ollama') {
             this.generationPanelLoading = true;
-            this.apiService.getOllamaModels$().subscribe({
-                next: (models) => {
-                    const modelSet = new Set(models || []);
-                    if (this.generationModel) {
-                        modelSet.add(this.generationModel);
-                    }
-                    this.generationModels = Array.from(modelSet);
-                    this.generationPanelLoading = false;
-                    this.refreshOllamaRuntimeState();
-                },
-                error: () => {
-                    this.generationModels = this.generationModel ? [this.generationModel] : [];
-                    this.generationPanelLoading = false;
-                }
-            });
+            this.loadQuickOllamaModelOptions(() => this.refreshOllamaRuntimeState());
             return;
         }
 
-        this.generationModels = this.generationModel ? [this.generationModel] : [];
+        this.generationModels = this.currentModelOnlyOption();
         this.generationPanelLoading = false;
+    }
+
+    /**
+     * Text models from the model index; the chosen one stays with a note when it is
+     * not marked. When the index cannot be read, only the chosen
+     * model is offered, with no note it has not earned.
+     */
+    private loadQuickOllamaModelOptions(after: () => void): void {
+        this.apiService.getModelIndex$().subscribe((entries) => {
+            this.generationModels = entries
+                ? buildModelOptions(
+                    entries,
+                    'completion',
+                    this.generationModel,
+                    modelOptionLabels((key) => this.localizationService.t(key), 'completion'),
+                    { placeholderWhenEmpty: false },
+                )
+                : this.currentModelOnlyOption();
+            this.generationPanelLoading = false;
+            after();
+        });
+    }
+
+    private currentModelOnlyOption(): UiSelectOption<string>[] {
+        return this.generationModel ? [{ value: this.generationModel, label: this.generationModel }] : [];
     }
 
     private refreshOllamaRuntimeState(): void {

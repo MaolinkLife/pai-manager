@@ -28,10 +28,14 @@ sentence-transformers
 openai
 pyttsx3
 timm
-diffusers @ git+https://github.com/huggingface/diffusers
+# Pinned: the owner's image models are verified on this diffusers build. An
+# unpinned git install drifts between environments (2026-09-12: 0.37.1 in the
+# venv crashed a checkpoint that works on this commit).
+diffusers @ git+https://github.com/huggingface/diffusers@f3d42be118f9af7ed9697b686fba09a8bdcd71d1
 transformers>=4.46.0
 accelerate>=1.0.0
-safetensors>=0.4.5
+# The diffusers commit above requires safetensors>=0.8.0rc0; this is the tested one.
+safetensors==0.8.0rc0
 gguf>=0.10.0
 pypdf>=4.0.0
 huggingface-hub>=0.26.0

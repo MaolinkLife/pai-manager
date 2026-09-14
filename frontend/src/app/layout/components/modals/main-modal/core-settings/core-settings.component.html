@@ -99,26 +99,34 @@
                             </ng-container>
                         </div>
 
-                        <div class="capability-actions">
-                            <app-ui-button
-                                variant="secondary"
-                                [loading]="(isChecking$ | async) || false"
-                                (pressed)="checkCapabilities()"
-                            >
-                                {{ "coreSettings.checkCapabilities" | translate }}
-                            </app-ui-button>
+                        <div class="router-capabilities">
+                            <label>{{ "coreSettings.routerCapabilities" | translate }}</label>
+                            <div class="router-capabilities__row">
+                                <app-model-capability-chips
+                                    *ngIf="routerModelEntry; else routerModelNotIndexed"
+                                    [entry]="routerModelEntry"
+                                ></app-model-capability-chips>
+                                <ng-template #routerModelNotIndexed>
+                                    <span class="router-capabilities__none">
+                                        {{ "coreSettings.routerCapabilitiesNotIndexed" | translate }}
+                                    </span>
+                                </ng-template>
+                                <a class="router-capabilities__edit" routerLink="/settings/models">
+                                    {{ "coreSettings.routerCapabilitiesEdit" | translate }}
+                                </a>
+                            </div>
+                            <p class="section-hint">{{ "coreSettings.routerCapabilitiesHint" | translate }}</p>
                         </div>
 
-                        <div class="capability-grid" formGroupName="capabilities">
-                            <app-ui-checkbox formControlName="tool">
-                                {{ "coreSettings.capabilityTool" | translate }}
-                            </app-ui-checkbox>
-                            <app-ui-checkbox formControlName="vision">
-                                {{ "coreSettings.capabilityVision" | translate }}
-                            </app-ui-checkbox>
-                            <app-ui-checkbox formControlName="thinking">
-                                {{ "coreSettings.capabilityThinking" | translate }}
-                            </app-ui-checkbox>
+                        <div class="form-group prompt-group">
+                            <label for="dlOrchestratorPrompt">{{ "coreSettings.orchestratorPrompt" | translate }}</label>
+                            <app-ui-textarea id="dlOrchestratorPrompt" [rows]="10" [autoResize]="true" formControlName="orchestratorPrompt"></app-ui-textarea>
+                            <div class="prompt-actions">
+                                <p class="section-hint">{{ "coreSettings.orchestratorPromptHint" | translate }}</p>
+                                <button type="button" class="reset-button" (click)="resetPrompt('orchestratorPrompt', 'decision_layer.orchestrator_prompt')">
+                                    {{ "coreSettings.resetPrompt" | translate }}
+                                </button>
+                            </div>
                         </div>
                     </div>
 
@@ -163,6 +171,12 @@
                                 formControlName="buildSchema"
                                 [rows]="14"
                             ></app-ui-textarea>
+                            <div class="prompt-actions">
+                                <span></span>
+                                <button type="button" class="reset-button" (click)="resetPrompt('instructor.buildSchema', 'decision_layer.instructor.build_schema')">
+                                    {{ "coreSettings.resetPrompt" | translate }}
+                                </button>
+                            </div>
                         </div>
                     </div>
 

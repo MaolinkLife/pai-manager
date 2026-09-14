@@ -135,6 +135,12 @@
                         [autoResize]="false"
                         [rows]="12"
                     ></app-ui-textarea>
+                    <div class="prompt-actions">
+                        <p class="hint">{{ "moralSettings.systemPromptHint" | translate }}</p>
+                        <button type="button" class="reset-button" (click)="resetPrompt('systemPrompt', 'moral.system_prompt')">
+                            {{ "moralSettings.resetPrompt" | translate }}
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -490,6 +496,17 @@
                         placeholder="ru-RU"
                     ></app-ui-input>
                     <p class="hint">{{ "moralSettings.innerVoiceLanguageHint" | translate }}</p>
+                </div>
+
+                <div class="form-group">
+                    <label for="moralInnerVoicePrompt">{{ "moralSettings.innerVoicePrompt" | translate }}</label>
+                    <app-ui-textarea id="moralInnerVoicePrompt" [rows]="8" [autoResize]="true" formControlName="systemPrompt"></app-ui-textarea>
+                    <div class="prompt-actions">
+                        <p class="hint">{{ "moralSettings.innerVoicePromptHint" | translate }}</p>
+                        <button type="button" class="reset-button" (click)="resetPrompt('innerVoice.systemPrompt', 'moral.inner_voice.system_prompt')">
+                            {{ "moralSettings.resetPrompt" | translate }}
+                        </button>
+                    </div>
                 </div>
             </div>
 

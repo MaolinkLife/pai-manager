@@ -470,7 +470,10 @@ def get_full_history(character_id: str):
     try:
         messages = (
             session.query(History)
-            .filter_by(character_id=character_id)
+            .filter(
+                History.character_id == character_id,
+                ((History.role != "assistant") | (History.active_variant.is_(True))),
+            )
             .order_by(History.timestamp.asc())
             .all()
         )
@@ -789,7 +792,12 @@ def build_history_up_to_user_message(session, character_id, user_msg, limit=32):
 
     history_before_user = (
         session.query(History)
-        .filter(History.character_id == character_id, History.timestamp < user_timestamp)
+        .filter(
+            History.character_id == character_id,
+            History.timestamp < user_timestamp,
+            # An answer replaced by a reroll is not part of the conversation.
+            ((History.role != "assistant") | (History.active_variant.is_(True))),
+        )
         .order_by(History.timestamp.desc())
         .limit(limit)
         .all()
@@ -823,6 +831,7 @@ def build_history_up_to_assistant_message(session, character_id, assistant_msg, 
         .filter(
             History.character_id == character_id,
             History.timestamp <= assistant_timestamp,
+            ((History.role != "assistant") | (History.active_variant.is_(True))),
         )
         .order_by(History.timestamp.desc())
         .limit(limit)

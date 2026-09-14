@@ -37,7 +37,12 @@ export class AuthGuard implements CanActivate, CanActivateChild {
     ): Observable<boolean | UrlTree> {
         return this.authService.getBootstrapState$().pipe(
             switchMap((bootstrap) => {
-                if (!bootstrap?.has_owner) {
+                if (!bootstrap) {
+                    // The server refused or did not answer: the sign-in page says why,
+                    // and the session is kept for when it answers again.
+                    return of(this.router.parseUrl('/auth'));
+                }
+                if (!bootstrap.has_owner) {
                     this.authService.clearSession();
                     this.authService.exitAnonymousMode();
                     return of(this.router.parseUrl('/auth'));

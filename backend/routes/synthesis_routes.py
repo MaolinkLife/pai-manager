@@ -419,6 +419,7 @@ async def generate_image(payload: dict = Body(...)):
         result = await media_generation_pipeline.run_image(
             MediaPipelineRequest(
                 mode="direct",
+                manual_prompt=True,
                 prompt=prompt,
                 scenario_key=str(payload.get("scenario_key", payload.get("scenarioKey", "")) or ""),
                 negative_prompt=negative_prompt or "",

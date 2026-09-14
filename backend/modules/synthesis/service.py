@@ -346,6 +346,28 @@ class SynthesisService:
             )
         return request, profile
 
+    def refine_prompts_from_feedback(
+        self,
+        *,
+        request_prompt: str,
+        previous_positive: str,
+        previous_negative: str,
+        feedback: str,
+        with_appearance: bool = True,
+    ) -> tuple[str, str]:
+        """Rewrite a generation prompt from a check's feedback, for a reroll.
+
+        `with_appearance=False` keeps her appearance out: the scene of anyone else
+        must not get it, and her own picture gets the anchor put in separately.
+        """
+        return self._engineer_prompts(
+            request_prompt=request_prompt,
+            previous_positive=previous_positive,
+            previous_negative=previous_negative,
+            feedback=feedback,
+            with_appearance=with_appearance,
+        )
+
     def _engineer_prompts(
         self,
         *,
@@ -353,6 +375,7 @@ class SynthesisService:
         previous_positive: str,
         previous_negative: str,
         feedback: str,
+        with_appearance: bool = True,
     ) -> tuple[str, str]:
         cfg = self._prompting_cfg()
         character_name = str(get_active_character_name(default="PAI") or "PAI").strip() or "PAI"
@@ -366,7 +389,7 @@ class SynthesisService:
                 }
             )
         )
-        appearance_prompt = str(visual_profile.appearance_textarea or "").strip()
+        appearance_prompt = str(visual_profile.appearance_textarea or "").strip() if with_appearance else ""
         default_negative = str(cfg.get("default_negative_prompt") or "").strip()
 
         system = SYNTHESIS_PROMPT_ENGINEERING_SYSTEM_PROMPT.format(character_name=visual_profile.character_name or character_name)
@@ -616,7 +639,11 @@ class SynthesisService:
 
     def generate_image(self, request: ImageGenerationRequest) -> ImageGenerationResult:
         try:
-            request, _visual_profile = self._prepare_visual_intent_prompt(request)
+            # Chat and proactive images are put together before generation;
+            # only callers that still ask for visual intent here
+            # (the Telegram bridge, untouched for now) pass through the composer.
+            if request.use_visual_intent or isinstance(request.visual_intent_input, dict):
+                request, _visual_profile = self._prepare_visual_intent_prompt(request)
             model = self._resolve_target_model(request)
             provider_name = self._provider_name_for_model(model)
             request.provider = provider_name

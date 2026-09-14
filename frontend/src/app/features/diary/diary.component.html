@@ -6,6 +6,9 @@
                 <p>{{ 'diary.subtitle' | translate }}</p>
             </div>
             <div class="actions">
+                <app-ui-checkbox class="hidden-toggle" (checkedChange)="setShowHidden($event)">
+                    {{ 'diary.showHidden' | translate }}
+                </app-ui-checkbox>
                 <app-ui-button (pressed)="refreshEntries()">
                     Refresh
                 </app-ui-button>
@@ -16,11 +19,16 @@
         </header>
 
         <section class="diary-list" *ngIf="entries.length; else emptyState">
-            <article class="diary-item" *ngFor="let entry of entries">
+            <article class="diary-item" [class.hidden-entry]="entry.hidden" *ngFor="let entry of entries; trackBy: trackEntry">
                 <div class="timeline-dot"></div>
 
                 <header>
                     <time>{{ entry.date | date: 'dd.MM.yyyy, HH:mm:ss' }}</time>
+                    <div class="hidden-mark" *ngIf="entry.hidden">
+                        {{ 'diary.hiddenMark' | translate }}:
+                        <ng-container *ngIf="hiddenReasonKey(entry.hiddenReason) as reasonKey; else rawReason">{{ reasonKey | translate }}</ng-container>
+                        <ng-template #rawReason>{{ entry.hiddenReason }}</ng-template>
+                    </div>
                     <div class="mood">{{ 'diary.mood' | translate }}: {{ entry.mood }}</div>
                 </header>
 
@@ -125,6 +133,13 @@
                 </footer>
             </article>
         </section>
+
+        <div class="load-more" *ngIf="entries.length && (hasMore || error)">
+            <p class="load-error" *ngIf="error">{{ error }}</p>
+            <app-ui-button *ngIf="hasMore" variant="secondary" [loading]="loadingMore" (pressed)="loadMore()">
+                {{ (loadingMore ? 'diary.loadingMore' : 'diary.loadMore') | translate }}
+            </app-ui-button>
+        </div>
 
         <ng-template #emptyState>
             <section class="empty-state">

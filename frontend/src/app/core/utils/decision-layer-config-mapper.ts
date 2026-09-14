@@ -1,16 +1,12 @@
 import { DecisionLayerConfigDto } from '../models/project-config.dto';
 import { DecisionLayerConfig } from '../models/project-config.model';
+import { promptField } from './technical-prompt-field';
 
 const defaultDecisionLayerConfig = (): DecisionLayerConfig => ({
     mode: 'system',
     activeProvider: 'ollama',
     maxSteps: 4,
     releaseAfterUse: true,
-    capabilities: {
-        tool: false,
-        vision: false,
-        thinking: false,
-    },
     providers: {
         ollama: {
                 model: 'llama3.2',
@@ -38,10 +34,6 @@ export const mapDecisionLayerDtoToModel = (
         activeProvider: dto?.active_provider || defaults.activeProvider,
         maxSteps: dto?.max_steps || defaults.maxSteps,
         releaseAfterUse: dto?.release_after_use ?? defaults.releaseAfterUse,
-        capabilities: {
-            ...defaults.capabilities,
-            ...(dto?.capabilities || {}),
-        },
         providers: {
             ...(dto?.providers || {}),
             ollama: {
@@ -58,6 +50,7 @@ export const mapDecisionLayerDtoToModel = (
             excludeDisabledModules:
                 dto?.instructor?.exclude_disabled_modules ?? defaults.instructor?.excludeDisabledModules ?? true,
         },
+        orchestratorPrompt: dto?.orchestrator_prompt ?? '',
     };
 };
 
@@ -68,10 +61,6 @@ export const mapDecisionLayerModelToDto = (
     const normalized = {
         ...defaults,
         ...(model || {}),
-        capabilities: {
-            ...defaults.capabilities,
-            ...(model?.capabilities || {}),
-        },
         providers: {
             ...defaults.providers,
             ...(model?.providers || {}),
@@ -91,11 +80,6 @@ export const mapDecisionLayerModelToDto = (
         active_provider: normalized.activeProvider || 'ollama',
         max_steps: normalized.maxSteps || 4,
         release_after_use: normalized.releaseAfterUse ?? true,
-        capabilities: {
-            tool: !!normalized.capabilities.tool,
-            vision: !!normalized.capabilities.vision,
-            thinking: !!normalized.capabilities.thinking,
-        },
         providers: {
             ...normalized.providers,
             ollama: {
@@ -111,5 +95,61 @@ export const mapDecisionLayerModelToDto = (
             include_geolocation: normalized.instructor?.includeGeolocation ?? false,
             exclude_disabled_modules: normalized.instructor?.excludeDisabledModules ?? true,
         },
+        ...promptField('orchestrator_prompt', model?.orchestratorPrompt),
     };
+};
+
+const putDefined = (target: Record<string, any>, key: string, value: unknown): void => {
+    if (value !== undefined) {
+        target[key] = value;
+    }
+};
+
+/**
+ * A settings save sends only the fields it changed. Filling the rest with the
+ * frontend defaults overwrote the owner's mode and model on every
+ * save of the Core tab (found 2026-09-13).
+ */
+export const mapDecisionLayerPartialModelToDto = (
+    model: Partial<DecisionLayerConfig> | undefined,
+): Partial<DecisionLayerConfigDto> => {
+    const dto: Record<string, any> = {};
+    if (!model) {
+        return dto;
+    }
+    if (model.mode !== undefined) {
+        dto['mode'] = model.mode === 'llm' ? 'llm' : 'system';
+    }
+    putDefined(dto, 'active_provider', model.activeProvider);
+    putDefined(dto, 'max_steps', model.maxSteps);
+    putDefined(dto, 'release_after_use', model.releaseAfterUse);
+
+    if (model.providers) {
+        const providers: Record<string, any> = {};
+        Object.entries(model.providers).forEach(([name, provider]) => {
+            if (name !== 'ollama') {
+                providers[name] = provider;
+                return;
+            }
+            const ollama: Record<string, any> = {};
+            putDefined(ollama, 'model', provider?.model);
+            putDefined(ollama, 'temperature', provider?.temperature);
+            putDefined(ollama, 'max_tokens', provider?.maxTokens);
+            putDefined(ollama, 'thinking', provider?.thinking);
+            providers['ollama'] = ollama;
+        });
+        dto['providers'] = providers;
+    }
+
+    if (model.instructor) {
+        const instructor: Record<string, any> = {};
+        putDefined(instructor, 'build_schema', model.instructor.buildSchema);
+        putDefined(instructor, 'include_datetime', model.instructor.includeDatetime);
+        putDefined(instructor, 'include_geolocation', model.instructor.includeGeolocation);
+        putDefined(instructor, 'exclude_disabled_modules', model.instructor.excludeDisabledModules);
+        dto['instructor'] = instructor;
+    }
+
+    Object.assign(dto, promptField('orchestrator_prompt', model.orchestratorPrompt));
+    return dto as Partial<DecisionLayerConfigDto>;
 };

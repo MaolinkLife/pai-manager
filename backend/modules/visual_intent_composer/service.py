@@ -108,6 +108,50 @@ class VisualIntentComposerService:
         updated = profile.model_copy(update={"appearance_textarea": generated})
         return updated, generated
 
+    def roll_subject(self, profile: VisualProfile) -> str:
+        """The subject of an image nobody named one for: the profile's weighted dice."""
+        payload = VisualIntentInput(visual_profile=profile)
+        recent_counts = visual_history_cache_service.recent_counts(profile_key=self._profile_key(profile), lookback=12)
+        purpose = self._resolve_purpose(payload)
+        subject_mode = self._resolve_subject_mode(
+            payload,
+            profile,
+            purpose=purpose,
+            intimacy=self._resolve_intimacy(payload, profile),
+            recent_counts=recent_counts,
+        )
+        return self._apply_capability_constraints(subject_mode, profile)
+
+    def has_selfie_pose(self, profile: VisualProfile) -> bool:
+        pool = self._parse_pool_override(profile.selfie_composition_pool_override, pool_key="selfie_composition_pool")
+        return bool(pool) or bool(str(profile.selfie_composition_base or "").strip())
+
+    def pick_selfie_pose(self, profile: VisualProfile) -> str:
+        """The selfie pose set in the persona settings; empty when none is set.
+
+        With no pose set, the model composes the selfie itself:
+        the built-in pool serves only the composer's own template.
+        """
+        pool = self._parse_pool_override(profile.selfie_composition_pool_override, pool_key="selfie_composition_pool")
+        if not pool:
+            return str(profile.selfie_composition_base or "").strip()
+        profile_key = self._profile_key(profile)
+        recent_counts = visual_history_cache_service.recent_counts(profile_key=profile_key, lookback=12)
+        selected = self._select_pool_item(
+            pool,
+            payload=VisualIntentInput(visual_profile=profile),
+            anti_repetition_strength=profile.anti_repetition_strength,
+            recent_counts=recent_counts.get("composition_pool_ids") or {},
+        )
+        visual_history_cache_service.register(
+            profile_key=profile_key,
+            subject_mode="self",
+            composition_pool_id=str(selected.get("id") or ""),
+            setting="",
+            lighting=[],
+        )
+        return str(selected.get("prompt") or "").strip()
+
     def compose(self, payload: VisualIntentInput) -> VisualIntentPlan:
         profile, generated_appearance = self.ensure_appearance_anchor(payload.visual_profile)
         profile_key = self._profile_key(profile)
@@ -266,6 +310,10 @@ class VisualIntentComposerService:
         intimacy: float,
         recent_counts: dict[str, dict[str, int]],
     ) -> str:
+        decided = str((payload.self_expression_context or {}).get("decided_subject") or "").strip()
+        if decided in {"self", "self_plus_environment", "environment_only", "symbolic_mood", "object_focus"}:
+            # Already decided (a proactive image, a request about her): no dice.
+            return decided
         emotion = payload.emotion_state or {}
         mood_vector = emotion.get("mood_vector") or {}
         tiredness = clamp01(mood_vector.get("tiredness"), 0.0)

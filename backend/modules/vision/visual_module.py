@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Optional
 
 from PIL import Image, UnidentifiedImageError
 
-from constants.visual import DEFAULT_VISUAL_MODEL
+from constants.prompts import VISION_ATTACHMENT_PROMPT, VISION_FALLBACK_PROMPT, VISION_SCREEN_PROMPT
 from modules.vision.providers.apple_vision import AppleVisionProvider
 from modules.vision.providers.llama_cpp_vision import LlamaCppVisionProvider
 from modules.vision.providers.ollama_vision import OllamaVisionProvider
@@ -28,7 +28,7 @@ class VisualModule:
             {},
         ) or {}
         if self.provider_name == "apple_vision":
-            return AppleVisionProvider()
+            return AppleVisionProvider(provider_cfg.get("model_id"))
         if self.provider_name in {"ollama_vision", "llava"}:
             return OllamaVisionProvider(provider_cfg)
         if self.provider_name == "llama_cpp_vision":
@@ -38,10 +38,18 @@ class VisualModule:
     def is_ready(self) -> bool:
         return bool(self.provider and self.provider.is_ready())
 
+    def unavailable_reason(self) -> str:
+        """Why the provider cannot look right now, as the provider reported it."""
+        for attribute in ("_last_probe_error", "_last_error", "_load_error"):
+            reason = str(getattr(self.provider, attribute, "") or "").strip()
+            if reason:
+                return reason
+        return f"vision provider '{self.provider_name}' is not ready"
+
     def describe_image(
         self,
         image: Image.Image,
-        prompt: str = "Describe the image in detail in English.",
+        prompt: str = VISION_FALLBACK_PROMPT,
     ) -> Dict[str, Any]:
         return self.provider.describe_image(image, prompt)
 
@@ -68,10 +76,9 @@ class VisualModule:
             )
             return {}
 
-        prompt = config_service.get_config_value(
-            "vision.attachment_prompt",
-            "Describe the user-provided image in detail in English.",
-        )
+        from modules.system.technical_prompts import configured_prompt
+
+        prompt = configured_prompt("vision.attachment_prompt", VISION_ATTACHMENT_PROMPT)
 
         items: List[Dict[str, Any]] = []
         updates: List[Dict[str, Any]] = []
@@ -115,7 +122,7 @@ class VisualModule:
             item_data = {
                 "index": index,
                 "description": summary,
-                "model": result.get("model", DEFAULT_VISUAL_MODEL),
+                "model": result.get("model", getattr(self.provider, "model_id", "")),
                 "status": result.get("status", "success"),
             }
             items.append(item_data)
@@ -137,10 +144,12 @@ class VisualModule:
     # Screen capture processing
     # ------------------------------------------------------------------
     def describe_screen_snapshot(self) -> Optional[Dict[str, Any]]:
-        if not config_service.get_config_value("vision.enabled", False):
+        from modules.vision.worker import screen_capture_enabled
+
+        if not screen_capture_enabled():
             log_audit_entry(
                 "visual_module_disabled_screen",
-                "[VisualModule] Screen analysis skipped: vision disabled.",
+                "[VisualModule] Screen analysis skipped: background screen capture is off.",
                 AuditStatus.INFO,
             )
             return None
@@ -184,10 +193,9 @@ class VisualModule:
             )
             return None
 
-        prompt = config_service.get_config_value(
-            "vision.screen_prompt",
-            "Describe the current user screen in detail in English.",
-        )
+        from modules.system.technical_prompts import configured_prompt
+
+        prompt = configured_prompt("vision.screen_prompt", VISION_SCREEN_PROMPT)
 
         try:
             rgb_frame = frame_bgr[:, :, ::-1]
@@ -216,7 +224,7 @@ class VisualModule:
         return {
             "description": summary,
             "captured_at": datetime.utcfromtimestamp(captured_at).isoformat() + "Z",
-            "model": result.get("model", DEFAULT_VISUAL_MODEL),
+            "model": result.get("model", getattr(self.provider, "model_id", "")),
             "prompt": prompt,
         }
 

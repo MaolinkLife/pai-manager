@@ -6,10 +6,15 @@ import {
     HfRepoFile,
     HfSearchResult,
     LocalModelResourceItem,
+    MODEL_CAPABILITY_KEYS,
+    ModelIndexEntry,
     OllamaPullState,
     OllamaRuntimeModel,
 } from '../../../../core/services/api.service';
 import { WebsocketService } from '../../../../core/services/websocket.service';
+import { take } from 'rxjs/operators';
+import { ModalService } from '../../../../shared/components/modal/modal.service';
+import { ModelCapabilitiesModalComponent } from './model-capabilities-modal/model-capabilities-modal.component';
 import { NotificationService } from '../../../../shared/components/notification/notification.service';
 import { LocalizationService } from '../../../../shared/pipes/translation/localization.service';
 
@@ -36,6 +41,14 @@ export class ModelsSettingsComponent implements OnInit {
     pullStartPending = false;
     confirmDeleteModel: string | null = null;
     busyModels = new Set<string>();
+
+    /**
+     * What each model can do, from the model index: Ollama's
+     * metadata fills it, the owner corrects it here. A field, not a getter: rows
+     * rebuilt on every change detection loop with the translate pipe.
+     */
+    readonly capabilityKeys = MODEL_CAPABILITY_KEYS;
+    indexByName: Record<string, ModelIndexEntry> = {};
 
     hfQuery = '';
     hfSearching = false;
@@ -68,6 +81,7 @@ export class ModelsSettingsComponent implements OnInit {
         private notificationService: NotificationService,
         private localizationService: LocalizationService,
         private cdr: ChangeDetectorRef,
+        private modalService: ModalService,
     ) {}
 
     ngOnInit(): void {
@@ -108,6 +122,47 @@ export class ModelsSettingsComponent implements OnInit {
             this.loading = false;
             this.cdr.markForCheck();
         });
+        this.loadIndex();
+    }
+
+    loadIndex(): void {
+        this.apiService.getModelIndex$().subscribe((entries) => {
+            if (!entries) {
+                return;
+            }
+            this.indexByName = entries.reduce<Record<string, ModelIndexEntry>>((byName, entry) => {
+                byName[entry.name] = entry;
+                return byName;
+            }, {});
+            this.cdr.markForCheck();
+        });
+    }
+
+    /** The capabilities editor for one model; a saved entry replaces the row's. */
+    openCapabilities(model: string): void {
+        const entry = this.indexByName[model];
+        if (!entry) {
+            return;
+        }
+        const modalRef = this.modalService.open(ModelCapabilitiesModalComponent, {
+            title: model,
+            appearance: 'default',
+            data: { entry, capabilityKeys: this.capabilityKeys },
+        });
+        modalRef.afterClosed$.pipe(take(1)).subscribe((saved?: ModelIndexEntry) => {
+            if (!saved) {
+                return;
+            }
+            this.indexByName = { ...this.indexByName, [model]: saved };
+            this.cdr.markForCheck();
+        });
+    }
+
+    differenceHint(entry: ModelIndexEntry): string {
+        const declared = entry.declared.length
+            ? entry.declared.map((key) => this.t(`settingsPage.models.capabilities.${key}`)).join(', ')
+            : this.t('settingsPage.models.capabilitiesNothingDeclared');
+        return `${this.t('settingsPage.models.capabilitiesDifferHint')} ${declared}`;
     }
 
     trackByModel(_index: number, item: OllamaRuntimeModel): string {

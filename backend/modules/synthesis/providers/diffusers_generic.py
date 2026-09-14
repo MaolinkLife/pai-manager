@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Tuple
 
 from constants.paths import STORAGE_DIR
+from modules.synthesis.prompt_encoding import CLIP_PROMPT_FAMILIES, encode_prompts
 from modules.synthesis.providers.base import ImageProviderError
 from modules.synthesis.types import (
     ImageGenerationRequest,
@@ -380,6 +381,39 @@ class DiffusersGenericProvider:
             visual_profile=request.visual_profile,
         )
 
+    def _prompt_arguments(
+        self,
+        pipe: object,
+        request: ImageGenerationRequest,
+        model: SynthesisModelInfo,
+    ) -> dict:
+        """Prompt arguments for the pipeline call; never raises.
+
+        CLIP-based checkpoints get embeddings of the whole weighted prompt
+        (prompt_encoding); other families and a failed encoding get the plain
+        strings, which the pipeline cuts to its own limit.
+        """
+        plain = {"prompt": request.prompt, "negative_prompt": request.negative_prompt}
+        if model.family not in CLIP_PROMPT_FAMILIES:
+            return plain
+        try:
+            encoded = encode_prompts(pipe, request.prompt, request.negative_prompt)
+        except Exception as exc:
+            log_audit_entry(
+                "synthesis_prompt_encoding_failed",
+                "[Synthesis] Long prompt encoding failed; the pipeline will cut the prompt to 77 tokens.",
+                AuditStatus.WARNING,
+                details={"model_id": model.model_id, "family": model.family, "error": str(exc)},
+            )
+            return plain
+        log_audit_entry(
+            "synthesis_prompt_encoded",
+            "[Synthesis] Prompt encoded in CLIP chunks with weights.",
+            AuditStatus.INFO,
+            details={"model_id": model.model_id, "family": model.family, **encoded.audit_details()},
+        )
+        return encoded.pipeline_kwargs()
+
     def generate(
         self,
         request: ImageGenerationRequest,
@@ -404,8 +438,7 @@ class DiffusersGenericProvider:
         started = time.time()
         try:
             output = pipe(
-                prompt=request.prompt,
-                negative_prompt=request.negative_prompt,
+                **self._prompt_arguments(pipe, request, model),
                 height=request.height,
                 width=request.width,
                 num_inference_steps=request.num_inference_steps,

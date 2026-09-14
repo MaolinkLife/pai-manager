@@ -193,6 +193,33 @@
                 </div>
             </div>
 
+            <div class="section" *ngIf="isOwner" [formGroup]="passwordForm">
+                <h3>🔑 {{ "systemSettings.passwordTitle" | translate }}</h3>
+                <p class="hint">{{ "systemSettings.passwordHint" | translate }}</p>
+
+                <div class="form-group">
+                    <label for="currentPassword">{{ "systemSettings.passwordCurrent" | translate }}</label>
+                    <app-ui-input id="currentPassword" type="password" formControlName="currentPassword"></app-ui-input>
+                </div>
+
+                <div class="form-group">
+                    <label for="newPassword">{{ "systemSettings.passwordNew" | translate }}</label>
+                    <app-ui-input id="newPassword" type="password" formControlName="newPassword"></app-ui-input>
+                </div>
+
+                <div class="form-group">
+                    <label for="repeatPassword">{{ "systemSettings.passwordRepeat" | translate }}</label>
+                    <app-ui-input id="repeatPassword" type="password" formControlName="repeatPassword"></app-ui-input>
+                    <p class="hint" *ngIf="passwordsDiffer()">{{ "systemSettings.passwordMismatch" | translate }}</p>
+                </div>
+
+                <div class="button-row">
+                    <button type="button" [disabled]="!canChangePassword()" (click)="changePassword()">
+                        {{ "systemSettings.passwordChange" | translate }}
+                    </button>
+                </div>
+            </div>
+
             <div class="section">
                 <h3>{{ "settings.modules" | translate }}</h3>
 
@@ -245,8 +272,9 @@
                             id="tunnel-local-url"
                             type="text"
                             formControlName="localUrl"
-                            [placeholder]="'http://127.0.0.1:3880'"
+                            [readonly]="true"
                         ></app-ui-input>
+                        <small>{{ "settings.tunnelLocalFromConfig" | translate }}</small>
                     </div>
 
                     <div class="form-group">
@@ -255,9 +283,7 @@
                             id="tunnel-local-port"
                             type="number"
                             formControlName="localPort"
-                            [min]="1"
-                            [max]="65535"
-                            [step]="1"
+                            [readonly]="true"
                         ></app-ui-input>
                     </div>
 
@@ -296,6 +322,13 @@
                     >
                         {{ tunnelStatus?.public_url }}
                     </a>
+                    <button
+                        *ngIf="tunnelStatus?.running && tunnelStatus?.public_url"
+                        type="button"
+                        (click)="copyTunnelLink()"
+                    >
+                        {{ "settings.tunnelCopyLink" | translate }}
+                    </button>
                 </div>
 
                 <div class="tunnel-actions">

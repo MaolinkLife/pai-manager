@@ -69,7 +69,11 @@ def storage_is_isolated() -> bool:
 
     live_storage = os.path.abspath(os.path.join(paths.BASE_DIR, "storage"))
     current = os.path.abspath(paths.STORAGE_DIR)
-    return current == os.path.abspath(override) and current != live_storage
+    logs_moved = all(
+        os.path.abspath(path).startswith(current)
+        for path in (paths.LOGS_DIR, paths.TRACEBACK_LOGS_DIR)
+    )
+    return current == os.path.abspath(override) and current != live_storage and logs_moved
 
 
 def pytest_collection_modifyitems(config, items):
@@ -237,11 +241,13 @@ class ContourPai:
         """Write one message of her past into the history, as the live chat does."""
         from modules.memory import history as history_service
 
+        # SQLite drops tzinfo without converting, and the live chat stores UTC:
+        # normalise first, or a local 21:00 would be stored as 21:00 UTC.
         entry = history_service.add_history(
             self.character_id,
             role,
             content,
-            at,
+            at.astimezone(timezone.utc),
             runtime_meta={"transport": {"name": "main_chat"}},
         )
         return entry.id
@@ -254,6 +260,7 @@ class ContourPai:
         try:
             session.add(
                 ShortTermMemory(
+                    character_id=self.character_id,
                     summary=summary,
                     dialogue_ids=json.dumps(list(dialogue_ids)),
                     themes="[]",

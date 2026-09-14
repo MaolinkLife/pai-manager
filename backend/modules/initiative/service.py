@@ -26,12 +26,19 @@ from modules.system import config as config_service
 from modules.system.logger import AuditStatus, log_audit_entry
 
 
+def initiative_enabled() -> bool:
+    """The global initiative switch: off → PAI writes first nowhere, whatever a
+    channel's own initiative settings say. Reminders are tasks, not initiative,
+    and do not look at it."""
+    return bool(config_service.get_config_value("initiative.enabled", False))
+
+
 def _settings() -> Dict[str, Any]:
     cfg = config_service.get_config_value("initiative", {}) or {}
     chat = cfg.get("chat") if isinstance(cfg.get("chat"), dict) else {}
     selfie = cfg.get("selfie") if isinstance(cfg.get("selfie"), dict) else {}
     return {
-        "enabled": bool(chat.get("enabled", True)),
+        "enabled": bool(cfg.get("enabled", False)) and bool(chat.get("enabled", True)),
         "selfie_enabled": bool(selfie.get("enabled", True)),
         "selfie_chance": max(0.0, min(1.0, float(selfie.get("chance", 0.4) or 0.0))),
     }
@@ -205,13 +212,36 @@ async def _attach_selfie(message_id: str, content: str) -> None:
         from modules.system.config import get_config_value
         from modules.system.service import get_active_character_name
 
+        import asyncio
+
+        from modules.synthesis.image_scene import write_image_scene
+        from modules.visual_intent_composer import VisualProfile
+        from modules.visual_profile_store import visual_profile_store_service
+
+        character_name = get_active_character_name(default="PAI")
+        try:
+            profile = visual_profile_store_service.load_profile(character_name=character_name)
+        except Exception:
+            profile = VisualProfile()
+        # A proactive image is always her, as a selfie: the model
+        # writes where she is and what she is doing from her own message.
+        scene = await asyncio.to_thread(
+            write_image_scene,
+            request_text=content[:2000],
+            context={"her_message": content[:2000]},
+            profile=profile,
+            subject="self",
+        )
         image_cfg = get_config_value("telegram.image", {}) or {}
+        negative = ", ".join(
+            part for part in (scene.negative_prompt, str(image_cfg.get("negative_prompt") or "").strip()) if part
+        )
         result = await media_generation_pipeline.run_image(
             MediaPipelineRequest(
                 mode="chat_auto",
-                prompt=content[:2000],
+                prompt=scene.scene,
                 scenario_key="main_chat",
-                negative_prompt=str(image_cfg.get("negative_prompt") or ""),
+                negative_prompt=negative,
                 image_provider="auto",
                 image_model=str(image_cfg.get("default_model") or "").strip() or None,
                 width=max(64, int(image_cfg.get("width", 1024) or 1024)),
@@ -221,8 +251,11 @@ async def _attach_selfie(message_id: str, content: str) -> None:
                 use_prompt_builder=False,
                 review_generated_image=False,
                 use_visual_intent=True,
+                compose_before_generation=True,
+                image_subject="self",
+                request_text=content[:2000],
                 source="main_chat_initiative",
-                character_name=get_active_character_name(default="PAI"),
+                character_name=character_name,
                 metadata={"allow_scenario_controls": True, "purpose_hint": "check_in"},
             )
         )

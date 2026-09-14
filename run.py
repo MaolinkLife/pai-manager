@@ -10,6 +10,21 @@ import urllib.error
 
 sys.dont_write_bytecode = True
 IS_WINDOWS = os.name == "nt"
+BACKEND_VENV_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "backend", "venv")
+
+
+def backend_venv_mismatch(prefix: str | None = None) -> dict | None:
+    """Details when the launcher runs outside backend/venv, None when it does not.
+
+    The backend inherits this interpreter through sys.executable. Any other
+    python (miniconda, a stale activate.bat) would run PAI on packages the
+    tests never saw.
+    """
+    active = os.path.normcase(os.path.abspath(sys.prefix if prefix is None else prefix))
+    expected = os.path.normcase(os.path.abspath(BACKEND_VENV_DIR))
+    if active == expected:
+        return None
+    return {"expected": expected, "active": active}
 
 
 def log_console(component: str, message: str, details: dict | None = None) -> None:
@@ -128,6 +143,16 @@ def stop_process(process: subprocess.Popen, *, label: str, timeout_sec: float = 
 
 
 def main():
+    mismatch = backend_venv_mismatch()
+    if mismatch:
+        log_console(
+            "Launcher",
+            "Python не из backend\\venv, запуск остановлен. Запускайте через launch.bat.",
+            {**mismatch, "python": sys.executable},
+        )
+        return
+    log_console("Launcher", "Python из backend\\venv.", {"python": sys.executable})
+
     frontend_port, backend_port = load_ports()
     sync_frontend_proxy_target(backend_port)
 

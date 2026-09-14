@@ -166,7 +166,7 @@
         <button
             class="btn-icon"
             (click)="toggleVoice.emit(msg.id)"
-            *ngIf="msg.role === 'assistant' && msg.id"
+            *ngIf="ownerTools && msg.role === 'assistant' && msg.id"
             [attr.data-tooltip]="currentPlayingMessage === msg.id ? 'Остановить озвучку' : 'Озвучить ответ'"
             [attr.aria-label]="currentPlayingMessage === msg.id ? 'Остановить озвучку' : 'Озвучить ответ'"
         >
@@ -175,7 +175,7 @@
         <button
             class="btn-icon"
             (click)="illustrate.emit(msg.id)"
-            *ngIf="msg.role === 'assistant' && msg.id && !msg.isPending"
+            *ngIf="ownerTools && msg.role === 'assistant' && msg.id && !msg.isPending"
             [disabled]="isIllustrating"
             [class.active]="isIllustrating"
             [attr.data-tooltip]="isIllustrating ? 'Создаю изображение...' : 'Создать изображение по запросу'"

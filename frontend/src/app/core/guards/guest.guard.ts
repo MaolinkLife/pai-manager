@@ -22,8 +22,12 @@ export class GuestGuard implements CanActivate {
     ): Observable<boolean | UrlTree> {
         return this.authService.getBootstrapState$().pipe(
             switchMap((bootstrap) => {
+                if (!bootstrap) {
+                    // The server refused or did not answer: the sign-in page says why.
+                    return of(true);
+                }
                 // First-run: always allow auth page so first account can be created.
-                if (!bootstrap?.has_owner) {
+                if (!bootstrap.has_owner) {
                     this.authService.clearSession();
                     this.authService.exitAnonymousMode();
                     return of(true);

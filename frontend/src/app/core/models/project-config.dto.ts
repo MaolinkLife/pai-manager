@@ -51,11 +51,6 @@ export interface DecisionLayerConfigDto {
     active_provider: string;
     max_steps: number;
     release_after_use?: boolean;
-    capabilities: {
-        tool: boolean;
-        vision: boolean;
-        thinking: boolean;
-    };
     providers: {
         ollama: {
             model: string;
@@ -71,6 +66,7 @@ export interface DecisionLayerConfigDto {
         include_geolocation?: boolean;
         exclude_disabled_modules?: boolean;
     };
+    orchestrator_prompt?: string;
 }
 
 export interface TunnelingConfigDto {
@@ -106,6 +102,10 @@ export interface VisionModuleConfigDto {
 
 export interface VisionConfigDto {
     enabled: boolean;
+    screen_capture_enabled?: boolean;
+    attachment_prompt?: string;
+    generated_image_prompt?: string;
+    screen_prompt?: string;
     active_provider?: string;
     monitor_index: number;
     fps: number;
@@ -260,6 +260,7 @@ export interface MoralInnerVoiceConfigDto {
     max_tokens?: number;
     temperature?: number;
     language?: string;
+    system_prompt?: string;
 }
 
 export interface MoralConfigDto {
@@ -288,6 +289,8 @@ export interface MemoryDiaryNarrativeConfigDto {
 
 export interface MemoryDiaryConfigDto {
     narrative?: MemoryDiaryNarrativeConfigDto;
+    system_prompt?: string;
+    user_template?: string;
 }
 
 export interface MemoryConsolidationJudgeDto {
@@ -297,6 +300,13 @@ export interface MemoryConsolidationJudgeDto {
     temperature?: number;
     max_tokens?: number;
     request_timeout?: number;
+    system_prompt?: string;
+}
+
+export interface MemoryShortTermConfigDto {
+    startup_refresh_enabled?: boolean;
+    summary_system_prompt?: string;
+    summary_task_prompt?: string;
 }
 
 export interface MemoryConsolidationConfigDto {
@@ -313,6 +323,7 @@ export interface MemoryConfigDto {
     embedding_provider: string;
     embedding_model: string;
     consolidation?: MemoryConsolidationConfigDto;
+    short_term?: MemoryShortTermConfigDto;
     diary?: MemoryDiaryConfigDto;
 }
 
@@ -351,6 +362,7 @@ export interface ValidatorConfigDto {
     temperature?: number;
     instruction_char_limit?: number;
     output_char_limit?: number;
+    system_prompt?: string;
 }
 
 export interface LanguageGuardConfigDto {
@@ -366,6 +378,7 @@ export interface ConfidenceConfigDto {
     temperature?: number;
     user_char_limit?: number;
     output_char_limit?: number;
+    system_prompt?: string;
 }
 
 export interface FactualityConfigDto {
@@ -385,6 +398,7 @@ export interface SelfWatcherConfigDto {
     max_events_in_cluster?: number;
     llm_max_tokens?: number;
     llm_temperature?: number;
+    reflection_prompt?: string;
 }
 
 // --- Audit logs retention (0.9.0 §3.6-bis) ---------------------------------
@@ -435,12 +449,27 @@ export interface SynthesisDiffusersConfigDto {
     torch_dtype: string;
 }
 
+export interface SynthesisImageCheckGateConfigDto {
+    enabled: boolean;
+    threshold: number;
+    reroll: boolean;
+}
+
+export interface SynthesisImageCheckConfigDto {
+    relevance: SynthesisImageCheckGateConfigDto;
+    quality: SynthesisImageCheckGateConfigDto;
+    max_generations: number;
+    describe_prompt: string;
+    system_prompt: string;
+    user_template: string;
+}
+
+export interface SynthesisImageSceneConfigDto {
+    format_prompt: string;
+}
+
 export interface SynthesisPromptingConfigDto {
     enabled: boolean;
-    max_attempts: number;
-    assess_enabled: boolean;
-    retry_enabled?: boolean;
-    quality_threshold: number;
     appearance_prompt: string;
     default_negative_prompt: string;
     visual_profile?: {
@@ -495,6 +524,8 @@ export interface SynthesisConfigDto {
     sd_webui: SynthesisSdWebUIConfigDto;
     comfyui: SynthesisComfyUIConfigDto;
     diffusers: SynthesisDiffusersConfigDto;
+    image_check?: SynthesisImageCheckConfigDto;
+    image_scene?: SynthesisImageSceneConfigDto;
     prompting?: SynthesisPromptingConfigDto;
 }
 
@@ -512,8 +543,6 @@ export interface ApiConfigDto {
     type: string;
     streaming: boolean;
     model: string;
-    visual_model: string;
-    visual_model_options?: string[];
     token_limit: number;
     message_pair_limit: number;
     active_provider: string;
@@ -547,6 +576,12 @@ export interface SystemConfigDto {
     };
 }
 
+export interface InitiativeConfigDto {
+    enabled?: boolean;
+    chat?: { enabled?: boolean };
+    selfie?: { enabled?: boolean; chance?: number };
+}
+
 export interface ProjectConfigDto extends BaseConfigDto {
     voice: VoiceConfigDto;
     modules: ModuleConfigDto;
@@ -572,4 +607,5 @@ export interface ProjectConfigDto extends BaseConfigDto {
     self_watcher?: SelfWatcherConfigDto;
     audit_logs?: AuditLogsConfigDto;
     stt?: SttConfigDto;
+    initiative?: InitiativeConfigDto;
 }

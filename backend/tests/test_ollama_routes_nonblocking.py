@@ -48,15 +48,3 @@ def test_ollama_routes_leave_the_event_loop_free(monkeypatch, client_name, route
     monkeypatch.setattr(ollama_routes.ollama_client, client_name, _slow({"status": "ok", "models": []}))
 
     assert asyncio.run(_order_of(route_call)) == ["other", "route"]
-
-
-def test_vision_probe_leaves_the_event_loop_free(monkeypatch):
-    monkeypatch.setattr(
-        ollama_routes.ollama_client,
-        "model_supports_vision",
-        _slow({"supported": False, "reason": "text-only"}),
-    )
-
-    order = asyncio.run(_order_of(lambda: ollama_routes._probe_vision_support("qwen")))
-
-    assert order == ["other", "route"]

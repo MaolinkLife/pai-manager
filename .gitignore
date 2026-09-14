@@ -99,10 +99,12 @@ backend/config/generation_presets.json
 
 backend/storage/history/*
 backend/storage/files/*
+backend/storage/archives/*
 backend/storage/database/*
 backend/storage/vector_store
 backend/storage/models/*
 backend/storage/outputs/images/*
+backend/storage/outputs/image_checks/*
 
 backend/temp/audio/*
 backend/temp/logs/*

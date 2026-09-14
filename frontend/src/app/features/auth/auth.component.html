@@ -2,6 +2,22 @@
     <div class="auth-card">
         <div class="auth-title">Авторизация</div>
         <div class="auth-subtitle">Вход в персональный профиль ассистента</div>
+        <div class="auth-setup-note" *ngIf="bootstrapError">
+            <strong>Не удалось связаться с PAI.</strong>
+            {{ bootstrapError.message }}
+        </div>
+        <app-ui-button
+            *ngIf="bootstrapError"
+            [loading]="checkingServer"
+            [disabled]="checkingServer"
+            [fullWidth]="true"
+            type="button"
+            (click)="loadBootstrapState()"
+        >
+            Повторить
+        </app-ui-button>
+
+        <ng-container *ngIf="!bootstrapError && bootstrapState">
         <div class="auth-setup-note" *ngIf="setupRequired">
             Первый запуск: создайте первый аккаунт. Он автоматически получит роль owner.
         </div>
@@ -109,5 +125,6 @@
                 Войти без авторизации (аноним)
             </button>
         </div>
+        </ng-container>
     </div>
 </section>

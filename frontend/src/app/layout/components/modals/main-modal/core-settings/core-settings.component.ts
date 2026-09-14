@@ -2,7 +2,8 @@ import { Component, OnInit } from '@angular/core';
 import { UntypedFormBuilder, UntypedFormGroup, Validators } from '@angular/forms';
 import { BehaviorSubject } from 'rxjs';
 import { finalize, take } from 'rxjs/operators';
-import { ApiService } from '../../../../../core/services/api.service';
+import { ApiService, ModelIndexEntry } from '../../../../../core/services/api.service';
+import { buildModelOptions, modelOptionLabels } from '../../../../../core/utils/model-options';
 import { ConfigService } from '../../../../../core/services/config.service';
 import { NotificationService } from '../../../../../shared/components/notification/notification.service';
 import { LocalizationService } from '../../../../../shared/pipes/translation/localization.service';
@@ -18,9 +19,11 @@ export class CoreSettingsComponent implements OnInit {
     showInstructorModal = false;
     dlForm: UntypedFormGroup;
     isLoading$ = new BehaviorSubject<boolean>(true);
-    isChecking$ = new BehaviorSubject<boolean>(false);
     originalConfig: any = {};
-    capabilityDetails: Record<string, any> | null = null;
+    /** What the router model can do, from the model index; edited in the models tab. */
+    routerModelEntry: ModelIndexEntry | null = null;
+    private modelIndex: ModelIndexEntry[] = [];
+    private modelIndexLoaded = false;
     ollamaModelOptions: UiSelectOption[] = [
         { value: '', label: 'Модели не найдены', disabled: true },
     ];
@@ -38,7 +41,7 @@ export class CoreSettingsComponent implements OnInit {
 
     ngOnInit(): void {
         this.loadConfig();
-        this.loadOllamaModels();
+        this.loadModelIndex();
     }
 
     private createForm(): UntypedFormGroup {
@@ -47,11 +50,6 @@ export class CoreSettingsComponent implements OnInit {
             activeProvider: ['ollama', Validators.required],
             maxSteps: [4, [Validators.min(1), Validators.max(12)]],
             releaseAfterUse: [true],
-            capabilities: this.fb.group({
-                tool: [false],
-                vision: [false],
-                thinking: [false],
-            }),
             providers: this.fb.group({
                 ollama: this.fb.group({
                     model: ['llama3.2', Validators.required],
@@ -67,6 +65,7 @@ export class CoreSettingsComponent implements OnInit {
                 includeGeolocation: [false],
                 excludeDisabledModules: [true],
             }),
+            orchestratorPrompt: [''],
         });
     }
 
@@ -83,11 +82,6 @@ export class CoreSettingsComponent implements OnInit {
                     activeProvider: dl.activeProvider || 'ollama',
                     maxSteps: dl.maxSteps || 4,
                     releaseAfterUse: dl.releaseAfterUse ?? true,
-                    capabilities: {
-                        tool: !!dl.capabilities?.tool,
-                        vision: !!dl.capabilities?.vision,
-                        thinking: !!dl.capabilities?.thinking,
-                    },
                     providers: {
                         ollama: {
                             model: dl.providers?.ollama?.model || config?.api?.providers?.ollama?.model || config?.api?.model || 'llama3.2',
@@ -102,6 +96,7 @@ export class CoreSettingsComponent implements OnInit {
                         excludeDisabledModules:
                             dl.instructor?.excludeDisabledModules ?? dl.instructor?.exclude_disabled_modules ?? true,
                     },
+                    orchestratorPrompt: dl.orchestratorPrompt ?? dl.orchestrator_prompt ?? '',
                 });
                 this.originalConfig = this.buildDecisionLayerConfigFromForm();
             },
@@ -112,22 +107,6 @@ export class CoreSettingsComponent implements OnInit {
                     message: 'Failed to load Decision Layer settings',
                     autoClose: true,
                 });
-            },
-        });
-    }
-
-    private loadOllamaModels(): void {
-        this.apiService.getOllamaModels$().pipe(take(1)).subscribe({
-            next: (models: string[]) => {
-                const cleaned = (Array.isArray(models) ? models : [])
-                    .map((item) => String(item || '').trim())
-                    .filter((item) => item.length > 0);
-                this.ollamaModelOptions = cleaned.length
-                    ? cleaned.map((model) => ({ value: model, label: model }))
-                    : [{ value: '', label: 'Модели не найдены', disabled: true }];
-            },
-            error: () => {
-                this.ollamaModelOptions = [{ value: '', label: 'Модели не найдены', disabled: true }];
             },
         });
     }
@@ -148,41 +127,27 @@ export class CoreSettingsComponent implements OnInit {
         this.showInstructorModal = false;
     }
 
-    checkCapabilities(): void {
-        const model = this.dlForm.get('providers.ollama.model')?.value;
-        if (!model) {
-            return;
-        }
-        this.isChecking$.next(true);
-        this.apiService.checkOllamaCapabilities$(model).pipe(
-            take(1),
-            finalize(() => this.isChecking$.next(false))
-        ).subscribe((result) => {
-            if (!result) {
-                this.notificationService.open({
-                    title: 'Error',
-                    type: 'error',
-                    message: 'Failed to check Ollama model capabilities',
-                    autoClose: true,
-                });
-                return;
-            }
-
-            this.dlForm.patchValue({
-                capabilities: {
-                    tool: !!result.capabilities.tool,
-                    vision: !!result.capabilities.vision,
-                    thinking: !!result.capabilities.thinking,
-                },
-            });
-            this.capabilityDetails = result.details || null;
-            this.notificationService.open({
-                title: 'OK',
-                type: 'success',
-                message: 'Model capabilities checked',
-                autoClose: true,
-            });
+    private loadModelIndex(): void {
+        this.apiService.getModelIndex$().pipe(take(1)).subscribe((entries) => {
+            this.modelIndex = entries ?? [];
+            this.modelIndexLoaded = true;
+            this.resolveRouterModelEntry();
         });
+        this.dlForm.get('providers.ollama.model')?.valueChanges.subscribe(() => this.resolveRouterModelEntry());
+    }
+
+    /** The router model's chips and the text models it can be picked from, both from the model index. */
+    private resolveRouterModelEntry(): void {
+        const name = String(this.dlForm.get('providers.ollama.model')?.value || '').trim();
+        this.routerModelEntry = this.modelIndex.find((entry) => entry.name === name) ?? null;
+        if (this.modelIndexLoaded) {
+            this.ollamaModelOptions = buildModelOptions(
+                this.modelIndex,
+                'completion',
+                name,
+                modelOptionLabels((key) => this.localizationService.t(key), 'completion'),
+            );
+        }
     }
 
     saveChanges(): void {
@@ -221,11 +186,6 @@ export class CoreSettingsComponent implements OnInit {
             activeProvider: value.activeProvider,
             maxSteps: Number(value.maxSteps),
             releaseAfterUse: !!value.releaseAfterUse,
-            capabilities: {
-                tool: !!value.capabilities.tool,
-                vision: !!value.capabilities.vision,
-                thinking: !!value.capabilities.thinking,
-            },
             providers: {
                 ollama: {
                     model: value.providers.ollama.model,
@@ -239,7 +199,32 @@ export class CoreSettingsComponent implements OnInit {
                 includeGeolocation: !!value.instructor.includeGeolocation,
                 excludeDisabledModules: !!value.instructor.excludeDisabledModules,
             },
+            orchestratorPrompt: String(value.orchestratorPrompt ?? ''),
         };
+    }
+
+    /** Puts the built-in prompt back into the field; saving keeps it. */
+    resetPrompt(controlPath: string, configPath: string): void {
+        const control = this.dlForm.get(controlPath);
+        if (!control) {
+            return;
+        }
+        this.configService
+            .getDefaultValue$(configPath)
+            .pipe(take(1))
+            .subscribe((value) => {
+                if (typeof value !== 'string') {
+                    this.notificationService.open({
+                        title: 'Error',
+                        type: 'error',
+                        message: 'Failed to load the default prompt',
+                        autoClose: true,
+                    });
+                    return;
+                }
+                control.setValue(value);
+                control.markAsDirty();
+            });
     }
 
     private getChanges(): any {

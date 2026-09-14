@@ -16,6 +16,7 @@ export interface VoicePlaybackStatusResponse {
     status: string;
     speaking: boolean;
     stage: string;
+    message_id?: string | null;
     timestamp?: string;
 }
 

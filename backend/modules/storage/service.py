@@ -127,8 +127,52 @@ def _category_from_mime(mime_type: str, file_name: str = "") -> str:
     return "other"
 
 
+MEDIA_LINK_TTL_SECONDS = 7 * 24 * 60 * 60
+
+
+def _media_link_signature(media_id: str, expires: int) -> str:
+    import hashlib
+    import hmac
+
+    from modules.system.auth import _get_auth_secret
+
+    message = f"media:{media_id}:{expires}".encode("utf-8")
+    return hmac.new(_get_auth_secret().encode("utf-8"), message, hashlib.sha256).hexdigest()
+
+
+def signed_media_url(media_id: str, *, now: float | None = None) -> str:
+    """A link that opens this one file without a token, for a week.
+
+    An <img> tag sends no Authorization header: through a tunnel the access
+    guard would refuse even the owner's own pictures without it.
+    """
+    import time
+
+    expires = int((time.time() if now is None else now) + MEDIA_LINK_TTL_SECONDS)
+    return f"/api/media/{media_id}?exp={expires}&sig={_media_link_signature(str(media_id), expires)}"
+
+
+def media_link_is_valid(
+    media_id: str,
+    expires: str | int | None,
+    signature: str | None,
+    *,
+    now: float | None = None,
+) -> bool:
+    import hmac
+    import time
+
+    try:
+        expires_at = int(expires)
+    except (TypeError, ValueError):
+        return False
+    if expires_at < (time.time() if now is None else now):
+        return False
+    return hmac.compare_digest(_media_link_signature(str(media_id), expires_at), str(signature or ""))
+
+
 def _storage_public_url(entry: Storage) -> str:
-    return f"/api/media/{entry.id}"
+    return signed_media_url(entry.id)
 
 
 def _serialize_storage_entry(entry: Storage) -> dict:
@@ -418,9 +462,6 @@ def save_library_file(
     if not file_bytes:
         raise HTTPException(status_code=400, detail="Empty file")
 
-    from modules.system import character as character_service
-    from modules.system.service import get_active_character_name
-
     safe_name = _safe_filename(file_name or "file")
     resolved_mime = mime_type or mimetypes.guess_type(safe_name)[0] or DEFAULT_MIME_TYPE
     category = _category_from_mime(resolved_mime, safe_name)
@@ -434,31 +475,15 @@ def save_library_file(
 
     session = SessionLocal()
     try:
-        char_name = get_active_character_name(default="default_waifu")
-        character = character_service.get_or_create_character(char_name)
-        history = History(
-            character_id=character.id,
-            role="tool",
-            content=f"[Library upload] {safe_name}",
-            tags='["library_upload"]',
-            runtime_meta='{"source":"library"}',
-        )
-        session.add(history)
-        session.flush()
-
-        entry = Storage(
-            id=str(uuid.uuid4()),
-            message_id=history.id,
+        entry = _create_library_entry(
+            session,
             file_name=safe_name,
-            file_path=str(relative_path).replace("\\", "/"),
+            relative_path=str(relative_path).replace("\\", "/"),
             mime_type=resolved_mime,
             size=len(file_bytes),
             category=category,
             description=description,
         )
-        session.add(entry)
-        session.commit()
-        session.refresh(entry)
         payload = _serialize_storage_entry(entry)
         return payload
     except Exception:
@@ -470,6 +495,82 @@ def save_library_file(
         raise
     finally:
         session.close()
+
+
+def register_library_path(
+    *,
+    file_path: Path,
+    file_name: str,
+    mime_type: str,
+    description: str | None = None,
+) -> dict:
+    """Put a file that already lives inside storage into the library, without copying it."""
+    _ensure_schema()
+    path = Path(file_path).resolve()
+    root = Path(STORAGE_DIR).resolve()
+    if not path.is_file() or not path.is_relative_to(root):
+        raise HTTPException(status_code=400, detail="The file must exist inside storage")
+    resolved_mime = mime_type or mimetypes.guess_type(path.name)[0] or DEFAULT_MIME_TYPE
+    safe_name = _safe_filename(file_name or path.name)
+    session = SessionLocal()
+    try:
+        entry = _create_library_entry(
+            session,
+            file_name=safe_name,
+            relative_path=str(path.relative_to(root)).replace("\\", "/"),
+            mime_type=resolved_mime,
+            size=path.stat().st_size,
+            category=_category_from_mime(resolved_mime, safe_name),
+            description=description,
+        )
+        return _serialize_storage_entry(entry)
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
+
+
+def _create_library_entry(
+    session,
+    *,
+    file_name: str,
+    relative_path: str,
+    mime_type: str,
+    size: int,
+    category: str,
+    description: str | None,
+) -> Storage:
+    """A library file hangs on a service history row of the active character."""
+    from modules.system import character as character_service
+    from modules.system.service import get_active_character_name
+
+    char_name = get_active_character_name(default="default_waifu")
+    character = character_service.get_or_create_character(char_name)
+    history = History(
+        character_id=character.id,
+        role="tool",
+        content=f"[Library upload] {file_name}",
+        tags='["library_upload"]',
+        runtime_meta='{"source":"library"}',
+    )
+    session.add(history)
+    session.flush()
+
+    entry = Storage(
+        id=str(uuid.uuid4()),
+        message_id=history.id,
+        file_name=file_name,
+        file_path=relative_path,
+        mime_type=mime_type,
+        size=size,
+        category=category,
+        description=description,
+    )
+    session.add(entry)
+    session.commit()
+    session.refresh(entry)
+    return entry
 
 
 def read_library_text(media_id: str, *, max_bytes: int = 1_000_000) -> dict:

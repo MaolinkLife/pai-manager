@@ -167,6 +167,35 @@
     font-size: 13px;
 }
 
+.prompt-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px 12px;
+    margin-top: 6px;
+
+    .hint {
+        flex: 1 1 240px;
+    }
+
+    .reset-button {
+        flex-shrink: 0;
+        background: transparent;
+        color: var(--color-accent);
+        border: 1px solid var(--color-border);
+        padding: 6px 12px;
+        border-radius: var(--radius);
+        font-family: var(--font-family);
+        cursor: pointer;
+        transition: border-color 0.2s ease;
+
+        &:hover {
+            border-color: var(--color-accent);
+        }
+    }
+}
+
 .scars-triggers {
     display: flex;
     flex-direction: column;

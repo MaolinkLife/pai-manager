@@ -304,6 +304,7 @@ async def playback_status():
         "status": "ok",
         "speaking": check_if_speaking(),
         "stage": voice_state.stage().value,
+        "message_id": voice_state.snapshot().message_id,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 

@@ -8,6 +8,7 @@ from sqlalchemy import (
     Integer,
     Float,
     Date,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
@@ -22,10 +23,10 @@ class Character(Base):
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     name = Column(String, unique=True, index=True, nullable=False)
     configs = Column(Text, default="{}")  # JSON as a string
-    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(
         DateTime,
-        default=datetime.now(timezone.utc),
+        default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
     )
 
@@ -40,7 +41,7 @@ class History(Base):
     character_id = Column(String, ForeignKey("characters.id"), nullable=False)
     role = Column(String, nullable=False)  # 'user' / 'assistant'
     content = Column(Text, nullable=False)
-    timestamp = Column(DateTime, default=datetime.now(timezone.utc))
+    timestamp = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     tags = Column(Text, default='[]')
     runtime_meta = Column(Text, default='{}')
     parent_message_id = Column(String, nullable=True, index=True)
@@ -74,10 +75,10 @@ class TelegramChat(Base):
     last_synced_message_id = Column(Integer, nullable=True)
     last_synced_at = Column(DateTime, nullable=True)
     meta = Column(Text, default="{}")
-    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(
         DateTime,
-        default=datetime.now(timezone.utc),
+        default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
     )
 
@@ -94,10 +95,10 @@ class TelegramUser(Base):
     trust_level = Column(Integer, default=0)
     last_seen_at = Column(DateTime, nullable=True)
     meta = Column(Text, default="{}")
-    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(
         DateTime,
-        default=datetime.now(timezone.utc),
+        default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
     )
 
@@ -120,10 +121,10 @@ class TelegramMessage(Base):
     deleted_at = Column(DateTime, nullable=True)
     sync_state = Column(String, nullable=False, default="active")
     meta = Column(Text, default="{}")
-    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(
         DateTime,
-        default=datetime.now(timezone.utc),
+        default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
     )
 
@@ -144,12 +145,12 @@ class TelegramSyncJob(Base):
     cursor_message_id = Column(Integer, nullable=True)
     payload = Column(Text, default="{}")
     error = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     started_at = Column(DateTime, nullable=True)
     completed_at = Column(DateTime, nullable=True)
     updated_at = Column(
         DateTime,
-        default=datetime.now(timezone.utc),
+        default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
     )
 
@@ -172,7 +173,7 @@ class User(Base):
     auth_provider = Column(String, nullable=False, default="local")
     is_active = Column(Boolean, default=True)
     last_login_at = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     settings = relationship(
         "UserSettings",
@@ -217,7 +218,7 @@ class Message(Base):
     role = Column(String, nullable=False)  # 'user' / 'assistant'
     content = Column(Text, nullable=False)  # plain text for now; encryption later
     volatile = Column(Boolean, default=False)  # temporary message
-    timestamp = Column(DateTime, default=datetime.now(timezone.utc))
+    timestamp = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     tags = Column(Text, default='[]')
 
     user = relationship("User")
@@ -242,10 +243,10 @@ class UserSettings(Base):
     language = Column(String, default="en-US")
     timezone_name = Column("timezone", String, default="UTC")
     ui_prefs = Column(Text, default="{}")
-    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(
         DateTime,
-        default=datetime.now(timezone.utc),
+        default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
     )
 
@@ -263,10 +264,10 @@ class AuthSession(Base):
     ip_address = Column(String, nullable=True)
     expires_at = Column(DateTime, nullable=False)
     revoked_at = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(
         DateTime,
-        default=datetime.now(timezone.utc),
+        default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
     )
 
@@ -285,10 +286,10 @@ class UserConfig(Base):
         index=True,
     )
     config_json = Column(Text, default="{}")
-    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(
         DateTime,
-        default=datetime.now(timezone.utc),
+        default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
     )
 
@@ -307,10 +308,10 @@ class UserTtsSettings(Base):
         index=True,
     )
     settings_json = Column(Text, default="{}")
-    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(
         DateTime,
-        default=datetime.now(timezone.utc),
+        default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
     )
 
@@ -329,10 +330,10 @@ class UserVisionSettings(Base):
         index=True,
     )
     settings_json = Column(Text, default="{}")
-    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(
         DateTime,
-        default=datetime.now(timezone.utc),
+        default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
     )
 
@@ -344,13 +345,41 @@ class ShortTermMemory(Base):
     __tablename__ = "short_term_memory"
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    character_id = Column(
+        String, ForeignKey("characters.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     summary = Column(Text, nullable=False)
     dialogue_ids = Column(Text, nullable=False)
     themes = Column(Text, default='[]')
-    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(
         DateTime,
-        default=datetime.now(timezone.utc),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+
+class ModelIndexEntry(Base):
+    """What a model can do: what its provider declares and the owner's own marks.
+
+    `owner_capabilities` is NULL while the owner has not marked the model; then the
+    declared capabilities are the model's capabilities.
+    """
+
+    __tablename__ = "model_index"
+    __table_args__ = (UniqueConstraint("provider", "name", name="uq_model_index_provider_name"),)
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    provider = Column(String, nullable=False)
+    name = Column(String, nullable=False)
+    digest = Column(String, nullable=True)
+    declared_known = Column(Boolean, nullable=False, default=False)
+    declared_capabilities = Column(Text, nullable=False, default="[]")
+    owner_capabilities = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(
+        DateTime,
+        default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
     )
 
@@ -369,7 +398,7 @@ class Storage(Base):
     category = Column(String, nullable=False, default="other")
     description = Column(Text, nullable=True)
     meta = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     message = relationship("History", back_populates="media")
 
@@ -385,10 +414,10 @@ class Reasoning(Base):
         unique=True,
     )
     content = Column(Text, nullable=False)
-    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(
         DateTime,
-        default=datetime.now(timezone.utc),
+        default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
     )
 
@@ -404,10 +433,10 @@ class LorebookEntry(Base):
     keywords = Column(Text, default="")
     category = Column(String, default="general")
     active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(
         DateTime,
-        default=datetime.now(timezone.utc),
+        default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
     )
 
@@ -426,7 +455,7 @@ class EmotionalTrace(Base):
     user_tone = Column(String, nullable=True)
     cause = Column(Text, nullable=True)
     notes = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     # Decay model: each day the intensity decreases by ``decay_rate``, but
     # never falls below ``persistence_floor``. ``resolved`` marks traces
@@ -568,7 +597,7 @@ class ForgivenessEvent(Base):
     delta_intensity = Column(Float, default=0.0)
     # Whether this event flipped the target trace's resolved flag.
     triggered_resolve = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     character = relationship("Character")
     trace = relationship("EmotionalTrace")
@@ -588,10 +617,10 @@ class DailyMoralSummary(Base):
     sociability = Column(Float, default=0.5)
     resentment = Column(Float, default=0.0)
     summary = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(
         DateTime,
-        default=datetime.now(timezone.utc),
+        default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
     )
 
@@ -612,7 +641,7 @@ class MoralStateSnapshot(Base):
     recommendations = Column(Text, default="[]")  # JSON array
     hard_directives = Column(Text, default="[]")  # JSON array
     meta = Column(Text, default="{}")
-    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     character = relationship("Character")
     message = relationship("History")
@@ -721,7 +750,7 @@ class ConversationStateLog(Base):
     last_topic = Column(Text, nullable=False, default="")
     recent_tone_summary = Column(Text, nullable=False, default="neutral")
     payload = Column(Text, default="{}")
-    created_at = Column(DateTime, default=datetime.now(timezone.utc), index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
 
     character = relationship("Character")
 
@@ -763,7 +792,7 @@ class ImportedArchive(Base):
     # (their exports are numbered), never inferred: archive 7 came after 6 even
     # when neither carries a date.
     archive_sequence = Column(Integer, nullable=True)
-    imported_at = Column(DateTime, default=datetime.now(timezone.utc), index=True)
+    imported_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
     period_hint_start = Column(DateTime, nullable=True)
     period_hint_end = Column(DateTime, nullable=True)
     message_count = Column(Integer, nullable=False, default=0)

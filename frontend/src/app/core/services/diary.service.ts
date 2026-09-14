@@ -20,7 +20,10 @@ export interface DiaryListResponse {
     status: string;
     entries: DiaryEntryDto[];
     total: number;
-    days: number;
+    limit: number;
+    offset: number;
+    has_more: boolean;
+    include_hidden: boolean;
 }
 
 export interface DiaryGenerateResponse {
@@ -35,8 +38,12 @@ export class DiaryService {
 
     constructor(private http: HttpClient) {}
 
-    getEntries$(days = 30): Observable<DiaryListResponse> {
-        const params = new HttpParams().set('days', String(days));
+    /** One page of every diary entry of the active character, newest first. */
+    getEntries$(offset = 0, limit = 30, includeHidden = false): Observable<DiaryListResponse> {
+        const params = new HttpParams()
+            .set('offset', String(offset))
+            .set('limit', String(limit))
+            .set('include_hidden', String(includeHidden));
         return this.http.get<DiaryListResponse>(`${this.apiUrl}/diary`, { params });
     }
 

@@ -23,7 +23,7 @@ class OllamaGenerateProvider(GenerateProvider):
         "reason",
         "thinking",
         # qwen3 / qwen3.5 families think by default (the user's main model
-        # huihui_ai/qwen3.5-* was not detected and got hard-capped).
+        # qwen3.5 variants were not detected and got hard-capped).
         "qwen3",
         "deepseek",
         "magistral",

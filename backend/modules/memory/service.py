@@ -207,6 +207,7 @@ class MemoryModule:
                     "key_facts": [DEFAULT_FALLBACK_MESSAGE],
                     "session_length": 0,
                     "memory_status": "embedding_failed",
+                    "memory_error": "embeddings are unavailable and keyword search is off",
                     "matches": [],
                     "recent_history": history_preview,
                     "conversation_state": conversation_state,
@@ -291,10 +292,14 @@ class MemoryModule:
                 primary_vector = None
                 vector_cfg = None
 
+            short_term_character = (
+                database_service.get_or_create_character(char_name) if char_name else None
+            )
             short_match, short_payload, short_meta = self._search_short_term_memory(
                 primary_vector,
                 vector_cfg,
                 settings["short_term"],
+                character_id=short_term_character.id if short_term_character else None,
             )
             if short_match and short_payload:
                 self._register_candidate(
@@ -671,20 +676,25 @@ class MemoryModule:
                 "lore_block": lore_block,
                 "count": len(formatted),
                 "raw_lore_entries": entries,
+                "lore_status": "ok" if formatted else "empty",
             }
 
-        except Exception as exc:  # pragma: no cover
+        except Exception as exc:
             log_audit_entry(
                 "memory_module.lore_error",
                 "[Memory] Ошибка поиска по лорбуку",
                 AuditStatus.ERROR,
                 details={"error": str(exc)},
             )
+            # A failed search is not "nothing found": the instructor tells the
+            # model the lorebook failed.
             return {
                 "lore_matches": [],
                 "lore_block": "",
                 "count": 0,
                 "raw_lore_entries": [],
+                "lore_status": "failed",
+                "lore_error": str(exc),
             }
 
     def _load_settings(self) -> Dict[str, Any]:
@@ -889,8 +899,10 @@ class MemoryModule:
         user_embedding: Optional[List[float]],
         vector_cfg: Optional[Dict[str, Any]],
         short_term_cfg: Dict[str, Any],
+        *,
+        character_id: Optional[str],
     ) -> Tuple[Optional[MemoryMatch], Optional[Dict[str, Any]], Dict[str, Any]]:
-        if user_embedding is None or not vector_cfg:
+        if user_embedding is None or not vector_cfg or not character_id:
             return None, None, {}
 
         lookback_days = int(
@@ -898,7 +910,7 @@ class MemoryModule:
             or DEFAULT_SHORT_TERM_LOOKBACK_DAYS
         )
         lookback_days = max(1, min(lookback_days, 60))
-        records = load_recent_records(lookback_days)
+        records = load_recent_records(character_id=character_id, days=lookback_days)
         if not records:
             return None, None, {}
 
@@ -912,7 +924,12 @@ class MemoryModule:
         if not record:
             return None, None, {}
 
-        history_rows = database_service.get_history_by_ids(record.dialogue_ids)
+        # Only the character's own messages, whatever ids the summary names.
+        history_rows = [
+            row
+            for row in database_service.get_history_by_ids(record.dialogue_ids) or []
+            if row.character_id == character_id
+        ]
         if not history_rows:
             return (
                 None,
@@ -1442,6 +1459,20 @@ class MemoryModule:
 
     @staticmethod
     def _resolve_message_scope(message_payload: Dict[str, Any]) -> Dict[str, Any]:
+        scope = MemoryModule._resolve_channel_scope(message_payload)
+        # A reroll replaces an answer that stays the active variant in the table
+        # until the new one is stored: the turn must not find it in memory and
+        # answer "I already said that".
+        target_id = str(message_payload.get("reroll_target_message_id") or "").strip()
+        if target_id:
+            scope["replaced_answer_id"] = target_id
+            group_id = str(message_payload.get("variant_group_id") or "").strip()
+            if group_id:
+                scope["replaced_answer_group"] = group_id
+        return scope
+
+    @staticmethod
+    def _resolve_channel_scope(message_payload: Dict[str, Any]) -> Dict[str, Any]:
         runtime_meta = message_payload.get("runtime_meta")
         if not isinstance(runtime_meta, dict):
             return {"channel": "main_chat"}
@@ -1466,6 +1497,7 @@ class MemoryModule:
         scope: Optional[Dict[str, Any]],
     ) -> List[Dict[str, Any]]:
         rows = [item for item in (payloads or []) if isinstance(item, dict)]
+        rows = MemoryModule._drop_replaced_answer(rows, scope)
         channel = str((scope or {}).get("channel") or "main_chat").strip().lower()
         if channel == "telegram":
             chat_id = (scope or {}).get("chat_id")
@@ -1503,6 +1535,26 @@ class MemoryModule:
             if name in {"", "main_chat"}:
                 filtered.append(row)
         return filtered
+
+    @staticmethod
+    def _drop_replaced_answer(
+        rows: List[Dict[str, Any]],
+        scope: Optional[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        """Leave out the answer a reroll replaces, with every variant of it."""
+        target_id = str((scope or {}).get("replaced_answer_id") or "").strip()
+        group_id = str((scope or {}).get("replaced_answer_group") or "").strip()
+        if not target_id and not group_id:
+            return rows
+        kept: List[Dict[str, Any]] = []
+        for row in rows:
+            if str(row.get("role") or "") == "assistant" and (
+                (target_id and str(row.get("id") or "") == target_id)
+                or (group_id and str(row.get("variant_group_id") or "") == group_id)
+            ):
+                continue
+            kept.append(row)
+        return kept
 
     @staticmethod
     def _dedupe_telegram_payloads(

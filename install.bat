@@ -31,12 +31,18 @@ echo.
 echo install backend...
 cd backend
 
-IF NOT EXIST venv (
+IF NOT EXIST venv\Scripts\python.exe (
     echo Create a virtual environment...
     python -m venv venv
 )
 
-call venv\Scripts\activate.bat
+:: Install into the backend venv explicitly; activate.bat may point elsewhere
+set "VENV_PYTHON=%CD%\venv\Scripts\python.exe"
+if not exist "%VENV_PYTHON%" (
+    echo [ERROR] Backend venv was not created: %VENV_PYTHON%
+    pause
+    exit /b 1
+)
 
 :: Use project-local pip cache to avoid global AppData permission issues
 if not exist temp\pip-cache (
@@ -45,9 +51,9 @@ if not exist temp\pip-cache (
 set "PIP_CACHE_DIR=%CD%\temp\pip-cache"
 set "PIP_NO_CACHE_DIR=1"
 
-python -m pip install --upgrade pip wheel
-python -m pip install "setuptools<81"
-python -m pip install --no-cache-dir -r requirements.txt
+"%VENV_PYTHON%" -m pip install --upgrade pip wheel
+"%VENV_PYTHON%" -m pip install "setuptools<81"
+"%VENV_PYTHON%" -m pip install --no-cache-dir -r requirements.txt
 cd ..
 
 echo.

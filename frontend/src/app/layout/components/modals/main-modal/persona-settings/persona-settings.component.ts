@@ -2,11 +2,39 @@ import { Component, OnInit } from '@angular/core';
 import { UntypedFormArray, UntypedFormBuilder, UntypedFormGroup } from '@angular/forms';
 import { BehaviorSubject, forkJoin } from 'rxjs';
 import { finalize } from 'rxjs/operators';
-import { ConfigService, SystemCharacter } from '../../../../../core/services/config.service';
+import { CharacterDeletionPreview, ConfigService, SystemCharacter } from '../../../../../core/services/config.service';
 import { TelegramChatPeer, TelegramService } from '../../../../../core/services/telegram.service';
 import { UiSelectOption } from '../../../../../shared/ui/components/ui-select/ui-select.component';
 import { LocalizationService } from '../../../../../shared/pipes/translation/localization.service';
 import { UiNotificationService } from '../../../../../shared/ui/services/ui-notification.service';
+
+interface DeleteSummaryRow {
+    labelKey: string;
+    count: number;
+}
+
+const DELETE_SUMMARY_LABELS: Array<[string, string]> = [
+    ['history', 'personaSettings.deleteCounts.history'],
+    ['daily_activity_diary', 'personaSettings.deleteCounts.diary'],
+    ['emotional_traces', 'personaSettings.deleteCounts.emotionalTraces'],
+    ['moral_state_snapshots', 'personaSettings.deleteCounts.moralSnapshots'],
+    ['storage', 'personaSettings.deleteCounts.files'],
+];
+
+/** The tables that matter to a person by name; the rest summed as "other records". */
+function buildDeleteSummaryRows(counts: Record<string, number>): DeleteSummaryRow[] {
+    const named = new Set(DELETE_SUMMARY_LABELS.map(([table]) => table));
+    const rows = DELETE_SUMMARY_LABELS
+        .filter(([table]) => (Number(counts[table]) || 0) > 0)
+        .map(([table, labelKey]) => ({ labelKey, count: Number(counts[table]) }));
+    const other = Object.entries(counts)
+        .filter(([table]) => !named.has(table))
+        .reduce((sum, [, count]) => sum + (Number(count) || 0), 0);
+    if (other > 0) {
+        rows.push({ labelKey: 'personaSettings.deleteCounts.other', count: other });
+    }
+    return rows;
+}
 
 @Component({
     selector: 'app-persona-settings',
@@ -20,6 +48,14 @@ export class PersonaSettingsComponent implements OnInit {
     isCharacterImportBusy = false;
     isCharacterCreateBusy = false;
     isCharacterDeleteBusy = false;
+    showDeleteCharacterModal = false;
+    deletePreviewLoading = false;
+    deletePreview: CharacterDeletionPreview | null = null;
+    // Rows are a field, rebuilt when a preview arrives: a getter returning a new
+    // array under *ngFor + the impure translate pipe loops change detection.
+    deleteSummaryRows: DeleteSummaryRow[] = [];
+    deleteBlockedMessage = '';
+    deleteConfirmName = '';
     isChatsLoading = false;
     showCreateCharacterModal = false;
     newCharacterName = '';
@@ -329,7 +365,11 @@ export class PersonaSettingsComponent implements OnInit {
         }
 
         this.isCharacterCreateBusy = true;
-        this.configService.createSystemCharacter$(name, true).subscribe({
+        this.configService.createSystemCharacter$(name, true).pipe(
+            finalize(() => {
+                this.isCharacterCreateBusy = false;
+            }),
+        ).subscribe({
             next: (response: any) => {
                 const character = response?.character;
                 const characterName = character?.name || name;
@@ -354,39 +394,116 @@ export class PersonaSettingsComponent implements OnInit {
         });
     }
 
+    /** Opens the deletion dialog: what goes into the archive, then the name to confirm. */
     deleteSelectedCharacter(): void {
         const characterId = String(this.personaForm.get('active_character_id')?.value || '').trim();
-        if (!characterId || this.isCharacterDeleteBusy) {
+        if (!characterId || this.isCharacterDeleteBusy || this.deletePreviewLoading) {
             return;
         }
-        const characterName = this.characterIdToNameMap.get(characterId) || characterId;
-        if (!window.confirm(`Delete character "${characterName}"?`)) {
+        this.resetDeleteDialog();
+        this.showDeleteCharacterModal = true;
+        this.deletePreviewLoading = true;
+        this.configService
+            .getCharacterDeletionPreview$(characterId)
+            .pipe(finalize(() => {
+                this.deletePreviewLoading = false;
+            }))
+            .subscribe({
+                next: (preview) => this.applyDeletionPreview(preview),
+                error: (error) => {
+                    console.error('Character deletion preview error:', error);
+                    this.showDeleteCharacterModal = false;
+                    this.uiNotificationService.error(
+                        error?.error?.detail || this.localizationService.t('personaSettings.deletePreviewFailed'),
+                        'Character',
+                    );
+                },
+            });
+    }
+
+    canConfirmDelete(): boolean {
+        const preview = this.deletePreview;
+        return !!preview
+            && !preview.blocked
+            && !this.isCharacterDeleteBusy
+            && this.deleteConfirmName.trim() === String(preview.character?.name || '').trim();
+    }
+
+    closeDeleteCharacterModal(): void {
+        if (this.isCharacterDeleteBusy) {
             return;
         }
+        this.showDeleteCharacterModal = false;
+        this.resetDeleteDialog();
+    }
+
+    confirmDeleteCharacter(): void {
+        const preview = this.deletePreview;
+        if (!preview || !this.canConfirmDelete()) {
+            return;
+        }
+        const characterId = String(preview.character.id);
+        const characterName = String(preview.character.name);
 
         this.isCharacterDeleteBusy = true;
-        this.configService.deleteSystemCharacter$(characterId).subscribe({
-            next: (response: any) => {
-                const characters = response?.characters || [];
-                const activeName = response?.active_char_name || characters[0]?.name || '';
-                const activeId = response?.active_character_id || characters[0]?.id || null;
-                const activePrompt =
-                    characters.find((item: SystemCharacter) => item.id === activeId)?.prompt ||
-                    characters.find((item: SystemCharacter) => item.name === activeName)?.prompt ||
-                    '';
-                this.applyCharacterCatalog(characters, activeId, activeName, activePrompt);
-                this.removeVisualProfile(characterName);
-                this.patchFormForCharacter(this.resolveActiveCharacterId(activeId, activeName), activeName, activePrompt);
-                this.uiNotificationService.success(characterName, 'Character deleted');
-            },
-            error: (error) => {
-                console.error('Character delete error:', error);
-                this.uiNotificationService.error(error?.error?.detail || 'Failed to delete character', 'Character');
-            },
-            complete: () => {
+        this.configService
+            .deleteSystemCharacter$(characterId)
+            // Released on an error too: the button used to stay busy until a reload.
+            .pipe(finalize(() => {
                 this.isCharacterDeleteBusy = false;
-            },
-        });
+            }))
+            .subscribe({
+                next: (response: any) => {
+                    const characters = response?.characters || [];
+                    const activeName = response?.active_char_name || characters[0]?.name || '';
+                    const activeId = response?.active_character_id || characters[0]?.id || null;
+                    const activePrompt =
+                        characters.find((item: SystemCharacter) => item.id === activeId)?.prompt ||
+                        characters.find((item: SystemCharacter) => item.name === activeName)?.prompt ||
+                        '';
+                    this.applyCharacterCatalog(characters, activeId, activeName, activePrompt);
+                    this.removeVisualProfile(characterName);
+                    this.patchFormForCharacter(this.resolveActiveCharacterId(activeId, activeName), activeName, activePrompt);
+                    this.showDeleteCharacterModal = false;
+                    this.resetDeleteDialog();
+                    const archiveName = String(response?.archive?.file_name || '').trim();
+                    this.uiNotificationService.success(
+                        archiveName
+                            ? `${this.localizationService.t('personaSettings.deletedToArchive')} ${archiveName}`
+                            : this.localizationService.t('personaSettings.deleted'),
+                        characterName,
+                    );
+                },
+                error: (error) => {
+                    console.error('Character delete error:', error);
+                    this.uiNotificationService.error(
+                        error?.error?.detail || this.localizationService.t('personaSettings.deleteFailed'),
+                        'Character',
+                    );
+                },
+            });
+    }
+
+    trackDeleteSummaryRow(_index: number, row: DeleteSummaryRow): string {
+        return row.labelKey;
+    }
+
+    private applyDeletionPreview(preview: CharacterDeletionPreview): void {
+        this.deletePreview = preview;
+        this.deleteSummaryRows = buildDeleteSummaryRows(preview?.counts || {});
+        const blocked = preview?.blocked;
+        this.deleteBlockedMessage = !blocked
+            ? ''
+            : blocked.code === 'telegram_messages'
+                ? this.localizationService.t('personaSettings.deleteBlockedTelegram')
+                : blocked.message;
+    }
+
+    private resetDeleteDialog(): void {
+        this.deletePreview = null;
+        this.deleteSummaryRows = [];
+        this.deleteBlockedMessage = '';
+        this.deleteConfirmName = '';
     }
 
     private patchFormForCharacter(characterId: string, characterName: string, systemPrompt: string): void {

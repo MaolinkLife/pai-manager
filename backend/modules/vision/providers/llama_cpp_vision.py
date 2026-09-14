@@ -22,6 +22,7 @@ from typing import Any, Dict, Optional
 
 from PIL import Image
 
+from constants.prompts import VISION_FALLBACK_PROMPT
 from modules.llama_cpp import client as llama_client
 from modules.system.logger import AuditStatus, log_audit_entry
 
@@ -79,7 +80,7 @@ class LlamaCppVisionProvider:
             {
                 "role": "user",
                 "content": [
-                    {"type": "text", "text": str(prompt or "Describe the image in detail in English.")},
+                    {"type": "text", "text": str(prompt or VISION_FALLBACK_PROMPT)},
                     {
                         "type": "image_url",
                         "image_url": {

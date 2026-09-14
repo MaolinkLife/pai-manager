@@ -50,7 +50,7 @@
                         <button
                             type="button"
                             class="danger-button"
-                            [disabled]="isCharacterDeleteBusy || !personaForm.get('active_character_id')?.value"
+                            [disabled]="isCharacterDeleteBusy || deletePreviewLoading || !personaForm.get('active_character_id')?.value"
                             (click)="deleteSelectedCharacter()"
                         >
                             {{ 'personaSettings.delete' | translate }}
@@ -265,6 +265,59 @@
                     (click)="createCharacter()"
                 >
                     {{ isCharacterCreateBusy ? ('general.loading' | translate) : ('personaSettings.create' | translate) }}
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="character-create-backdrop" *ngIf="showDeleteCharacterModal" (click)="closeDeleteCharacterModal()">
+        <div class="character-create-modal character-delete-modal" (click)="$event.stopPropagation()">
+            <h3>{{ 'personaSettings.deleteTitle' | translate }}</h3>
+            <p class="hint" *ngIf="deletePreviewLoading">{{ 'general.loading' | translate }}</p>
+
+            <ng-container *ngIf="deletePreview as preview">
+                <p class="delete-blocked" *ngIf="preview.blocked">{{ deleteBlockedMessage }}</p>
+
+                <ng-container *ngIf="!preview.blocked">
+                    <ng-container *ngIf="preview.has_data; else noHistory">
+                        <p class="delete-archive-note">{{ 'personaSettings.deleteArchiveNote' | translate }}</p>
+                        <ul class="delete-summary">
+                            <li *ngFor="let row of deleteSummaryRows; trackBy: trackDeleteSummaryRow">
+                                <span>{{ row.labelKey | translate }}</span>
+                                <strong>{{ row.count }}</strong>
+                            </li>
+                        </ul>
+                    </ng-container>
+                    <ng-template #noHistory>
+                        <p class="hint">{{ 'personaSettings.deleteNoHistory' | translate }}</p>
+                    </ng-template>
+
+                    <div class="form-group">
+                        <label for="delete-persona-name">
+                            {{ 'personaSettings.deleteTypeName' | translate }} <strong>{{ preview.character.name }}</strong>
+                        </label>
+                        <app-ui-input
+                            id="delete-persona-name"
+                            type="text"
+                            [(ngModel)]="deleteConfirmName"
+                            [ngModelOptions]="{ standalone: true }"
+                            [placeholder]="preview.character.name"
+                        ></app-ui-input>
+                    </div>
+                </ng-container>
+            </ng-container>
+
+            <div class="button-row">
+                <button type="button" (click)="closeDeleteCharacterModal()">
+                    {{ 'general.cancel' | translate }}
+                </button>
+                <button
+                    type="button"
+                    class="danger-confirm"
+                    [disabled]="!canConfirmDelete()"
+                    (click)="confirmDeleteCharacter()"
+                >
+                    {{ isCharacterDeleteBusy ? ('general.loading' | translate) : ('personaSettings.deleteConfirm' | translate) }}
                 </button>
             </div>
         </div>

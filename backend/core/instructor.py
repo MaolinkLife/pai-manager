@@ -1,6 +1,7 @@
 # core/instructor.py
 from typing import Dict, Any, List, Optional
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from core.prompt_loader import load_system_prompt
 from modules.system import config as config_service
@@ -8,6 +9,28 @@ from modules.system.logger import log_audit_entry, AuditStatus
 from modules.system.localization import get_text
 from constants.rules import SYSTEM_RULES
 from constants.messages import DEFAULT_CONTEXT, NO_MEMORY, NO_KNOWLEDGE
+
+# What a module block in the scope says (so the system
+# knows what is happening to it). Data; a successful lookup that found nothing;
+# a module switched off (left out while the instructor excludes disabled
+# modules); a module that failed, which always goes in.
+MODULE_OK = "ok"
+MODULE_EMPTY = "empty"
+MODULE_DISABLED = "disabled"
+MODULE_FAILED = "failed"
+
+_MEMORY_STATES = {
+    "ready": MODULE_OK,
+    "not_found": MODULE_EMPTY,
+    "empty_input": MODULE_EMPTY,
+    "disabled": MODULE_DISABLED,
+    "module_unavailable": MODULE_FAILED,
+    "embedding_failed": MODULE_FAILED,
+    "error": MODULE_FAILED,
+    "failed": MODULE_FAILED,
+}
+
+NO_LOREBOOK_ENTRIES = "[OK]: no lorebook entries found."
 
 
 def _normalize_message_text(value: Any) -> str:
@@ -229,13 +252,13 @@ class Instructor:
             if emotion_lines:
                 emotions_block = "\n[EMOTIONS]\n" + "\n".join(emotion_lines)
 
-        if status in {"module_unavailable", "embedding_failed", "error"}:
-            return "[ERROR]: memory module is unavailable." + stages_block + emotions_block
-        if facts and any(item != NO_MEMORY for item in facts):
+        # Failed and disabled memory are said by _build_dynamic_tool_messages. A
+        # lookup that found nothing still carries a fallback key fact ("За сегодня
+        # ничего не найдено."), which is not a record.
+        found = _MEMORY_STATES.get(status, MODULE_EMPTY) != MODULE_EMPTY or not status
+        if found and facts and any(item != NO_MEMORY for item in facts):
             lines = "\n".join(f"- {item}" for item in facts[:10])
             return f"[OK]: memory records found:\n{lines}{stages_block}{emotions_block}"
-        if status == "disabled":
-            return "[OK]: memory module is disabled." + stages_block + emotions_block
         return "[OK]: no relevant memory records found." + stages_block + emotions_block
 
     def _build_conversation_state_section(self, memory_context: Dict[str, Any]) -> str:
@@ -296,7 +319,7 @@ class Instructor:
             ).strip()
             if lines:
                 return f"[OK]: lorebook matches found:\n{lines}"
-        return "[ERROR] Not Found"
+        return NO_LOREBOOK_ENTRIES
 
     def _build_emotion_tool_content(self, moral_state: Dict[str, Any]) -> str:
         state = moral_state or {}
@@ -395,6 +418,16 @@ class Instructor:
             )
             lines.append(f"{label}: {description}")
 
+        # The assistant must know when it has no eyes right now, not guess.
+        attachments_info = visual_context.get("attachments") or {}
+        if attachments_info.get("unavailable"):
+            count = int(attachments_info.get("count") or 0) or 1
+            reason = str(attachments_info.get("reason") or "vision is unavailable").strip()
+            lines.append(
+                f"The user attached {count} image(s), but your vision could not look at them ({reason}). "
+                "You do not know what is in them: say so honestly instead of guessing."
+            )
+
         screen_info = visual_context.get("screen") or {}
         screen_description = (screen_info.get("description") or "").strip()
         if screen_description:
@@ -403,23 +436,37 @@ class Instructor:
             if timestamp:
                 prefix = f"{prefix} ({timestamp})"
             lines.append(f"{prefix}: {screen_description}")
+        elif screen_info.get("unavailable"):
+            reason = str(screen_info.get("reason") or "vision is unavailable").strip()
+            lines.append(
+                f"You were asked to look at the screen, but your vision is not available ({reason}). "
+                "You cannot see the screen now: say so honestly."
+            )
 
         return "\n".join(lines)
 
     def _get_environment_info(self) -> str:
-        now = datetime.now()
-        date_str = now.strftime("%d %B %Y")
-        time_str = now.strftime("%H:%M:%S")
+        parts: List[str] = []
 
-        from modules.system import config as config_service
+        # The instructor switch "include date and time" decides whether the clock
+        # enters the scope at all. The clock is the owner's: PAI lives with the
+        # owner, and guests chat on the owner's settings.
+        if bool(
+            config_service.get_config_value(
+                "decision_layer.instructor.include_datetime", True
+            )
+        ):
+            now, zone_label = self._clock_now()
+            parts.extend(
+                [
+                    f"Date: {now.strftime('%d %B %Y')}",
+                    f"Time: {now.strftime('%H:%M:%S')}",
+                    f"Timezone: {zone_label}",
+                ]
+            )
 
         location = config_service.get_config_value("location", "unknown")
         coordinates = config_service.get_config_value("coordinates", None)
-
-        parts = [
-            f"Date: {date_str}",
-            f"Time: {time_str}",
-        ]
 
         if location and location != "unknown":
             parts.append(f"Location: {location}")
@@ -429,8 +476,78 @@ class Instructor:
 
         return "\n".join(parts)
 
+    @staticmethod
+    def _clock_now() -> tuple[datetime, str]:
+        """Now in the owner's timezone; the server's local time when unknown."""
+        from modules.system.user import resolve_owner_timezone
+
+        zone_name = resolve_owner_timezone()
+        if zone_name:
+            return datetime.now(ZoneInfo(zone_name)), zone_name
+        local_now = datetime.now().astimezone()
+        return local_now, str(local_now.tzinfo or "server local time")
+
     def _build_environment_tool_content(self) -> str:
         return self._get_environment_info()
+
+    @staticmethod
+    def _memory_module_state(memory_context: Dict[str, Any]) -> str:
+        status = str(memory_context.get("memory_status") or "").strip().lower()
+        return _MEMORY_STATES.get(status, MODULE_EMPTY)
+
+    @staticmethod
+    def _lore_state(memory_context: Dict[str, Any], memory_state: str) -> Optional[str]:
+        """None when the lorebook was not searched and there is nothing to say."""
+        if memory_state == MODULE_DISABLED:
+            return MODULE_DISABLED
+        if memory_state == MODULE_FAILED:
+            # The memory failure block already says the lookup did not run.
+            return None
+        stated = str(memory_context.get("lore_status") or "").strip().lower()
+        if stated in {MODULE_OK, MODULE_EMPTY, MODULE_FAILED}:
+            return stated
+        lore_matches = memory_context.get("lore_matches")
+        if isinstance(lore_matches, list) and any(str(item or "").strip() for item in lore_matches):
+            return MODULE_OK
+        if "lore_matches" in memory_context:
+            return MODULE_EMPTY
+        return None
+
+    @staticmethod
+    def _exclude_disabled_modules() -> bool:
+        return bool(
+            config_service.get_config_value(
+                "decision_layer.instructor.exclude_disabled_modules", True
+            )
+        )
+
+    @staticmethod
+    def _actor_is_owner(user_message: Optional[Dict[str, Any]]) -> bool:
+        try:
+            from core.interaction import resolve_interaction_policy
+
+            policy = resolve_interaction_policy((user_message or {}).get("actor_user_uuid"))
+            return policy.actor_role == "owner"
+        except Exception:
+            return False
+
+    @staticmethod
+    def _failure_block(
+        module_label: str, error: Any, user_message: Optional[Dict[str, Any]]
+    ) -> str:
+        if Instructor._actor_is_owner(user_message):
+            detail = " ".join(str(error or "unknown error").split())[:300]
+            return (
+                f"[ERROR]: the {module_label} failed: {detail}. "
+                "Tell the user you tried to use it and it fails with this error, "
+                "so they can check it."
+            )
+        # A guest gets no details: an error can carry paths and internals of the
+        # owner's machine. The wording is a placeholder.
+        return (
+            f"[ERROR]: the {module_label} is not working right now. "
+            "Tell the user only that something went wrong, without any details."
+        )
 
     def _build_diary_tool_content(self) -> str:
         """§3.9-bis-retrieval: recent diary days as generation context.
@@ -523,8 +640,20 @@ class Instructor:
         # Analyzer output is operational routing metadata for Decision Layer.
         # It should not be exposed as final-answer context to the generator.
 
-        memory_info = self._build_memory_tool_content(memory_context or {}).strip()
-        if memory_info and not memory_info.lower().startswith("[ok]: memory module is disabled"):
+        context = memory_context or {}
+        memory_status = str(context.get("memory_status") or "").strip().lower()
+        exclude_disabled = self._exclude_disabled_modules()
+
+        memory_state = self._memory_module_state(context)
+        if memory_state == MODULE_FAILED:
+            memory_info = self._failure_block(
+                "memory module", context.get("memory_error"), user_message
+            )
+        elif memory_state == MODULE_DISABLED:
+            memory_info = "" if exclude_disabled else "[OK]: memory module is disabled."
+        else:
+            memory_info = self._build_memory_tool_content(context).strip()
+        if memory_info:
             dynamic_messages.append(
                 {
                     "role": "tool",
@@ -533,13 +662,19 @@ class Instructor:
                 }
             )
 
-        knowledge_info = self._build_knowledge_tool_content(memory_context or {}).strip()
-        memory_status = str((memory_context or {}).get("memory_status") or "").strip().lower()
-        if (
-            knowledge_info
-            and not knowledge_info.startswith("[ERROR]")
-            and memory_status not in {"", "disabled"}
-        ):
+        lore_state = self._lore_state(context, memory_state)
+        knowledge_info = ""
+        if lore_state == MODULE_OK:
+            knowledge_info = self._build_knowledge_tool_content(context).strip()
+        elif lore_state == MODULE_EMPTY:
+            knowledge_info = NO_LOREBOOK_ENTRIES
+        elif lore_state == MODULE_FAILED:
+            knowledge_info = self._failure_block(
+                "lorebook", context.get("lore_error"), user_message
+            )
+        elif lore_state == MODULE_DISABLED and not exclude_disabled:
+            knowledge_info = "[OK]: lorebook is disabled together with the memory module."
+        if knowledge_info:
             dynamic_messages.append(
                 {
                     "role": "tool",

@@ -292,6 +292,41 @@
     font-weight: 600;
 }
 
+.model-capabilities {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin-top: 4px;
+}
+
+.capability-differs {
+    font-size: 13px;
+    color: #f0b429;
+    cursor: help;
+}
+
+.capability-edit {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border-radius: 6px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: color-mix(in srgb, var(--color-text) 70%, transparent);
+    cursor: pointer;
+    transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+
+    &:hover {
+        color: var(--color-accent);
+        border-color: var(--color-border);
+        background: color-mix(in srgb, var(--color-surface) 75%, transparent);
+    }
+}
+
 .model-actions {
     display: flex;
     gap: 8px;

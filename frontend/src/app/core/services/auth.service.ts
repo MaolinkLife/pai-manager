@@ -11,6 +11,27 @@ import {
     AuthUser,
 } from '../models/auth.model';
 
+export interface BootstrapError {
+    status: number;
+    message: string;
+}
+
+/** A refusal or an unreachable server, described for the sign-in page. */
+export function describeBootstrapError(error: HttpErrorResponse | null | undefined): BootstrapError {
+    const status = Number(error?.status ?? 0);
+    const detail = typeof error?.error?.detail === 'string' ? error.error.detail : '';
+    if (status === 0) {
+        return { status, message: 'Сервер не отвечает. Проверьте, что PAI запущена и адрес доступен.' };
+    }
+    if (status === 401 || status === 403) {
+        return {
+            status,
+            message: detail ? `Сервер отказал в доступе (${status}): ${detail}` : `Сервер отказал в доступе (${status}).`,
+        };
+    }
+    return { status, message: detail ? `Ошибка сервера (${status}): ${detail}` : `Ошибка сервера (${status}).` };
+}
+
 @Injectable({
     providedIn: 'root'
 })
@@ -28,8 +49,15 @@ export class AuthService {
         this.loadStoredBootstrapState()
     );
     private refreshInFlight$: Observable<AuthTokenResponse | null> | null = null;
+    /** Why the last «is there an owner» request failed; null when it answered. */
+    bootstrapError: BootstrapError | null = null;
 
     constructor(private http: HttpClient) { }
+
+    /** The owner signed in: the only role that sees anything besides the chat. */
+    isOwner(): boolean {
+        return !this.isAnonymousMode() && this.getCurrentUser()?.role === 'owner';
+    }
 
     getCurrentUser(): AuthUser | null {
         return this.currentUserSubject.value;
@@ -156,24 +184,27 @@ export class AuthService {
         );
     }
 
-    getBootstrapState$(forceRefresh: boolean = false): Observable<AuthBootstrapState> {
+    /** Changes the signed-in owner's password; the owner's other sessions are signed out. */
+    changePassword$(payload: { current_password: string; new_password: string }): Observable<{ status: string; revoked_sessions: number }> {
+        return this.http.post<{ status: string; revoked_sessions: number }>(`${this.apiUrl}/me/password`, payload);
+    }
+
+    /** The server's answer, or null when it refused or did not answer (see `bootstrapError`). */
+    getBootstrapState$(forceRefresh: boolean = false): Observable<AuthBootstrapState | null> {
         const cached = this.bootstrapStateSubject.value;
         if (!forceRefresh && cached) {
             return of(cached);
         }
 
         return this.http.get<AuthBootstrapState>(`${this.apiUrl}/bootstrap-state`).pipe(
-            tap((state) => this.storeBootstrapState(state)),
-            catchError(() => {
-                const fallback: AuthBootstrapState = {
-                    has_owner: false,
-                    requires_setup: true,
-                    auth_users_count: 0,
-                    first_registration_role: 'owner',
-                    allow_anonymous: false,
-                };
-                this.storeBootstrapState(fallback);
-                return of(fallback);
+            tap((state) => {
+                this.bootstrapError = null;
+                this.storeBootstrapState(state);
+            }),
+            catchError((error: HttpErrorResponse) => {
+                // A refusal is not a first run: never offer to create the owner because of it.
+                this.bootstrapError = describeBootstrapError(error);
+                return of(null);
             })
         );
     }

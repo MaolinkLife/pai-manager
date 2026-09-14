@@ -16,6 +16,7 @@ import {
     MoralScarTrigger,
     MoralScarsConfig,
 } from '../models/project-config.model';
+import { promptField } from './technical-prompt-field';
 
 const mapDecayDtoToModel = (dto?: MoralDecayConfigDto): MoralDecayConfig | undefined => {
     if (!dto) {
@@ -116,6 +117,7 @@ const mapInnerVoiceDtoToModel = (
         maxTokens: dto.max_tokens ?? 80,
         temperature: dto.temperature ?? 0.7,
         language: dto.language ?? '',
+        systemPrompt: dto.system_prompt ?? '',
     };
 };
 
@@ -130,6 +132,7 @@ const mapInnerVoiceModelToDto = (
         max_tokens: model.maxTokens,
         temperature: model.temperature,
         language: model.language,
+        ...promptField('system_prompt', model.systemPrompt),
     };
 };
 

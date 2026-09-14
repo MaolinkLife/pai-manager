@@ -2,7 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { FormBuilder, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 import { finalize } from 'rxjs/operators';
-import { AuthService } from '../../core/services/auth.service';
+import { AuthService, BootstrapError } from '../../core/services/auth.service';
 import { AuthBootstrapState } from '../../core/models/auth.model';
 import { NotificationService } from '../../shared/components/notification/notification.service';
 
@@ -17,6 +17,8 @@ export class AuthComponent implements OnInit {
     mode: AuthMode = 'login';
     loading = false;
     bootstrapState: AuthBootstrapState | null = null;
+    bootstrapError: BootstrapError | null = null;
+    checkingServer = false;
     setupRequired = false;
 
     readonly loginForm = this.fb.group({
@@ -40,19 +42,23 @@ export class AuthComponent implements OnInit {
     ) { }
 
     ngOnInit(): void {
-        this.authService.getBootstrapState$(true).subscribe({
-            next: (state) => {
+        this.loadBootstrapState();
+    }
+
+    loadBootstrapState(): void {
+        this.checkingServer = true;
+        this.authService
+            .getBootstrapState$(true)
+            .pipe(finalize(() => (this.checkingServer = false)))
+            .subscribe((state) => {
                 this.bootstrapState = state;
-                this.setupRequired = !state.has_owner;
+                // A refusal or a silent server is shown as such, never as a first run.
+                this.bootstrapError = state ? null : this.authService.bootstrapError;
+                this.setupRequired = !!state && !state.has_owner;
                 if (this.setupRequired) {
                     this.mode = 'register';
                 }
-            },
-            error: () => {
-                this.setupRequired = true;
-                this.mode = 'register';
-            },
-        });
+            });
     }
 
     switchMode(mode: AuthMode): void {

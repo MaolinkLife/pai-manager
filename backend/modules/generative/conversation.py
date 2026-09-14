@@ -22,6 +22,7 @@ from modules.generative.output_normalizer import StreamingOutputNormalizer, norm
 from modules.system.service import get_active_character_name
 from core.decision_layer import decision_layer
 from modules.database import service as database_service
+from modules.synthesis.image_check import ImageCheckSettings
 from modules.synthesis.media_pipeline import MediaPipelineRequest, media_generation_pipeline
 from modules.system import config as config_service
 from modules.system.logger import AuditStatus, log_audit_entry
@@ -110,50 +111,6 @@ def _sanitize_history(history: list, *, drop_media: bool) -> list:
 def build_chat_request(history: list) -> list:
     sanitized = _sanitize_history(history, drop_media=True)
     return [msg for msg in sanitized if msg.get("role") != "system"]
-
-
-def _should_pass_media_to_main_ollama_model() -> bool:
-    if str(config_service.get_config_value("api.active_provider", "") or "").strip() != "ollama":
-        return False
-    active_vision = str(config_service.get_config_value("vision.active_provider", "") or "").strip()
-    if active_vision not in {"ollama_vision", "llava"}:
-        return False
-    return bool(
-        config_service.get_config_value(
-            f"vision.vision_modules.{active_vision}.use_main_model_context",
-            False,
-        )
-    )
-
-
-def _image_payloads_for_ollama(media_items: Iterable[dict] | None) -> List[str]:
-    images: List[str] = []
-    for item in media_items or []:
-        if not isinstance(item, dict):
-            continue
-        category = str(item.get("category") or item.get("mediaType") or "").lower()
-        mime_type = str(item.get("mimeType") or item.get("mime_type") or "").lower()
-        if category != "image" and not mime_type.startswith("image/"):
-            continue
-        data = str(item.get("data") or item.get("base64") or "").strip()
-        if not data:
-            continue
-        if "," in data and data.lower().startswith("data:image"):
-            data = data.split(",", 1)[1].strip()
-        if data:
-            images.append(data)
-    return images
-
-
-def _attach_images_to_last_user_message(chat_history: list, media_items: Iterable[dict] | None) -> int:
-    images = _image_payloads_for_ollama(media_items)
-    if not images:
-        return 0
-    for message in reversed(chat_history):
-        if isinstance(message, dict) and message.get("role") == "user":
-            message["images"] = images
-            return len(images)
-    return 0
 
 
 def split_reasoning(raw: str) -> tuple[str, str]:
@@ -1129,26 +1086,14 @@ def _build_main_chat_image_prompt(
     analysis = decision_context.get("analysis") or {}
     moral_state = decision_context.get("moral_state") or {}
     visual_context = decision_context.get("visual_context") or {}
-    cfg = config_service.get_config_value("synthesis.prompting", {}) or {}
-    appearance = ""
     try:
         from modules.visual_profile_store import visual_profile_store_service
 
         visual_profile = visual_profile_store_service.load_profile()
-        appearance = str(
-            visual_profile.appearance_textarea
-            or visual_profile.character_name
-            or ""
-        ).strip()
     except Exception:
-        visual_profile = cfg.get("visual_profile") if isinstance(cfg, dict) else {}
-        if isinstance(visual_profile, dict):
-            appearance = str(
-                visual_profile.get("appearance_textarea")
-                or visual_profile.get("character_name")
-                or ""
-            ).strip()
-    fallback_appearance = str((cfg or {}).get("appearance_prompt") or "").strip() if isinstance(cfg, dict) else ""
+        from modules.visual_intent_composer import VisualProfile
+
+        visual_profile = VisualProfile()
     user_text = str((user_message or {}).get("content") or "").strip()
     recent_topic = str(((memory_context or {}).get("conversation_state") or {}).get("last_topic") or "").strip()
     history = (memory_context or {}).get("recent_history") or []
@@ -1174,78 +1119,43 @@ def _build_main_chat_image_prompt(
             visual_parts.append(str(screen.get("description")))
         visual_summary = "\n".join(visual_parts)
 
-    prompt_payload = {
-        "user_message": user_text,
-        "recent_history": history_preview,
-        "recent_topic": recent_topic,
-        "analyzer_image_decision": image_decision,
-        "themes": ((analysis.get("input_analysis") or {}).get("dominant_themes") or [])[:8],
-        "emotion": moral_state.get("current_emotion") or moral_state.get("summary"),
-        "visual_context": visual_summary,
-        "character_appearance": appearance or fallback_appearance,
-    }
+    from modules.synthesis.image_scene import write_image_scene
 
-    system_prompt = (
-        "You write prompts for an image generator inside a character chat system. "
-        "Create one concise, visually concrete prompt for the image the character should attach now. "
-        "Use current conversation context, visual context if present, and the character appearance anchor if present. "
-        "If context is weak, create a natural in-character casual image. "
-        "Avoid text, captions, watermarks, UI, logos. "
-        "Return ONLY valid JSON with fields: prompt, negative_prompt."
+    # Who is in the picture and its scene, in one call.
+    # Her appearance is not the model's to write: the pipeline puts the anchor in.
+    scene = write_image_scene(
+        request_text=user_text,
+        context={
+            "recent_history": history_preview,
+            "recent_topic": recent_topic,
+            "analyzer_image_decision": image_decision,
+            "themes": ((analysis.get("input_analysis") or {}).get("dominant_themes") or [])[:8],
+            "emotion": moral_state.get("current_emotion") or moral_state.get("summary"),
+            "visual_context": visual_summary,
+        },
+        profile=visual_profile,
     )
-    try:
-        result = generation_manager.generate(
-            GenerateRequest(
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {
-                        "role": "user",
-                        "content": json.dumps(prompt_payload, ensure_ascii=False, indent=2),
-                    },
-                ],
-                options={"temperature": 0.75, "max_tokens": 700},
-                metadata={"mode": "main_chat_image_prompt"},
-            )
-        )
-        raw = (result.content or "").strip()
-        raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw, flags=re.IGNORECASE | re.DOTALL).strip()
-        parsed = json.loads(raw)
-        prompt = str(parsed.get("prompt") or "").strip()
-        negative = str(parsed.get("negative_prompt") or "").strip()
-        if prompt:
-            usage = _extract_usage_metadata(result.raw)
-            return json.dumps(
-                {
-                    "prompt": prompt,
-                    "negative_prompt": negative,
-                    "provider": result.provider,
-                    "usage": usage,
-                },
-                ensure_ascii=False,
-            )
-    except Exception as exc:
-        _dl_console_log(
-            "LLM-промпт для картинки не получен, использую fallback.",
-            {"error": str(exc)},
-        )
+    if not scene.scene:
+        _dl_console_log("Сцена для картинки от модели не получена, собирает пайплайн.", {"subject": scene.subject})
+    return json.dumps(
+        {
+            "prompt": scene.scene,
+            "negative_prompt": scene.negative_prompt,
+            "subject": scene.subject,
+            "free_roll": scene.free_roll,
+            "provider": scene.provider,
+            "usage": _extract_usage_metadata(scene.raw) if scene.raw else {},
+        },
+        ensure_ascii=False,
+    )
 
-    parts = [
-        "Generate an in-character image for the main chat reply.",
-        "It should feel like a natural attachment sent by the assistant, not a poster or UI screenshot.",
-    ]
-    if appearance or fallback_appearance:
-        parts.append(f"Character appearance/style anchor: {appearance or fallback_appearance}")
-    if user_text:
-        parts.append(f"User message context: {user_text[:700]}")
-    if recent_topic:
-        parts.append(f"Recent topic: {recent_topic}")
-    if visual_summary:
-        parts.append(f"Visual context: {visual_summary[:700]}")
-    style_hint = str((image_decision or {}).get("style_hint") or "").strip()
-    if style_hint:
-        parts.append(f"Analyzer style hint: {style_hint}")
-    parts.append("Avoid text, watermarks, captions, logos, and UI elements in the image.")
-    return json.dumps({"prompt": "\n".join(parts), "negative_prompt": ""}, ensure_ascii=False)
+
+def _generated_image_describe_prompt() -> str:
+    """What vision is asked about a picture PAI generated: a technical prompt from the settings."""
+    from constants.prompts import VISION_GENERATED_IMAGE_PROMPT
+    from modules.system.technical_prompts import configured_prompt
+
+    return configured_prompt("vision.generated_image_prompt", VISION_GENERATED_IMAGE_PROMPT)
 
 
 async def _prepare_main_chat_image_context(
@@ -1280,8 +1190,11 @@ async def _prepare_main_chat_image_context(
         parsed_prompt = json.loads(prompt_payload)
     except Exception:
         parsed_prompt = {"prompt": prompt_payload, "negative_prompt": ""}
-    prompt = str(parsed_prompt.get("prompt") or prompt_payload).strip()
+    prompt = str(parsed_prompt.get("prompt") or "").strip()
     generated_negative = str(parsed_prompt.get("negative_prompt") or "").strip()
+    image_subject = parsed_prompt.get("subject")
+    subject_roll = str(parsed_prompt.get("free_roll") or "")
+    request_text = str((last_user_message or {}).get("content") or "").strip()
     prompt_usage = parsed_prompt.get("usage") if isinstance(parsed_prompt.get("usage"), dict) else {}
     prompt_provider = str(parsed_prompt.get("provider") or "")
     _dl_console_log("Промпт для генерации картинки получен.", {"prompt": prompt[:700]})
@@ -1359,12 +1272,8 @@ async def _prepare_main_chat_image_context(
                 "width": width,
                 "height": height,
                 "steps": steps,
-                "check_enabled": bool(
-                    (config_service.get_config_value("synthesis.prompting", {}) or {}).get("assess_enabled", True)
-                ),
-                "retry_enabled": bool(
-                    (config_service.get_config_value("synthesis.prompting", {}) or {}).get("retry_enabled", True)
-                ),
+                "check_enabled": ImageCheckSettings.from_config().any_enabled,
+                "retry_enabled": ImageCheckSettings.from_config().generations_allowed() > 1,
             },
         )
         _dl_console_log(
@@ -1396,6 +1305,10 @@ async def _prepare_main_chat_image_context(
                 use_prompt_builder=False,
                 review_generated_image=False,
                 use_visual_intent=True,
+                compose_before_generation=True,
+                image_subject=image_subject,
+                subject_roll=subject_roll,
+                request_text=request_text,
                 source="main_chat",
                 character_name=get_active_character_name(default="default"),
                 metadata={"allow_scenario_controls": True},
@@ -1435,45 +1348,49 @@ async def _prepare_main_chat_image_context(
         return []
 
     mime_type = str(getattr(result, "mime_type", "") or "image/png")
-    description = ""
-    try:
-        vision_started = time.perf_counter()
-        await _emit_runtime_trace(trace_hook, "image_vision", "start")
-        _dl_console_log("Передаю созданную картинку в Vision для описания.")
-        with Image.open(BytesIO(result.image_bytes)) as image:
-            visual_module = VisualModule()
-            vision_result = await asyncio.to_thread(
-                visual_module.describe_image,
-                image.convert("RGB"),
-                "Describe this generated image for the assistant before it writes the final reply. Be concise and factual.",
+    # The pipeline's image check has already described the image: vision is not asked twice.
+    description = str(getattr(result, "vision_description", "") or "").strip()
+    if description:
+        _dl_console_log("Vision описание картинки получено при проверке изображения.", {"description": description[:700]})
+    else:
+        try:
+            vision_started = time.perf_counter()
+            await _emit_runtime_trace(trace_hook, "image_vision", "start")
+            _dl_console_log("Передаю созданную картинку в Vision для описания.")
+            with Image.open(BytesIO(result.image_bytes)) as image:
+                visual_module = VisualModule()
+                vision_result = await asyncio.to_thread(
+                    visual_module.describe_image,
+                    image.convert("RGB"),
+                    _generated_image_describe_prompt(),
+                )
+            description = str((vision_result or {}).get("summary") or "").strip()
+            if description:
+                _dl_console_log("Vision описание картинки получено.", {"description": description[:700]})
+            else:
+                _dl_console_log("Vision вернул пустое описание картинки.")
+            await _emit_runtime_trace(
+                trace_hook,
+                "image_vision",
+                "end",
+                started_at=vision_started,
+                details={
+                    "description_length": len(description),
+                    "status": "described" if description else "empty",
+                },
             )
-        description = str((vision_result or {}).get("summary") or "").strip()
-        if description:
-            _dl_console_log("Vision описание картинки получено.", {"description": description[:700]})
-        else:
-            _dl_console_log("Vision вернул пустое описание картинки.")
-        await _emit_runtime_trace(
-            trace_hook,
-            "image_vision",
-            "end",
-            started_at=vision_started,
-            details={
-                "description_length": len(description),
-                "status": "described" if description else "empty",
-            },
-        )
-    except Exception as exc:
-        description = f"Generated image prompt: {prompt[:700]}"
-        await _emit_runtime_trace(
-            trace_hook,
-            "image_vision",
-            "error",
-            details={"error": str(exc)},
-        )
-        _dl_console_log(
-            "Vision описание картинки не получено, использую описание по промпту.",
-            {"error": str(exc)},
-        )
+        except Exception as exc:
+            description = f"Generated image prompt: {prompt[:700]}"
+            await _emit_runtime_trace(
+                trace_hook,
+                "image_vision",
+                "error",
+                details={"error": str(exc)},
+            )
+            _dl_console_log(
+                "Vision описание картинки не получено, использую описание по промпту.",
+                {"error": str(exc)},
+            )
 
     media = {
         "id": str(uuid.uuid4()),
@@ -1794,16 +1711,6 @@ async def generate_standard(
 
     chat_history = build_chat_request(history)
     chat_history.insert(0, {"role": "system", "content": system_prompt})
-    direct_image_count = 0
-    if _should_pass_media_to_main_ollama_model():
-        direct_image_count = _attach_images_to_last_user_message(chat_history, user_media_for_storage)
-        if direct_image_count:
-            log_audit_entry(
-                "conversation_standard_direct_ollama_images",
-                "[Conversation] Image attachments attached to the main Ollama request.",
-                AuditStatus.INFO,
-                details={"count": direct_image_count},
-            )
 
     request_payload = GenerateRequest(
         messages=chat_history,
@@ -1958,16 +1865,11 @@ async def generate_standard(
         extra_tags = list(memory_context_for_tags.get("short_term_themes") or [])
         user_display_content = last_user_message.get("display_content", last_user_message.get("content", ""))
         user_tags = _generate_tags_for_text(user_display_content, extra=extra_tags)
-        existing_user = None
-        message_id = str(last_user_message.get("id") or "").strip()
-        if message_id:
-            existing_user = database_service.get_message_by_id(message_id)
-        if not existing_user and not suppress_user_echo:
-            database_service.add_message_to_history(
-                character_name=get_active_character_name(default="default"),
-                role="user",
+        if not suppress_user_echo:
+            _store_user_message_once(
+                last_user_message,
+                store=store,
                 content=user_display_content,
-                timestamp=datetime.now(timezone.utc),
                 media=user_media_for_storage,
                 tags=user_tags,
             )
@@ -2043,7 +1945,9 @@ async def generate_standard(
     elif emit_ws_fn:
         await emit_ws_fn({"type": "system", "event": "typing_end"})
 
-    decision_layer.handle_response(assistant_content)
+    decision_layer.handle_response(
+        assistant_content, message_id=getattr(assistant_message_obj, "id", None)
+    )
     print("[Generator] Ответ передан в голосовой движок (standard).")
 
     if not return_full:
@@ -2104,6 +2008,74 @@ async def generate_standard(
 # ---------------------------------------------------------------------------
 # Streaming generation
 # ---------------------------------------------------------------------------
+def _speak_reply(content: str, message_id: Optional[str], *, speak: bool) -> None:
+    """Voice a reply on this machine. A guest's reply stays silent: the speakers
+    are the owner's."""
+    if not speak:
+        return
+    decision_layer.handle_response(content, message_id=message_id)
+
+
+def _is_reroll(last_user_message: Optional[Dict[str, Any]]) -> bool:
+    """A reroll replays a user message that is already in the database: it
+    replaces the answer only and never stores the user message again."""
+    return bool(str((last_user_message or {}).get("reroll_target_message_id") or "").strip())
+
+
+def _store_user_message_once(
+    last_user_message: Optional[Dict[str, Any]],
+    *,
+    store: bool,
+    content: str,
+    media: Optional[list],
+    tags: Optional[list],
+) -> Optional[Any]:
+    """Store the user message unless it is already in the database; the new row or None."""
+    if not store or not last_user_message or _is_reroll(last_user_message):
+        return None
+    message_id = str(last_user_message.get("id") or "").strip()
+    if message_id and database_service.get_message_by_id(message_id):
+        return None
+    return database_service.add_message_to_history(
+        character_name=get_active_character_name(default="default"),
+        role="user",
+        content=content,
+        timestamp=datetime.now(timezone.utc),
+        media=media,
+        tags=tags,
+    )
+
+
+async def _confirm_user_message_id(
+    last_user_message: Dict[str, Any],
+    *,
+    client_message_id: str,
+    stored_entry: Optional[Any],
+    emit_fn: Optional[Callable[[dict], Awaitable[bool]]],
+    with_run: Callable[[Dict[str, Any]], Dict[str, Any]],
+) -> None:
+    """Tell the chat the real id of a user message it drew under its own.
+
+    The chat shows a sent message at once under a temporary id; the row id exists
+    only once it is stored. Until the chat learns it, a reroll, edit or delete of
+    that message points at an id the database does not have (a reroll stored the
+    user message a second time, 2026-09-13). Everything after this uses the real
+    id, the echo to the chat included.
+    """
+    real_id = str(getattr(stored_entry, "id", "") or "").strip()
+    if real_id:
+        last_user_message["id"] = real_id
+    else:
+        real_id = str(last_user_message.get("id") or "").strip()
+    if emit_fn is None or not client_message_id or not real_id or client_message_id == real_id:
+        return
+    payload: Dict[str, Any] = {"type": "ack_message", "tempId": client_message_id, "realId": real_id}
+    stored_media = getattr(stored_entry, "media_payload", None)
+    if stored_media:
+        payload["media"] = stored_media
+    await emit_fn(with_run(payload))
+
+
 async def generate_stream(
     decision_context: Dict[str, Any],
     history: list,
@@ -2117,6 +2089,7 @@ async def generate_stream(
     should_stop: Optional[Callable[[], bool]] = None,
     request_options_patch: Optional[Dict[str, Any]] = None,
     skip_thinking_attempted: bool = False,
+    speak: bool = True,
 ) -> None:
     if not history:
         return
@@ -2184,16 +2157,6 @@ async def generate_stream(
 
     chat_history = build_chat_request(history)
     chat_history.insert(0, {"role": "system", "content": system_prompt})
-    direct_image_count = 0
-    if _should_pass_media_to_main_ollama_model():
-        direct_image_count = _attach_images_to_last_user_message(chat_history, user_media_for_storage)
-        if direct_image_count:
-            log_audit_entry(
-                "conversation_stream_direct_ollama_images",
-                "[Conversation] Image attachments attached to the main Ollama stream request.",
-                AuditStatus.INFO,
-                details={"count": direct_image_count},
-            )
 
     request_payload = GenerateRequest(
         messages=chat_history,
@@ -2211,23 +2174,30 @@ async def generate_stream(
 
     stored_user_entry = None
     suppress_user_echo = bool(last_user_message.get("suppress_user_echo")) if last_user_message else False
+    client_message_id = (
+        str(last_user_message.get("client_message_id") or last_user_message.get("id") or "").strip()
+        if last_user_message
+        else ""
+    )
     if store and last_user_message and not suppress_user_echo:
         extra_tags = list(memory_context.get("short_term_themes") or [])
         user_display_content = last_user_message.get("display_content", last_user_message.get("content", ""))
         user_tags = _generate_tags_for_text(user_display_content, extra=extra_tags)
-        existing_user = None
-        message_id = str(last_user_message.get("id") or "").strip()
-        if message_id:
-            existing_user = database_service.get_message_by_id(message_id)
-        if not existing_user:
-            stored_user_entry = database_service.add_message_to_history(
-                character_name=get_active_character_name(default="default"),
-                role="user",
-                content=user_display_content,
-                timestamp=datetime.now(timezone.utc),
-                media=user_media_for_storage,
-                tags=user_tags,
-            )
+        stored_user_entry = _store_user_message_once(
+            last_user_message,
+            store=store,
+            content=user_display_content,
+            media=user_media_for_storage,
+            tags=user_tags,
+        )
+    if last_user_message and not suppress_user_echo:
+        await _confirm_user_message_id(
+            last_user_message,
+            client_message_id=client_message_id,
+            stored_entry=stored_user_entry,
+            emit_fn=emit_fn,
+            with_run=_with_run,
+        )
     if stored_user_entry and last_user_message:
         stored_media = getattr(stored_user_entry, "media_payload", []) or []
         user_media_for_emit = stored_media
@@ -2793,7 +2763,7 @@ async def generate_stream(
             )
 
     if not stopped:
-        decision_layer.handle_response(assistant_content)
+        _speak_reply(assistant_content, getattr(assistant_message_obj, "id", None), speak=speak)
     assistant_timestamp = getattr(
         assistant_message_obj, "timestamp", datetime.now(timezone.utc)
     )
@@ -2927,5 +2897,5 @@ def play_message(msg_id: str):
     print("[Generator] Воспроизведение сохранённого сообщения.")
     message = database_service.get_message_by_id(msg_id)
     if config_service.get_config_value("voice.enabled", False):
-        decision_layer.handle_response(message.get("content", ""))
+        decision_layer.handle_response(message.get("content", ""), message_id=msg_id)
     return message

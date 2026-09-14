@@ -122,46 +122,6 @@
                     <app-ui-input id="fallbackOrder" type="text" formControlName="fallbackOrder" placeholder="provider1, provider2"></app-ui-input>
                 </div>
 
-                <div class="form-group">
-                    <label for="visualModel">{{
-                        "settings.visualModel" | translate
-                    }}</label>
-                    <div class="visual-model-combo" (focusin)="openVisualModelDropdown()" (focusout)="closeVisualModelDropdown()">
-                        <div class="visual-model-combo__input-row">
-                            <app-ui-input id="visualModel" type="text" formControlName="visualModel" [placeholder]="'settings.visualModelPlaceholder' | translate"></app-ui-input>
-                            <button type="button" class="visual-model-combo__add" (click)="addCurrentVisualModelOption()" [title]="'settings.addVisualModel' | translate">
-                                +
-                            </button>
-                        </div>
-                        <div class="visual-model-combo__menu" *ngIf="visualModelDropdownOpen && hasVisualModelDropdownItems">
-                            <ng-container *ngIf="visualModelManualOptions.length > 0">
-                                <div class="visual-model-combo__caption">
-                                    {{ "settings.savedModels" | translate }}
-                                </div>
-                                <button type="button" class="visual-model-combo__option" *ngFor="let model of visualModelManualOptions" (mousedown)="selectVisualModel(model)">
-                                    <span>{{ model }}</span>
-                                    <span class="visual-model-combo__delete" (mousedown)="removeVisualModelOption(model, $event)" [title]="'general.delete' | translate">
-                                        ×
-                                    </span>
-                                </button>
-                            </ng-container>
-
-                            <div class="visual-model-combo__divider" *ngIf="isOllamaActiveProvider"></div>
-                            <ng-container *ngIf="isOllamaActiveProvider">
-                                <div class="visual-model-combo__caption">
-                                    Ollama
-                                </div>
-                                <button type="button" class="visual-model-combo__option" *ngFor="let model of visualModelOllamaOptions" (mousedown)="selectVisualModel(model)">
-                                    <span>{{ model }}</span>
-                                </button>
-                                <div class="visual-model-combo__empty" *ngIf="visualModelOllamaOptions.length === 0">
-                                    {{ "settings.ollamaUnavailable" | translate }}
-                                </div>
-                            </ng-container>
-                        </div>
-                    </div>
-                </div>
-
                 <div class="form-group token-limit-block">
                     <label for="tokenLimit">{{
                         "settings.tokenLimit" | translate

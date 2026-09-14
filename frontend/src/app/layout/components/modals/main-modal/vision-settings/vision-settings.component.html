@@ -79,24 +79,29 @@
                         [options]="visionProviderOptions"
                     ></app-ui-select>
                 </div>
+            </div>
 
-                <div class="form-group provider-status" *ngIf="activeProvider">
-                    <div class="provider-status-row">
-                        <div class="provider-status-text" *ngIf="providerStatus; else noProviderStatus">
-                            <strong>{{ "settings.visionProviderStatus" | translate }}:</strong>
-                            <span *ngIf="providerStatus.ready === true">{{ "settings.visionStatusSupported" | translate }}</span>
-                            <span *ngIf="providerStatus.ready === false">{{ "settings.visionStatusUnavailable" | translate }}</span>
-                            <span *ngIf="providerStatus.ready === null">{{ "settings.visionStatusConfigured" | translate }}</span>
-                            <span class="provider-status-model" *ngIf="providerStatus.model">({{ providerStatus.model }})</span>
-                            <span class="provider-status-message">- {{ providerStatus.message }}</span>
-                        </div>
-                        <ng-template #noProviderStatus>
-                            <div class="provider-status-text">
-                                <strong>{{ "settings.visionProviderStatus" | translate }}:</strong> {{ "settings.visionStatusUnknown" | translate }}
-                            </div>
-                        </ng-template>
-                        <button type="button" class="select-monitor-btn" (click)="checkProviderCapability()" [disabled]="isCheckingProvider">
-                            {{ isCheckingProvider ? ('settings.visionChecking' | translate) : ('settings.visionCheckSupport' | translate) }}
+            <div class="section">
+                <h3>{{ "settings.visionPromptsTitle" | translate }}</h3>
+
+                <div class="form-group">
+                    <label for="visionAttachmentPrompt">{{ "settings.visionAttachmentPrompt" | translate }}</label>
+                    <app-ui-textarea id="visionAttachmentPrompt" [rows]="3" [autoResize]="true" formControlName="attachmentPrompt"></app-ui-textarea>
+                    <div class="prompt-actions">
+                        <p class="hint">{{ "settings.visionAttachmentPromptHint" | translate }}</p>
+                        <button type="button" class="reset-button" (click)="resetPrompt('attachmentPrompt', 'vision.attachment_prompt')">
+                            {{ "settings.resetPrompt" | translate }}
+                        </button>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="visionGeneratedImagePrompt">{{ "settings.visionGeneratedImagePrompt" | translate }}</label>
+                    <app-ui-textarea id="visionGeneratedImagePrompt" [rows]="3" [autoResize]="true" formControlName="generatedImagePrompt"></app-ui-textarea>
+                    <div class="prompt-actions">
+                        <p class="hint">{{ "settings.visionGeneratedImagePromptHint" | translate }}</p>
+                        <button type="button" class="reset-button" (click)="resetPrompt('generatedImagePrompt', 'vision.generated_image_prompt')">
+                            {{ "settings.resetPrompt" | translate }}
                         </button>
                     </div>
                 </div>
@@ -162,6 +167,25 @@
 
             <div class="section">
                 <h3>Capture</h3>
+
+                <div class="form-group">
+                    <label class="checkbox">
+                        <input type="checkbox" formControlName="screenCaptureEnabled" />
+                        {{ "settings.enableBackgroundScreenCapture" | translate }}
+                    </label>
+                    <small>{{ "settings.backgroundScreenCaptureHint" | translate }}</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="visionScreenPrompt">{{ "settings.visionScreenPrompt" | translate }}</label>
+                    <app-ui-textarea id="visionScreenPrompt" [rows]="3" [autoResize]="true" formControlName="screenPrompt"></app-ui-textarea>
+                    <div class="prompt-actions">
+                        <p class="hint">{{ "settings.visionScreenPromptHint" | translate }}</p>
+                        <button type="button" class="reset-button" (click)="resetPrompt('screenPrompt', 'vision.screen_prompt')">
+                            {{ "settings.resetPrompt" | translate }}
+                        </button>
+                    </div>
+                </div>
 
                 <div class="form-group">
                     <label for="monitorIndex">{{

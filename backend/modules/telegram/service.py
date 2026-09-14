@@ -5559,6 +5559,13 @@ class TelegramBridgeService:
     # ------------------------------------------------------------------ #
     # Initiative loop
     # ------------------------------------------------------------------ #
+    @staticmethod
+    def _initiative_switched_on(init_cfg: dict[str, Any]) -> bool:
+        # The global initiative switch gates the bridge's own initiative too.
+        from modules.initiative import initiative_enabled
+
+        return initiative_enabled() and bool(init_cfg.get("enabled", False))
+
     async def _initiative_worker(self) -> None:
         while not self._stop_signal.is_set():
             channel_allowed, reason = can_accept_ingress("telegram")
@@ -5590,7 +5597,7 @@ class TelegramBridgeService:
                 },
             )
 
-            if not bool(init_cfg.get("enabled", False)):
+            if not self._initiative_switched_on(init_cfg):
                 continue
 
             idle_minutes = int(init_cfg.get("idle_minutes", 60) or 60)

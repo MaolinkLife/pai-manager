@@ -542,6 +542,20 @@ def get_user_from_access_token(token: str) -> Optional[User]:
         raise ValueError("Invalid access token payload")
     session: Session = SessionLocal()
     try:
+        # An access token lives for years; it is only as good as its session. A
+        # revoked session (logout, the other devices after a password change)
+        # signs its access token out too (2026-09-14).
+        auth_session = (
+            session.query(AuthSession)
+            .filter(AuthSession.id == payload.get("sid"))
+            .first()
+        )
+        if (
+            not auth_session
+            or auth_session.revoked_at is not None
+            or auth_session.user_uuid != user_uuid
+        ):
+            return None
         user = session.query(User).filter(User.uuid == user_uuid).first()
         if not user or not user.is_active:
             return None
@@ -591,6 +605,53 @@ def update_user_settings(
         session.commit()
     finally:
         session.close()
+
+
+def change_password(
+    user_uuid: str,
+    *,
+    current_password: str,
+    new_password: str,
+    keep_session_id: Optional[str] = None,
+) -> int:
+    """Change the password from inside a signed-in session.
+
+    The current password has to match. Every other session of the user is revoked:
+    a leaked password must not leave someone else signed in;
+    the session that made the change stays. Returns how many sessions were revoked.
+    """
+    session: Session = SessionLocal()
+    try:
+        user = session.query(User).filter(User.uuid == user_uuid).first()
+        if not user or not user.is_active or not user.password_hash:
+            raise ValueError("User not found or inactive")
+        if not verify_password(current_password or "", user.password_hash):
+            raise ValueError("The current password is wrong")
+        user.password_hash = hash_password(new_password)
+        now = _utcnow()
+        others = session.query(AuthSession).filter(
+            AuthSession.user_uuid == user_uuid,
+            AuthSession.revoked_at.is_(None),
+        )
+        if keep_session_id:
+            others = others.filter(AuthSession.id != keep_session_id)
+        revoked = 0
+        for other in others.all():
+            other.revoked_at = now
+            revoked += 1
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
+    log_audit_entry(
+        "auth_password_changed",
+        "[Auth] Password changed.",
+        AuditStatus.INFO,
+        details={"user_uuid": user_uuid, "revoked_sessions": revoked},
+    )
+    return revoked
 
 
 def get_user_by_uuid(user_uuid: str) -> Optional[User]:

@@ -29,6 +29,7 @@ export class SettingsComponent implements OnInit {
                 { key: 'generate', labelKey: 'settingsSidebar.generation' },
                 { key: 'core', labelKey: 'settingsSidebar.core' },
                 { key: 'system', labelKey: 'settingsSidebar.system' },
+                { key: 'initiative', labelKey: 'settingsSidebar.initiative' },
             ],
         },
         {

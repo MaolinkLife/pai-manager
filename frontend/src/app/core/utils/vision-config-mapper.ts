@@ -44,6 +44,10 @@ export function mapVisionDtoToModel(dtoVision: ProjectConfigDto['vision']): Proj
 
     return {
         enabled: dtoVision?.enabled ?? false,
+        screenCaptureEnabled: dtoVision?.screen_capture_enabled ?? false,
+        attachmentPrompt: dtoVision?.attachment_prompt ?? '',
+        generatedImagePrompt: dtoVision?.generated_image_prompt ?? '',
+        screenPrompt: dtoVision?.screen_prompt ?? '',
         activeProvider: dtoVision?.active_provider || 'apple_vision',
         monitorIndex: dtoVision?.monitor_index ?? 0,
         fps: dtoVision?.fps ?? 5,
@@ -68,6 +72,18 @@ export function mapVisionModelToDto(vision: Partial<ProjectConfig['vision']>): P
 
     if (vision && 'enabled' in vision) {
         dto.enabled = vision.enabled;
+    }
+    if (vision && 'screenCaptureEnabled' in vision) {
+        dto.screen_capture_enabled = vision.screenCaptureEnabled;
+    }
+    if (vision && typeof vision.attachmentPrompt === 'string') {
+        dto.attachment_prompt = vision.attachmentPrompt;
+    }
+    if (vision && typeof vision.generatedImagePrompt === 'string') {
+        dto.generated_image_prompt = vision.generatedImagePrompt;
+    }
+    if (vision && typeof vision.screenPrompt === 'string') {
+        dto.screen_prompt = vision.screenPrompt;
     }
     if (vision && 'activeProvider' in vision) {
         dto.active_provider = vision.activeProvider;

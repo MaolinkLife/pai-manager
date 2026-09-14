@@ -9,7 +9,9 @@ import {
     signal,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { EMPTY } from 'rxjs';
 import { MoralDashboardState, MoralStateService } from '../../../core/services/moral-state.service';
+import { AuthService } from '../../../core/services/auth.service';
 import { VoiceService } from '../../../core/services/voice.service';
 import { WebsocketService } from '../../../core/services/websocket.service';
 import { LocalizationService } from '../../../shared/pipes/translation/localization.service';
@@ -103,12 +105,17 @@ export class AiEntityVisualizerComponent implements OnInit, OnDestroy {
         private moralStateService: MoralStateService,
         private websocketService: WebsocketService,
         private localizationService: LocalizationService,
-        private voiceService: VoiceService
+        private voiceService: VoiceService,
+        private authService: AuthService
     ) {}
 
     ngOnInit(): void {
         this.localizationService.init();
-        this.fetchState();
+        // Her state and the call belong to the owner: a guest only writes.
+        const owner = this.authService.isOwner();
+        if (owner) {
+            this.fetchState();
+        }
         this.moralStateService.state$
             .pipe(takeUntilDestroyed(this.destroyRef))
             .subscribe((nextState) => {
@@ -140,7 +147,7 @@ export class AiEntityVisualizerComponent implements OnInit, OnDestroy {
                 }
             });
 
-        this.voiceService.callStatus$()
+        (owner ? this.voiceService.callStatus$() : EMPTY)
             .pipe(takeUntilDestroyed(this.destroyRef))
             .subscribe({
                 next: (status) => {
@@ -247,6 +254,7 @@ export class AiEntityVisualizerComponent implements OnInit, OnDestroy {
             { keys: ['sadness', 'sad', 'sorrow', 'grief', 'melancholy'], color: '#6aa8ff', threshold: 0.25 },
             { keys: ['joy', 'happiness', 'happy', 'delight'], color: '#ffd24d', threshold: 0.25 },
             { keys: ['resentment', 'offended', 'hurt'], color: '#62d184', threshold: 0.2 },
+            { keys: ['disgust', 'disgusted'], color: '#c0a36e', threshold: 0.25 },
             { keys: ['irritation', 'annoyed'], color: '#ff9a4d', threshold: 0.25 },
         ];
 

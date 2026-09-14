@@ -32,12 +32,9 @@ def _resolve_text_model(model: Optional[str]) -> str:
     return model or config_service.get_config_value("api.model")
 
 
-def get_visual_model() -> str:
-    return config_service.get_config_value("api.visual_model")
-
-
 def _resolve_visual_model(model: Optional[str]) -> str:
-    return str(model or get_visual_model() or "").strip()
+    # The vision model comes from the vision settings only.
+    return str(model or "").strip()
 
 
 def _post_json_with_retries(
@@ -421,21 +418,32 @@ async def stream_chat(
 # Visual helpers
 # ---------------------------------------------------------------------------
 
-def chat_image(
+def chat_image_response(
     messages: Iterable[Dict[str, Any]],
     model: str | None = None,
     *,
     options: Optional[Dict[str, Any]] = None,
     keep_alive: Optional[Any] = None,
-) -> str:
+) -> Dict[str, Any]:
+    """The whole answer of a multimodal chat call.
+
+    Returns ``{"content", "thinking", "done_reason"}`` or ``{"error"}``, so a
+    caller can tell an empty answer from one the token limit cut. The
+    ``__think`` option switches the model's reasoning on or off, as in the
+    other chat helpers.
+    """
     ollama_model_visual = _resolve_visual_model(model)
-    payload = {
+    request_options = dict(options or {})
+    think_override = request_options.pop("__think", None)
+    payload: Dict[str, Any] = {
         "model": ollama_model_visual,
         "messages": list(messages),
         "stream": False,
     }
-    if isinstance(options, dict) and options:
-        payload["options"] = dict(options)
+    if request_options:
+        payload["options"] = request_options
+    if think_override is not None:
+        payload["think"] = bool(think_override)
     if keep_alive is not None:
         payload["keep_alive"] = keep_alive
     try:
@@ -451,17 +459,35 @@ def chat_image(
             log_error(
                 f"[Ollama visual HTTP {response.status_code}] model={ollama_model_visual} body={body_preview}"
             )
-            return f"[ERROR] Ollama HTTP {response.status_code}: {body_preview or response.reason}"
+            return {"error": f"Ollama HTTP {response.status_code}: {body_preview or response.reason}"}
         data = response.json()
 
         if "error" in data:
             log_error(f"[Ollama visual error]: {data['error']}")
-            return f"[ERROR] {data['error']}"
+            return {"error": str(data["error"])}
 
-        return data.get("message", {}).get("content", "")
+        message = data.get("message") or {}
+        return {
+            "content": message.get("content") or "",
+            "thinking": message.get("thinking") or "",
+            "done_reason": data.get("done_reason") or "",
+        }
     except Exception as exc:
         log_error(f"[Ollama visual HTTP error]: {exc}")
-        return f"[ERROR] Visual model request failed: {exc}"
+        return {"error": f"Visual model request failed: {exc}"}
+
+
+def chat_image(
+    messages: Iterable[Dict[str, Any]],
+    model: str | None = None,
+    *,
+    options: Optional[Dict[str, Any]] = None,
+    keep_alive: Optional[Any] = None,
+) -> str:
+    result = chat_image_response(messages, model, options=options, keep_alive=keep_alive)
+    if result.get("error"):
+        return f"[ERROR] {result['error']}"
+    return result.get("content", "")
 
 
 async def stream_chat_image(
@@ -473,13 +499,17 @@ async def stream_chat_image(
 ) -> AsyncIterator[Dict[str, Any]]:
     ollama_model_visual = _resolve_visual_model(model)
     url = f"{OLLAMA_API_URL}/chat"
+    request_options = dict(options or {})
+    think_override = request_options.pop("__think", None)
     payload = {
         "model": ollama_model_visual,
         "messages": list(messages),
         "stream": True,
     }
-    if isinstance(options, dict) and options:
-        payload["options"] = dict(options)
+    if request_options:
+        payload["options"] = request_options
+    if think_override is not None:
+        payload["think"] = bool(think_override)
     if keep_alive is not None:
         payload["keep_alive"] = keep_alive
 
@@ -667,77 +697,53 @@ def show_model(model: str) -> Dict[str, Any]:
         return {"status": "error", "model": model_name, "message": f"Ollama error: {exc}"}
 
 
-def model_supports_vision(model: str) -> Dict[str, Any]:
-    model_name = str(model or "").strip()
-    normalized_name = model_name.lower()
-    if not model_name:
-        return {"supported": False, "source": "empty_model", "reason": "model is required"}
+def model_capabilities(model: str) -> Dict[str, Any]:
+    """What the model can do, as Ollama itself declares it (`/api/show` capabilities).
 
-    non_vision_markers = (
-        "gpt-oss",
-        "gptoss",
-    )
-    if any(marker in normalized_name for marker in non_vision_markers):
-        return {"supported": False, "source": "name_denylist", "reason": "known text-only model"}
+    No generation is run to find out, and nothing is guessed from the model name:
+    a capability Ollama does not declare is absent. The owner marks what a
+    model can do by hand in the model index.
+    """
+    model_name = str(model or "").strip()
+    if not model_name:
+        return {"status": "error", "model": model_name, "reason": "model is required", "capabilities": []}
 
     metadata = show_model(model_name)
-    if metadata.get("status") == "ok":
-        data = metadata.get("data") or {}
-        capabilities = data.get("capabilities")
-        if isinstance(capabilities, list):
-            normalized_caps = {str(item).strip().lower() for item in capabilities}
-            return {
-                "supported": "vision" in normalized_caps,
-                "source": "ollama_show.capabilities",
-                "capabilities": sorted(normalized_caps),
-            }
-
-        details = data.get("details") or {}
-        families = details.get("families")
-        if not isinstance(families, list):
-            family = details.get("family")
-            families = [family] if family else []
-        normalized_families = {str(item).strip().lower() for item in families if item}
-        if any("vision" in family or "clip" in family or "mmproj" in family for family in normalized_families):
-            return {
-                "supported": True,
-                "source": "ollama_show.details.families",
-                "families": sorted(normalized_families),
-            }
-
-        model_info = data.get("model_info") or {}
-        info_keys = {str(key).lower() for key in model_info.keys()}
-        if any("vision" in key or "clip" in key or "mmproj" in key for key in info_keys):
-            return {
-                "supported": True,
-                "source": "ollama_show.model_info",
-            }
-
-    vision_name_markers = (
-        "llava",
-        "bakllava",
-        "moondream",
-        "minicpm-v",
-        "minicpm_v",
-        "llama3.2-vision",
-        "llama3.2_vision",
-        "qwen2-vl",
-        "qwen2.5-vl",
-        "qwen2_5-vl",
-        "qwen-vl",
-        "gemma3",
-    )
-    if any(marker in normalized_name for marker in vision_name_markers):
-        return {"supported": True, "source": "name_allowlist"}
-
-    if metadata.get("status") == "error":
+    if metadata.get("status") != "ok":
         return {
-            "supported": False,
-            "source": "ollama_show_error",
+            "status": "error",
+            "model": model_name,
             "reason": metadata.get("message") or "model metadata unavailable",
+            "capabilities": [],
         }
+    declared = (metadata.get("data") or {}).get("capabilities")
+    if not isinstance(declared, list):
+        return {
+            "status": "ok",
+            "model": model_name,
+            "declared": False,
+            "reason": "Ollama does not report the model's capabilities; update Ollama",
+            "capabilities": [],
+        }
+    return {
+        "status": "ok",
+        "model": model_name,
+        "declared": True,
+        "capabilities": sorted({str(item).strip().lower() for item in declared if str(item).strip()}),
+    }
 
-    return {"supported": False, "source": "metadata_default", "reason": "no vision capability found"}
+
+def model_supports_vision(model: str) -> Dict[str, Any]:
+    info = model_capabilities(model)
+    capabilities = info.get("capabilities") or []
+    if "vision" in capabilities:
+        return {"supported": True, "source": "ollama_show.capabilities", "capabilities": capabilities}
+    return {
+        "supported": False,
+        "source": "ollama_show.capabilities" if info.get("status") == "ok" else "ollama_show_error",
+        "reason": info.get("reason") or "model metadata does not declare vision",
+        "capabilities": capabilities,
+    }
 
 
 def release_model(model: str | None = None) -> Dict[str, Any]:

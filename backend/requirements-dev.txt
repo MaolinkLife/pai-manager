@@ -1,0 +1,3 @@
+# Test-only dependencies — not needed to run PAI.
+-r requirements.txt
+freezegun==1.5.5

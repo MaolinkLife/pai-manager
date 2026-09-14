@@ -20,9 +20,10 @@ class VoiceStateSnapshot:
     stage: VoiceStage
     changed_at: datetime
     reason: Optional[str]
+    message_id: Optional[str] = None
 
 
-def _broadcast_voice_state(stage: str, reason: Optional[str]) -> None:
+def _broadcast_voice_state(stage: str, reason: Optional[str], message_id: Optional[str] = None) -> None:
     """Fire-and-forget WS push of the voice stage onto the uvicorn loop.
 
     Transitions happen in TTS worker threads, so the coroutine is scheduled
@@ -43,6 +44,7 @@ def _broadcast_voice_state(stage: str, reason: Optional[str]) -> None:
             "type": "voice_state",
             "stage": stage,
             "reason": reason,
+            "message_id": message_id,
             "timestamp": datetime.utcnow().isoformat(),
         }
         asyncio.run_coroutine_threadsafe(
@@ -58,22 +60,29 @@ class VoiceStateController:
         self._stage = VoiceStage.LISTENING
         self._changed_at = datetime.utcnow()
         self._reason: Optional[str] = None
+        self._message_id: Optional[str] = None
 
-    def _set_stage(self, stage: VoiceStage, reason: Optional[str]) -> None:
+    def _set_stage(
+        self, stage: VoiceStage, reason: Optional[str], message_id: Optional[str] = None
+    ) -> None:
+        # Only speech belongs to a chat message; every other stage has none.
+        if stage != VoiceStage.SPEAKING:
+            message_id = None
         with self._lock:
-            if self._stage == stage and reason == self._reason:
+            if self._stage == stage and reason == self._reason and message_id == self._message_id:
                 return
             self._stage = stage
             self._changed_at = datetime.utcnow()
             self._reason = reason
+            self._message_id = message_id
 
         log_audit_entry(
             "voice_state_transition",
             "[Voice] Stage updated",
             AuditStatus.INFO,
-            details={"stage": stage.value, "reason": reason},
+            details={"stage": stage.value, "reason": reason, "message_id": message_id},
         )
-        _broadcast_voice_state(stage.value, reason)
+        _broadcast_voice_state(stage.value, reason, message_id)
 
     def enter_waiting(self, reason: Optional[str] = None) -> None:
         self._set_stage(VoiceStage.WAITING, reason)
@@ -81,8 +90,8 @@ class VoiceStateController:
     def enter_listening(self, reason: Optional[str] = None) -> None:
         self._set_stage(VoiceStage.LISTENING, reason)
 
-    def enter_speaking(self, reason: Optional[str] = None) -> None:
-        self._set_stage(VoiceStage.SPEAKING, reason)
+    def enter_speaking(self, reason: Optional[str] = None, message_id: Optional[str] = None) -> None:
+        self._set_stage(VoiceStage.SPEAKING, reason, message_id)
 
     def stage(self) -> VoiceStage:
         with self._lock:
@@ -90,7 +99,7 @@ class VoiceStateController:
 
     def snapshot(self) -> VoiceStateSnapshot:
         with self._lock:
-            return VoiceStateSnapshot(self._stage, self._changed_at, self._reason)
+            return VoiceStateSnapshot(self._stage, self._changed_at, self._reason, self._message_id)
 
     def is_listening(self) -> bool:
         return self.stage() == VoiceStage.LISTENING

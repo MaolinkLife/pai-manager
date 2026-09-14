@@ -24,16 +24,21 @@ from constants.prompts import DECISION_LAYER_ORCHESTRATOR_PROMPT
 
 from modules.system import config as config_service
 from modules.system.logger import log_audit_entry, AuditStatus
+from modules.system.technical_prompts import configured_prompt
 from modules.system.runtime_profile import should_release_resources
 from core.interaction import resolve_interaction_policy
 from core.input_envelope import InputEnvelope
 from core.task_layer import (
     TASK_COMPLETE,
+    TASK_FAILED,
     TASK_SKIPPED,
     TASK_UNAVAILABLE,
     TaskPlan,
 )
 from modules.ollama import client as ollama_client
+
+SCREEN_CAPTURE_OFF_REASON = "background screen capture is turned off"
+SCREEN_NOT_SHARED_REASON = "the screen is not shared in this conversation"
 
 
 class DecisionLayer:
@@ -49,6 +54,7 @@ class DecisionLayer:
     def __init__(self):
         self._memory_module: Optional[MemoryModule] = None
         self._memory_module_failed: bool = False
+        self._memory_module_error: str = ""
         self.moral_matrix = MoralMatrixModule()
         self.instructor = Instructor()
         self.analyzer = AnalyzerModule()
@@ -68,6 +74,78 @@ class DecisionLayer:
             "[DecisionLayer] DecisionLayer использует общий TTS сервис.",
             AuditStatus.INFO,
         )
+
+    async def _collect_memory_result(
+        self,
+        safe_user_message: Dict[str, Any],
+        task_plan: TaskPlan,
+        decisions: Dict[str, Any],
+        *,
+        memory_enabled: bool,
+    ) -> MemoryContextResult:
+        """Memory lookup for the turn.
+
+        A module that failed to start or crashed while collecting becomes a
+        failed status carrying its error for the instructor, never a crashed
+        turn, so the system knows what is happening to it.
+        """
+        if not memory_enabled:
+            task_plan.mark("memory", TASK_SKIPPED, reason="disabled_by_config")
+            log_audit_entry(
+                "decision_layer_memory_context_skipped",
+                "[DecisionLayer] MemoryModule skipped by configuration.",
+                AuditStatus.INFO,
+                details={
+                    "enabled": False,
+                    "needs_deep_memory": bool(decisions.get("needs_deep_memory")),
+                },
+            )
+            return MemoryContextResult(
+                context=self._empty_memory_context(status="disabled"),
+                meta={"memory_bypassed": True, "reason": "disabled_by_config"},
+            )
+
+        memory_module = self._get_memory_module()
+        if memory_module is None:
+            task_plan.mark("memory", TASK_UNAVAILABLE, reason="module_unavailable")
+            return MemoryContextResult(
+                context={
+                    **self._empty_memory_context(status="module_unavailable"),
+                    "memory_error": getattr(self, "_memory_module_error", "")
+                    or "the memory module failed to start",
+                },
+                meta={"memory_bypassed": True, "reason": "module_unavailable"},
+            )
+
+        try:
+            memory_result = await memory_module.collect_context(
+                safe_user_message.get("content", ""), safe_user_message
+            )
+        except Exception as exc:
+            log_audit_entry(
+                "decision_layer_memory_context_failed",
+                "[DecisionLayer] MemoryModule failed while collecting context.",
+                AuditStatus.ERROR,
+                details={"error": str(exc), "error_type": type(exc).__name__},
+            )
+            task_plan.mark("memory", TASK_FAILED, reason="failed", details={"error": str(exc)})
+            return MemoryContextResult(
+                context={
+                    **self._empty_memory_context(status="failed"),
+                    "memory_error": str(exc),
+                },
+                meta={"memory_bypassed": True, "reason": "failed"},
+            )
+
+        task_plan.mark(
+            "memory",
+            TASK_COMPLETE,
+            details={
+                "status": (memory_result.context or {}).get("memory_status"),
+                "matches": len((memory_result.context or {}).get("matches") or []),
+            },
+        )
+        return memory_result
 
     def _is_deep_memory_enabled(self) -> bool:
         direct_flag = config_service.get_config_value("memory.deep_memory_enabled", None)
@@ -96,6 +174,7 @@ class DecisionLayer:
                     details={"error": str(exc)},
                 )
                 self._memory_module_failed = True
+                self._memory_module_error = str(exc)
                 self._memory_module = None
         return self._memory_module
 
@@ -581,45 +660,12 @@ class DecisionLayer:
             AuditStatus.INFO,
             details={"user_message": safe_user_message},
         )
-        if memory_enabled:
-            memory_module = self._get_memory_module()
-            if memory_module is not None:
-                memory_result = await memory_module.collect_context(
-                    safe_user_message.get("content", ""), safe_user_message
-                )
-                task_plan.mark(
-                    "memory",
-                    TASK_COMPLETE,
-                    details={
-                        "status": (memory_result.context or {}).get("memory_status"),
-                        "matches": len((memory_result.context or {}).get("matches") or []),
-                    },
-                )
-            else:
-                memory_result = MemoryContextResult(
-                    context=self._empty_memory_context(status="module_unavailable"),
-                    meta={"memory_bypassed": True, "reason": "module_unavailable"},
-                )
-                task_plan.mark(
-                    "memory",
-                    TASK_UNAVAILABLE,
-                    reason="module_unavailable",
-                )
-        else:
-            memory_result = MemoryContextResult(
-                context=self._empty_memory_context(status="disabled"),
-                meta={"memory_bypassed": True, "reason": "disabled_by_config"},
-            )
-            task_plan.mark("memory", TASK_SKIPPED, reason="disabled_by_config")
-            log_audit_entry(
-                "decision_layer_memory_context_skipped",
-                "[DecisionLayer] MemoryModule skipped by configuration.",
-                AuditStatus.INFO,
-                details={
-                    "enabled": False,
-                    "needs_deep_memory": bool(decisions.get("needs_deep_memory")),
-                },
-            )
+        memory_result = await self._collect_memory_result(
+            safe_user_message,
+            task_plan,
+            decisions,
+            memory_enabled=memory_enabled,
+        )
         await _trace(
             "memory",
             "end",
@@ -779,7 +825,9 @@ class DecisionLayer:
             },
         )
         visual_context = await self._collect_visual_context(
-            raw_media_payload, decisions
+            raw_media_payload,
+            decisions,
+            screen_allowed=interaction_policy.actor_role == "owner",
         )
         if task_plan.first("vision"):
             if visual_context:
@@ -1027,7 +1075,7 @@ class DecisionLayer:
             "source": "feature_flag" if explicit_image_generation else image_generation.get("source", "analyzer"),
         }
 
-    def handle_response(self, text: str) -> None:
+    def handle_response(self, text: str, message_id: Optional[str] = None) -> None:
         if not text:
             return
         print("[DecisionLayer] Обработка ответа для озвучки.")
@@ -1035,7 +1083,7 @@ class DecisionLayer:
             "decision_layer_tts_request",
             "[DecisionLayer] Запрос на озвучку текста.",
             AuditStatus.INFO,
-            details={"text": text},
+            details={"text": text, "message_id": message_id},
         )
         from modules.voice.call_state import is_call_active
 
@@ -1051,7 +1099,7 @@ class DecisionLayer:
 
         try:
             print("[DecisionLayer] Передаём текст в общий TTS сервис.")
-            success = speak_line(text)
+            success = speak_line(text, message_id=message_id)
             log_audit_entry(
                 "decision_layer_tts_success",
                 "[DecisionLayer] Текст успешно передан в очередь сервису.",
@@ -1344,10 +1392,11 @@ class DecisionLayer:
         if not model:
             return None
 
-        capabilities = (
-            config_service.get_config_value("decision_layer.capabilities", {}) or {}
-        )
-        use_tools = bool(capabilities.get("tool"))
+        # What the router model can do comes from the model index.
+        from modules.model_index import service as model_index
+
+        capabilities = await asyncio.to_thread(model_index.capabilities_of, "ollama", model) or []
+        use_tools = "tools" in capabilities
         options = {
             "temperature": float(provider_cfg.get("temperature", 0.2)),
             "num_predict": int(provider_cfg.get("max_tokens", 512)),
@@ -1356,7 +1405,12 @@ class DecisionLayer:
         route_tool = self._decision_route_tool()
         payload = self._build_llm_decision_payload(analysis, user_message)
         messages = [
-            {"role": "system", "content": DECISION_LAYER_ORCHESTRATOR_PROMPT},
+            {
+                "role": "system",
+                "content": configured_prompt(
+                    "decision_layer.orchestrator_prompt", DECISION_LAYER_ORCHESTRATOR_PROMPT
+                ),
+            },
             {
                 "role": "user",
                 "content": (
@@ -1617,10 +1671,55 @@ class DecisionLayer:
                 self._visual_module = None
         return self._visual_module
 
-    async def _collect_visual_context(
-        self, media_payload: List[Dict[str, Any]], decisions: Dict[str, bool]
+    @staticmethod
+    def _screen_off_reason(screen_allowed: bool) -> str:
+        """Why the screen stays unseen for this message; empty when it may be looked at."""
+        from modules.vision.worker import screen_capture_enabled
+
+        if not screen_allowed:
+            return SCREEN_NOT_SHARED_REASON
+        if not screen_capture_enabled():
+            return SCREEN_CAPTURE_OFF_REASON
+        return ""
+
+    @staticmethod
+    def _vision_unavailable_context(
+        media_payload: List[Dict[str, Any]],
+        decisions: Dict[str, bool],
+        has_images: bool,
+        reason: str,
     ) -> Dict[str, Any]:
-        """Collect visual description of attachments and/or screen snapshot."""
+        """Visual context that tells the assistant it cannot look right now.
+
+        Returning nothing made the model believe no image was sent at all.
+        """
+        context: Dict[str, Any] = {}
+        if has_images:
+            context["attachments"] = {
+                "items": [],
+                "count": sum(
+                    1 for item in media_payload if (item.get("category") or "").lower() == "image"
+                ),
+                "unavailable": True,
+                "reason": reason,
+            }
+        elif decisions.get("needs_vision", False):
+            context["screen"] = {"unavailable": True, "reason": reason}
+        return context
+
+    async def _collect_visual_context(
+        self,
+        media_payload: List[Dict[str, Any]],
+        decisions: Dict[str, bool],
+        *,
+        screen_allowed: bool = False,
+    ) -> Dict[str, Any]:
+        """Collect visual description of attachments and/or screen snapshot.
+
+        Pictures sent to the chat need vision as a whole. The screen also needs
+        background screen capture and the owner: a guest gets only their own
+        pictures described, never the owner's screen.
+        """
         if not config_service.get_config_value("vision.enabled", False):
             print("[DecisionLayer] Визуальный модуль отключен в конфигурации.")
             log_audit_entry(
@@ -1632,7 +1731,6 @@ class DecisionLayer:
 
         media_payload = media_payload or []
         has_images = self._has_image_attachments(media_payload)
-        direct_ollama_media = self._should_pass_media_to_main_ollama_model()
         needs_vision = decisions.get("needs_vision", False)
         if not needs_vision:
             print("[DecisionLayer] Визуальный анализ не требуется — пропускаем.")
@@ -1644,25 +1742,10 @@ class DecisionLayer:
             )
             return {}
 
-        if direct_ollama_media and has_images:
-            log_audit_entry(
-                "decision_layer_vision_attachment_direct_context",
-                "[DecisionLayer] Image attachments will be passed to the main Ollama model.",
-                AuditStatus.INFO,
-                details={"media_count": len(media_payload)},
-            )
-            return {
-                "attachments": {
-                    "direct_context": True,
-                    "provider": "ollama",
-                    "items": [],
-                    "count": sum(
-                        1
-                        for item in media_payload
-                        if (item.get("category") or "").lower() == "image" and item.get("data")
-                    ),
-                }
-            }
+        # Images are described by the vision module only.
+        screen_off_reason = self._screen_off_reason(screen_allowed)
+        if screen_off_reason and not has_images:
+            return {"screen": {"unavailable": True, "reason": screen_off_reason}}
 
         module = self._get_visual_module()
         if not module:
@@ -1672,16 +1755,20 @@ class DecisionLayer:
                 "[DecisionLayer] Визуальный модуль недоступен.",
                 AuditStatus.WARNING,
             )
-            return {}
+            return self._vision_unavailable_context(
+                media_payload, decisions, has_images, "the vision module could not be started"
+            )
 
         if not module.is_ready():
+            reason = module.unavailable_reason()
             print("[DecisionLayer] Визуальный модуль не готов к обработке.")
             log_audit_entry(
                 "decision_layer_vision_not_ready",
                 "[DecisionLayer] Визуальный модуль не готов к обработке.",
                 AuditStatus.WARNING,
+                details={"reason": reason, "has_images": has_images},
             )
-            return {}
+            return self._vision_unavailable_context(media_payload, decisions, has_images, reason)
 
         # ----------------------------------------------------------------- #
         # Run two potentially heavy visual operations in separate threads
@@ -1689,12 +1776,12 @@ class DecisionLayer:
         coroutines = [
             (
                 asyncio.to_thread(module.describe_media_attachments, media_payload)
-                if has_images and not direct_ollama_media
+                if has_images
                 else asyncio.sleep(0, result=None)
             ),
             (
                 asyncio.to_thread(module.describe_screen_snapshot)
-                if decisions.get("needs_vision", False)
+                if decisions.get("needs_vision", False) and not screen_off_reason
                 else asyncio.sleep(0, result=None)
             ),
         ]
@@ -1777,21 +1864,6 @@ class DecisionLayer:
             )
 
         return visual_context
-
-    @staticmethod
-    def _should_pass_media_to_main_ollama_model() -> bool:
-        active_provider = str(
-            config_service.get_config_value("vision.active_provider", "")
-            or ""
-        ).strip()
-        if active_provider not in {"ollama_vision", "llava"}:
-            return False
-        return bool(
-            config_service.get_config_value(
-                f"vision.vision_modules.{active_provider}.use_main_model_context",
-                False,
-            )
-        )
 
     @staticmethod
     def _has_image_attachments(media_payload: List[Dict[str, Any]]) -> bool:

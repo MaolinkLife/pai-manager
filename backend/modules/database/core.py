@@ -50,7 +50,39 @@ def create_database():
     _ensure_user_reminders_table()
     _ensure_knowledge_tables()
     _ensure_imported_history_tables()
+    _ensure_model_index_table()
     _log_console("Схема базы данных готова.")
+
+
+def _ensure_model_index_table() -> None:
+    """The model index: what each model can do.
+
+    Built by create_all on fresh databases; this adds it to existing ones.
+    """
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS model_index (
+                    id TEXT PRIMARY KEY,
+                    provider TEXT NOT NULL,
+                    name TEXT NOT NULL,
+                    digest TEXT,
+                    declared_known BOOLEAN NOT NULL DEFAULT 0,
+                    declared_capabilities TEXT NOT NULL DEFAULT '[]',
+                    owner_capabilities TEXT,
+                    created_at DATETIME,
+                    updated_at DATETIME
+                )
+                """
+            )
+        )
+        conn.execute(
+            text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_model_index_provider_name "
+                "ON model_index(provider, name)"
+            )
+        )
 
 
 def _ensure_knowledge_tables() -> None:

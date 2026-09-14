@@ -12,6 +12,7 @@ from constants.moral import (
     DEFAULT_METRICS,
     EMOTIONAL_STATE_DEFINITIONS,
     EMOTION_SYNONYMS,
+    IGNORED_EMOTION_LABELS,
     NEGATIVE_EMOTIONS,
     POSITIVE_EMOTIONS,
     RELATIONSHIP_STATUSES,
@@ -72,8 +73,26 @@ class MoralMatrixProviderManager:
                 continue
             try:
                 result = await provider.run(payload)
-                if result:
+                if result and MoralMatrixModule.recognizes_provider_answer(result):
                     return ProviderRunResult(payload=result, provider=provider.name)
+                if result:
+                    # An answer in a structure no matrix prompt asks for used to
+                    # be accepted and collapse into a calm state with zero
+                    # intensity. Treat it as no answer and fall through.
+                    errors.append(f"{provider.name}_unusable_answer")
+                    log_audit_entry(
+                        "moral_matrix_provider_unusable_answer",
+                        "[MoralMatrix] Provider answer has no usable structure; trying next fallback.",
+                        AuditStatus.WARNING,
+                        details={
+                            "provider": provider.name,
+                            "keys": (
+                                sorted(str(key) for key in result.keys())[:20]
+                                if isinstance(result, dict)
+                                else type(result).__name__
+                            ),
+                        },
+                    )
             except Exception as exc:
                 errors.append(f"{provider.name}_error")
                 log_audit_entry(
@@ -358,8 +377,8 @@ class MoralMatrixModule:
 
         narrative: Optional[str] = None
         if provider_result.payload:
-            narrative = provider_result.payload.get("summary")
-            extra_directives = provider_result.payload.get("hard_directives") or []
+            narrative = (transition or {}).get("summary") or provider_result.payload.get("summary")
+            extra_directives = (transition or {}).get("hard_directives") or []
             if extra_directives:
                 hard_directives.extend(extra_directives)
 
@@ -380,6 +399,7 @@ class MoralMatrixModule:
             "heuristics": heuristic_snapshot,
             "transition_provider": provider_result.provider,
             "transition": transition,
+            "memory_recommendation": (transition or {}).get("memory_recommendation"),
         }
 
         result = MoralMatrixResult(
@@ -576,6 +596,7 @@ class MoralMatrixModule:
         try:
             # Lazy imports — avoid circular import via generative → analyzer pipeline.
             from constants.prompts import MORAL_INNER_VOICE_PROMPT
+            from modules.system.technical_prompts import configured_prompt
             from modules.generative.manager import (
                 NoProviderResolved,
                 generation_manager,
@@ -616,7 +637,12 @@ class MoralMatrixModule:
             result = generation_manager.generate(
                 GenerateRequest(
                     messages=[
-                        {"role": "system", "content": MORAL_INNER_VOICE_PROMPT},
+                        {
+                            "role": "system",
+                            "content": configured_prompt(
+                                "moral.inner_voice.system_prompt", MORAL_INNER_VOICE_PROMPT
+                            ),
+                        },
                         {"role": "user", "content": user_payload},
                     ],
                     options={
@@ -1088,21 +1114,30 @@ class MoralMatrixModule:
     ) -> Optional[Dict[str, Any]]:
         if not isinstance(payload, dict):
             return None
+        if isinstance(payload.get("emotional_reaction"), dict) or isinstance(
+            payload.get("state_update"), dict
+        ):
+            return self._normalize_structured_answer(payload)
         state = payload.get("current_state")
         if not isinstance(state, dict):
             state = {}
-        emotion = self._normalize_emotion(
+        # Only what the answer actually states overrides the current state: a
+        # missing label or intensity used to become "peace" with 0.0 and wipe
+        # the state computed before the provider ran.
+        raw_label = str(
             state.get("state")
             or payload.get("current_emotion")
             or payload.get("emotion")
             or ""
-        )
-        if emotion not in DEFAULT_EMOTIONAL_STATE:
-            emotion = "peace"
-        intensity = self._clamp_float(
-            state.get("intensity", payload.get("emotion_intensity", 0.0)),
-            0.0,
-            1.0,
+        ).strip()
+        emotion = ""
+        if raw_label:
+            emotion = self._normalize_emotion(raw_label)
+            if emotion not in DEFAULT_EMOTIONAL_STATE:
+                emotion = "peace"
+        raw_intensity = state.get("intensity", payload.get("emotion_intensity"))
+        intensity: Optional[float] = (
+            self._clamp_float(raw_intensity, 0.0, 1.0) if raw_intensity is not None else None
         )
         vector_delta = self._normalize_delta_map(
             payload.get("emotion_vector_delta"),
@@ -1120,8 +1155,8 @@ class MoralMatrixModule:
         influence = state.get("influence") if isinstance(state.get("influence"), dict) else {}
         return {
             "state": {
-                "state": emotion,
-                "intensity": intensity,
+                **({"state": emotion} if emotion else {}),
+                **({"intensity": intensity} if intensity is not None else {}),
                 "trigger": str(state.get("trigger") or payload.get("trigger") or "").strip(),
                 "associated_events": [str(item) for item in associated_events[:8]],
                 "influence": influence,
@@ -1131,6 +1166,103 @@ class MoralMatrixModule:
             "summary": payload.get("summary"),
             "soft_recommendations": payload.get("soft_recommendations") or [],
             "hard_directives": payload.get("hard_directives") or [],
+        }
+
+    @staticmethod
+    def recognizes_provider_answer(payload: Any) -> bool:
+        """True when an answer carries at least one field some matrix prompt
+        asks for — the owner's prompt (`emotional_reaction`, `state_update`, …)
+        or the built-in one (`current_state`, deltas, `summary`, directives).
+        A partial answer is fine; an answer with none of them is unusable."""
+        if not isinstance(payload, dict):
+            return False
+        sections = (
+            "message_analysis",
+            "moral_assessment",
+            "emotional_reaction",
+            "state_update",
+            "behavior_formation",
+            "memory_recommendation",
+            "current_state",
+            "emotion_vector_delta",
+            "metrics_delta",
+        )
+        if any(isinstance(payload.get(key), dict) for key in sections):
+            return True
+        summary = payload.get("summary")
+        if isinstance(summary, str) and summary.strip():
+            return True
+        return any(
+            isinstance(payload.get(key), list)
+            for key in ("hard_directives", "soft_recommendations")
+        )
+
+    def _normalize_structured_answer(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Answer in the structure of the owner's matrix prompt (moral.system_prompt).
+
+        `emotional_reaction` carries the verdict — what I feel, how strongly and
+        why — and `state_update.recommended_new_state` the resulting state.
+        `memory_recommendation` is kept for the layer that decides what to
+        remember; it does not change the state.
+        """
+
+        def section(name: str) -> Dict[str, Any]:
+            value = payload.get(name)
+            return value if isinstance(value, dict) else {}
+
+        def strings(value: Any) -> List[str]:
+            if not isinstance(value, list):
+                return []
+            return [str(item).strip() for item in value if str(item).strip()]
+
+        reaction = section("emotional_reaction")
+        update = section("state_update")
+        behavior = section("behavior_formation")
+        target_raw = update.get("recommended_new_state")
+        target_raw = target_raw if isinstance(target_raw, dict) else {}
+
+        vector_target: Dict[str, float] = {}
+        for key, value in target_raw.items():
+            normalized = self._known_emotion(key)
+            if normalized:
+                vector_target[normalized] = max(
+                    vector_target.get(normalized, 0.0),
+                    self._clamp_float(value, 0.0, 1.0),
+                )
+
+        emotion = self._known_emotion(reaction.get("dominant_shift"))
+        stated_dominant = bool(emotion)
+        if not emotion and vector_target:
+            # No usable dominant ("none", or a label outside the pool such as
+            # laziness): take the strongest emotion of the new state.
+            emotion = max(vector_target, key=lambda key: vector_target[key])
+        intensity: Optional[float] = None
+        if stated_dominant and "shift_strength" in reaction:
+            intensity = self._clamp_float(reaction.get("shift_strength"), 0.0, 1.0)
+        elif emotion in vector_target:
+            intensity = vector_target[emotion]
+
+        desired = str(behavior.get("desired_behavior") or "").strip().lower()
+        influence = {"behavior": desired} if desired and desired != "unclear" else {}
+        memory_recommendation = payload.get("memory_recommendation")
+        return {
+            "state": {
+                **({"state": emotion} if emotion else {}),
+                **({"intensity": intensity} if intensity is not None else {}),
+                "trigger": str(reaction.get("shift_reason") or "").strip(),
+                "associated_events": [],
+                "influence": influence,
+            },
+            "emotion_vector_delta": {},
+            "emotion_vector_target": vector_target,
+            "metrics_delta": {},
+            "summary": reaction.get("reaction_summary"),
+            "soft_recommendations": strings(behavior.get("response_constraints"))
+            + strings(behavior.get("notes_for_generator")),
+            "hard_directives": [f"behavior:{desired}"] if influence else [],
+            "memory_recommendation": (
+                memory_recommendation if isinstance(memory_recommendation, dict) else None
+            ),
         }
 
     def _apply_provider_transition(
@@ -1155,6 +1287,9 @@ class MoralMatrixModule:
                     0.0,
                     1.0,
                 )
+        for key, value in (transition.get("emotion_vector_target") or {}).items():
+            if key in DEFAULT_EMOTIONAL_STATE:
+                emotion_vector[key] = self._clamp_float(value, 0.0, 1.0)
         emotion_vector[emotion] = max(emotion_vector.get(emotion, 0.0), intensity)
         emotion_vector.update(self._normalize_vector(emotion_vector))
         trigger = str(state.get("trigger") or fallback_trigger).strip()
@@ -1402,6 +1537,16 @@ class MoralMatrixModule:
                 AuditStatus.WARNING,
                 details={"error": str(exc)},
             )
+
+    @staticmethod
+    def _known_emotion(label: Any) -> str:
+        """Pool key for a label, or "" when the label is not an emotion of the
+        pool. Unlike _normalize_emotion it never guesses "peace"."""
+        value = str(label or "").strip().lower()
+        if not value or value in IGNORED_EMOTION_LABELS:
+            return ""
+        mapped = EMOTION_SYNONYMS.get(value, value)
+        return mapped if mapped in DEFAULT_EMOTIONAL_STATE else ""
 
     @staticmethod
     def _normalize_emotion(label: str) -> str:

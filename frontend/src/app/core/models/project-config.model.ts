@@ -23,6 +23,21 @@ export interface ProjectConfig {
     selfWatcher?: SelfWatcherConfig;
     auditLogs?: AuditLogsConfig;
     stt?: SttConfig;
+    initiative?: InitiativeConfig;
+}
+
+/** Global initiative: off → PAI writes first nowhere, channels included. */
+export interface InitiativeConfig {
+    enabled: boolean;
+    chat: { enabled: boolean };
+    selfie: { enabled: boolean; chance: number };
+}
+
+/** What an initiative settings save carries: only the changed fields. */
+export interface InitiativeConfigPatch {
+    enabled?: boolean;
+    chat?: { enabled?: boolean };
+    selfie?: { enabled?: boolean; chance?: number };
 }
 
 export interface DecisionLayerConfig {
@@ -30,11 +45,6 @@ export interface DecisionLayerConfig {
     activeProvider: string;
     maxSteps: number;
     releaseAfterUse?: boolean;
-    capabilities: {
-        tool: boolean;
-        vision: boolean;
-        thinking: boolean;
-    };
     providers: {
         ollama: {
             model: string;
@@ -50,6 +60,7 @@ export interface DecisionLayerConfig {
         includeGeolocation: boolean;
         excludeDisabledModules: boolean;
     };
+    orchestratorPrompt?: string;
 }
 
 export interface TunnelingConfig {
@@ -118,6 +129,10 @@ export interface SystemConfig {
 
 export interface VisionConfig {
     enabled: boolean;
+    screenCaptureEnabled: boolean;
+    attachmentPrompt?: string;
+    generatedImagePrompt?: string;
+    screenPrompt?: string;
     activeProvider: string;
     monitorIndex: number;
     fps: number;
@@ -207,6 +222,7 @@ export interface MoralInnerVoiceConfig {
     maxTokens: number;
     temperature: number;
     language: string;
+    systemPrompt?: string;
 }
 
 export interface MoralConfig {
@@ -230,6 +246,8 @@ export interface MemoryDiaryNarrativeConfig {
 
 export interface MemoryDiaryConfig {
     narrative: MemoryDiaryNarrativeConfig;
+    systemPrompt?: string;
+    userTemplate?: string;
 }
 
 export interface MemoryConsolidationJudgeConfig {
@@ -239,6 +257,13 @@ export interface MemoryConsolidationJudgeConfig {
     temperature: number;
     maxTokens: number;
     requestTimeout: number;
+    systemPrompt?: string;
+}
+
+export interface MemoryShortTermConfig {
+    startupRefreshEnabled?: boolean;
+    summarySystemPrompt?: string;
+    summaryTaskPrompt?: string;
 }
 
 export interface MemoryConsolidationConfig {
@@ -255,6 +280,7 @@ export interface MemoryConfig {
     embeddingProvider: string;
     embeddingModel: string;
     consolidation?: MemoryConsolidationConfig;
+    shortTerm?: MemoryShortTermConfig;
     diary?: MemoryDiaryConfig;
 }
 
@@ -293,6 +319,7 @@ export interface ValidatorConfig {
     temperature: number;
     instructionCharLimit: number;
     outputCharLimit: number;
+    systemPrompt: string;
 }
 
 export interface LanguageGuardConfig {
@@ -308,6 +335,7 @@ export interface ConfidenceConfig {
     temperature: number;
     userCharLimit: number;
     outputCharLimit: number;
+    systemPrompt: string;
 }
 
 export interface FactualityConfig {
@@ -327,6 +355,7 @@ export interface SelfWatcherConfig {
     maxEventsInCluster: number;
     llmMaxTokens: number;
     llmTemperature: number;
+    reflectionPrompt: string;
 }
 
 // --- Audit logs retention (0.9.0 §3.6-bis) ---------------------------------
@@ -377,12 +406,27 @@ export interface SynthesisDiffusersConfig {
     torch_dtype: string;
 }
 
+export interface SynthesisImageCheckGateConfig {
+    enabled: boolean;
+    threshold: number;
+    reroll: boolean;
+}
+
+export interface SynthesisImageCheckConfig {
+    relevance: SynthesisImageCheckGateConfig;
+    quality: SynthesisImageCheckGateConfig;
+    max_generations: number;
+    describe_prompt: string;
+    system_prompt: string;
+    user_template: string;
+}
+
+export interface SynthesisImageSceneConfig {
+    format_prompt: string;
+}
+
 export interface SynthesisPromptingConfig {
     enabled: boolean;
-    max_attempts: number;
-    assess_enabled: boolean;
-    retry_enabled?: boolean;
-    quality_threshold: number;
     appearance_prompt: string;
     default_negative_prompt: string;
     visual_profile?: {
@@ -437,6 +481,8 @@ export interface SynthesisConfig {
     sd_webui: SynthesisSdWebUIConfig;
     comfyui: SynthesisComfyUIConfig;
     diffusers: SynthesisDiffusersConfig;
+    image_check?: SynthesisImageCheckConfig;
+    image_scene?: SynthesisImageSceneConfig;
     prompting?: SynthesisPromptingConfig;
 }
 
@@ -550,8 +596,6 @@ export interface ApiConfig {
     type: string;
     streaming: boolean;
     model: string;
-    visualModel: string;
-    visualModelOptions?: string[];
     tokenLimit: number;
     messagePairLimit: number;
     activeProvider: string;

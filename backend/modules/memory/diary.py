@@ -21,6 +21,7 @@ from modules.generative.manager import NoProviderResolved, generation_manager
 from modules.generative.types import GenerateRequest
 from modules.system import config as config_service
 from modules.system.logger import AuditStatus, log_audit_entry
+from modules.system.technical_prompts import configured_prompt, filled_prompt
 from modules.system.user import resolve_user_language
 
 
@@ -143,7 +144,12 @@ def _call_judge_llm(*, payload: dict[str, Any], settings: dict[str, Any]) -> str
     consolidation step.
     """
     messages = [
-        {"role": "system", "content": MEMORY_JUDGE_CONTRADICTION_PROMPT},
+        {
+            "role": "system",
+            "content": configured_prompt(
+                "memory.consolidation.judge.system_prompt", MEMORY_JUDGE_CONTRADICTION_PROMPT
+            ),
+        },
         {"role": "user", "content": json.dumps(payload, ensure_ascii=False, indent=2)},
     ]
     provider = settings["provider"]
@@ -529,6 +535,45 @@ def list_daily_activity_entries(
     return [entry for entry in entries if not _is_entry_pruned(entry)]
 
 
+def list_diary_page(
+    *,
+    character_id: str,
+    limit: int = 30,
+    offset: int = 0,
+    include_hidden: bool = False,
+) -> dict[str, Any]:
+    """One page of the diary screen: every entry of the character, newest first.
+
+    Unlike ``list_daily_activity_entries`` there is no day window: the screen
+    asked for the last 30 days only, so older entries never reached it
+    (2026-09-13). Entries hidden by sleep consolidation (``payload.pruned``)
+    come only with ``include_hidden``; their ``payload.pruned`` says why.
+    """
+    limit = max(1, min(int(limit or 30), 200))
+    offset = max(0, int(offset or 0))
+    with engine.begin() as conn:
+        rows = conn.execute(
+            text(
+                """
+                SELECT id, character_id, day, mood, summary, tags, stats, payload, created_at, updated_at
+                FROM daily_activity_diary
+                WHERE character_id = :character_id
+                ORDER BY day DESC
+                """
+            ),
+            {"character_id": character_id},
+        ).fetchall()
+    entries = [_row_to_entry(row) for row in rows]
+    if not include_hidden:
+        entries = [entry for entry in entries if not _is_entry_pruned(entry)]
+    page = entries[offset : offset + limit]
+    return {
+        "entries": page,
+        "total": len(entries),
+        "has_more": offset + len(page) < len(entries),
+    }
+
+
 def _is_entry_pruned(entry: DiaryEntry) -> bool:
     payload = entry.payload if isinstance(entry.payload, dict) else {}
     pruned = payload.get("pruned") if isinstance(payload, dict) else None
@@ -569,6 +614,8 @@ def _load_day_rows(*, character_id: str, day: date) -> list[History]:
                 History.character_id == character_id,
                 History.timestamp >= day_start,
                 History.timestamp < day_end,
+                # An answer replaced by a reroll is not part of the day.
+                ((History.role != "assistant") | (History.active_variant.is_(True))),
             )
             .order_by(History.timestamp.asc())
             .all()
@@ -657,13 +704,17 @@ def _summarize_activity(
     transcript: str,
     language: str = "en-US",
 ) -> dict[str, Any]:
-    user = DAILY_ACTIVITY_DIARY_USER_PROMPT_TEMPLATE.format(
+    user = filled_prompt(
+        "memory.diary.user_template",
+        DAILY_ACTIVITY_DIARY_USER_PROMPT_TEMPLATE,
         day=day.isoformat(),
         language=language,
         stats_json=json.dumps(stats, ensure_ascii=False),
         transcript=transcript[:12000],
     )
-    system_prompt = DAILY_ACTIVITY_DIARY_SYSTEM_PROMPT.format(language=language)
+    system_prompt = filled_prompt(
+        "memory.diary.system_prompt", DAILY_ACTIVITY_DIARY_SYSTEM_PROMPT, language=language
+    )
     raw = ""
     try:
         result = generation_manager.generate(

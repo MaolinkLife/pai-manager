@@ -156,7 +156,9 @@ def test_format_for_api_injects_dynamic_context_and_filters_operational_history(
     assert messages[-1]["id"] == "u1"
 
 
-def test_format_for_api_skips_empty_lorebook_tool(monkeypatch):
+def test_format_for_api_says_the_lorebook_found_nothing(monkeypatch):
+    # A successful search that found nothing tells
+    # the model "nothing found"; it used to be dropped as "[ERROR] Not Found".
     instructor = Instructor()
     monkeypatch.setattr(
         instructor,
@@ -177,8 +179,8 @@ def test_format_for_api_skips_empty_lorebook_tool(monkeypatch):
         )
     )
 
-    names = [m.get("name") for m in messages if m.get("role") == "tool"]
-    assert "knowledge.lorebook" not in names
+    lorebook = [m for m in messages if m.get("role") == "tool" and m.get("name") == "knowledge.lorebook"]
+    assert [m.get("content") for m in lorebook] == ["[OK]: no lorebook entries found."]
 
 
 def test_build_system_prompt_does_not_emit_section_markers(monkeypatch):

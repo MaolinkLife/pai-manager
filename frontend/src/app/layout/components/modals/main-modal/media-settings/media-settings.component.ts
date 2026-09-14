@@ -1,12 +1,22 @@
 import { ChangeDetectorRef, Component, OnDestroy, OnInit } from '@angular/core';
-import { UntypedFormArray, UntypedFormBuilder, UntypedFormGroup } from '@angular/forms';
+import { AbstractControl, UntypedFormArray, UntypedFormBuilder, UntypedFormGroup } from '@angular/forms';
+import {
+    canRegenerate,
+    generationsWarning,
+    IMAGE_CHECK_DEFAULTS,
+    IMAGE_CHECK_GATES,
+    IMAGE_CHECK_GENERATIONS,
+    IMAGE_CHECK_THRESHOLD,
+    ImageCheckGateName,
+    normalizeImageCheck,
+} from './image-check-settings';
 import { ConfigService } from '../../../../../core/services/config.service';
 import { SynthesisService } from '../../../../../core/services/synthesis.service';
 import { UiNotificationService } from '../../../../../shared/ui/services/ui-notification.service';
 import { UiSelectOption } from '../../../../../shared/ui/components/ui-select/ui-select.component';
 import { LocalizationService } from '../../../../../shared/pipes/translation/localization.service';
 import { Subject } from 'rxjs';
-import { takeUntil } from 'rxjs/operators';
+import { take, takeUntil } from 'rxjs/operators';
 
 @Component({
     selector: 'app-media-settings',
@@ -71,6 +81,13 @@ export class MediaSettingsComponent implements OnInit, OnDestroy {
         { value: 'bfloat16', label: 'bfloat16' },
         { value: 'float32', label: 'float32' },
     ];
+    readonly imageCheckThreshold = IMAGE_CHECK_THRESHOLD;
+    readonly imageCheckGenerations = IMAGE_CHECK_GENERATIONS;
+    // The owner's order: the strict quality check first, then the match to the request.
+    readonly imageCheckGateRows: { name: ImageCheckGateName; label: string }[] = [
+        { name: 'quality', label: 'mediaSettings.imageCheckQuality' },
+        { name: 'relevance', label: 'mediaSettings.imageCheckRelevance' },
+    ];
     private synthesisBase: any = {};
     private readonly destroy$ = new Subject<void>();
 
@@ -83,10 +100,14 @@ export class MediaSettingsComponent implements OnInit, OnDestroy {
         private cdr: ChangeDetectorRef,
     ) {
         this.mediaForm = this.createForm();
+        this.syncImageCheckControls();
     }
 
     ngOnInit(): void {
         this.localizationService.init();
+        this.imageCheckGroup.valueChanges
+            .pipe(takeUntil(this.destroy$))
+            .subscribe(() => this.syncImageCheckControls());
         this.loadConfig();
         this.loadLocalModelCatalog();
     }
@@ -99,6 +120,12 @@ export class MediaSettingsComponent implements OnInit, OnDestroy {
     private createForm(): UntypedFormGroup {
         return this.fb.group({
             active_provider: ['core'],
+            image_check: this.createImageCheckGroup(),
+            // Technical: the answer format of the scene call for chat and proactive
+            // images. An empty field means the built-in format.
+            image_scene: this.fb.group({
+                format_prompt: [''],
+            }),
             sd_webui: this.fb.group({
                 enabled: [false],
                 base_url: ['http://127.0.0.1:7860'],
@@ -145,13 +172,14 @@ export class MediaSettingsComponent implements OnInit, OnDestroy {
                 keep_loaded: [true],
                 gguf_cpu_offload: [true],
             }),
+            // `prompting.enabled` is hidden until it is understood what it was for;
+            // its value stays in the config through the merge in buildSynthesisForSave.
             prompting: this.fb.group({
-                enabled: [true],
-                max_attempts: [3],
-                assess_enabled: [true],
-                retry_enabled: [true],
-                quality_threshold: [0.72],
                 default_negative_prompt: ['(text:2), (signature:2), raw photo'],
+                // Technical: the image prompt builder of the sandbox, prompt engineering
+                // and builder scenarios. An empty field means the built-in prompt.
+                image_prompt_builder_system_prompt: [''],
+                image_prompt_builder_user_template: [''],
                 scenarios: this.fb.array([]),
             }),
         });
@@ -159,6 +187,87 @@ export class MediaSettingsComponent implements OnInit, OnDestroy {
 
     get scenarioControls(): UntypedFormArray {
         return this.mediaForm.get('prompting.scenarios') as UntypedFormArray;
+    }
+
+    get imageCheckGroup(): UntypedFormGroup {
+        return this.mediaForm.get('image_check') as UntypedFormGroup;
+    }
+
+    get showGenerationsWarning(): boolean {
+        const check = normalizeImageCheck(this.imageCheckGroup.getRawValue());
+        return canRegenerate(check) && generationsWarning(this.imageCheckGroup.get('max_generations')?.value);
+    }
+
+    private createImageCheckGroup(): UntypedFormGroup {
+        const gate = (name: ImageCheckGateName): UntypedFormGroup => this.fb.group({
+            enabled: [IMAGE_CHECK_DEFAULTS[name].enabled],
+            threshold: [IMAGE_CHECK_DEFAULTS[name].threshold],
+            reroll: [IMAGE_CHECK_DEFAULTS[name].reroll],
+        });
+        return this.fb.group({
+            relevance: gate('relevance'),
+            quality: gate('quality'),
+            max_generations: [IMAGE_CHECK_DEFAULTS.max_generations],
+            describe_prompt: [IMAGE_CHECK_DEFAULTS.describe_prompt],
+            system_prompt: [IMAGE_CHECK_DEFAULTS.system_prompt],
+            user_template: [IMAGE_CHECK_DEFAULTS.user_template],
+        });
+    }
+
+    /** A switched-off check locks its threshold and reroll; the count needs a check that may reroll. */
+    syncImageCheckControls(): void {
+        const group = this.imageCheckGroup;
+        const check = normalizeImageCheck(group.getRawValue());
+        IMAGE_CHECK_GATES.forEach((name) => {
+            this.setControlEnabled(group.get(`${name}.threshold`), check[name].enabled);
+            this.setControlEnabled(group.get(`${name}.reroll`), check[name].enabled);
+        });
+        this.setControlEnabled(group.get('max_generations'), canRegenerate(check));
+    }
+
+    private setControlEnabled(control: AbstractControl | null, enabled: boolean): void {
+        if (!control || control.enabled === enabled) {
+            return;
+        }
+        if (enabled) {
+            control.enable({ emitEvent: false });
+        } else {
+            control.disable({ emitEvent: false });
+        }
+    }
+
+    /** Puts the built-in prompt back into the field; saving keeps it. */
+    resetPrompt(controlPath: string, configPath: string): void {
+        const control = this.mediaForm.get(controlPath);
+        if (!control) {
+            return;
+        }
+        this.configService
+            .getDefaultValue$(configPath)
+            .pipe(take(1), takeUntil(this.destroy$))
+            .subscribe((value) => {
+                if (typeof value !== 'string') {
+                    this.uiNotificationService.error(
+                        this.localizationService.t('mediaSettings.resetPromptFailed'),
+                        this.localizationService.t('mediaSettings.title'),
+                    );
+                    return;
+                }
+                control.setValue(value);
+                control.markAsDirty();
+                this.cdr.markForCheck();
+            });
+    }
+
+    private imageCheckForSave(): any {
+        const base = this.synthesisBase?.image_check || {};
+        const check = normalizeImageCheck(this.imageCheckGroup.getRawValue());
+        return {
+            ...base,
+            ...check,
+            relevance: { ...(base.relevance || {}), ...check.relevance },
+            quality: { ...(base.quality || {}), ...check.quality },
+        };
     }
 
     private defaultScenarioRows(): any[] {
@@ -261,12 +370,15 @@ export class MediaSettingsComponent implements OnInit, OnDestroy {
                     const { scenarios: _ignoredScenarios, ...promptingForPatch } = prompting;
                     this.mediaForm.patchValue({
                         active_provider: activeProvider,
+                        image_check: normalizeImageCheck(synthesis.image_check),
+                        image_scene: { format_prompt: String(synthesis.image_scene?.format_prompt || '') },
                         sd_webui: synthesis.sd_webui || {},
                         comfyui: synthesis.comfyui || {},
                         diffusers: synthesis.diffusers || {},
                         prompting: promptingForPatch,
                     });
                     this.patchScenarioControls(scenarios);
+                    this.syncImageCheckControls();
                     this.originalSynthesis = this.buildSynthesisForSave();
                     this.ensureComfyuiCurrentModelOption();
                     if (activeProvider === 'comfyui') {
@@ -531,6 +643,9 @@ export class MediaSettingsComponent implements OnInit, OnDestroy {
         return {
             ...(this.synthesisBase || {}),
             ...synthesis,
+            // Raw form value: locked controls still hold what the owner set.
+            image_check: this.imageCheckForSave(),
+            image_scene: { ...(this.synthesisBase?.image_scene || {}), ...(synthesis.image_scene || {}) },
             sd_webui: { ...(this.synthesisBase?.sd_webui || {}), ...(synthesis.sd_webui || {}) },
             comfyui: { ...(this.synthesisBase?.comfyui || {}), ...(synthesis.comfyui || {}) },
             diffusers: { ...(this.synthesisBase?.diffusers || {}), ...(synthesis.diffusers || {}) },

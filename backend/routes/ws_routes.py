@@ -245,6 +245,37 @@ def _get_visible_main_chat_history(
     return visible_items[visible_offset:target_visible_count]
 
 
+def _bind_session_actor(data: dict, session_user_uuid: str | None) -> dict:
+    """Who is asking comes from the session token only.
+
+    A payload may not name another user: a guest naming the owner's uuid would
+    get the owner's rights (history, reroll, delete).
+    """
+    if isinstance(data, dict):
+        data["actor_user_uuid"] = session_user_uuid
+    return data
+
+
+def _history_for_actor(
+    actor_policy,
+    char_name: str,
+    *,
+    limit: int,
+    offset: int,
+    include_all_sources: bool,
+) -> list[dict]:
+    """The owner reads the shared history. A guest's chat is not stored there,
+    and the owner's is not theirs to read."""
+    if actor_policy.actor_role != "owner":
+        return []
+    return _get_visible_main_chat_history(
+        char_name,
+        limit=limit,
+        offset=offset,
+        include_all_sources=include_all_sources,
+    )
+
+
 async def _safe_send_json(websocket: WebSocket, payload: dict) -> bool:
     try:
         await websocket.send_json(payload)
@@ -268,7 +299,8 @@ async def websocket_endpoint(websocket: WebSocket):
         except Exception:
             session_user_uuid = None
 
-    await manager.connect(websocket)
+    session_policy = resolve_interaction_policy(session_user_uuid)
+    await manager.connect(websocket, owner=session_policy.actor_role == "owner")
     active_generation_task = None
     active_stop_event = None
     active_run_id = None
@@ -303,8 +335,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
             action = payload.get("action")
             data = payload.get("payload", {})
-            if isinstance(data, dict) and session_user_uuid and not data.get("actor_user_uuid"):
-                data["actor_user_uuid"] = session_user_uuid
+            data = _bind_session_actor(data, session_user_uuid)
 
             log_audit_entry(
                 "ws_action_received",
@@ -351,7 +382,10 @@ async def websocket_endpoint(websocket: WebSocket):
                     if requested_run_id:
                         data["run_id"] = requested_run_id
                     if client_user_id:
-                        data["id"] = client_user_id
+                        # The chat may know this message under its temporary id.
+                        # The lookup keeps the database id; the stream tells the
+                        # chat the real one (ack_message).
+                        data["client_message_id"] = client_user_id
                     if request_actor_user_uuid:
                         data["actor_user_uuid"] = request_actor_user_uuid
                     action = "send_message"
@@ -475,7 +509,10 @@ async def websocket_endpoint(websocket: WebSocket):
                     if requested_run_id:
                         data["run_id"] = requested_run_id
                     if client_user_id:
-                        data["id"] = client_user_id
+                        # The chat may know this message under its temporary id.
+                        # The lookup keeps the database id; the stream tells the
+                        # chat the real one (ack_message).
+                        data["client_message_id"] = client_user_id
                     if request_actor_user_uuid:
                         data["actor_user_uuid"] = request_actor_user_uuid
                     action = "send_message"
@@ -783,6 +820,8 @@ async def websocket_endpoint(websocket: WebSocket):
                                 run_id=payload_run_id,
                                 trace_hook=trace_hook,
                                 should_stop=stop_event.is_set,
+                                # The speakers are the owner's: a guest's reply stays silent.
+                                speak=interaction_policy.actor_role == "owner",
                             )
                             await trace_hook(
                                 {
@@ -1243,7 +1282,8 @@ async def websocket_endpoint(websocket: WebSocket):
                     default="default_waifu",
                 )
                 # Hide internal tool-role telemetry from the end-user chat feed.
-                history = _get_visible_main_chat_history(
+                history = _history_for_actor(
+                    actor_policy,
                     char_name,
                     limit=max(1, int(limit)),
                     offset=max(0, int(offset)),

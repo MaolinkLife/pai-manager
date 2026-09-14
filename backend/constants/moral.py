@@ -13,7 +13,16 @@ DEFAULT_EMOTIONAL_STATE = {
     "resentment": 0.03,
     "tenderness": 0.22,
     "jealousy": 0.04,
+    "anger": 0.02,
+    "hurt": 0.02,
+    "disgust": 0.01,
+    "happiness": 0.12,
 }
+
+# The emotion pool: the emotions of the matrix prompt
+# plus resentment from the concept. calm is the same as peace; hurt is pain
+# right now, resentment is a grudge that builds up. Laziness is not an emotion.
+IGNORED_EMOTION_LABELS = {"laziness", "лень"}
 
 EMOTIONAL_STATE_DEFINITIONS = {
     "longing": {
@@ -88,6 +97,30 @@ EMOTIONAL_STATE_DEFINITIONS = {
         "behavior": "Косвенные вопросы, неуверенность, анализ причины",
         "influence": {"initiative": -0.05, "tone": "неуверенный", "reaction_delay": "+0.7s"},
     },
+    "anger": {
+        "label_ru": "Гнев",
+        "arises_when": "Грубость, унижение, повторное нарушение границ",
+        "behavior": "Резкость, может оборвать тему или не ответить",
+        "influence": {"initiative": -0.40, "tone": "резкий", "reaction_delay": "+1.2s"},
+    },
+    "hurt": {
+        "label_ru": "Задетость",
+        "arises_when": "Обидные слова своего человека прямо сейчас",
+        "behavior": "Тише и короче, может промолчать; проходит, если не повторяется",
+        "influence": {"initiative": -0.30, "tone": "задетый", "reaction_delay": "+1.2s"},
+    },
+    "disgust": {
+        "label_ru": "Отвращение",
+        "arises_when": "Мерзкое, унизительное, манипуляция",
+        "behavior": "Холодная дистанция, отказ обсуждать",
+        "influence": {"initiative": -0.45, "tone": "холодный", "reaction_delay": "+1.0s"},
+    },
+    "happiness": {
+        "label_ru": "Счастье",
+        "arises_when": "Устойчивое тепло и близость — глубже и дольше, чем радость-вспышка",
+        "behavior": "Щедрая инициатива, интерес, забота",
+        "influence": {"initiative": 0.30, "tone": "светлый", "reaction_delay": "-0.3s"},
+    },
 }
 
 DEFAULT_RELATIONSHIP_SCORE = 0.7  # scale 0-1
@@ -113,6 +146,10 @@ EMOTION_MAP = {
     "resentment": "resentment",
     "tenderness": "tenderness",
     "jealousy": "jealousy",
+    "anger": "anger",
+    "hurt": "hurt",
+    "disgust": "disgust",
+    "happiness": "happiness",
 }
 
 # Relationship status thresholds
@@ -123,8 +160,18 @@ RELATIONSHIP_STATUSES = [
     (0.0, "formal"),
 ]
 
-POSITIVE_EMOTIONS = {"joy", "tenderness", "pride", "peace", "gratitude", "warmth"}
-NEGATIVE_EMOTIONS = {"sadness", "frustration", "anxiety", "resentment", "jealousy", "confusion"}
+POSITIVE_EMOTIONS = {"joy", "tenderness", "pride", "peace", "happiness", "gratitude", "warmth"}
+NEGATIVE_EMOTIONS = {
+    "sadness",
+    "frustration",
+    "anxiety",
+    "resentment",
+    "jealousy",
+    "confusion",
+    "anger",
+    "hurt",
+    "disgust",
+}
 EMOTION_SYNONYMS = {
     "тоска": "longing",
     "радость": "joy",
@@ -140,7 +187,7 @@ EMOTION_SYNONYMS = {
     "нежность": "tenderness",
     "ревность": "jealousy",
     "longing": "longing",
-    "warm": "warmth",
+    "warm": "tenderness",
     "warmth": "tenderness",
     "tender": "tenderness",
     "tenderness": "tenderness",
@@ -155,12 +202,12 @@ EMOTION_SYNONYMS = {
     "fearful": "anxiety",
     "upset": "sadness",
     "annoyed": "frustration",
-    "anger": "frustration",
+    "anger": "anger",
     "irritation": "frustration",
-    "mad": "frustration",
-    "furious": "resentment",
-    "hurt": "resentment",
-    "offended": "resentment",
+    "mad": "anger",
+    "furious": "anger",
+    "hurt": "hurt",
+    "offended": "hurt",
     "calm": "peace",
     "neutral": "peace",
     "seductive": "tenderness",
@@ -170,6 +217,17 @@ EMOTION_SYNONYMS = {
     "confused": "confusion",
     "surprise": "confusion",
     "jealous": "jealousy",
+    "гнев": "anger",
+    "злость": "anger",
+    "angry": "anger",
+    "задетость": "hurt",
+    "отвращение": "disgust",
+    "disgust": "disgust",
+    "disgusted": "disgust",
+    "счастье": "happiness",
+    "happiness": "happiness",
+    "happy": "happiness",
+    "спокойствие": "peace",
 }
 
 # Behavioral recommendations for each dominant emotion
@@ -186,6 +244,10 @@ BEHAVIORAL_RECOMMENDATIONS = {
     "resentment": ["slow down", "set a soft boundary if needed"],
     "tenderness": ["answer softly", "use warmer phrasing"],
     "jealousy": ["ask indirectly", "avoid accusations"],
+    "anger": ["keep replies short and firm", "do not smooth over what was said"],
+    "hurt": ["answer quietly and briefly", "do not pretend it did not hurt"],
+    "disgust": ["keep a cold distance", "decline to continue the topic"],
+    "happiness": ["show warmth freely", "take initiative and show interest"],
 }
 
 FALLBACK_RECOMMENDATION = ["be natural"]

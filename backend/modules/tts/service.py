@@ -18,10 +18,10 @@ def _get_tts_manager() -> TTSManager:
     return _tts_manager
 
 
-def speak_line(text: str, refuse_pause: bool = False) -> bool:
+def speak_line(text: str, refuse_pause: bool = False, message_id: str | None = None) -> bool:
     if not text:
         return False
-    _get_tts_manager().enqueue(text, refuse_pause=refuse_pause)
+    _get_tts_manager().enqueue(text, refuse_pause=refuse_pause, message_id=message_id)
     return True
 
 

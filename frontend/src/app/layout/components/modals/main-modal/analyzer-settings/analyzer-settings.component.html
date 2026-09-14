@@ -108,6 +108,12 @@
                         height="300px"
                         [autoResize]="false"
                     ></app-ui-textarea>
+                    <div class="prompt-actions">
+                        <p class="hint">{{ "settings.analyzerPromptHint" | translate }}</p>
+                        <button type="button" class="reset-button" (click)="resetPrompt('systemPrompt', 'analyzer.system_prompt')">
+                            {{ "settings.resetPrompt" | translate }}
+                        </button>
+                    </div>
                 </div>
             </div>
 

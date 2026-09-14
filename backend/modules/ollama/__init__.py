@@ -5,7 +5,6 @@ from .client import (
     stream_chat_image,
     list_models,
     is_available,
-    get_visual_model,
 )
 
 __all__ = [
@@ -15,5 +14,4 @@ __all__ = [
     "stream_chat_image",
     "list_models",
     "is_available",
-    "get_visual_model",
 ]

@@ -11,7 +11,7 @@ from modules.system import config as config_service
 from modules.system.runtime_profile import should_release_resources
 from modules.system.localization import get_text
 from constants.visual import (
-    DEFAULT_VISUAL_MODEL,
+    VISION_MODEL_NOT_SELECTED,
     IMAGE_TOKEN_INDEX,
     DEFAULT_IMAGE_PROMPT,
 )
@@ -24,9 +24,8 @@ class AppleVisionProvider:
     """
 
     def __init__(self, model_id: str = None):
-        self.model_id = model_id or config_service.get_config_value(
-            "api.visual_model", DEFAULT_VISUAL_MODEL
-        )
+        # Only the model picked in the vision settings.
+        self.model_id = str(model_id or "").strip()
 
         if torch.cuda.is_available():
             self.device = "cuda"
@@ -43,6 +42,9 @@ class AppleVisionProvider:
     def _ensure_loaded(self) -> bool:
         if self.model is not None and self.tokenizer is not None:
             return True
+        if not self.model_id:
+            self._load_error = VISION_MODEL_NOT_SELECTED
+            return False
         try:
             init_message = get_text(
                 "logger.visual_provider_init",
@@ -66,7 +68,7 @@ class AppleVisionProvider:
             try:
                 self.model = AutoModelForCausalLM.from_pretrained(
                     self.model_id,
-                    torch_dtype=self._torch_dtype,
+                    dtype=self._torch_dtype,
                     device_map=None,
                     trust_remote_code=True,
                     low_cpu_mem_usage=True,
@@ -90,7 +92,7 @@ class AppleVisionProvider:
                 )
                 self.model = AutoModelForCausalLM.from_pretrained(
                     self.model_id,
-                    torch_dtype=self._torch_dtype,
+                    dtype=self._torch_dtype,
                     device_map=None,
                     trust_remote_code=True,
                     low_cpu_mem_usage=False,

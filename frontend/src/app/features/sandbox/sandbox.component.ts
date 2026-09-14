@@ -9,7 +9,9 @@ import {
     SynthesisService,
 } from '../../core/services/synthesis.service';
 import { NotificationService } from '../../shared/components/notification/notification.service';
+import { LocalizationService } from '../../shared/pipes/translation/localization.service';
 import { UiSelectOption } from '../../shared/ui/components/ui-select/ui-select.component';
+import { buildModelOptions, modelOptionLabels } from '../../core/utils/model-options';
 
 function generateTempId(): string {
     if ((crypto as any).randomUUID) {
@@ -71,11 +73,10 @@ export class SandboxComponent implements OnInit {
     imageScheduler = 'euler';
     imageComfyScheduler = 'normal';
     comfyuiCheckpoint = '';
-    useUnifiedRouter = true;
     persistOutput = false;
     loading = false;
     providerOptions: UiSelectOption[] = [];
-    modelOptions: string[] = [];
+    modelOptions: UiSelectOption<string>[] = [];
     imageProviderOptions: UiSelectOption<string>[] = [];
     imageModels: SynthesisModelInfo[] = [];
     comfyuiStatus: ComfyUIStatusResponse['comfyui'] | null = null;
@@ -103,6 +104,7 @@ export class SandboxComponent implements OnInit {
         private configService: ConfigService,
         private synthesisService: SynthesisService,
         private notificationService: NotificationService,
+        private localizationService: LocalizationService,
     ) {}
 
     ngOnInit(): void {
@@ -186,7 +188,6 @@ export class SandboxComponent implements OnInit {
                 sampler: this.imageProvider === 'comfyui' ? this.imageScheduler : null,
                 scheduler: this.imageProvider === 'comfyui' ? this.imageComfyScheduler : this.imageScheduler,
                 comfyui_checkpoint: this.imageProvider === 'comfyui' ? this.comfyuiCheckpoint : null,
-                use_unified_router: this.useUnifiedRouter,
                 use_prompt_builder: this.usePromptBuilder,
                 image_prompt_policy: this.imagePromptPolicy,
                 image_style_prompt: this.imageStylePrompt,
@@ -606,17 +607,26 @@ export class SandboxComponent implements OnInit {
         this.maxTokens = Number(providerConfig.maxTokens ?? this.config?.generateSettings?.numPredict ?? 1024);
 
         if (provider === 'ollama') {
-            this.apiService.getOllamaModels$().subscribe((models) => {
-                const modelSet = new Set(models || []);
-                if (this.model) {
-                    modelSet.add(this.model);
-                }
-                this.modelOptions = Array.from(modelSet);
+            // Text models from the model index; the chosen one stays with a note.
+            this.apiService.getModelIndex$().subscribe((entries) => {
+                this.modelOptions = entries
+                    ? buildModelOptions(
+                        entries,
+                        'completion',
+                        this.model,
+                        modelOptionLabels((key) => this.localizationService.t(key), 'completion'),
+                        { placeholderWhenEmpty: false },
+                    )
+                    : this.currentModelOnlyOption();
             });
             return;
         }
 
-        this.modelOptions = this.model ? [this.model] : [];
+        this.modelOptions = this.currentModelOnlyOption();
+    }
+
+    private currentModelOnlyOption(): UiSelectOption<string>[] {
+        return this.model ? [{ value: this.model, label: this.model }] : [];
     }
 
     private formatProviderLabel(provider: string): string {

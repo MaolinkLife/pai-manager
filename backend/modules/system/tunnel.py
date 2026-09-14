@@ -1,12 +1,14 @@
 import copy
+import json
+import os
 import re
 import subprocess
 import threading
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
-from urllib.parse import urlparse
 
 from constants.default_config import DEFAULT_CONFIG
+from constants.paths import PROJECT_DIR
 from modules.system import service as config_service
 from modules.system.logger import AuditStatus, log_audit_entry
 
@@ -35,6 +37,18 @@ _URL_PATTERNS = [
     re.compile(r"https://[a-zA-Z0-9.-]+\.ngrok-free\.app"),
 ]
 
+_DEFAULT_FRONTEND_PORT = 3880
+
+
+def _frontend_port() -> int:
+    """PAI's own web interface port; config/port-config.json is the source of truth."""
+    try:
+        with open(os.path.join(PROJECT_DIR, "config", "port-config.json"), encoding="utf-8") as handle:
+            port = int(json.load(handle).get("frontend"))
+    except Exception:
+        return _DEFAULT_FRONTEND_PORT
+    return port if 0 < port < 65536 else _DEFAULT_FRONTEND_PORT
+
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -58,14 +72,12 @@ def _extract_public_url(line: str) -> Optional[str]:
     if not clean:
         return None
 
+    # Only a tunnel's own address counts. cloudflared prints other links first (its
+    # terms of use), and the access guard trusts whatever lands here.
     for pattern in _URL_PATTERNS:
         match = pattern.search(clean)
         if match:
             return match.group(0)
-
-    generic = re.search(r"https://[^\s\"']+", clean)
-    if generic:
-        return generic.group(0)
     return None
 
 
@@ -89,18 +101,16 @@ def _normalize_tunneling_cfg(raw_cfg: Optional[Dict[str, Any]]) -> Dict[str, Any
         provider = "cloudflared"
     merged["provider"] = provider
 
-    local_url = str(merged.get("local_url") or "http://127.0.0.1:4200").strip()
-    merged["local_url"] = local_url
-
-    local_port = merged.get("local_port")
-    if not isinstance(local_port, int) or local_port <= 0:
-        parsed = urlparse(local_url)
-        local_port = parsed.port or 4200
-    merged["local_port"] = int(local_port)
+    # The tunnel opens PAI's own web interface: its port comes from
+    # config/port-config.json, not from a stored value (the old 4200 is long gone).
+    local_port = _frontend_port()
+    merged["local_port"] = local_port
+    merged["local_url"] = f"http://localhost:{local_port}"
 
     merged["enabled"] = bool(merged.get("enabled", False))
     merged["command_path"] = str(merged.get("command_path") or "").strip()
-    merged["public_url"] = str(merged.get("public_url") or "").strip()
+    public_url = str(merged.get("public_url") or "").strip()
+    merged["public_url"] = public_url if _extract_public_url(public_url) == public_url else ""
 
     return merged
 
@@ -120,7 +130,8 @@ def _build_command(cfg: Dict[str, Any]) -> list[str]:
 
     if provider == "cloudflared":
         executable = command_path or "cloudflared"
-        return [executable, "tunnel", "--url", local_url]
+        # The frontend dev server answers only to its own host name.
+        return [executable, "tunnel", "--url", local_url, "--http-host-header", f"localhost:{local_port}"]
 
     if provider == "localtunnel":
         executable = command_path or "lt"
@@ -179,6 +190,7 @@ def _reader_loop(process: subprocess.Popen) -> None:
             _ACTIVE_USER_UUID = None
             _STATE["running"] = False
             _STATE["pid"] = None
+            _STATE["public_url"] = ""
             _STATE["stopped_at"] = _now_iso()
             if exit_code not in [None, 0] and not _STATE.get("last_error"):
                 _STATE["last_error"] = f"Tunnel process exited with code {exit_code}"
@@ -216,7 +228,9 @@ def start_tunnel(
 
         _STATE["last_error"] = ""
         _STATE["stopped_at"] = None
-        _STATE["public_url"] = cfg.get("public_url", "")
+        # A quick tunnel gets a new address on every start: the one stored from an
+        # earlier run is not trusted until this tunnel reports its own.
+        _STATE["public_url"] = ""
 
         startup_info = None
         if hasattr(subprocess, "STARTUPINFO"):
@@ -287,6 +301,7 @@ def stop_tunnel(user_uuid: Optional[str] = None) -> Dict[str, Any]:
         with _STATE_LOCK:
             _STATE["running"] = False
             _STATE["pid"] = None
+            _STATE["public_url"] = ""
             _STATE["stopped_at"] = _now_iso()
         return get_status(user_uuid=user_uuid)
 
@@ -302,6 +317,7 @@ def stop_tunnel(user_uuid: Optional[str] = None) -> Dict[str, Any]:
     with _STATE_LOCK:
         _STATE["running"] = False
         _STATE["pid"] = None
+        _STATE["public_url"] = ""
         _STATE["stopped_at"] = _now_iso()
         _append_log("[Tunnel] Stopped.")
         log_audit_entry(

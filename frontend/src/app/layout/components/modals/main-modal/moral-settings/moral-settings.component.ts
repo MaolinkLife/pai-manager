@@ -7,7 +7,8 @@ import {
 } from '@angular/forms';
 import { BehaviorSubject } from 'rxjs';
 import { finalize, take } from 'rxjs/operators';
-import { ApiService } from '../../../../../core/services/api.service';
+import { ApiService, ModelIndexEntry } from '../../../../../core/services/api.service';
+import { buildModelOptions, modelOptionLabels } from '../../../../../core/utils/model-options';
 import { ConfigService } from '../../../../../core/services/config.service';
 import { NotificationService } from '../../../../../shared/components/notification/notification.service';
 import { UiSelectOption } from '../../../../../shared/ui/components/ui-select/ui-select.component';
@@ -25,6 +26,7 @@ export class MoralSettingsComponent implements OnInit {
     ollamaModelOptions: UiSelectOption[] = [
         { value: '', label: 'Модели не найдены', disabled: true },
     ];
+    private modelIndex: ModelIndexEntry[] | null = null;
     private readonly defaultMoralSystemPrompt = `You are the MoralMatrix governor. Your output augments an AI companion's emotional behaviour. Receive the current evaluation payload (JSON) and respond with STRICT JSON containing guidance.`;
 
     constructor(
@@ -104,6 +106,7 @@ export class MoralSettingsComponent implements OnInit {
                 maxTokens: [80, [Validators.min(1), Validators.max(1024)]],
                 temperature: [0.7, [Validators.min(0), Validators.max(2)]],
                 language: [''],
+                systemPrompt: [''],
             }),
         });
     }
@@ -256,6 +259,7 @@ export class MoralSettingsComponent implements OnInit {
                         maxTokens: innerVoice.maxTokens ?? innerVoice.max_tokens ?? 80,
                         temperature: innerVoice.temperature ?? 0.7,
                         language: innerVoice.language ?? '',
+                        systemPrompt: innerVoice.systemPrompt ?? innerVoice.system_prompt ?? '',
                     });
 
                     this.originalConfig = this.buildMoralConfigFromForm();
@@ -277,35 +281,22 @@ export class MoralSettingsComponent implements OnInit {
     }
 
     private loadOllamaModels(): void {
-        this.apiService.getOllamaModels$().pipe(take(1)).subscribe({
-            next: (models: string[]) => {
-                const cleaned = (Array.isArray(models) ? models : [])
-                    .map((item) => String(item || '').trim())
-                    .filter((item) => item.length > 0);
-                if (cleaned.length > 0) {
-                    this.ollamaModelOptions = cleaned.map((model) => ({ value: model, label: model }));
-                    this.ensureCurrentOllamaModelOption();
-                    this.cdr.markForCheck();
-                    return;
-                }
-                this.ollamaModelOptions = [{ value: '', label: 'Модели не найдены', disabled: true }];
-                this.ensureCurrentOllamaModelOption();
-                this.cdr.markForCheck();
-            },
-            error: () => {
-                this.ollamaModelOptions = [{ value: '', label: 'Модели не найдены', disabled: true }];
-                this.ensureCurrentOllamaModelOption();
-                this.cdr.markForCheck();
-            },
+        this.apiService.getModelIndex$().pipe(take(1)).subscribe((entries) => {
+            this.modelIndex = entries;
+            this.ensureCurrentOllamaModelOption();
+            this.cdr.markForCheck();
         });
     }
 
+    /** Text models from the model index; the chosen one stays with a note when it is not marked. */
     private ensureCurrentOllamaModelOption(): void {
         const current = String(this.providersForm.get('ollama.model')?.value || '').trim();
-        if (!current || this.ollamaModelOptions.some((item) => item.value === current)) {
-            return;
-        }
-        this.ollamaModelOptions = [{ value: current, label: current }, ...this.ollamaModelOptions];
+        this.ollamaModelOptions = buildModelOptions(
+            this.modelIndex,
+            'completion',
+            current,
+            modelOptionLabels((key) => this.localizationService.t(key), 'completion'),
+        );
     }
 
     private toggleFallbackControls(activeProvider: string): void {
@@ -435,8 +426,34 @@ export class MoralSettingsComponent implements OnInit {
                 maxTokens: Number(formValue.innerVoice?.maxTokens ?? 80),
                 temperature: Number(formValue.innerVoice?.temperature ?? 0.7),
                 language: String(formValue.innerVoice?.language ?? '').trim(),
+                systemPrompt: String(formValue.innerVoice?.systemPrompt ?? ''),
             },
         };
+    }
+
+    /** Puts the built-in prompt back into the field; saving keeps it. */
+    resetPrompt(controlPath: string, configPath: string): void {
+        const control = this.moralForm.get(controlPath);
+        if (!control) {
+            return;
+        }
+        this.configService
+            .getDefaultValue$(configPath)
+            .pipe(take(1))
+            .subscribe((value) => {
+                if (typeof value !== 'string') {
+                    this.notificationService.open({
+                        title: 'Error',
+                        type: 'error',
+                        message: 'Failed to load the default prompt',
+                        autoClose: true,
+                    });
+                    return;
+                }
+                control.setValue(value);
+                control.markAsDirty();
+                this.cdr.markForCheck();
+            });
     }
 
     private getChanges(): any {

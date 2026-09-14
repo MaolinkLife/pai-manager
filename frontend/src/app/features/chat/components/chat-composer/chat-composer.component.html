@@ -176,6 +176,7 @@
                         </button>
 
                         <button
+                            *ngIf="ownerTools"
                             type="button"
                             class="icon-btn"
                             (click)="toggleRecord.emit()"
@@ -187,6 +188,7 @@
                         </button>
 
                         <button
+                            *ngIf="ownerTools"
                             type="button"
                             class="icon-btn"
                             [ngClass]="{ active: voiceModeEnabled, loading: voiceModeLoading }"

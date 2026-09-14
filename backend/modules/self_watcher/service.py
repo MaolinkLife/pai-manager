@@ -205,6 +205,7 @@ def record_nightly_reflection(
             generation_manager,
         )
         from modules.generative.types import GenerateRequest
+        from modules.system.technical_prompts import filled_prompt
         from modules.system.user import resolve_user_language
     except Exception as exc:
         log_audit_entry(
@@ -234,7 +235,9 @@ def record_nightly_reflection(
         f"{cluster_blob}"
     )
 
-    system_prompt = SELF_WATCHER_REFLECTION_PROMPT.format(language=language)
+    system_prompt = filled_prompt(
+        "self_watcher.reflection_prompt", SELF_WATCHER_REFLECTION_PROMPT, language=language
+    )
     try:
         result = generation_manager.generate(
             GenerateRequest(

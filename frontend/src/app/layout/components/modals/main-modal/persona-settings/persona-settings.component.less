@@ -213,6 +213,56 @@ app-ui-checkbox {
     }
 }
 
+.character-delete-modal {
+    width: min(480px, calc(100vw - 32px));
+
+    .delete-archive-note {
+        margin: 0 0 12px;
+        line-height: 1.45;
+        color: var(--color-text-active);
+    }
+
+    .delete-blocked {
+        margin: 0;
+        line-height: 1.45;
+        color: color-mix(in srgb, #f59e0b 80%, var(--color-text-active));
+    }
+
+    .delete-summary {
+        list-style: none;
+        margin: 0 0 16px;
+        padding: 10px 12px;
+        display: grid;
+        gap: 6px;
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius);
+        background: var(--color-bg);
+
+        li {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            font-size: 13px;
+        }
+    }
+
+    .button-row button.danger-confirm:last-child {
+        background-color: #ef4444;
+        color: #fff;
+
+        &:hover:not(:disabled) {
+            background-color: #dc2626;
+            box-shadow: 0 0 6px rgba(239, 68, 68, 0.5);
+        }
+
+        &:disabled {
+            background-color: var(--color-border);
+            color: color-mix(in srgb, var(--color-text) 50%, transparent);
+            box-shadow: none;
+        }
+    }
+}
+
 @media (max-width: 760px) {
     .grid,
     .checkbox-group,

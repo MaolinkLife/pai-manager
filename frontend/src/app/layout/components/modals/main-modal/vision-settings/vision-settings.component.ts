@@ -4,7 +4,8 @@ import { BehaviorSubject, Subject } from 'rxjs';
 import { finalize, take, takeUntil } from 'rxjs/operators';
 import { ConfigService } from '../../../../../core/services/config.service';
 import { ResourcesService } from '../../../../../core/services/resources.service';
-import { ApiService } from '../../../../../core/services/api.service';
+import { ApiService, ModelIndexEntry } from '../../../../../core/services/api.service';
+import { buildModelOptions, modelOptionLabels } from '../../../../../core/utils/model-options';
 import { ModalService } from '../../../../../shared/components/modal/modal.service';
 import { MonitorSelectionModalComponent } from '../../monitor-selection-modal/monitor-selection-modal.component';
 import { NotificationService } from '../../../../../shared/components/notification/notification.service';
@@ -19,18 +20,10 @@ interface ProviderFieldMeta {
     type: ProviderFieldType;
 }
 
-interface VisionProviderStatusView {
-    provider: string;
-    model: string;
-    ready: boolean | null;
-    message: string;
-    probe: boolean;
-}
-
 const VISION_PROVIDER_DEFAULTS: Record<string, Record<string, any>> = {
-    apple_vision: { model_id: 'apple/FastVLM-1.5B', max_tokens: 128 },
-    llava: { model_id: 'llava-hf/llava-1.5-7b-hf', max_tokens: 128 },
-    ollama_vision: { model: 'llava:latest', max_tokens: 512, probe_enabled: true, probe_cache_seconds: 300, image_format: 'PNG', keep_alive: '5m', use_main_model_context: false },
+    apple_vision: { model_id: '', max_tokens: 128 },
+    llava: { model_id: '', max_tokens: 128 },
+    ollama_vision: { model: '', max_tokens: 512, image_format: 'PNG', keep_alive: '5m' },
 };
 
 @Component({
@@ -45,9 +38,8 @@ export class VisionSettingsComponent implements OnInit, OnDestroy {
 
     visionProviders: { value: string; label: string }[] = [];
     isLoading$ = new BehaviorSubject<boolean>(true);
-    isCheckingProvider = false;
-    providerStatus: VisionProviderStatusView | null = null;
-    ollamaModels: string[] = [];
+    /** Vision models come from the model index. */
+    private modelIndex: ModelIndexEntry[] | null = null;
     isLoadingOllamaModels = false;
 
     private providerFieldMeta: Record<string, ProviderFieldMeta[]> = {};
@@ -83,6 +75,10 @@ export class VisionSettingsComponent implements OnInit, OnDestroy {
     private createForm(): UntypedFormGroup {
         return this.fb.group({
             enabled: [false],
+            screenCaptureEnabled: [false],
+            attachmentPrompt: [''],
+            generatedImagePrompt: [''],
+            screenPrompt: [''],
             activeProvider: [''],
             monitorIndex: [0],
             fps: [5],
@@ -122,7 +118,6 @@ export class VisionSettingsComponent implements OnInit, OnDestroy {
                 if (providerName === 'ollama_vision') {
                     this.loadOllamaModels();
                 }
-                this.refreshProviderStatus(false);
             });
     }
 
@@ -148,6 +143,10 @@ export class VisionSettingsComponent implements OnInit, OnDestroy {
 
                         this.visionForm.patchValue({
                             enabled: vision.enabled ?? false,
+                            screenCaptureEnabled: vision.screenCaptureEnabled ?? false,
+                            attachmentPrompt: vision.attachmentPrompt ?? '',
+                            generatedImagePrompt: vision.generatedImagePrompt ?? '',
+                            screenPrompt: vision.screenPrompt ?? '',
                             activeProvider,
                             monitorIndex: vision.monitorIndex ?? 0,
                             fps: vision.fps ?? 5,
@@ -177,7 +176,6 @@ export class VisionSettingsComponent implements OnInit, OnDestroy {
                     this.pendingChanges = {};
                     this.visionForm.markAsPristine();
                     this.isInitializing = false;
-                    this.refreshProviderStatus(false);
                     this.cdr.markForCheck();
                 },
                 error: (error) => {
@@ -274,6 +272,31 @@ export class VisionSettingsComponent implements OnInit, OnDestroy {
             });
     }
 
+    /** Puts the built-in prompt back into the field; saving keeps it. */
+    resetPrompt(controlName: string, configPath: string): void {
+        const control = this.visionForm.get(controlName);
+        if (!control) {
+            return;
+        }
+        this.configService
+            .getDefaultValue$(configPath)
+            .pipe(take(1), takeUntil(this.destroy$))
+            .subscribe((value) => {
+                if (typeof value !== 'string') {
+                    this.notificationService.open({
+                        title: 'Error',
+                        type: 'error',
+                        message: 'Failed to load the default prompt',
+                        autoClose: true,
+                    });
+                    return;
+                }
+                control.setValue(value);
+                control.markAsDirty();
+                this.cdr.markForCheck();
+            });
+    }
+
     hasChanges(): boolean {
         const modules = this.buildModulesPayload();
         return (
@@ -328,10 +351,13 @@ export class VisionSettingsComponent implements OnInit, OnDestroy {
     }
 
     get ollamaModelOptions(): UiSelectOption<string>[] {
-        return this.ollamaModels.map((item) => ({
-            value: item,
-            label: item,
-        }));
+        const current = String(this.currentProviderGroup?.get('model')?.value || '').trim();
+        return buildModelOptions(
+            this.modelIndex,
+            'vision',
+            current,
+            modelOptionLabels((key) => this.localizationService.t(key), 'vision'),
+        );
     }
 
     get activeProvider(): string {
@@ -344,10 +370,6 @@ export class VisionSettingsComponent implements OnInit, OnDestroy {
             return null;
         }
         return (this.visionForm.get('visionModules') as UntypedFormGroup)?.get(provider) as UntypedFormGroup;
-    }
-
-    checkProviderCapability(): void {
-        this.refreshProviderStatus(true);
     }
 
     refreshOllamaModels(): void {
@@ -409,80 +431,17 @@ export class VisionSettingsComponent implements OnInit, OnDestroy {
         if (this.isLoadingOllamaModels) {
             return;
         }
-        if (!forceReload && this.ollamaModels.length > 0) {
+        if (!forceReload && this.modelIndex !== null) {
             return;
         }
         this.isLoadingOllamaModels = true;
-        this.apiService.getOllamaModels$()
+        this.apiService.getModelIndex$()
             .pipe(take(1), takeUntil(this.destroy$))
-            .subscribe({
-                next: (models) => {
-                    this.ollamaModels = Array.isArray(models) ? models : [];
-                    if (this.activeProvider === 'ollama_vision' && this.ollamaModels.length > 0) {
-                        const group = this.currentProviderGroup;
-                        const control = group?.get('model');
-                        const current = String(control?.value || '').trim();
-                        if (control && !current) {
-                            control.setValue(this.ollamaModels[0], { emitEvent: true });
-                        }
-                    }
-                    this.isLoadingOllamaModels = false;
-                    this.cdr.markForCheck();
-                },
-                error: () => {
-                    this.ollamaModels = [];
-                    this.isLoadingOllamaModels = false;
-                    this.cdr.markForCheck();
-                },
-            });
-    }
-
-    private refreshProviderStatus(probe: boolean): void {
-        const provider = String(this.activeProvider || '').trim();
-        if (!provider) {
-            this.providerStatus = null;
-            return;
-        }
-        const group = this.currentProviderGroup;
-        const model = String(
-            group?.get('model')?.value
-            ?? group?.get('model_id')?.value
-            ?? ''
-        ).trim();
-        this.providerStatus = {
-            provider,
-            model,
-            ready: this.providerStatus?.ready ?? null,
-            message: probe ? 'checking...' : (this.providerStatus?.message || 'not checked'),
-            probe,
-        };
-        this.isCheckingProvider = true;
-        this.resourcesService.getVisionProviderStatus$(provider, model || null, probe)
-            .pipe(take(1), takeUntil(this.destroy$))
-            .subscribe({
-                next: (response) => {
-                    const payload = response?.provider || {};
-                    this.providerStatus = {
-                        provider: String(payload.name || provider),
-                        model: String(payload.model || model || ''),
-                        ready: typeof payload.ready === 'boolean' ? payload.ready : null,
-                        message: String(payload.message || 'unknown'),
-                        probe: !!payload.probe,
-                    };
-                    this.isCheckingProvider = false;
-                    this.cdr.markForCheck();
-                },
-                error: () => {
-                    this.providerStatus = {
-                        provider,
-                        model: model || '',
-                        ready: false,
-                        message: 'status request failed',
-                        probe,
-                    };
-                    this.isCheckingProvider = false;
-                    this.cdr.markForCheck();
-                }
+            .subscribe((entries) => {
+                // No model is picked automatically: an empty one stays empty.
+                this.modelIndex = entries ?? [];
+                this.isLoadingOllamaModels = false;
+                this.cdr.markForCheck();
             });
     }
 
@@ -491,23 +450,6 @@ export class VisionSettingsComponent implements OnInit, OnDestroy {
         Object.keys(providerConfig || {}).forEach((fieldName) => {
             group.addControl(fieldName, new UntypedFormControl(providerConfig[fieldName]));
         });
-
-        group.valueChanges
-            .pipe(takeUntil(this.destroy$))
-            .subscribe((value) => {
-                if (this.isInitializing || providerName !== this.activeProvider) {
-                    return;
-                }
-                const model = String(value?.model ?? value?.model_id ?? '').trim();
-                this.providerStatus = {
-                    provider: providerName,
-                    model,
-                    ready: null,
-                    message: 'not checked',
-                    probe: false,
-                };
-                this.cdr.markForCheck();
-            });
 
         this.setProviderMetadata(providerName, providerConfig || {});
 
@@ -576,6 +518,10 @@ export class VisionSettingsComponent implements OnInit, OnDestroy {
 
         return {
             enabled: raw.enabled,
+            screenCaptureEnabled: raw.screenCaptureEnabled,
+            attachmentPrompt: String(raw.attachmentPrompt ?? ''),
+            generatedImagePrompt: String(raw.generatedImagePrompt ?? ''),
+            screenPrompt: String(raw.screenPrompt ?? ''),
             activeProvider: raw.activeProvider,
             monitorIndex: raw.monitorIndex,
             fps: raw.fps,

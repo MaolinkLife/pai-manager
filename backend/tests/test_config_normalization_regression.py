@@ -81,3 +81,61 @@ def test_normalize_restores_missing_bridge_switch_as_off():
     normalized = normalize_config_structure(raw)
 
     assert normalized["telegram"]["enabled"] is False
+
+
+LEGACY_IMAGE_ASSESSMENT_KEYS = {"assess_enabled", "quality_threshold", "max_attempts", "retry_enabled"}
+
+
+def test_normalize_replaces_the_old_image_assessment_with_the_image_check():
+    raw = copy.deepcopy(DEFAULT_CONFIG)
+    raw["synthesis"]["prompting"].update(
+        {"assess_enabled": True, "quality_threshold": 0.72, "max_attempts": 3, "retry_enabled": True}
+    )
+    raw["synthesis"].pop("image_check")
+
+    normalized = normalize_config_structure(raw)
+
+    prompting = normalized["synthesis"]["prompting"]
+    assert not LEGACY_IMAGE_ASSESSMENT_KEYS & set(prompting)
+    # Hidden in the UI, kept in the config until it is understood what it was for.
+    assert prompting["enabled"] is True
+    # The old values never took effect; the owner's new defaults apply.
+    assert normalized["synthesis"]["image_check"] == DEFAULT_CONFIG["synthesis"]["image_check"]
+
+
+def test_normalize_keeps_image_check_settings_the_owner_changed():
+    raw = copy.deepcopy(DEFAULT_CONFIG)
+    raw["synthesis"]["image_check"]["quality"] = {"enabled": True, "threshold": 0.9, "reroll": True}
+    raw["synthesis"]["image_check"]["system_prompt"] = "Judge strictly."
+
+    normalized = normalize_config_structure(raw)
+
+    assert normalized["synthesis"]["image_check"]["quality"] == {"enabled": True, "threshold": 0.9, "reroll": True}
+    assert normalized["synthesis"]["image_check"]["system_prompt"] == "Judge strictly."
+
+
+def test_a_fresh_config_presets_the_image_check_and_its_prompts():
+    normalized = normalize_config_structure({})
+
+    check = normalized["synthesis"]["image_check"]
+    assert check["relevance"] == {"enabled": True, "threshold": 0.6, "reroll": False}
+    assert check["quality"] == {"enabled": False, "threshold": 0.82, "reroll": False}
+    assert check["max_generations"] == 2
+    for key in ("describe_prompt", "system_prompt", "user_template"):
+        assert check[key].strip(), key
+    assert not LEGACY_IMAGE_ASSESSMENT_KEYS & set(normalized["synthesis"]["prompting"])
+
+
+def test_the_config_model_and_the_defaults_agree_on_the_image_check():
+    from models.config_model import SynthesisImageCheckConfig
+
+    assert SynthesisImageCheckConfig().model_dump() == DEFAULT_CONFIG["synthesis"]["image_check"]
+
+
+def test_a_fresh_config_presets_the_image_scene_answer_format():
+    from models.config_model import SynthesisImageSceneConfig
+
+    normalized = normalize_config_structure({})
+
+    assert normalized["synthesis"]["image_scene"]["format_prompt"].strip()
+    assert SynthesisImageSceneConfig().model_dump() == DEFAULT_CONFIG["synthesis"]["image_scene"]

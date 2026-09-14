@@ -3,8 +3,6 @@ import os
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 PROJECT_DIR = os.path.dirname(BASE_DIR)
 CONFIG_DIR = os.path.join(BASE_DIR, "config")
-LOGS_DIR = os.path.join(BASE_DIR, "logs")
-TRACEBACK_LOGS_DIR = os.path.join(PROJECT_DIR, "logs")
 # PAI_STORAGE_DIR moves the whole storage tree (database, vector store, models)
 # elsewhere. Contour tests run on a throwaway tree this way; while it is set,
 # legacy migrations that would pull live files into storage are disabled.
@@ -13,6 +11,12 @@ STORAGE_DIR = (
     os.path.abspath(STORAGE_OVERRIDE)
     if STORAGE_OVERRIDE
     else os.path.join(BASE_DIR, "storage")
+)
+# Logs follow the override as well: a test run must neither write into nor
+# rotate the live backend's logs. Without the override nothing moves.
+LOGS_DIR = os.path.join(STORAGE_DIR, "logs") if STORAGE_OVERRIDE else os.path.join(BASE_DIR, "logs")
+TRACEBACK_LOGS_DIR = (
+    os.path.join(STORAGE_DIR, "logs") if STORAGE_OVERRIDE else os.path.join(PROJECT_DIR, "logs")
 )
 TEMP_DIR = os.path.join(BASE_DIR, "temp")
 

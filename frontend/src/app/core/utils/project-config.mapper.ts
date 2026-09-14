@@ -39,11 +39,12 @@ import {
     mapMoralPartialModelToDto
 } from './moral-config-mapper';
 import { mapSystemDtoToModel, mapSystemModelToDto } from './system-config-mapper';
-import { mapMemoryDtoToModel, mapMemoryModelToDto } from './memory-config-mapper';
+import { mapMemoryDtoToModel, mapMemoryModelToDto, mapMemoryPartialModelToDto } from './memory-config-mapper';
 import { mapConnectorDtoToModel, mapConnectorModelToDto } from './connector-config-mapper';
 import {
     mapDecisionLayerDtoToModel,
-    mapDecisionLayerModelToDto
+    mapDecisionLayerModelToDto,
+    mapDecisionLayerPartialModelToDto,
 } from './decision-layer-config-mapper';
 import {
     mapValidatorDtoToModel,
@@ -65,6 +66,11 @@ import {
     mapSttDtoToModel,
     mapSttModelToDto,
 } from './stt-config-mapper';
+import {
+    mapInitiativeDtoToModel,
+    mapInitiativeModelToDto,
+    mapInitiativePartialModelToDto,
+} from './initiative-config-mapper';
 
 
 export const mapProjectConfigDtoToModel = (dto: ProjectConfigDto): ProjectConfig => ({
@@ -91,6 +97,7 @@ export const mapProjectConfigDtoToModel = (dto: ProjectConfigDto): ProjectConfig
     selfWatcher: mapSelfWatcherDtoToModel(dto.self_watcher),
     auditLogs: mapAuditLogsDtoToModel(dto.audit_logs),
     stt: mapSttDtoToModel(dto.stt),
+    initiative: mapInitiativeDtoToModel(dto.initiative),
 });
 
 export const mapProjectConfigModelToDto = (model: ProjectConfig): ProjectConfigDto => ({
@@ -117,6 +124,7 @@ export const mapProjectConfigModelToDto = (model: ProjectConfig): ProjectConfigD
     self_watcher: mapSelfWatcherModelToDto(model.selfWatcher),
     audit_logs: mapAuditLogsModelToDto(model.auditLogs),
     stt: mapSttModelToDto(model.stt),
+    initiative: mapInitiativeModelToDto(model.initiative),
 });
 
 export const mapPartialModelToDto = (
@@ -155,7 +163,7 @@ export const mapPartialModelToDto = (
                 dto.modules = mapModulesModelToDto(model.modules!);
                 break;
             case 'decisionLayer':
-                dto.decision_layer = mapDecisionLayerModelToDto(model.decisionLayer!);
+                dto.decision_layer = mapDecisionLayerPartialModelToDto(model.decisionLayer) as ProjectConfigDto['decision_layer'];
                 break;
             case 'connector':
                 dto.connector = mapConnectorModelToDto(model.connector!);
@@ -190,7 +198,7 @@ export const mapPartialModelToDto = (
                 }
                 break;
             case 'memory':
-                dto.memory = mapMemoryModelToDto(model.memory);
+                dto.memory = mapMemoryPartialModelToDto(model.memory) as ProjectConfigDto['memory'];
                 break;
             case 'moral':
                 const moralDto = mapMoralPartialModelToDto(model.moral);
@@ -227,6 +235,9 @@ export const mapPartialModelToDto = (
                 break;
             case 'stt':
                 dto.stt = mapSttModelToDto(model.stt);
+                break;
+            case 'initiative':
+                dto.initiative = mapInitiativePartialModelToDto(model.initiative);
                 break;
         }
     });

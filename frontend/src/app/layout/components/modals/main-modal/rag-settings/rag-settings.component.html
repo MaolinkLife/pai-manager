@@ -829,6 +829,51 @@
                     formControlName="consolidationJudgeRequestTimeout"
                 ></app-ui-input>
             </div>
+
+            <div class="form-group">
+                <label for="ragJudgeSystemPrompt">{{ "ragSettings.judgePrompt" | translate }}</label>
+                <app-ui-textarea id="ragJudgeSystemPrompt" [rows]="8" [autoResize]="true" formControlName="consolidationJudgeSystemPrompt"></app-ui-textarea>
+                <div class="prompt-actions">
+                    <p class="hint">{{ "ragSettings.judgePromptHint" | translate }}</p>
+                    <button type="button" class="reset-button" (click)="resetPrompt('consolidationJudgeSystemPrompt', 'memory.consolidation.judge.system_prompt')">
+                        {{ "ragSettings.resetPrompt" | translate }}
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h3>🌙 {{ "ragSettings.daySummaryTitle" | translate }}</h3>
+            <p class="hint">{{ "ragSettings.daySummaryHint" | translate }}</p>
+
+            <div class="form-group">
+                <app-ui-checkbox formControlName="daySummaryStartupRefresh">
+                    {{ "ragSettings.daySummaryStartupRefresh" | translate }}
+                </app-ui-checkbox>
+                <p class="hint">{{ "ragSettings.daySummaryStartupRefreshHint" | translate }}</p>
+            </div>
+
+            <div class="form-group">
+                <label for="ragDaySummarySystemPrompt">{{ "ragSettings.daySummarySystemPrompt" | translate }}</label>
+                <app-ui-textarea id="ragDaySummarySystemPrompt" [rows]="6" [autoResize]="true" formControlName="daySummarySystemPrompt"></app-ui-textarea>
+                <div class="prompt-actions">
+                    <p class="hint">{{ "ragSettings.daySummarySystemPromptHint" | translate }}</p>
+                    <button type="button" class="reset-button" (click)="resetPrompt('daySummarySystemPrompt', 'memory.short_term.summary_system_prompt')">
+                        {{ "ragSettings.resetPrompt" | translate }}
+                    </button>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="ragDaySummaryTaskPrompt">{{ "ragSettings.daySummaryTaskPrompt" | translate }}</label>
+                <app-ui-textarea id="ragDaySummaryTaskPrompt" [rows]="3" [autoResize]="true" formControlName="daySummaryTaskPrompt"></app-ui-textarea>
+                <div class="prompt-actions">
+                    <p class="hint">{{ "ragSettings.daySummaryTaskPromptHint" | translate }}</p>
+                    <button type="button" class="reset-button" (click)="resetPrompt('daySummaryTaskPrompt', 'memory.short_term.summary_task_prompt')">
+                        {{ "ragSettings.resetPrompt" | translate }}
+                    </button>
+                </div>
+            </div>
         </div>
 
         <div class="section">
@@ -861,6 +906,28 @@
                     max="20000"
                     formControlName="narrativeMaxChars"
                 ></app-ui-input>
+            </div>
+
+            <div class="form-group">
+                <label for="ragDiarySystemPrompt">{{ "ragSettings.diarySystemPrompt" | translate }}</label>
+                <app-ui-textarea id="ragDiarySystemPrompt" [rows]="10" [autoResize]="true" formControlName="diarySystemPrompt"></app-ui-textarea>
+                <div class="prompt-actions">
+                    <p class="hint">{{ "ragSettings.diarySystemPromptHint" | translate }}</p>
+                    <button type="button" class="reset-button" (click)="resetPrompt('diarySystemPrompt', 'memory.diary.system_prompt')">
+                        {{ "ragSettings.resetPrompt" | translate }}
+                    </button>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="ragDiaryUserTemplate">{{ "ragSettings.diaryUserTemplate" | translate }}</label>
+                <app-ui-textarea id="ragDiaryUserTemplate" [rows]="4" [autoResize]="true" formControlName="diaryUserTemplate"></app-ui-textarea>
+                <div class="prompt-actions">
+                    <p class="hint">{{ "ragSettings.diaryUserTemplateHint" | translate }}</p>
+                    <button type="button" class="reset-button" (click)="resetPrompt('diaryUserTemplate', 'memory.diary.user_template')">
+                        {{ "ragSettings.resetPrompt" | translate }}
+                    </button>
+                </div>
             </div>
         </div>
 

@@ -15,6 +15,13 @@ from modules.system.logger import log_audit_entry, AuditStatus
 from modules.system.localization import get_text
 
 
+def screen_capture_enabled() -> bool:
+    """Background screen capture has its own switch, and it is part of vision."""
+    return bool(config_service.get_config_value("vision.enabled", False)) and bool(
+        config_service.get_config_value("vision.screen_capture_enabled", False)
+    )
+
+
 class VisionBuffer:
     """Circular buffer for storing frames."""
 
@@ -71,7 +78,7 @@ class ScreenCapturer:
 
     def start(self):
         """Start screen capture."""
-        if not config_service.get_config_value("vision.enabled", False):
+        if not screen_capture_enabled():
             message_disabled = get_text(
                 "logger.vision_disabled",
                 default="[Vision] Vision module disabled",

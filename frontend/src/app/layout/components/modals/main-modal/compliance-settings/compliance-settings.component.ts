@@ -3,6 +3,7 @@ import { UntypedFormBuilder, UntypedFormGroup, Validators } from '@angular/forms
 import { BehaviorSubject } from 'rxjs';
 import { finalize, take } from 'rxjs/operators';
 import { ConfigService } from '../../../../../core/services/config.service';
+import { pickChangedFields } from '../../../../../core/utils/changed-fields';
 import { NotificationService } from '../../../../../shared/components/notification/notification.service';
 import { LocalizationService } from '../../../../../shared/pipes/translation/localization.service';
 
@@ -17,8 +18,8 @@ import { LocalizationService } from '../../../../../shared/pipes/translation/loc
  *   • Factuality    (§3.9)
  *   • Self-Watcher  (§3.7)
  *
- * Each section maps to its own top-level config key, so `saveChanges`
- * sends a multi-key PATCH body. Defaults mirror constants/default_config.py.
+ * Each section maps to its own top-level config key. `saveChanges` sends only
+ * the fields that changed. Defaults mirror constants/default_config.py.
  */
 @Component({
     selector: 'app-compliance-settings',
@@ -28,6 +29,8 @@ import { LocalizationService } from '../../../../../shared/pipes/translation/loc
 export class ComplianceSettingsComponent implements OnInit {
     complianceForm: UntypedFormGroup;
     isLoading$ = new BehaviorSubject<boolean>(true);
+    /** Without the stored values a save could not tell what changed. */
+    loadFailed = false;
     originalSnapshot: any = {};
 
     constructor(
@@ -54,6 +57,7 @@ export class ComplianceSettingsComponent implements OnInit {
                 temperature: [0.0, [Validators.min(0), Validators.max(2)]],
                 instructionCharLimit: [4000, [Validators.min(0)]],
                 outputCharLimit: [4000, [Validators.min(0)]],
+                systemPrompt: [''],
             }),
             languageGuard: this.fb.group({
                 enabled: [false],
@@ -67,6 +71,7 @@ export class ComplianceSettingsComponent implements OnInit {
                 temperature: [0.0, [Validators.min(0), Validators.max(2)]],
                 userCharLimit: [2000, [Validators.min(0)]],
                 outputCharLimit: [4000, [Validators.min(0)]],
+                systemPrompt: [''],
             }),
             factuality: this.fb.group({
                 enabled: [false],
@@ -84,6 +89,7 @@ export class ComplianceSettingsComponent implements OnInit {
                 maxEventsInCluster: [20, [Validators.min(1), Validators.max(500)]],
                 llmMaxTokens: [220, [Validators.min(1), Validators.max(4096)]],
                 llmTemperature: [0.5, [Validators.min(0), Validators.max(2)]],
+                reflectionPrompt: [''],
             }),
         });
     }
@@ -105,6 +111,7 @@ export class ComplianceSettingsComponent implements OnInit {
                     this.cdr.markForCheck();
                 },
                 error: () => {
+                    this.loadFailed = true;
                     this.notificationService.open({
                         title: 'Error',
                         type: 'error',
@@ -127,6 +134,7 @@ export class ComplianceSettingsComponent implements OnInit {
                 validator.instructionCharLimit ?? validator.instruction_char_limit ?? 4000,
             outputCharLimit:
                 validator.outputCharLimit ?? validator.output_char_limit ?? 4000,
+            systemPrompt: validator.systemPrompt ?? validator.system_prompt ?? '',
         });
 
         const lg = config.languageGuard || config.language_guard || {};
@@ -144,6 +152,7 @@ export class ComplianceSettingsComponent implements OnInit {
             temperature: conf.temperature ?? 0.0,
             userCharLimit: conf.userCharLimit ?? conf.user_char_limit ?? 2000,
             outputCharLimit: conf.outputCharLimit ?? conf.output_char_limit ?? 4000,
+            systemPrompt: conf.systemPrompt ?? conf.system_prompt ?? '',
         });
 
         const fact = config.factuality || {};
@@ -168,7 +177,33 @@ export class ComplianceSettingsComponent implements OnInit {
                 sw.maxEventsInCluster ?? sw.max_events_in_cluster ?? 20,
             llmMaxTokens: sw.llmMaxTokens ?? sw.llm_max_tokens ?? 220,
             llmTemperature: sw.llmTemperature ?? sw.llm_temperature ?? 0.5,
+            reflectionPrompt: sw.reflectionPrompt ?? sw.reflection_prompt ?? '',
         });
+    }
+
+    /** Puts the built-in prompt back into the field; saving keeps it. */
+    resetPrompt(controlPath: string, configPath: string): void {
+        const control = this.complianceForm.get(controlPath);
+        if (!control) {
+            return;
+        }
+        this.configService
+            .getDefaultValue$(configPath)
+            .pipe(take(1))
+            .subscribe((value) => {
+                if (typeof value !== 'string') {
+                    this.notificationService.open({
+                        title: 'Error',
+                        type: 'error',
+                        message: 'Failed to load the default prompt',
+                        autoClose: true,
+                    });
+                    return;
+                }
+                control.setValue(value);
+                control.markAsDirty();
+                this.cdr.markForCheck();
+            });
     }
 
     private buildSnapshot(): any {
@@ -176,7 +211,7 @@ export class ComplianceSettingsComponent implements OnInit {
     }
 
     hasChanges(): boolean {
-        return JSON.stringify(this.buildSnapshot()) !== JSON.stringify(this.originalSnapshot);
+        return !this.loadFailed && Object.keys(pickChangedFields(this.buildSnapshot(), this.originalSnapshot)).length > 0;
     }
 
     saveChanges(): void {
@@ -184,13 +219,7 @@ export class ComplianceSettingsComponent implements OnInit {
             return;
         }
         const current = this.buildSnapshot();
-        const updateData: any = {
-            validator: current.validator,
-            languageGuard: current.languageGuard,
-            confidence: current.confidence,
-            factuality: current.factuality,
-            selfWatcher: current.selfWatcher,
-        };
+        const updateData = pickChangedFields(current, this.originalSnapshot);
         this.configService.updateConfig$(updateData).subscribe({
             next: () => {
                 this.notificationService.open({

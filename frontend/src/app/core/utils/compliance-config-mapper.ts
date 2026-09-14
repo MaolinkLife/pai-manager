@@ -23,6 +23,16 @@ import {
     SelfWatcherConfig,
     ValidatorConfig,
 } from '../models/project-config.model';
+import { promptField } from './technical-prompt-field';
+
+/** A settings save sends only the fields it carries — nothing is filled with defaults. */
+const definedFields = (pairs: Array<[string, unknown]>): Record<string, unknown> =>
+    pairs.reduce((dto: Record<string, unknown>, [key, value]) => {
+        if (value !== undefined) {
+            dto[key] = value;
+        }
+        return dto;
+    }, {});
 
 // ---- Validator -----------------------------------------------------------
 
@@ -35,18 +45,22 @@ export const mapValidatorDtoToModel = (
     temperature: dto?.temperature ?? 0.0,
     instructionCharLimit: dto?.instruction_char_limit ?? 4000,
     outputCharLimit: dto?.output_char_limit ?? 4000,
+    systemPrompt: dto?.system_prompt ?? '',
 });
 
 export const mapValidatorModelToDto = (
-    model?: ValidatorConfig,
+    model?: Partial<ValidatorConfig>,
 ): ValidatorConfigDto => ({
-    enabled: model?.enabled ?? false,
-    threshold: model?.threshold ?? 0.7,
-    max_tokens: model?.maxTokens ?? 256,
-    temperature: model?.temperature ?? 0.0,
-    instruction_char_limit: model?.instructionCharLimit ?? 4000,
-    output_char_limit: model?.outputCharLimit ?? 4000,
-});
+    ...definedFields([
+        ['enabled', model?.enabled],
+        ['threshold', model?.threshold],
+        ['max_tokens', model?.maxTokens],
+        ['temperature', model?.temperature],
+        ['instruction_char_limit', model?.instructionCharLimit],
+        ['output_char_limit', model?.outputCharLimit],
+    ]),
+    ...promptField('system_prompt', model?.systemPrompt),
+}) as ValidatorConfigDto;
 
 // ---- Language guard ------------------------------------------------------
 
@@ -59,12 +73,12 @@ export const mapLanguageGuardDtoToModel = (
 });
 
 export const mapLanguageGuardModelToDto = (
-    model?: LanguageGuardConfig,
-): LanguageGuardConfigDto => ({
-    enabled: model?.enabled ?? false,
-    min_dominance: model?.minDominance ?? 0.7,
-    min_output_chars: model?.minOutputChars ?? 40,
-});
+    model?: Partial<LanguageGuardConfig>,
+): LanguageGuardConfigDto => definedFields([
+    ['enabled', model?.enabled],
+    ['min_dominance', model?.minDominance],
+    ['min_output_chars', model?.minOutputChars],
+]) as LanguageGuardConfigDto;
 
 // ---- Confidence ----------------------------------------------------------
 
@@ -77,18 +91,22 @@ export const mapConfidenceDtoToModel = (
     temperature: dto?.temperature ?? 0.0,
     userCharLimit: dto?.user_char_limit ?? 2000,
     outputCharLimit: dto?.output_char_limit ?? 4000,
+    systemPrompt: dto?.system_prompt ?? '',
 });
 
 export const mapConfidenceModelToDto = (
-    model?: ConfidenceConfig,
+    model?: Partial<ConfidenceConfig>,
 ): ConfidenceConfigDto => ({
-    enabled: model?.enabled ?? false,
-    threshold: model?.threshold ?? 0.5,
-    max_tokens: model?.maxTokens ?? 64,
-    temperature: model?.temperature ?? 0.0,
-    user_char_limit: model?.userCharLimit ?? 2000,
-    output_char_limit: model?.outputCharLimit ?? 4000,
-});
+    ...definedFields([
+        ['enabled', model?.enabled],
+        ['threshold', model?.threshold],
+        ['max_tokens', model?.maxTokens],
+        ['temperature', model?.temperature],
+        ['user_char_limit', model?.userCharLimit],
+        ['output_char_limit', model?.outputCharLimit],
+    ]),
+    ...promptField('system_prompt', model?.systemPrompt),
+}) as ConfidenceConfigDto;
 
 // ---- Factuality ----------------------------------------------------------
 
@@ -104,15 +122,15 @@ export const mapFactualityDtoToModel = (
 });
 
 export const mapFactualityModelToDto = (
-    model?: FactualityConfig,
-): FactualityConfigDto => ({
-    enabled: model?.enabled ?? false,
-    gate_on_low_confidence: model?.gateOnLowConfidence ?? true,
-    top_k: model?.topK ?? 3,
-    min_similarity: model?.minSimilarity ?? 0.6,
-    max_claims: model?.maxClaims ?? 6,
-    claim_min_length: model?.claimMinLength ?? 3,
-});
+    model?: Partial<FactualityConfig>,
+): FactualityConfigDto => definedFields([
+    ['enabled', model?.enabled],
+    ['gate_on_low_confidence', model?.gateOnLowConfidence],
+    ['top_k', model?.topK],
+    ['min_similarity', model?.minSimilarity],
+    ['max_claims', model?.maxClaims],
+    ['claim_min_length', model?.claimMinLength],
+]) as FactualityConfigDto;
 
 // ---- Self-Watcher --------------------------------------------------------
 
@@ -126,16 +144,20 @@ export const mapSelfWatcherDtoToModel = (
     maxEventsInCluster: dto?.max_events_in_cluster ?? 20,
     llmMaxTokens: dto?.llm_max_tokens ?? 220,
     llmTemperature: dto?.llm_temperature ?? 0.5,
+    reflectionPrompt: dto?.reflection_prompt ?? '',
 });
 
 export const mapSelfWatcherModelToDto = (
-    model?: SelfWatcherConfig,
+    model?: Partial<SelfWatcherConfig>,
 ): SelfWatcherConfigDto => ({
-    enabled: model?.enabled ?? false,
-    mismatch_threshold: model?.mismatchThreshold ?? 0.5,
-    nightly_reflection_enabled: model?.nightlyReflectionEnabled ?? true,
-    lookback_days: model?.lookbackDays ?? 7,
-    max_events_in_cluster: model?.maxEventsInCluster ?? 20,
-    llm_max_tokens: model?.llmMaxTokens ?? 220,
-    llm_temperature: model?.llmTemperature ?? 0.5,
-});
+    ...definedFields([
+        ['enabled', model?.enabled],
+        ['mismatch_threshold', model?.mismatchThreshold],
+        ['nightly_reflection_enabled', model?.nightlyReflectionEnabled],
+        ['lookback_days', model?.lookbackDays],
+        ['max_events_in_cluster', model?.maxEventsInCluster],
+        ['llm_max_tokens', model?.llmMaxTokens],
+        ['llm_temperature', model?.llmTemperature],
+    ]),
+    ...promptField('reflection_prompt', model?.reflectionPrompt),
+}) as SelfWatcherConfigDto;

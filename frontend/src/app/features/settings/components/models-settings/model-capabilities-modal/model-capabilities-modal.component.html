@@ -1,0 +1,40 @@
+<div class="capabilities-modal">
+    <p class="capabilities-modal__hint">{{ "settingsPage.models.capabilitiesModalHint" | translate }}</p>
+
+    <form [formGroup]="form" class="capabilities-modal__list">
+        <div class="capabilities-modal__item" *ngFor="let key of capabilityKeys; trackBy: trackByKey">
+            <app-ui-checkbox [formControlName]="key" [id]="'model-capability-' + key">
+                {{ "settingsPage.models.capabilities." + key | translate }}
+            </app-ui-checkbox>
+            <span class="capabilities-modal__declared" *ngIf="isDeclared(key)">
+                {{ "settingsPage.models.capabilitiesDeclaredByOllama" | translate }}
+            </span>
+        </div>
+    </form>
+
+    <p class="capabilities-modal__note capabilities-modal__note--warning" *ngIf="differsFromOllama()">
+        ⚠ {{ "settingsPage.models.capabilitiesDifferShort" | translate }}
+    </p>
+    <p class="capabilities-modal__note" *ngIf="!entry.declared_known">
+        {{ "settingsPage.models.capabilitiesUnknown" | translate }}
+    </p>
+    <p class="capabilities-modal__note capabilities-modal__note--error" *ngIf="saveError">{{ saveError }}</p>
+
+    <div class="capabilities-modal__actions">
+        <app-ui-button
+            variant="ghost"
+            size="sm"
+            [disabled]="saving || !entry.declared_known || !differsFromOllama()"
+            (pressed)="resetToOllama()"
+        >
+            {{ "settingsPage.models.capabilitiesReset" | translate }}
+        </app-ui-button>
+        <span class="capabilities-modal__spacer"></span>
+        <app-ui-button variant="secondary" size="sm" [disabled]="saving" (pressed)="cancel()">
+            {{ "settingsPage.models.capabilitiesCancel" | translate }}
+        </app-ui-button>
+        <app-ui-button size="sm" [loading]="saving" (pressed)="save()">
+            {{ "settingsPage.models.capabilitiesSave" | translate }}
+        </app-ui-button>
+    </div>
+</div>

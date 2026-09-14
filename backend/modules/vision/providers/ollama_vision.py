@@ -2,115 +2,90 @@ from __future__ import annotations
 
 import base64
 import io
-import time
 from typing import Any, Dict, Optional
 
-from PIL import Image, ImageDraw
+from PIL import Image
 
+from constants.prompts import VISION_FALLBACK_PROMPT
+from constants.visual import VISION_MODEL_NOT_SELECTED
 from modules.ollama import client as ollama_client
-from modules.system import config as config_service
 from modules.system.logger import AuditStatus, log_audit_entry
 
 
 class OllamaVisionProvider:
-    """Vision provider backed by Ollama /api/chat multimodal models."""
+    """Vision provider backed by Ollama /api/chat multimodal models.
+
+    Whether the model can see is what Ollama declares in the model metadata. No
+    test image is sent to find out: a model is not run to
+    check what it can do.
+    """
 
     def __init__(self, provider_config: Optional[Dict[str, Any]] = None):
         cfg = provider_config or {}
-        self.model_id = str(
-            cfg.get("model")
-            or cfg.get("model_id")
-            or config_service.get_config_value("api.visual_model", "")
-            or ""
-        ).strip()
+        # Only the model picked in the vision settings.
+        self.model_id = str(cfg.get("model") or cfg.get("model_id") or "").strip()
         self.max_tokens = int(cfg.get("max_tokens", 512) or 512)
-        self.probe_enabled = bool(cfg.get("probe_enabled", True))
-        self.probe_cache_seconds = max(5, int(cfg.get("probe_cache_seconds", 300) or 300))
         self.keep_alive = cfg.get("keep_alive", None)
         image_format = str(cfg.get("image_format") or "PNG").strip().upper()
         self.image_format = image_format if image_format in {"PNG", "JPEG"} else "PNG"
 
-        self._last_probe_at: float = 0.0
-        self._last_probe_ok: Optional[bool] = None
+        # Why the model is unavailable; the vision status routes read it.
         self._last_probe_error: str = ""
+        # What Ollama's model metadata declares (vision, thinking, tools, ...).
+        self._capabilities: list[str] = []
+        self._thinks: bool = False
 
-    def _build_probe_image_b64(self) -> str:
-        # Use a real, simple image. Some VLMs return empty content for 1x1/tiny probes.
-        image = Image.new("RGB", (256, 256), color="white")
-        draw = ImageDraw.Draw(image)
-        draw.rectangle((28, 40, 118, 168), fill=(220, 48, 48))
-        draw.ellipse((142, 48, 226, 132), fill=(42, 103, 220))
-        draw.text((34, 205), "VISION TEST", fill=(10, 10, 10))
-        buffer = io.BytesIO()
-        image.save(buffer, format="PNG")
-        return base64.b64encode(buffer.getvalue()).decode("ascii")
+    def _note_capabilities(self, metadata_support: Dict[str, Any]) -> None:
+        self._capabilities = [str(item).strip().lower() for item in (metadata_support.get("capabilities") or [])]
+        self._thinks = "thinking" in self._capabilities
+
+    def _request_options(self, **options: Any) -> Dict[str, Any]:
+        # A description needs no reasoning. Left to reason, a thinking model
+        # spends the whole token budget there and answers nothing (2026-09-12).
+        if self._thinks:
+            options["__think"] = False
+        return options
 
     @staticmethod
-    def _is_error_content(content: str) -> bool:
-        return str(content or "").strip().lower().startswith("[error]")
+    def _empty_answer_reason(result: Dict[str, Any]) -> str:
+        """Why an answer is unusable, read from Ollama's own fields; "" when it is fine."""
+        if result.get("error"):
+            return str(result["error"])
+        if str(result.get("content") or "").strip():
+            return ""
+        if str(result.get("thinking") or "").strip() and result.get("done_reason") == "length":
+            return "reasoning used the whole token budget before any answer"
+        if result.get("done_reason") == "length":
+            return "the token limit cut the answer before any text"
+        return "the model returned an empty answer"
 
-    def _probe_vision_support(self) -> bool:
-        if not self.probe_enabled:
-            metadata_support = ollama_client.model_supports_vision(self.model_id)
-            if not metadata_support.get("supported"):
-                self._last_probe_ok = False
-                self._last_probe_error = str(metadata_support.get("reason") or "model metadata does not declare vision support")
-                return False
-            return True
-        now = time.time()
-        if self._last_probe_ok is not None and (now - self._last_probe_at) < self.probe_cache_seconds:
-            return bool(self._last_probe_ok)
-
-        metadata_support = ollama_client.model_supports_vision(self.model_id)
-        if not metadata_support.get("supported"):
-            self._last_probe_ok = False
-            self._last_probe_error = str(metadata_support.get("reason") or "model metadata does not declare vision support")
-            self._last_probe_at = now
+    def _check_vision_support(self) -> bool:
+        if not self.model_id:
+            self._last_probe_error = VISION_MODEL_NOT_SELECTED
             return False
-
-        test_messages = [
-            {
-                "role": "user",
-                "content": "List the shapes and text in this image.",
-                "images": [self._build_probe_image_b64()],
-            }
-        ]
-        try:
-            # Keep probe extremely lightweight to avoid runner crashes on low-memory setups.
-            content = str(
-                ollama_client.chat_image(
-                    test_messages,
-                    model=self.model_id,
-                    options={
-                        "num_predict": max(self.max_tokens, 256),
-                        "temperature": 0.0,
-                    },
-                    keep_alive=self.keep_alive,
-                )
-                or ""
-            ).strip()
-            ok = bool(content) and not self._is_error_content(content)
-            self._last_probe_ok = ok
-            self._last_probe_error = "" if ok else (content or "empty probe response")
-        except Exception as exc:
-            self._last_probe_ok = False
-            self._last_probe_error = str(exc)
-        self._last_probe_at = now
-        if not self._last_probe_ok:
-            log_audit_entry(
-                "vision_ollama_probe_failed",
-                "[OllamaVisionProvider] Vision probe failed; model marked unavailable.",
-                AuditStatus.WARNING,
-                details={"model_id": self.model_id, "error": self._last_probe_error},
-            )
-        return bool(self._last_probe_ok)
+        metadata_support = ollama_client.model_supports_vision(self.model_id)
+        self._note_capabilities(metadata_support)
+        if metadata_support.get("supported"):
+            self._last_probe_error = ""
+            return True
+        self._last_probe_error = str(metadata_support.get("reason") or "model metadata does not declare vision support")
+        log_audit_entry(
+            "vision_ollama_not_declared",
+            "[OllamaVisionProvider] The model's metadata does not declare vision; model marked unavailable.",
+            AuditStatus.WARNING,
+            details={
+                "model_id": self.model_id,
+                "error": self._last_probe_error,
+                "capabilities": self._capabilities,
+            },
+        )
+        return False
 
     def is_ready(self) -> bool:
         if not ollama_client.is_available():
-            self._last_probe_ok = False
             self._last_probe_error = "ollama is unavailable"
             return False
-        return self._probe_vision_support()
+        return self._check_vision_support()
 
     def describe_image(self, image: Image.Image, prompt: str) -> Dict[str, Any]:
         if not self.is_ready():
@@ -130,28 +105,24 @@ class OllamaVisionProvider:
         messages = [
             {
                 "role": "user",
-                "content": str(prompt or "Describe the image in detail in English."),
+                "content": str(prompt or VISION_FALLBACK_PROMPT),
                 "images": [encoded],
             }
         ]
-        content = str(
-            ollama_client.chat_image(
-                messages,
-                model=self.model_id,
-                options={
-                    "num_predict": self.max_tokens,
-                    "temperature": 0.1,
-                },
-                keep_alive=self.keep_alive,
-            )
-            or ""
-        ).strip()
-        if not content or self._is_error_content(content):
+        result = ollama_client.chat_image_response(
+            messages,
+            model=self.model_id,
+            options=self._request_options(num_predict=self.max_tokens, temperature=0.1),
+            keep_alive=self.keep_alive,
+        )
+        reason = self._empty_answer_reason(result)
+        if reason:
             return {
-                "summary": content or "Vision response is empty",
+                "summary": f"[ERROR] {reason}" if result.get("error") else f"Vision response is empty: {reason}",
                 "model": self.model_id,
                 "status": "error",
             }
+        content = str(result.get("content") or "").strip()
         return {
             "summary": content,
             "model": self.model_id,

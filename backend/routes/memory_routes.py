@@ -13,7 +13,7 @@ from modules.memory.short_term import (
 )
 from modules.memory.diary import (
     generate_daily_activity_entry,
-    list_daily_activity_entries,
+    list_diary_page,
 )
 from modules.memory.emulator import MemorySearchEmulator
 from modules.memory.knowledge import (
@@ -161,6 +161,11 @@ def _load_message_preview(dialogue_ids: List[str], max_items: int = 3) -> List[D
         session.close()
 
 
+def _active_character_id(actor_user_uuid: str) -> str:
+    char_name = get_active_character_name(user_uuid=actor_user_uuid, default="default_waifu")
+    return character_service.get_or_create_character(char_name).id
+
+
 @router.post("/refresh")
 async def refresh_short_term_memory(
     request: Request, days: int = Query(default=7, ge=1, le=60)
@@ -175,14 +180,9 @@ async def refresh_short_term_memory(
     ensure_short_term_schema()
     ensure_memory_knowledge_schema()
 
-    char_name = get_active_character_name(
-        user_uuid=actor_user_uuid,
-        default="default_waifu",
-    )
-
-    character = character_service.get_or_create_character(char_name)
-    refresh_recent_days(character.id, days=days)
-    records = load_recent_records(days=days)
+    character_id = _active_character_id(actor_user_uuid)
+    refresh_recent_days(character_id, days=days)
+    records = load_recent_records(character_id=character_id, days=days)
 
     log_audit_entry(
         "memory_route_refresh",
@@ -201,7 +201,7 @@ async def refresh_short_term_memory(
 async def list_short_term_memory(
     request: Request, days: int = Query(default=7, ge=1, le=120)
 ) -> dict:
-    _require_owner_memory_access(request)
+    actor_user_uuid = _require_owner_memory_access(request)
     print(
         get_text(
             "memory_routes.list_request",
@@ -210,7 +210,7 @@ async def list_short_term_memory(
     )
     ensure_short_term_schema()
     ensure_memory_knowledge_schema()
-    records = load_recent_records(days=days)
+    records = load_recent_records(character_id=_active_character_id(actor_user_uuid), days=days)
     payload = []
     for record in records:
         payload.append(
@@ -245,10 +245,10 @@ async def search_short_term_memory(
     days: int = Query(default=30, ge=1, le=365),
     limit: int = Query(default=50, ge=1, le=200),
 ) -> dict:
-    _require_owner_memory_access(request)
+    actor_user_uuid = _require_owner_memory_access(request)
     ensure_short_term_schema()
     ensure_memory_knowledge_schema()
-    records = load_recent_records(days=days)
+    records = load_recent_records(character_id=_active_character_id(actor_user_uuid), days=days)
 
     normalized_query = _safe_lower(q)
     normalized_message_id = (message_id or "").strip()
@@ -366,7 +366,9 @@ async def list_full_history(
 @router.get("/diary")
 async def list_diary_entries(
     request: Request,
-    days: int = Query(default=30, ge=1, le=365),
+    limit: int = Query(default=30, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    include_hidden: bool = Query(default=False),
 ) -> dict:
     actor_user_uuid = _require_owner_memory_access(request)
     char_name = get_active_character_name(
@@ -374,12 +376,20 @@ async def list_diary_entries(
         default="default_waifu",
     )
     character = character_service.get_or_create_character(char_name)
-    entries = list_daily_activity_entries(character_id=character.id, days=days)
+    page = list_diary_page(
+        character_id=character.id,
+        limit=limit,
+        offset=offset,
+        include_hidden=include_hidden,
+    )
     return {
         "status": "ok",
-        "entries": [entry.to_dict() for entry in entries],
-        "total": len(entries),
-        "days": days,
+        "entries": [entry.to_dict() for entry in page["entries"]],
+        "total": page["total"],
+        "limit": limit,
+        "offset": offset,
+        "has_more": page["has_more"],
+        "include_hidden": include_hidden,
     }
 
 

@@ -1,7 +1,7 @@
 import { AfterViewInit, Component, DestroyRef, ElementRef, HostListener, OnDestroy, OnInit, ViewChild, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { UntypedFormControl } from '@angular/forms';
-import { Observable } from 'rxjs';
+import { Observable, of } from 'rxjs';
 import { finalize, map } from 'rxjs/operators';
 import { LibraryItem } from '../../core/models/library.model';
 import { Message, MessageCompliance, MessageKnowledgeSource, MessageMedia, MessageMediaCategory } from '../../core/models/message.model';
@@ -11,6 +11,7 @@ import { AuthService } from '../../core/services/auth.service';
 import { ConfigService } from '../../core/services/config.service';
 import { LibraryService } from '../../core/services/library.service';
 import { SynthesisService } from '../../core/services/synthesis.service';
+import { VoicePlaybackStateService, voiceToggleAction } from '../../core/services/voice-playback-state.service';
 import { VoiceModeResponse, VoiceService } from '../../core/services/voice.service';
 import { BufferedWebsocketMessage, WebsocketService } from '../../core/services/websocket.service';
 import { NotificationService } from '../../shared/components/notification/notification.service';
@@ -18,6 +19,7 @@ import { ChatComposerComponent, ComposerContextAttachment } from './components/c
 import {
     ChatMessageStoreService,
     ChatRunStoreService,
+    ChatSessionStateService,
     ChatWsEvent,
     RuntimeStageView,
     RuntimeState,
@@ -171,16 +173,66 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy {
     emojiPickerSide: 'left' | 'right' | 'top' | 'bottom' = 'right';
     readonly emojiPanelWidth = 360;
     readonly emojiPanelHeight = 360;
-    chatInput = new UntypedFormControl('');
+    // Work in progress and the unsent draft live in ChatSessionStateService:
+    // leaving the chat for another tab destroys this page, not them.
+    get chatInput(): UntypedFormControl {
+        return this.chatSession.draft;
+    }
+    get loading(): boolean {
+        return this.chatSession.generationActive;
+    }
+    set loading(value: boolean) {
+        this.chatSession.generationActive = value;
+    }
+    get activeGenerationRunId(): string | null {
+        return this.chatSession.activeGenerationRunId;
+    }
+    set activeGenerationRunId(value: string | null) {
+        this.chatSession.activeGenerationRunId = value;
+    }
+    get refreshHistoryAfterRunId(): string | null {
+        return this.chatSession.refreshHistoryAfterRunId;
+    }
+    set refreshHistoryAfterRunId(value: string | null) {
+        this.chatSession.refreshHistoryAfterRunId = value;
+    }
+    get illustratingMessageId(): string | null {
+        return this.chatSession.illustratingMessageId;
+    }
+    set illustratingMessageId(value: string | null) {
+        this.chatSession.illustratingMessageId = value;
+    }
+    get recording(): boolean {
+        return this.chatSession.recording;
+    }
+    set recording(value: boolean) {
+        this.chatSession.recording = value;
+    }
+    get isProcessingAttachments(): boolean {
+        return this.chatSession.processingAttachments;
+    }
+    set isProcessingAttachments(value: boolean) {
+        this.chatSession.processingAttachments = value;
+    }
+    get attachments(): MessageMedia[] {
+        return this.chatSession.attachments;
+    }
+    set attachments(value: MessageMedia[]) {
+        this.chatSession.attachments = value;
+    }
+    get contextAttachments(): ComposerContextAttachment[] {
+        return this.chatSession.contextAttachments;
+    }
+    set contextAttachments(value: ComposerContextAttachment[]) {
+        this.chatSession.contextAttachments = value;
+    }
+
     chatHistory: Message[] = [];
     readonly chatMessageViews = signal<ChatMessageViewModel[]>([]);
     historyLoaded = false;
-    loading = false;
     chatInputValue: string = '';
     userName: string = '';
     charName: string = '';
-    attachments: MessageMedia[] = [];
-    contextAttachments: ComposerContextAttachment[] = [];
     imageGenerationEnabled = false;
     codeInterpreterEnabled = false;
     webpageModalOpen = false;
@@ -191,7 +243,6 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy {
     private pendingLargeMessageText: string | null = null;
     private skipLargeMessagePromptOnce = false;
     selectedMedia: MessageMedia | null = null;
-    isProcessingAttachments = false;
     showAllChatSources = false;
     libraryPickerOpen = false;
     libraryPickerLoading = false;
@@ -200,14 +251,10 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy {
 
     config$: Observable<{ userName: string; charName: string } | null> | null = null;
 
-    recording = false;
     voiceModeEnabled = false;
     voiceModeLoading = false;
     activeDropdown: string | null = null;
     currentPlayingMessage: string | null = null;
-    activeGenerationRunId: string | null = null;
-    illustratingMessageId: string | null = null;
-    refreshHistoryAfterRunId: string | null = null;
     ttsEnabled = false;
     isComposerScrollable = false;
     editingMessageId: string | null = null;
@@ -215,7 +262,6 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy {
     private pendingRealtimeScroll = false;
     private shouldAutoScrollOnMessageFlush = false;
     private pendingHistoryPrependScroll: { scrollHeight: number; scrollTop: number } | null = null;
-    private playbackResetTimer: ReturnType<typeof setTimeout> | null = null;
     private readonly chatMessageViewCache = new Map<string, CachedChatMessageView>();
     private readonly expandedUserMessageIds = new Set<string>();
     activeUsageMessageId: string | null = null;
@@ -229,10 +275,12 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy {
         private libraryService: LibraryService,
         private synthesisService: SynthesisService,
         private voiceService: VoiceService,
+        private voicePlaybackState: VoicePlaybackStateService,
         private websocketService: WebsocketService,
         private notificationService: NotificationService,
         private chatRunStore: ChatRunStoreService,
-        private chatMessageStore: ChatMessageStoreService
+        private chatMessageStore: ChatMessageStoreService,
+        private chatSession: ChatSessionStateService
     ) { }
 
     ngOnInit(): void {
@@ -249,7 +297,19 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy {
         } else {
             this.loadHistory();
         }
-        this.fetchVoiceModeStatus();
+        // Voice belongs to the owner: a guest's chat has neither voice mode nor playback.
+        if (this.isOwner) {
+            this.fetchVoiceModeStatus();
+        }
+        // The voice button shows what the backend reports as sounding, not a guess.
+        this.voicePlaybackState.state$
+            .pipe(takeUntilDestroyed(this.destroyRef))
+            .subscribe((state) => {
+                this.currentPlayingMessage = state.stage === 'speaking' ? state.messageId : null;
+            });
+        if (this.isOwner) {
+            this.voicePlaybackState.refresh();
+        }
         this.chatMessageStore.messages$
             .pipe(takeUntilDestroyed(this.destroyRef))
             .subscribe((messages) => {
@@ -507,9 +567,6 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy {
                             patch.runtime = finalRuntime || this.ensureRuntime(event.run_id);
                         }
                         this.chatMessageStore.patchById(message.id, patch);
-                        if (!event.stopped && event.voice_playback_started === true && message.role === 'assistant' && message.id) {
-                            this.startPlaybackTracking(message.id, message.content);
-                        }
                     }
                     this.chatMessageStore.finishStreaming();
                     this.loading = false;
@@ -610,9 +667,8 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy {
     }
 
     ngOnDestroy(): void {
+        // Unsent attachments stay in ChatSessionStateService for when the chat is opened again.
         this.messagesContainerRef?.nativeElement.removeEventListener('wheel', this.onMessagesWheel);
-        this.stopPlaybackTracking();
-        this.resetAttachments();
     }
 
     // Wheel-up near the top reveals older messages / fetches the next page,
@@ -815,7 +871,19 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy {
             });
     }
 
+    /** Only the owner sees anything besides the chat. */
+    get isOwner(): boolean {
+        return this.authService.isOwner();
+    }
+
     getSettings(): void {
+        if (!this.isOwner) {
+            // The configuration is the owner's; a guest's chat needs only the names.
+            this.userName = this.authService.getCurrentUser()?.name || '';
+            this.charName = 'PAI';
+            this.config$ = of({ userName: this.userName, charName: this.charName });
+            return;
+        }
         this.config$ = this.configService.getConfig$().pipe(
             map((config: ProjectConfig | null) => {
                 if (!config) {
@@ -1219,36 +1287,27 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy {
     toggleVoice(msgId: string | null | undefined): void {
         if (!msgId) return;
 
-        if (this.currentPlayingMessage === msgId) {
+        // Only sends the command: the button follows the voice_state the backend reports.
+        const action = voiceToggleAction(this.voicePlaybackState.state, msgId);
+        if (action === 'stop') {
             this.voiceService.stopPlay$().subscribe({
-                next: () => {
-                    this.stopPlaybackTracking();
-                },
-                error: () => {
-                    this.stopPlaybackTracking();
-                },
+                error: (err) => console.error('[Voice] Stop failed', err),
+            });
+            return;
+        }
+
+        const playRequest = () => {
+            this.voiceService.playMessage(msgId).subscribe({
+                error: (err) => console.error('[Voice] Play failed', err),
+            });
+        };
+        if (action === 'switch') {
+            this.voiceService.stopPlay$().subscribe({
+                next: () => playRequest(),
+                error: () => playRequest(),
             });
         } else {
-            const playRequest = () => {
-                this.voiceService.playMessage(msgId).subscribe({
-                    next: () => {
-                        const msg = this.chatHistory.find((m) => m.id === msgId);
-                        this.startPlaybackTracking(msgId, msg?.content);
-                    },
-                    error: () => {
-                        this.stopPlaybackTracking();
-                    },
-                });
-            };
-
-            if (this.currentPlayingMessage) {
-                this.voiceService.stopPlay$().subscribe({
-                    next: () => playRequest(),
-                    error: () => playRequest(),
-                });
-            } else {
-                playRequest();
-            }
+            playRequest();
         }
     }
 
@@ -2349,41 +2408,6 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy {
         if (runtime && linkedMessage) {
             this.chatMessageStore.patchById(linkedMessage.id, { runtime });
         }
-    }
-
-    private startPlaybackTracking(messageId: string, text?: string): void {
-        this.currentPlayingMessage = messageId;
-
-        if (this.playbackResetTimer) {
-            clearTimeout(this.playbackResetTimer);
-            this.playbackResetTimer = null;
-        }
-
-        const timeoutMs = this.estimatePlaybackDurationMs(text);
-        this.playbackResetTimer = setTimeout(() => {
-            if (this.currentPlayingMessage === messageId) {
-                this.currentPlayingMessage = null;
-            }
-            this.playbackResetTimer = null;
-        }, timeoutMs);
-    }
-
-    private stopPlaybackTracking(): void {
-        this.currentPlayingMessage = null;
-        if (this.playbackResetTimer) {
-            clearTimeout(this.playbackResetTimer);
-            this.playbackResetTimer = null;
-        }
-    }
-
-    private estimatePlaybackDurationMs(text?: string): number {
-        const chars = (text || '').length;
-        if (chars <= 0) {
-            return 5000;
-        }
-        const charsPerSecond = 14; // conservative RU/EN TTS pace
-        const estimatedMs = Math.round((chars / charsPerSecond) * 1000) + 1200;
-        return Math.min(Math.max(estimatedMs, 3000), 120000);
     }
 
     private hydrateRuntimeFromHistory(raw: any): RuntimeState | undefined {

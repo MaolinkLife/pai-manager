@@ -32,6 +32,8 @@ export class ChatComposerComponent implements AfterViewInit {
     @Input() activeDropdown: string | null = null;
     @Input() recording = false;
     @Input() voiceModeEnabled = false;
+    /** Voice input and voice mode use the owner's microphone: shown to the owner only. */
+    @Input() ownerTools = true;
     @Input() voiceModeLoading = false;
     @Input() loading = false;
     @Input() activeGenerationRunId: string | null = null;

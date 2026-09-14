@@ -69,6 +69,51 @@ export class SystemSettingsComponent implements OnInit {
         private updateService: UpdateService,
     ) {
         this.systemForm = this.createForm();
+        this.passwordForm = this.fb.group({ currentPassword: [''], newPassword: [''], repeatPassword: [''] });
+    }
+
+    /** Password change: its own form and button, apart from the settings save. Owner only for now. */
+    passwordForm: UntypedFormGroup;
+    isOwner = false;
+    isPasswordBusy = false;
+
+    canChangePassword(): boolean {
+        const { currentPassword, newPassword, repeatPassword } = this.passwordForm.value;
+        return !this.isPasswordBusy
+            && !!currentPassword
+            && String(newPassword || '').length >= 8
+            && newPassword === repeatPassword;
+    }
+
+    passwordsDiffer(): boolean {
+        const { newPassword, repeatPassword } = this.passwordForm.value;
+        return !!repeatPassword && newPassword !== repeatPassword;
+    }
+
+    changePassword(): void {
+        if (!this.canChangePassword()) {
+            return;
+        }
+        const { currentPassword, newPassword } = this.passwordForm.value;
+        const title = this.localizationService.t('systemSettings.passwordTitle');
+        this.isPasswordBusy = true;
+        this.authService.changePassword$({ current_password: currentPassword, new_password: newPassword })
+            .pipe(finalize(() => {
+                this.isPasswordBusy = false;
+            }))
+            .subscribe({
+                next: () => {
+                    this.passwordForm.reset({ currentPassword: '', newPassword: '', repeatPassword: '' });
+                    this.uiNotificationService.success(this.localizationService.t('systemSettings.passwordChanged'), title);
+                },
+                error: (error) => {
+                    const detail = error?.error?.detail;
+                    this.uiNotificationService.error(
+                        typeof detail === 'string' && detail ? detail : this.localizationService.t('systemSettings.passwordChangeFailed'),
+                        title,
+                    );
+                },
+            });
     }
 
     ngOnInit(): void {
@@ -83,6 +128,7 @@ export class SystemSettingsComponent implements OnInit {
 
     private loadUserLanguage(): void {
         this.authService.me$().subscribe((user) => {
+            this.isOwner = user?.role === 'owner';
             const lang = user?.settings?.language || 'en-US';
             this.originalUserLanguage = lang;
             this.systemForm.get('userLanguage')?.setValue(lang, { emitEvent: false });
@@ -749,7 +795,7 @@ export class SystemSettingsComponent implements OnInit {
         this.tunnelService.getStatus$().subscribe({
             next: (status) => {
                 this.tunnelStatus = status;
-                this.syncTunnelPublicUrl(status.public_url || '');
+                this.syncTunnelFromStatus(status);
                 this.isTunnelBusy = false;
             },
             error: (error) => {
@@ -761,20 +807,19 @@ export class SystemSettingsComponent implements OnInit {
 
     startTunnel(): void {
         const cfg = this.systemForm.get('connector.tunneling')?.value || {};
+        // The local address comes from config/port-config.json and the public one
+        // from the tunnel itself: neither is the form's to send.
         const overrides = {
             enabled: !!cfg.enabled,
             provider: cfg.provider || 'cloudflared',
-            local_url: cfg.localUrl || 'http://127.0.0.1:3880',
-            local_port: Number(cfg.localPort) || 3880,
             command_path: cfg.commandPath || '',
-            public_url: cfg.publicUrl || '',
         };
 
         this.isTunnelBusy = true;
         this.tunnelService.start$(overrides).subscribe({
             next: (status) => {
                 this.tunnelStatus = status;
-                this.syncTunnelPublicUrl(status.public_url || '');
+                this.syncTunnelFromStatus(status);
                 this.isTunnelBusy = false;
                 if (status.last_error && !status.running) {
                     this.uiNotificationService.error(status.last_error, 'Tunnel');
@@ -799,7 +844,7 @@ export class SystemSettingsComponent implements OnInit {
         this.tunnelService.stop$().subscribe({
             next: (status) => {
                 this.tunnelStatus = status;
-                this.syncTunnelPublicUrl(status.public_url || '');
+                this.syncTunnelFromStatus(status);
                 this.isTunnelBusy = false;
                 this.uiNotificationService.success('Tunnel stopped', 'Tunnel');
             },
@@ -809,6 +854,49 @@ export class SystemSettingsComponent implements OnInit {
                 this.uiNotificationService.error('Failed to stop tunnel', 'Tunnel');
             },
         });
+    }
+
+    copyTunnelLink(): void {
+        const url = this.tunnelStatus?.public_url || '';
+        if (!url) {
+            return;
+        }
+        const copied = () => this.uiNotificationService.success(url, 'Link copied');
+        const failed = () => this.uiNotificationService.error('Could not copy the link', 'Tunnel');
+        const copyWithTextarea = () => {
+            const field = document.createElement('textarea');
+            field.value = url;
+            field.setAttribute('readonly', '');
+            field.style.position = 'fixed';
+            field.style.opacity = '0';
+            document.body.appendChild(field);
+            field.select();
+            const ok = document.execCommand('copy');
+            document.body.removeChild(field);
+            if (ok) {
+                copied();
+            } else {
+                failed();
+            }
+        };
+        if (navigator.clipboard?.writeText) {
+            navigator.clipboard.writeText(url).then(copied, copyWithTextarea);
+        } else {
+            copyWithTextarea();
+        }
+    }
+
+    private syncTunnelFromStatus(status: TunnelStatus): void {
+        this.syncTunnelPublicUrl(status.public_url || '');
+        const config = status.config;
+        if (!config) {
+            return;
+        }
+        const local = { localUrl: config.local_url, localPort: config.local_port };
+        this.systemForm.get('connector.tunneling')?.patchValue(local, { emitEvent: false });
+        if (this.originalConfig?.connector?.tunneling) {
+            Object.assign(this.originalConfig.connector.tunneling, local);
+        }
     }
 
     private syncTunnelPublicUrl(url: string): void {

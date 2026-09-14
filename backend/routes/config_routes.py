@@ -11,9 +11,9 @@ import ast
 import asyncio
 
 from fastapi import APIRouter, HTTPException, Request, status
+from core.interaction import resolve_interaction_policy
 from modules.system.character import (
     create_character_record,
-    delete_character_record,
     get_active_character_for_user,
     get_character_prompt,
     import_character_yaml_text,
@@ -24,6 +24,12 @@ from modules.system.character import (
 )
 from modules.system import auth as auth_service
 from modules.system import service as system_service
+from modules.system.character_archive import (
+    CharacterArchiveError,
+    CharacterDeletionBlocked,
+    delete_character,
+    deletion_preview,
+)
 
 router = APIRouter(prefix="/api/config", tags=["Config"])
 
@@ -67,6 +73,17 @@ def _require_user_uuid(request: Request) -> str:
     return user_uuid
 
 
+def _require_owner_uuid(request: Request) -> str:
+    """System actions are the owner's alone."""
+    user_uuid = _require_user_uuid(request)
+    if resolve_interaction_policy(user_uuid).actor_role != "owner":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the owner can do this",
+        )
+    return user_uuid
+
+
 def _config_error_detail(error: ValueError) -> str:
     message = str(error)
     prefix = "Config validation failed: "
@@ -85,8 +102,11 @@ def _config_error_detail(error: ValueError) -> str:
 async def _apply_module_switches() -> None:
     # A social module switched off in settings must stop right away, not on next launch.
     from modules.telegram.runtime import sync_telegram_bridge_with_config
+    from modules.vision.service import sync_screen_capture_with_config
 
     await asyncio.to_thread(sync_telegram_bridge_with_config)
+    # Background screen capture switched off stops right away as well.
+    await asyncio.to_thread(sync_screen_capture_with_config)
 
 
 # Returns the entire config
@@ -158,6 +178,17 @@ async def apply_preset(request: Request):
         return {"status": "ok", "message": f"Preset '{preset_name}' applied."}
     else:
         return {"status": "error", "message": "Preset not found"}
+
+
+@router.get("/defaults")
+def get_default_config():
+    """The built-in settings: "reset to default" on a settings field takes its value from here."""
+    import copy
+
+    from constants.default_config import DEFAULT_CONFIG
+    from modules.system.config import normalize_config_structure
+
+    return normalize_config_structure(copy.deepcopy(DEFAULT_CONFIG))
 
 
 @router.get("/system")
@@ -266,17 +297,33 @@ async def create_system_character(request: Request):
     }
 
 
-@router.delete("/system/characters/{character_id}")
-def delete_system_character(character_id: str, request: Request):
-    user_uuid = _require_user_uuid(request)
-    active_before = get_active_character_for_user(user_uuid)
-
+@router.get("/system/characters/{character_id}/deletion-preview")
+def get_character_deletion_preview(character_id: str, request: Request):
+    _require_owner_uuid(request)
     try:
-        deleted = delete_character_record(character_id=character_id, user_uuid=user_uuid)
+        return {"status": "ok", **deletion_preview(character_id)}
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.delete("/system/characters/{character_id}")
+def delete_system_character(character_id: str, request: Request):
+    user_uuid = _require_owner_uuid(request)
+    active_before = get_active_character_for_user(user_uuid)
+
+    # A character with data goes into a checked archive before its rows leave the
+    # database; see modules/system/character_archive.py.
+    try:
+        deleted = delete_character(character_id, user_uuid=user_uuid)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except CharacterDeletionBlocked as exc:
+        raise HTTPException(status_code=409, detail=exc.message) from exc
+    except CharacterArchiveError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"The character archive failed, nothing was deleted: {exc}",
+        ) from exc
 
     active = get_active_character_for_user(user_uuid)
     if not active and (active_before or {}).get("id") == deleted.get("id"):
@@ -286,7 +333,9 @@ def delete_system_character(character_id: str, request: Request):
 
     return {
         "status": "ok",
-        "deleted": deleted,
+        "deleted": {"id": deleted.get("id"), "name": deleted.get("name")},
+        "counts": deleted.get("counts"),
+        "archive": deleted.get("archive"),
         "active_character_id": (active or {}).get("id"),
         "active_char_name": (active or {}).get("name"),
         "characters": list_characters(sync_from_yaml=True),

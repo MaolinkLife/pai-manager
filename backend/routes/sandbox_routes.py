@@ -77,7 +77,6 @@ class SandboxImagePipelineRequest(SandboxPipelineRequest):
     sampler: str | None = None
     scheduler: str | None = "euler"
     comfyui_checkpoint: str | None = None
-    use_unified_router: bool | None = None
     use_prompt_builder: bool = True
     image_prompt_policy: str = ""
     image_style_prompt: str = ""
@@ -385,6 +384,7 @@ async def run_image_pipeline(payload: SandboxImagePipelineRequest):
         result = await media_generation_pipeline.run_image(
             MediaPipelineRequest(
                 mode="sandbox_forced",
+                manual_prompt=True,
                 prompt=payload.user_prompt,
                 scenario_key="sandbox",
                 negative_prompt=payload.image_negative_prompt,
@@ -402,7 +402,6 @@ async def run_image_pipeline(payload: SandboxImagePipelineRequest):
                 sampler=payload.sampler,
                 scheduler=payload.scheduler,
                 comfyui_checkpoint=payload.comfyui_checkpoint,
-                use_unified_router=payload.use_unified_router,
                 use_prompt_builder=bool(payload.use_prompt_builder),
                 prompt_policy=payload.image_prompt_policy,
                 style_prompt=payload.image_style_prompt,

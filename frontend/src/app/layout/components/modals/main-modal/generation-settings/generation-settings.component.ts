@@ -1,7 +1,8 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { UntypedFormBuilder, UntypedFormGroup } from '@angular/forms';
 import { ConfigService } from '../../../../../core/services/config.service';
-import { ApiService } from '../../../../../core/services/api.service';
+import { ApiService, ModelIndexEntry } from '../../../../../core/services/api.service';
+import { buildModelOptions, modelOptionLabels } from '../../../../../core/utils/model-options';
 import { GenerationPreset } from '../../../../../core/models/generation-preset.model';
 import { combineLatest, BehaviorSubject, Subject } from 'rxjs';
 import { LocalizationService } from '../../../../../shared/pipes/translation/localization.service';
@@ -53,15 +54,14 @@ export class GenerationSettingsComponent implements OnInit, OnDestroy {
     originalConfig: any;
     presets: GenerationPreset[] = [];
     selectedPresetName: string = 'default';
-    availableModels: string[] = [];
+    availableModels: UiSelectOption<string>[] = [];
     dropdownOpen: boolean = false;
     selectedModel = '';
     isLoading$ = new BehaviorSubject<boolean>(true);
     providerKeys: string[] = [];
     apiTypeOptions: string[] = [];
-    visualModelDropdownOpen = false;
-    visualModelManualOptions: string[] = [];
-    private ollamaModels: string[] = [];
+    /** Text models come from the model index. */
+    private modelIndex: ModelIndexEntry[] | null = null;
     private destroy$ = new Subject<void>();
     private readonly tokenLimitMin = 512;
     private readonly tokenLimitMax = 131072;
@@ -101,8 +101,6 @@ export class GenerationSettingsComponent implements OnInit, OnDestroy {
             apiType: ['Ollama'],
             activeProvider: ['ollama'],
             fallbackOrder: [''],
-            visualModel: ['apple/FastVLM-1.5B'],
-            visualModelOptions: [[]],
             tokenLimit: [2048],
             messagePairLimit: [4],
             streaming: [true],
@@ -129,7 +127,7 @@ export class GenerationSettingsComponent implements OnInit, OnDestroy {
         combineLatest([
             this.configService.getConfig$(),
             this.configService.getGenerationPresets$(),
-            this.apiService.getOllamaModels$()
+            this.apiService.getModelIndex$()
         ]).pipe(
             tap(() => this.isLoading$.next(true)),
             finalize(() => this.isLoading$.next(false))
@@ -149,13 +147,7 @@ export class GenerationSettingsComponent implements OnInit, OnDestroy {
                     1,
                     50
                 );
-                const visualModel = String(config.api?.visualModel || '').trim();
-                const visualModelOptions = this.mergeUniqueStrings([
-                    ...this.normalizeStringList(config.api?.visualModelOptions),
-                    visualModel,
-                ]);
                 if (this.originalConfig?.api) {
-                    this.originalConfig.api.visualModelOptions = visualModelOptions;
                     this.originalConfig.api.tokenLimit = tokenLimit;
                 }
 
@@ -165,13 +157,10 @@ export class GenerationSettingsComponent implements OnInit, OnDestroy {
                     fallbackOrder: this.stringifyFallbackOrder(
                         config.api.fallbackOrder || []
                     ),
-                    visualModel,
-                    visualModelOptions,
                     tokenLimit,
                     messagePairLimit,
                     streaming: config.api?.streaming !== false,
                 }, { emitEvent: false });
-                this.visualModelManualOptions = visualModelOptions;
 
                 this.apiTypeOptions = Array.from(
                     new Set([
@@ -196,7 +185,7 @@ export class GenerationSettingsComponent implements OnInit, OnDestroy {
             this.selectedPresetName = currentPresetName || activePreset?.name || this.selectedPresetName;
 
             // Load models
-            this.ollamaModels = (models || []).filter(Boolean);
+            this.modelIndex = models;
             const activeProvider = this.generationForm.get('activeProvider')?.value;
             this.updateAvailableModels(activeProvider);
         });
@@ -278,11 +267,12 @@ export class GenerationSettingsComponent implements OnInit, OnDestroy {
         const normalizedProvider = this.normalizeProviderKey(provider);
         if (normalizedProvider === 'ollama') {
             const currentModel = this.getProviderModel(normalizedProvider);
-            this.availableModels = Array.from(
-                new Set([
-                    ...(currentModel ? [currentModel] : []),
-                    ...(this.ollamaModels || []),
-                ])
+            this.availableModels = buildModelOptions(
+                this.modelIndex,
+                'completion',
+                currentModel,
+                modelOptionLabels((key) => this.localizationService.t(key), 'completion'),
+                { placeholderWhenEmpty: false },
             );
         } else {
             this.availableModels = [];
@@ -319,46 +309,6 @@ export class GenerationSettingsComponent implements OnInit, OnDestroy {
     onTokenLimitInputCommit(): void {
         const control = this.generationForm.get('tokenLimit');
         control?.setValue(this.tokenLimitValue);
-    }
-
-    openVisualModelDropdown(): void {
-        this.visualModelDropdownOpen = true;
-    }
-
-    closeVisualModelDropdown(): void {
-        window.setTimeout(() => {
-            this.visualModelDropdownOpen = false;
-        }, 120);
-    }
-
-    selectVisualModel(model: string): void {
-        const value = String(model || '').trim();
-        if (!value) {
-            return;
-        }
-        this.generationForm.get('visualModel')?.setValue(value);
-        this.visualModelDropdownOpen = false;
-    }
-
-    addCurrentVisualModelOption(): void {
-        const value = String(this.generationForm.get('visualModel')?.value || '').trim();
-        if (!value) {
-            return;
-        }
-        const next = this.mergeUniqueStrings([...this.visualModelManualOptions, value]);
-        this.visualModelManualOptions = next;
-        this.generationForm.get('visualModelOptions')?.setValue(next);
-        this.generationForm.get('visualModelOptions')?.markAsDirty();
-    }
-
-    removeVisualModelOption(model: string, event?: MouseEvent): void {
-        event?.preventDefault();
-        event?.stopPropagation();
-        const value = String(model || '').trim();
-        const next = this.visualModelManualOptions.filter((item) => item !== value);
-        this.visualModelManualOptions = next;
-        this.generationForm.get('visualModelOptions')?.setValue(next);
-        this.generationForm.get('visualModelOptions')?.markAsDirty();
     }
 
     toggleDropdown() {
@@ -488,8 +438,6 @@ export class GenerationSettingsComponent implements OnInit, OnDestroy {
         return {
             type: values.apiType,
             streaming: values.streaming,
-            visualModel: values.visualModel,
-            visualModelOptions: this.normalizeStringList(values.visualModelOptions),
             tokenLimit: this.normalizeNumberInRange(values.tokenLimit, 2048, this.tokenLimitMin, this.tokenLimitMax),
             messagePairLimit: values.messagePairLimit,
             activeProvider,
@@ -616,21 +564,6 @@ export class GenerationSettingsComponent implements OnInit, OnDestroy {
         return 2048;
     }
 
-    private normalizeStringList(value: any): string[] {
-        if (!Array.isArray(value)) {
-            return [];
-        }
-        return this.mergeUniqueStrings(value);
-    }
-
-    private mergeUniqueStrings(values: any[]): string[] {
-        return Array.from(new Set(
-            (values || [])
-                .map((item) => String(item || '').trim())
-                .filter(Boolean)
-        ));
-    }
-
     get apiTypeSelectOptions(): UiSelectOption[] {
         return (this.apiTypeOptions || []).map(option => ({
             value: option,
@@ -652,13 +585,6 @@ export class GenerationSettingsComponent implements OnInit, OnDestroy {
         }));
     }
 
-    get visualModelOptions(): UiSelectOption[] {
-        return (this.ollamaModels || []).map((model) => ({
-            value: model,
-            label: model,
-        }));
-    }
-
     get isOllamaActiveProvider(): boolean {
         return this.normalizeProviderKey(this.generationForm.get('activeProvider')?.value) === 'ollama';
     }
@@ -670,14 +596,6 @@ export class GenerationSettingsComponent implements OnInit, OnDestroy {
             this.tokenLimitMin,
             this.tokenLimitMax
         );
-    }
-
-    get visualModelOllamaOptions(): string[] {
-        return this.mergeUniqueStrings(this.ollamaModels);
-    }
-
-    get hasVisualModelDropdownItems(): boolean {
-        return this.visualModelManualOptions.length > 0 || this.isOllamaActiveProvider;
     }
 
     trackByProviderField(_index: number, field: { key: string }): string {

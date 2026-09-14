@@ -55,6 +55,17 @@
                     <label>{{ "complianceSettings.validatorOutputLimit" | translate }}</label>
                     <app-ui-input type="number" min="0" max="100000" formControlName="outputCharLimit"></app-ui-input>
                 </div>
+
+                <div class="form-group">
+                    <label for="validator-system-prompt">{{ "complianceSettings.validatorPrompt" | translate }}</label>
+                    <app-ui-textarea id="validator-system-prompt" [rows]="8" [autoResize]="true" formControlName="systemPrompt"></app-ui-textarea>
+                    <div class="prompt-actions">
+                        <p class="hint">{{ "complianceSettings.jsonPromptHint" | translate }}</p>
+                        <button type="button" class="reset-button" (click)="resetPrompt('validator.systemPrompt', 'validator.system_prompt')">
+                            {{ "complianceSettings.resetPrompt" | translate }}
+                        </button>
+                    </div>
+                </div>
             </div>
 
             <div class="section" formGroupName="languageGuard">
@@ -114,6 +125,17 @@
                 <div class="form-group">
                     <label>{{ "complianceSettings.confidenceOutputLimit" | translate }}</label>
                     <app-ui-input type="number" min="0" max="100000" formControlName="outputCharLimit"></app-ui-input>
+                </div>
+
+                <div class="form-group">
+                    <label for="confidence-system-prompt">{{ "complianceSettings.confidencePrompt" | translate }}</label>
+                    <app-ui-textarea id="confidence-system-prompt" [rows]="8" [autoResize]="true" formControlName="systemPrompt"></app-ui-textarea>
+                    <div class="prompt-actions">
+                        <p class="hint">{{ "complianceSettings.jsonPromptHint" | translate }}</p>
+                        <button type="button" class="reset-button" (click)="resetPrompt('confidence.systemPrompt', 'confidence.system_prompt')">
+                            {{ "complianceSettings.resetPrompt" | translate }}
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -196,6 +218,17 @@
                 <div class="form-group">
                     <label>{{ "complianceSettings.swLlmTemperature" | translate }}</label>
                     <app-ui-input type="number" step="0.1" min="0" max="2" formControlName="llmTemperature"></app-ui-input>
+                </div>
+
+                <div class="form-group">
+                    <label for="self-watcher-reflection-prompt">{{ "complianceSettings.swReflectionPrompt" | translate }}</label>
+                    <app-ui-textarea id="self-watcher-reflection-prompt" [rows]="8" [autoResize]="true" formControlName="reflectionPrompt"></app-ui-textarea>
+                    <div class="prompt-actions">
+                        <p class="hint">{{ "complianceSettings.swReflectionPromptHint" | translate }}</p>
+                        <button type="button" class="reset-button" (click)="resetPrompt('selfWatcher.reflectionPrompt', 'self_watcher.reflection_prompt')">
+                            {{ "complianceSettings.resetPrompt" | translate }}
+                        </button>
+                    </div>
                 </div>
             </div>
 

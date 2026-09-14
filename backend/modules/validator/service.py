@@ -150,6 +150,7 @@ def validate_output(
     try:
         # Lazy imports — avoid pulling generative module at validator import time.
         from constants.prompts import VALIDATOR_COMPLIANCE_PROMPT
+        from modules.system.technical_prompts import configured_prompt
         from modules.generative.manager import (
             NoProviderResolved,
             generation_manager,
@@ -176,7 +177,10 @@ def validate_output(
         result = generation_manager.generate(
             GenerateRequest(
                 messages=[
-                    {"role": "system", "content": VALIDATOR_COMPLIANCE_PROMPT},
+                    {
+                        "role": "system",
+                        "content": configured_prompt("validator.system_prompt", VALIDATOR_COMPLIANCE_PROMPT),
+                    },
                     {"role": "user", "content": user_payload},
                 ],
                 options={

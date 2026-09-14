@@ -33,6 +33,8 @@ export class ChatMessageComponent {
     @Input() loading = false;
     @Input() activeGenerationRunId: string | null = null;
     @Input() currentPlayingMessage: string | null = null;
+    /** Voice and illustration run on the owner's machine: shown to the owner only. */
+    @Input() ownerTools = true;
     @Input() isLatestUserMessage = false;
     @Input() isLatestAssistantMessage = false;
     @Input() canContinue = false;

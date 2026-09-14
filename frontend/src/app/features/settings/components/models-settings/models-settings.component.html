@@ -174,6 +174,19 @@
                         <ng-container *ngIf="model.size_vram"> ({{ formatSize(model.size_vram) }} VRAM)</ng-container>
                     </ng-container>
                 </span>
+                <div class="model-capabilities" *ngIf="indexByName[model.name] as entry">
+                    <app-model-capability-chips [entry]="entry"></app-model-capability-chips>
+                    <span class="capability-differs" *ngIf="entry.differs" [attr.title]="differenceHint(entry)">⚠</span>
+                    <button
+                        type="button"
+                        class="capability-edit"
+                        [attr.title]="t('settingsPage.models.capabilitiesEdit')"
+                        [attr.aria-label]="t('settingsPage.models.capabilitiesEdit')"
+                        (click)="openCapabilities(model.name)"
+                    >
+                        <app-custom-svg name="edit" [size]="14"></app-custom-svg>
+                    </button>
+                </div>
             </div>
             <div class="model-actions">
                 <button

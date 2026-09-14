@@ -11,8 +11,25 @@ from constants.settings import (
 )
 from constants.prompts import (
     COGNITIVE_ANALYSIS_PROMPT,
+    IMAGE_SCENE_FORMAT_PROMPT,
     INSTRUCTOR_BUILD_SCHEMA_PROMPT,
     MORAL_MATRIX_PROVIDER_PROMPT,
+    SYNTHESIS_IMAGE_CHECK_DESCRIBE_PROMPT,
+    SYNTHESIS_IMAGE_CHECK_SYSTEM_PROMPT,
+    SYNTHESIS_IMAGE_CHECK_USER_TEMPLATE,
+    CONFIDENCE_ESTIMATION_PROMPT,
+    SELF_WATCHER_REFLECTION_PROMPT,
+    VALIDATOR_COMPLIANCE_PROMPT,
+    DAILY_ACTIVITY_DIARY_SYSTEM_PROMPT,
+    DAILY_ACTIVITY_DIARY_USER_PROMPT_TEMPLATE,
+    MEMORY_JUDGE_CONTRADICTION_PROMPT,
+    SHORT_TERM_DAILY_SUMMARY_SYSTEM_PROMPT,
+    SHORT_TERM_DAILY_SUMMARY_TASK_PROMPT,
+    MORAL_INNER_VOICE_PROMPT,
+    DECISION_LAYER_ORCHESTRATOR_PROMPT,
+    VISION_ATTACHMENT_PROMPT,
+    VISION_GENERATED_IMAGE_PROMPT,
+    VISION_SCREEN_PROMPT,
 )
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
@@ -80,6 +97,7 @@ class ValidatorConfig(BaseModel):
     temperature: float = 0.0
     instruction_char_limit: int = 4000
     output_char_limit: int = 4000
+    system_prompt: str = VALIDATOR_COMPLIANCE_PROMPT
 
 
 class LanguageGuardConfig(BaseModel):
@@ -103,6 +121,7 @@ class ConfidenceConfig(BaseModel):
     temperature: float = 0.0
     user_char_limit: int = 2000
     output_char_limit: int = 4000
+    system_prompt: str = CONFIDENCE_ESTIMATION_PROMPT
 
 
 class FactualityConfig(BaseModel):
@@ -129,6 +148,7 @@ class SelfWatcherConfig(BaseModel):
     max_events_in_cluster: int = 20
     llm_max_tokens: int = 220
     llm_temperature: float = 0.5
+    reflection_prompt: str = SELF_WATCHER_REFLECTION_PROMPT
 
 
 class AutoRerollConfig(BaseModel):
@@ -159,6 +179,8 @@ class InitiativeSelfieConfig(BaseModel):
 
 
 class InitiativeConfig(BaseModel):
+    # Global switch: off → PAI writes first nowhere, channels included.
+    enabled: bool = False
     # Chat initiative (блок C): PAI пишет первой + опциональное селфи.
     chat: InitiativeChatConfig = InitiativeChatConfig()
     selfie: InitiativeSelfieConfig = InitiativeSelfieConfig()
@@ -172,12 +194,6 @@ class DocumentsConfig(BaseModel):
     top_k: int = 4
     min_similarity: float = 0.35
     max_context_chars: int = 2400
-
-
-class DecisionLayerCapabilitiesConfig(BaseModel):
-    tool: bool = False
-    vision: bool = False
-    thinking: bool = False
 
 
 class DecisionLayerProviderOllamaConfig(BaseModel):
@@ -203,9 +219,9 @@ class DecisionLayerConfig(BaseModel):
     active_provider: str = "ollama"
     max_steps: int = 4
     release_after_use: bool = True
-    capabilities: DecisionLayerCapabilitiesConfig = DecisionLayerCapabilitiesConfig()
     providers: DecisionLayerProvidersConfig = DecisionLayerProvidersConfig()
     instructor: DecisionLayerInstructorConfig = DecisionLayerInstructorConfig()
+    orchestrator_prompt: str = DECISION_LAYER_ORCHESTRATOR_PROMPT
 
 
 class ConnectorTunnelingConfig(BaseModel):
@@ -339,17 +355,21 @@ class AudioConfig(BaseModel):
 
 
 class VisionModulesAppleVisionConfig(BaseModel):
-    model_id: str = "apple/FastVLM-1.5B"
+    model_id: str = ""
     max_tokens: int = 128
 
 
 class VisionModulesLlavaConfig(BaseModel):
-    model_id: str = "llava-hf/llava-1.5-7b-hf"
+    model_id: str = ""
     max_tokens: int = 128
 
 
 class VisionConfig(BaseModel):
     enabled: bool = True
+    screen_capture_enabled: bool = False
+    attachment_prompt: str = VISION_ATTACHMENT_PROMPT
+    generated_image_prompt: str = VISION_GENERATED_IMAGE_PROMPT
+    screen_prompt: str = VISION_SCREEN_PROMPT
     active_provider: str = "apple_vision"
     monitor_index: int = 0
     fps: int = 5
@@ -366,13 +386,11 @@ class VisionConfig(BaseModel):
     debug_save: bool = False
     debug_path: str = "temp/vision"
     vision_modules: Dict[str, Any] = {
-        "apple_vision": {"model_id": "apple/FastVLM-1.5B", "max_tokens": 128},
-        "llava": {"model_id": "llava-hf/llava-1.5-7b-hf", "max_tokens": 128},
+        "apple_vision": {"model_id": "", "max_tokens": 128},
+        "llava": {"model_id": "", "max_tokens": 128},
         "ollama_vision": {
-            "model": "llava:latest",
+            "model": "",
             "max_tokens": 512,
-            "probe_enabled": True,
-            "probe_cache_seconds": 300,
             "image_format": "PNG",
             "keep_alive": "5m",
         },
@@ -569,6 +587,7 @@ class MoralInnerVoiceConfig(BaseModel):
     max_tokens: int = 80
     temperature: float = 0.7
     language: str = ""  # blank → falls back to system.language
+    system_prompt: str = MORAL_INNER_VOICE_PROMPT
 
 
 class MoralScarTriggerConfig(BaseModel):
@@ -607,6 +626,8 @@ class MoralForgivenessConfig(BaseModel):
             "resentment",
             "frustration",
             "anger",
+            "hurt",
+            "disgust",
             "longing",
             "fear",
             "shame",
@@ -638,6 +659,7 @@ class MemoryConsolidationJudgeConfig(BaseModel):
     temperature: float = 0.0
     max_tokens: int = 512
     request_timeout: int = 60
+    system_prompt: str = MEMORY_JUDGE_CONTRADICTION_PROMPT
 
 
 class MemoryConsolidationConfig(BaseModel):
@@ -665,6 +687,14 @@ class MemoryDiaryContextConfig(BaseModel):
 class MemoryDiaryConfig(BaseModel):
     narrative: MemoryDiaryNarrativeConfig = MemoryDiaryNarrativeConfig()
     context: MemoryDiaryContextConfig = MemoryDiaryContextConfig()
+    system_prompt: str = DAILY_ACTIVITY_DIARY_SYSTEM_PROMPT
+    user_template: str = DAILY_ACTIVITY_DIARY_USER_PROMPT_TEMPLATE
+
+
+class MemoryShortTermConfig(BaseModel):
+    startup_refresh_enabled: bool = False
+    summary_system_prompt: str = SHORT_TERM_DAILY_SUMMARY_SYSTEM_PROMPT
+    summary_task_prompt: str = SHORT_TERM_DAILY_SUMMARY_TASK_PROMPT
 
 
 class MemoryConfig(BaseModel):
@@ -677,6 +707,7 @@ class MemoryConfig(BaseModel):
     embedding_provider: str = "auto"
     embedding_model: str = "nomic-embed-text"
     consolidation: MemoryConsolidationConfig = MemoryConsolidationConfig()
+    short_term: MemoryShortTermConfig = MemoryShortTermConfig()
     diary: MemoryDiaryConfig = MemoryDiaryConfig()
 
 
@@ -727,11 +758,27 @@ class SynthesisDiffusersConfig(BaseModel):
     gguf_base_repos: dict = Field(default_factory=dict)
 
 
+class SynthesisImageCheckGateConfig(BaseModel):
+    enabled: bool = False
+    threshold: float = 0.6
+    reroll: bool = False
+
+
+class SynthesisImageCheckConfig(BaseModel):
+    relevance: SynthesisImageCheckGateConfig = SynthesisImageCheckGateConfig(enabled=True, threshold=0.6)
+    quality: SynthesisImageCheckGateConfig = SynthesisImageCheckGateConfig(enabled=False, threshold=0.82)
+    max_generations: int = 2
+    describe_prompt: str = SYNTHESIS_IMAGE_CHECK_DESCRIBE_PROMPT
+    system_prompt: str = SYNTHESIS_IMAGE_CHECK_SYSTEM_PROMPT
+    user_template: str = SYNTHESIS_IMAGE_CHECK_USER_TEMPLATE
+
+
+class SynthesisImageSceneConfig(BaseModel):
+    format_prompt: str = IMAGE_SCENE_FORMAT_PROMPT
+
+
 class SynthesisPromptingConfig(BaseModel):
     enabled: bool = True
-    max_attempts: int = 3
-    assess_enabled: bool = True
-    quality_threshold: float = 0.72
     appearance_prompt: str = ""
     default_negative_prompt: str = "(text:2), (signature:2), raw photo"
     visual_profile: dict = Field(
@@ -768,6 +815,8 @@ class SynthesisConfig(BaseModel):
     sd_webui: SynthesisSdWebUIConfig = SynthesisSdWebUIConfig()
     comfyui: SynthesisComfyUIConfig = SynthesisComfyUIConfig()
     diffusers: SynthesisDiffusersConfig = SynthesisDiffusersConfig()
+    image_check: SynthesisImageCheckConfig = SynthesisImageCheckConfig()
+    image_scene: SynthesisImageSceneConfig = SynthesisImageSceneConfig()
     prompting: SynthesisPromptingConfig = SynthesisPromptingConfig()
 
 
@@ -1048,8 +1097,6 @@ class APIConfig(BaseModel):
     type: str = "Ollama"
     streaming: bool = True
     model: str = "llama3.2"
-    visual_model: str = "apple/FastVLM-1.5B"
-    visual_model_options: List[str] = Field(default_factory=lambda: ["apple/FastVLM-1.5B"])
     token_limit: int = 4096
     message_pair_limit: int = 4
     active_provider: str = "ollama"

@@ -1,6 +1,8 @@
 import { CommonModule } from '@angular/common';
 import { NgModule } from '@angular/core';
+import { RouterModule } from '@angular/router';
 import { SharedModule } from '../../../../shared/shared.module';
+import { ModelCapabilityChipsComponent } from './shared/model-capability-chips/model-capability-chips.component';
 
 import { LorebookComponent } from './lorebook/lorebook.component';
 import { VoiceSettingsComponent } from './voice-settings/voice-settings.component';
@@ -16,6 +18,7 @@ import { SocialSettingsComponent } from './social-settings/social-settings.compo
 import { MediaSettingsComponent } from './media-settings/media-settings.component';
 import { PersonaSettingsComponent } from './persona-settings/persona-settings.component';
 import { ComplianceSettingsComponent } from './compliance-settings/compliance-settings.component';
+import { InitiativeSettingsComponent } from './initiative-settings/initiative-settings.component';
 
 const SETTINGS_COMPONENTS = [
     LorebookComponent,
@@ -32,6 +35,8 @@ const SETTINGS_COMPONENTS = [
     MediaSettingsComponent,
     PersonaSettingsComponent,
     ComplianceSettingsComponent,
+    InitiativeSettingsComponent,
+    ModelCapabilityChipsComponent,
 ];
 
 /**
@@ -41,7 +46,7 @@ const SETTINGS_COMPONENTS = [
  */
 @NgModule({
     declarations: SETTINGS_COMPONENTS,
-    imports: [CommonModule, SharedModule],
+    imports: [CommonModule, SharedModule, RouterModule],
     exports: SETTINGS_COMPONENTS,
 })
 export class SettingsComponentsModule {}

@@ -16,6 +16,7 @@ from modules.database.core import engine, SessionLocal
 from modules.system.logger import AuditStatus, log_audit_entry
 from modules.system.localization import get_text
 from modules.system import config as config_service
+from modules.system.technical_prompts import configured_prompt
 
 from modules.generative.manager import generation_manager, NoProviderResolved
 from modules.generative.types import GenerateRequest
@@ -53,6 +54,7 @@ def _get_primary_vector_profile() -> dict:
 @dataclass
 class ShortTermRecord:
     id: str
+    character_id: str
     summary: str
     dialogue_ids: List[str]
     themes: List[str]
@@ -116,6 +118,16 @@ def ensure_short_term_schema() -> None:
 
     _ensure_column("history", "tags", "TEXT DEFAULT '[]'")
     _ensure_column("messages", "tags", "TEXT DEFAULT '[]'")
+    _ensure_column(
+        "short_term_memory",
+        "character_id",
+        "TEXT REFERENCES characters(id) ON DELETE CASCADE",
+    )
+    _execute_sql(
+        "CREATE INDEX IF NOT EXISTS ix_short_term_memory_character_id "
+        "ON short_term_memory (character_id)"
+    )
+    _bind_legacy_summaries()
 
 
 def _ensure_column(table: str, column: str, ddl: str) -> None:
@@ -144,6 +156,63 @@ def _ensure_column(table: str, column: str, ddl: str) -> None:
         message_args={"column": column, "table": table},
     )
     _execute_sql(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
+
+
+def _bind_legacy_summaries() -> None:
+    """Summaries written before they carried a character.
+
+    A summary is bound to the character whose messages it sums up. When its
+    messages no longer say whose day it was (all deleted, an empty day, or two
+    characters at once), it is removed: there is nobody it could be read for.
+    """
+    with engine.begin() as connection:
+        rows = connection.execute(
+            text("SELECT id, dialogue_ids FROM short_term_memory WHERE character_id IS NULL")
+        ).fetchall()
+        if not rows:
+            return
+        bound = removed = 0
+        for row_id, raw_ids in rows:
+            owners = _message_owners(connection, raw_ids)
+            if len(owners) == 1:
+                connection.execute(
+                    text("UPDATE short_term_memory SET character_id = :character_id WHERE id = :id"),
+                    {"character_id": owners[0], "id": row_id},
+                )
+                bound += 1
+            else:
+                connection.execute(
+                    text("DELETE FROM short_term_memory WHERE id = :id"), {"id": row_id}
+                )
+                removed += 1
+    log_audit_entry(
+        "short_memory_legacy_bound",
+        "[ShortTermMemory] Старые сводки привязаны к персонажам по их сообщениям.",
+        AuditStatus.INFO,
+        details={"bound": bound, "removed": removed},
+    )
+
+
+def _message_owners(connection, raw_ids: Optional[str]) -> List[str]:
+    """Characters whose existing messages a summary names."""
+    try:
+        ids = json.loads(raw_ids or "[]")
+    except (TypeError, ValueError):
+        return []
+    ids = [str(item) for item in ids if item] if isinstance(ids, list) else []
+    owners: set[str] = set()
+    for start in range(0, len(ids), 500):
+        binds = {f"id{index}": value for index, value in enumerate(ids[start : start + 500])}
+        placeholders = ", ".join(f":{key}" for key in binds)
+        owners.update(
+            str(row[0])
+            for row in connection.execute(
+                text(f"SELECT DISTINCT character_id FROM history WHERE id IN ({placeholders})"),
+                binds,
+            )
+            if row[0]
+        )
+    return sorted(owners)
 
 
 # ---------------------------------------------------------------------------
@@ -189,6 +258,7 @@ def refresh_recent_days(
             existing = (
                 session.query(ShortTermMemory)
                 .filter(
+                    ShortTermMemory.character_id == character_id,
                     ShortTermMemory.created_at >= day_start,
                     ShortTermMemory.created_at < day_end,
                 )
@@ -197,16 +267,7 @@ def refresh_recent_days(
             if existing:
                 continue
 
-            day_messages = (
-                session.query(History)
-                .filter(
-                    History.character_id == character_id,
-                    History.timestamp >= day_start,
-                    History.timestamp < day_end,
-                )
-                .order_by(History.timestamp.asc())
-                .all()
-            )
+            day_messages = _load_day_history(session, character_id, day_start, day_end)
 
             dialogue_ids = [msg.id for msg in day_messages]
             if day_messages:
@@ -223,6 +284,7 @@ def refresh_recent_days(
                 themes = ["empty_day", "no_messages"]
 
             record = ShortTermMemory(
+                character_id=character_id,
                 summary=summary,
                 dialogue_ids=json.dumps(dialogue_ids, ensure_ascii=False),
                 themes=json.dumps(themes, ensure_ascii=False),
@@ -259,6 +321,24 @@ def refresh_recent_days(
         session.close()
 
 
+def _load_day_history(
+    session: Session, character_id: str, day_start: datetime, day_end: datetime
+) -> list[History]:
+    """The day as the conversation has it: an answer replaced by a reroll stays
+    in the table for the variant switcher, not for the summary."""
+    return (
+        session.query(History)
+        .filter(
+            History.character_id == character_id,
+            History.timestamp >= day_start,
+            History.timestamp < day_end,
+            ((History.role != "assistant") | (History.active_variant.is_(True))),
+        )
+        .order_by(History.timestamp.asc())
+        .all()
+    )
+
+
 def _build_transcript(messages: Sequence[History]) -> str:
     lines = []
     for msg in messages:
@@ -281,11 +361,15 @@ def _generate_day_summary(
     *,
     summary_prompt: Optional[str] = None,
 ) -> tuple[str, List[str]]:
-    summary_prompt = summary_prompt or SHORT_TERM_DAILY_SUMMARY_TASK_PROMPT
+    summary_prompt = summary_prompt or configured_prompt(
+        "memory.short_term.summary_task_prompt", SHORT_TERM_DAILY_SUMMARY_TASK_PROMPT
+    )
 
     system_message = {
         "role": "system",
-        "content": SHORT_TERM_DAILY_SUMMARY_SYSTEM_PROMPT,
+        "content": configured_prompt(
+            "memory.short_term.summary_system_prompt", SHORT_TERM_DAILY_SUMMARY_SYSTEM_PROMPT
+        ),
     }
     user_message = {
         "role": "user",
@@ -339,7 +423,8 @@ def _build_fallback_summary(transcript: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def load_recent_records(days: int = 7) -> List[ShortTermRecord]:
+def load_recent_records(*, character_id: str, days: int = 7) -> List[ShortTermRecord]:
+    """The character's own day summaries: one character never reads another's."""
     session: Session = SessionLocal()
     now = datetime.now(timezone.utc)
     threshold = now - timedelta(days=days)
@@ -347,7 +432,10 @@ def load_recent_records(days: int = 7) -> List[ShortTermRecord]:
     try:
         rows = (
             session.query(ShortTermMemory)
-            .filter(ShortTermMemory.created_at >= threshold)
+            .filter(
+                ShortTermMemory.character_id == character_id,
+                ShortTermMemory.created_at >= threshold,
+            )
             .order_by(ShortTermMemory.created_at.desc())
             .all()
         )
@@ -356,6 +444,7 @@ def load_recent_records(days: int = 7) -> List[ShortTermRecord]:
             records.append(
                 ShortTermRecord(
                     id=row.id,
+                    character_id=row.character_id,
                     summary=row.summary,
                     dialogue_ids=json.loads(row.dialogue_ids or "[]"),
                     themes=json.loads(row.themes or "[]"),

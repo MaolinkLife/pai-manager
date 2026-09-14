@@ -16,6 +16,97 @@
             </div>
         </div>
 
+        <div class="section" formGroupName="image_check">
+            <h3>{{ 'mediaSettings.imageCheckTitle' | translate }}</h3>
+            <p class="hint section-hint">{{ 'mediaSettings.imageCheckHint' | translate }}</p>
+
+            <div class="image-check-gate" *ngFor="let gate of imageCheckGateRows" [formGroupName]="gate.name">
+                <app-ui-checkbox formControlName="enabled">
+                    {{ gate.label | translate }}
+                </app-ui-checkbox>
+                <div class="form-group threshold-group">
+                    <label [attr.for]="'image-check-' + gate.name + '-threshold'">
+                        {{ 'mediaSettings.imageCheckThreshold' | translate }}:
+                        <span class="threshold-value">{{ imageCheckGroup.get(gate.name + '.threshold')?.value | number: '1.2-2' }}</span>
+                    </label>
+                    <app-ui-range
+                        [id]="'image-check-' + gate.name + '-threshold'"
+                        formControlName="threshold"
+                        [min]="imageCheckThreshold.min"
+                        [max]="imageCheckThreshold.max"
+                        [step]="imageCheckThreshold.step"
+                    ></app-ui-range>
+                </div>
+                <app-ui-checkbox class="sub-checkbox" formControlName="reroll">
+                    {{ 'mediaSettings.imageCheckReroll' | translate }}
+                </app-ui-checkbox>
+            </div>
+
+            <div class="form-group">
+                <label for="image-check-max-generations">{{ 'mediaSettings.imageCheckMaxGenerations' | translate }}</label>
+                <app-ui-input
+                    id="image-check-max-generations"
+                    type="number"
+                    formControlName="max_generations"
+                    [min]="imageCheckGenerations.min"
+                    [max]="imageCheckGenerations.max"
+                    [step]="1"
+                ></app-ui-input>
+                <p class="hint">{{ 'mediaSettings.imageCheckMaxGenerationsHint' | translate }}</p>
+                <p class="warning" *ngIf="showGenerationsWarning">{{ 'mediaSettings.imageCheckMaxGenerationsWarning' | translate }}</p>
+            </div>
+
+            <div class="subsection">
+                <h4>{{ 'mediaSettings.imageCheckPromptsTitle' | translate }}</h4>
+                <p class="hint section-hint">{{ 'mediaSettings.imageCheckPromptsHint' | translate }}</p>
+                <div class="form-group">
+                    <label for="image-check-describe-prompt">{{ 'mediaSettings.imageCheckDescribePrompt' | translate }}</label>
+                    <app-ui-textarea id="image-check-describe-prompt" [rows]="3" [autoResize]="true" formControlName="describe_prompt"></app-ui-textarea>
+                    <div class="prompt-actions">
+                        <span></span>
+                        <button type="button" class="reset-button" (click)="resetPrompt('image_check.describe_prompt', 'synthesis.image_check.describe_prompt')">
+                            {{ 'mediaSettings.resetPrompt' | translate }}
+                        </button>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="image-check-system-prompt">{{ 'mediaSettings.imageCheckSystemPrompt' | translate }}</label>
+                    <app-ui-textarea id="image-check-system-prompt" [rows]="6" [autoResize]="true" formControlName="system_prompt"></app-ui-textarea>
+                    <div class="prompt-actions">
+                        <span></span>
+                        <button type="button" class="reset-button" (click)="resetPrompt('image_check.system_prompt', 'synthesis.image_check.system_prompt')">
+                            {{ 'mediaSettings.resetPrompt' | translate }}
+                        </button>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="image-check-user-template">{{ 'mediaSettings.imageCheckUserTemplate' | translate }}</label>
+                    <app-ui-textarea id="image-check-user-template" [rows]="6" [autoResize]="true" formControlName="user_template"></app-ui-textarea>
+                    <div class="prompt-actions">
+                        <p class="hint">{{ 'mediaSettings.imageCheckUserTemplateHint' | translate }}</p>
+                        <button type="button" class="reset-button" (click)="resetPrompt('image_check.user_template', 'synthesis.image_check.user_template')">
+                            {{ 'mediaSettings.resetPrompt' | translate }}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="section" formGroupName="image_scene">
+            <h3>{{ 'mediaSettings.imageSceneTitle' | translate }}</h3>
+            <p class="hint section-hint">{{ 'mediaSettings.imageSceneHint' | translate }}</p>
+            <div class="form-group">
+                <label for="image-scene-format-prompt">{{ 'mediaSettings.imageSceneFormatPrompt' | translate }}</label>
+                <app-ui-textarea id="image-scene-format-prompt" [rows]="6" [autoResize]="true" formControlName="format_prompt"></app-ui-textarea>
+                <div class="prompt-actions">
+                    <p class="hint">{{ 'mediaSettings.imageSceneFormatPromptHint' | translate }}</p>
+                    <button type="button" class="reset-button" (click)="resetPrompt('image_scene.format_prompt', 'synthesis.image_scene.format_prompt')">
+                        {{ 'mediaSettings.resetPrompt' | translate }}
+                    </button>
+                </div>
+            </div>
+        </div>
+
         <div class="section" formGroupName="sd_webui" *ngIf="isProviderActive('stable_diffusion_webui')">
             <h3>Stable Diffusion WebUI</h3>
             <div class="form-group">
@@ -254,24 +345,8 @@
 
         <div class="section" formGroupName="prompting">
             <h3>{{ 'mediaSettings.promptingTitle' | translate }}</h3>
-            <div class="form-group checkbox-group">
-                <app-ui-checkbox formControlName="enabled">
-                    {{ 'mediaSettings.enablePromptEngineering' | translate }}
-                </app-ui-checkbox>
-                <app-ui-checkbox formControlName="assess_enabled">
-                    {{ 'mediaSettings.enableQualityAssessment' | translate }}
-                </app-ui-checkbox>
-            </div>
-            <div class="grid">
-                <div class="form-group">
-                    <label for="prompting-max-attempts">{{ 'mediaSettings.maxAttempts' | translate }}</label>
-                    <app-ui-input id="prompting-max-attempts" type="number" formControlName="max_attempts"></app-ui-input>
-                </div>
-                <div class="form-group">
-                    <label for="prompting-threshold">{{ 'mediaSettings.qualityThreshold' | translate }}</label>
-                    <app-ui-input id="prompting-threshold" type="number" formControlName="quality_threshold"></app-ui-input>
-                </div>
-            </div>
+            <!-- «Включить цикл подготовки промпта» (prompting.enabled) is hidden until it is understood
+                 what it was for; the value stays in the config. -->
             <div class="form-group">
                 <label for="prompting-negative">{{ 'mediaSettings.defaultNegativePrompt' | translate }}</label>
                 <app-ui-textarea
@@ -280,6 +355,31 @@
                     [autoResize]="true"
                     formControlName="default_negative_prompt"
                 ></app-ui-textarea>
+            </div>
+
+            <div class="subsection">
+                <h4>{{ 'mediaSettings.imageBuilderTitle' | translate }}</h4>
+                <p class="hint section-hint">{{ 'mediaSettings.imageBuilderHint' | translate }}</p>
+                <div class="form-group">
+                    <label for="image-builder-system-prompt">{{ 'mediaSettings.imageBuilderSystemPrompt' | translate }}</label>
+                    <app-ui-textarea id="image-builder-system-prompt" [rows]="8" [autoResize]="true" formControlName="image_prompt_builder_system_prompt"></app-ui-textarea>
+                    <div class="prompt-actions">
+                        <span></span>
+                        <button type="button" class="reset-button" (click)="resetPrompt('prompting.image_prompt_builder_system_prompt', 'synthesis.prompting.image_prompt_builder_system_prompt')">
+                            {{ 'mediaSettings.resetPrompt' | translate }}
+                        </button>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="image-builder-user-template">{{ 'mediaSettings.imageBuilderUserTemplate' | translate }}</label>
+                    <app-ui-textarea id="image-builder-user-template" [rows]="6" [autoResize]="true" formControlName="image_prompt_builder_user_template"></app-ui-textarea>
+                    <div class="prompt-actions">
+                        <p class="hint">{{ 'mediaSettings.imageBuilderUserTemplateHint' | translate }}</p>
+                        <button type="button" class="reset-button" (click)="resetPrompt('prompting.image_prompt_builder_user_template', 'synthesis.prompting.image_prompt_builder_user_template')">
+                            {{ 'mediaSettings.resetPrompt' | translate }}
+                        </button>
+                    </div>
+                </div>
             </div>
 
             <div class="subsection" formArrayName="scenarios">

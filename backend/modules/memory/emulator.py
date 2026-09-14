@@ -220,7 +220,9 @@ class MemorySearchEmulator:
 
         # Stage 3: recent days summaries -> resolve day messages by windows
         if not trace_hits:
-            records = load_recent_records(days=max(1, int(lookback_days)))
+            records = load_recent_records(
+                character_id=character.id, days=max(1, int(lookback_days))
+            )
             day_hits: List[Dict[str, Any]] = []
             matched_records = self._rank_short_term_records(
                 records=records,
@@ -664,6 +666,7 @@ class MemorySearchEmulator:
                 .filter(
                     History.character_id == character_id,
                     History.timestamp >= day_start,
+                    ((History.role != "assistant") | (History.active_variant.is_(True))),
                 )
                 .order_by(History.timestamp.asc())
                 .all()
@@ -692,6 +695,7 @@ class MemorySearchEmulator:
                     History.character_id == character_id,
                     History.timestamp >= start,
                     History.timestamp < end,
+                    ((History.role != "assistant") | (History.active_variant.is_(True))),
                 )
                 .order_by(History.timestamp.asc())
                 .all()
@@ -731,6 +735,7 @@ class MemorySearchEmulator:
                 .filter(
                     History.character_id == character_id,
                     History.id.in_(ids),
+                    ((History.role != "assistant") | (History.active_variant.is_(True))),
                 )
                 .order_by(History.timestamp.asc())
                 .all()

@@ -128,6 +128,7 @@ def estimate_confidence(
 
     try:
         from constants.prompts import CONFIDENCE_ESTIMATION_PROMPT
+        from modules.system.technical_prompts import configured_prompt
         from modules.generative.manager import (
             NoProviderResolved,
             generation_manager,
@@ -154,7 +155,10 @@ def estimate_confidence(
         result = generation_manager.generate(
             GenerateRequest(
                 messages=[
-                    {"role": "system", "content": CONFIDENCE_ESTIMATION_PROMPT},
+                    {
+                        "role": "system",
+                        "content": configured_prompt("confidence.system_prompt", CONFIDENCE_ESTIMATION_PROMPT),
+                    },
                     {"role": "user", "content": payload},
                 ],
                 options={

@@ -191,6 +191,48 @@ async def update_me_settings(
     return {"user": auth_service.serialize_user(refreshed)} if refreshed else {"user": None}
 
 
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str = Field(min_length=8)
+
+
+@router.post("/me/password")
+async def change_my_password(
+    payload: ChangePasswordRequest,
+    authorization: Optional[str] = Header(default=None),
+):
+    """Change the signed-in owner's password; the owner's other sessions are signed out.
+
+    Owner only for now: `user` accounts get it when guests are wired in.
+    """
+    token = _extract_bearer_token(authorization)
+    try:
+        user = auth_service.get_user_from_access_token(token)
+        session_id = auth_service.decode_access_token(token).get("sid")
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc))
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found or inactive",
+        )
+    if (user.role or "").strip().lower() != "owner":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the owner can change the password here",
+        )
+    try:
+        revoked = auth_service.change_password(
+            user.uuid,
+            current_password=payload.current_password,
+            new_password=payload.new_password,
+            keep_session_id=session_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    return {"status": "ok", "revoked_sessions": revoked}
+
+
 @router.get("/bootstrap-state")
 async def bootstrap_state():
     return auth_service.get_auth_bootstrap_state()

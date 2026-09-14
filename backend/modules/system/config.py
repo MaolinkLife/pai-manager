@@ -209,6 +209,8 @@ def normalize_config_structure(config: dict | None) -> dict:
     else:
         _merge_missing(decision_layer_section, decision_layer_defaults)
     normalized["decision_layer"] = decision_layer_section
+    # Settings nothing reads any more (RETIRED_CONFIG_PATHS).
+    _drop_retired_paths(normalized)
 
     # Ensure connector section exists (user tunnel settings).
     if not isinstance(normalized.get("connector"), dict):
@@ -269,6 +271,13 @@ def normalize_config_structure(config: dict | None) -> dict:
         synthesis_section = copy.deepcopy(synthesis_defaults)
     else:
         _merge_missing(synthesis_section, synthesis_defaults)
+    # The post-generation assessment keys were replaced by `synthesis.image_check`.
+    # Their values are not carried over: the loop that read them was unreachable,
+    # so they never took effect; the new defaults apply.
+    prompting_section = synthesis_section.get("prompting")
+    if isinstance(prompting_section, dict):
+        for legacy_key in ("assess_enabled", "quality_threshold", "max_attempts", "retry_enabled"):
+            prompting_section.pop(legacy_key, None)
     normalized["synthesis"] = synthesis_section
 
     communication_defaults = DEFAULT_CONFIG.get("communication", {})
@@ -380,6 +389,26 @@ def normalize_config_structure(config: dict | None) -> dict:
         _merge_missing(memory_section, memory_defaults)
     normalized["memory"] = memory_section
 
+    initiative_defaults = DEFAULT_CONFIG.get("initiative", {})
+    initiative_section = normalized.get("initiative")
+    if not isinstance(initiative_section, dict):
+        initiative_section = {}
+    # The global initiative switch appeared on 2026-09-13, off on a fresh install.
+    # A config stored before it keeps doing what it did: if PAI could write first
+    # in the main chat or in Telegram, the switch comes on.
+    if "enabled" not in initiative_section:
+        chat_section = initiative_section.get("chat")
+        chat_enabled = chat_section.get("enabled", True) if isinstance(chat_section, dict) else True
+        telegram_initiative = (normalized.get("telegram") or {}).get("initiative")
+        telegram_enabled = (
+            telegram_initiative.get("enabled", False)
+            if isinstance(telegram_initiative, dict)
+            else False
+        )
+        initiative_section["enabled"] = bool(chat_enabled) or bool(telegram_enabled)
+    _merge_missing(initiative_section, initiative_defaults)
+    normalized["initiative"] = initiative_section
+
     return normalized
 
 
@@ -410,6 +439,57 @@ def _resolve_user_uuid(user_uuid: Optional[str]) -> Optional[str]:
     if user_uuid:
         return user_uuid
     return get_active_user_uuid()
+
+
+RETIRED_CONFIG_PATHS = (
+    # What the router model can do comes from the model index.
+    ("decision_layer", "capabilities"),
+    # Images are described by the vision module only.
+    ("vision", "vision_modules", "ollama_vision", "use_main_model_context"),
+    ("vision", "vision_modules", "llava", "use_main_model_context"),
+    # The vision model lives in the vision settings, not in the generation tab.
+    ("api", "visual_model"),
+    ("api", "visual_model_options"),
+)
+
+
+def _drop_retired_paths(config: dict) -> bool:
+    """Removes the retired settings from a config in place; True when something went."""
+    dropped = False
+    for path in RETIRED_CONFIG_PATHS:
+        block = config
+        for key in path[:-1]:
+            block = block.get(key) if isinstance(block, dict) else None
+        if isinstance(block, dict) and path[-1] in block:
+            block.pop(path[-1])
+            dropped = True
+    return dropped
+
+
+def drop_retired_config_keys() -> int:
+    """Removes settings nothing reads any more from the stored configs.
+
+    Stale values are removed rather than left to linger; see
+    RETIRED_CONFIG_PATHS. Returns how many stored configs changed.
+    """
+    session = SessionLocal()
+    changed = 0
+    try:
+        for record in session.query(UserConfig).all():
+            try:
+                payload = json.loads(record.config_json or "{}")
+            except Exception:
+                continue
+            if not isinstance(payload, dict):
+                continue
+            if _drop_retired_paths(payload):
+                record.config_json = json.dumps(payload, ensure_ascii=False)
+                changed += 1
+        if changed:
+            session.commit()
+    finally:
+        session.close()
+    return changed
 
 
 def _build_seed_config_for_user(user_uuid: str) -> dict:
@@ -571,7 +651,15 @@ def _apply_split_settings_overrides(config_data: dict, user_uuid: str) -> None:
     if isinstance(tts_settings, dict):
         config_data["voice"] = copy.deepcopy(tts_settings)
     if isinstance(vision_settings, dict):
-        config_data["vision"] = copy.deepcopy(vision_settings)
+        vision = copy.deepcopy(vision_settings)
+        # Background screen capture got its own switch (2026-09-13). Settings stored
+        # before it keep doing what they did: capture follows vision.
+        vision.setdefault("screen_capture_enabled", bool(vision.get("enabled", False)))
+        # Vision prompts moved into the settings (2026-09-13): stored settings get
+        # the built-in ones, as a fresh config does.
+        for key in ("attachment_prompt", "generated_image_prompt", "screen_prompt"):
+            vision.setdefault(key, DEFAULT_CONFIG["vision"][key])
+        config_data["vision"] = vision
 
 
 def _pick_owner_like_user(session) -> Optional[User]:
@@ -1099,9 +1187,6 @@ def validate_config(config: dict) -> tuple[bool, list]:
                 errors.append("decision_layer.providers must be an object")
             elif active_provider and isinstance(providers, dict) and active_provider not in providers:
                 errors.append("decision_layer.active_provider must exist inside decision_layer.providers")
-            capabilities = dl_cfg.get("capabilities")
-            if capabilities is not None and not isinstance(capabilities, dict):
-                errors.append("decision_layer.capabilities must be an object")
             max_steps = dl_cfg.get("max_steps")
             if max_steps is not None and (
                 not isinstance(max_steps, int) or max_steps <= 0

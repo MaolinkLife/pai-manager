@@ -2,10 +2,12 @@ import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
 import { UntypedFormBuilder, UntypedFormGroup, UntypedFormArray } from '@angular/forms';
 import { take } from 'rxjs/operators';
 import { ConfigService } from '../../../../../core/services/config.service';
-import { ApiService } from '../../../../../core/services/api.service';
+import { ApiService, ModelIndexEntry } from '../../../../../core/services/api.service';
+import { buildModelOptions, modelOptionLabels } from '../../../../../core/utils/model-options';
 import { LocalizationService } from '../../../../../shared/pipes/translation/localization.service';
 import { RagConfig, RagVectorProfile } from '../../../../../core/models/project-config.model';
 import { UiSelectOption } from '../../../../../shared/ui/components/ui-select/ui-select.component';
+import { pickChangedFields } from '../../../../../core/utils/changed-fields';
 
 @Component({
     selector: 'app-rag-settings',
@@ -47,6 +49,7 @@ export class RagSettingsComponent implements OnInit {
     ollamaModelOptions: UiSelectOption[] = [
         { value: '', label: 'Модели не найдены', disabled: true },
     ];
+    private modelIndex: ModelIndexEntry[] | null = null;
 
     constructor(
         private fb: UntypedFormBuilder,
@@ -59,33 +62,22 @@ export class RagSettingsComponent implements OnInit {
     }
 
     private loadOllamaModels(): void {
-        this.apiService.getOllamaModels$().pipe(take(1)).subscribe({
-            next: (models: string[]) => {
-                const cleaned = (Array.isArray(models) ? models : [])
-                    .map((item) => String(item || '').trim())
-                    .filter((item) => item.length > 0);
-                if (cleaned.length > 0) {
-                    this.ollamaModelOptions = cleaned.map((model) => ({ value: model, label: model }));
-                } else {
-                    this.ollamaModelOptions = [{ value: '', label: 'Модели не найдены', disabled: true }];
-                }
-                this.ensureCurrentJudgeModelOption();
-                this.cdr.markForCheck();
-            },
-            error: () => {
-                this.ollamaModelOptions = [{ value: '', label: 'Модели не найдены', disabled: true }];
-                this.ensureCurrentJudgeModelOption();
-                this.cdr.markForCheck();
-            },
+        this.apiService.getModelIndex$().pipe(take(1)).subscribe((entries) => {
+            this.modelIndex = entries;
+            this.ensureCurrentJudgeModelOption();
+            this.cdr.markForCheck();
         });
     }
 
+    /** Text models from the model index; the chosen judge stays with a note when it is not marked. */
     private ensureCurrentJudgeModelOption(): void {
         const current = String(this.ragForm.get('consolidationJudgeModel')?.value || '').trim();
-        if (!current || this.ollamaModelOptions.some((item) => item.value === current)) {
-            return;
-        }
-        this.ollamaModelOptions = [{ value: current, label: current }, ...this.ollamaModelOptions];
+        this.ollamaModelOptions = buildModelOptions(
+            this.modelIndex,
+            'completion',
+            current,
+            modelOptionLabels((key) => this.localizationService.t(key), 'completion'),
+        );
     }
 
     get vectorProfiles(): UntypedFormArray {
@@ -163,11 +155,19 @@ export class RagSettingsComponent implements OnInit {
             consolidationJudgeTemperature: [0.0],
             consolidationJudgeMaxTokens: [512],
             consolidationJudgeRequestTimeout: [60],
+            consolidationJudgeSystemPrompt: [''],
+
+            // Day summary of short-term memory: technical prompts
+            daySummaryStartupRefresh: [false],
+            daySummarySystemPrompt: [''],
+            daySummaryTaskPrompt: [''],
 
             // 0.9.0 — Narrative diary (§3.9-bis)
             narrativeEnabled: [true],
             narrativeMinChars: [80],
             narrativeMaxChars: [3000],
+            diarySystemPrompt: [''],
+            diaryUserTemplate: [''],
 
             // Search strategy settings
             sessionContextEnabled: [true],
@@ -212,6 +212,7 @@ export class RagSettingsComponent implements OnInit {
         const judge = consolidation.judge || {};
         const diary = m.diary || {};
         const narrative = diary.narrative || {};
+        const shortTerm = m.shortTerm || m.short_term || {};
 
         this.ragForm.patchValue({
             consolidationImportanceThreshold:
@@ -223,9 +224,18 @@ export class RagSettingsComponent implements OnInit {
             consolidationJudgeMaxTokens: judge.maxTokens ?? judge.max_tokens ?? 512,
             consolidationJudgeRequestTimeout:
                 judge.requestTimeout ?? judge.request_timeout ?? 60,
+            consolidationJudgeSystemPrompt: judge.systemPrompt ?? judge.system_prompt ?? '',
+            daySummaryStartupRefresh:
+                shortTerm.startupRefreshEnabled ?? shortTerm.startup_refresh_enabled ?? false,
+            daySummarySystemPrompt:
+                shortTerm.summarySystemPrompt ?? shortTerm.summary_system_prompt ?? '',
+            daySummaryTaskPrompt:
+                shortTerm.summaryTaskPrompt ?? shortTerm.summary_task_prompt ?? '',
             narrativeEnabled: narrative.enabled ?? true,
             narrativeMinChars: narrative.minChars ?? narrative.min_chars ?? 80,
             narrativeMaxChars: narrative.maxChars ?? narrative.max_chars ?? 3000,
+            diarySystemPrompt: diary.systemPrompt ?? diary.system_prompt ?? '',
+            diaryUserTemplate: diary.userTemplate ?? diary.user_template ?? '',
         });
 
         this.originalMemorySnapshot = this.buildMemoryPayload();
@@ -244,7 +254,13 @@ export class RagSettingsComponent implements OnInit {
                     temperature: Number(v.consolidationJudgeTemperature ?? 0),
                     maxTokens: Number(v.consolidationJudgeMaxTokens ?? 512),
                     requestTimeout: Number(v.consolidationJudgeRequestTimeout ?? 60),
+                    systemPrompt: String(v.consolidationJudgeSystemPrompt ?? ''),
                 },
+            },
+            shortTerm: {
+                startupRefreshEnabled: !!v.daySummaryStartupRefresh,
+                summarySystemPrompt: String(v.daySummarySystemPrompt ?? ''),
+                summaryTaskPrompt: String(v.daySummaryTaskPrompt ?? ''),
             },
             diary: {
                 narrative: {
@@ -252,8 +268,30 @@ export class RagSettingsComponent implements OnInit {
                     minChars: Number(v.narrativeMinChars ?? 80),
                     maxChars: Number(v.narrativeMaxChars ?? 3000),
                 },
+                systemPrompt: String(v.diarySystemPrompt ?? ''),
+                userTemplate: String(v.diaryUserTemplate ?? ''),
             },
         };
+    }
+
+    /** Puts the built-in prompt back into the field; saving keeps it. */
+    resetPrompt(controlName: string, configPath: string): void {
+        const control = this.ragForm.get(controlName);
+        if (!control) {
+            return;
+        }
+        this.configService
+            .getDefaultValue$(configPath)
+            .pipe(take(1))
+            .subscribe((value) => {
+                if (typeof value !== 'string') {
+                    console.error('Failed to load the default prompt', configPath);
+                    return;
+                }
+                control.setValue(value);
+                control.markAsDirty();
+                this.cdr.markForCheck();
+            });
     }
 
     private originalMemorySnapshot: any = {};
@@ -584,7 +622,9 @@ export class RagSettingsComponent implements OnInit {
         const changes = this.getChanges();
         const modules = this.buildModulesPayload();
         const memoryPayload = this.buildMemoryPayload();
-        const memoryChanged = this.memoryHasChanges();
+        // Only the memory fields that changed: one switch must not resend every prompt.
+        const memoryChanges = pickChangedFields(memoryPayload, this.originalMemorySnapshot);
+        const memoryChanged = Object.keys(memoryChanges).length > 0;
         const updateData: any = {};
         if (Object.keys(changes).length > 0) {
             updateData.rag = this.expandPathMap(changes);
@@ -593,7 +633,7 @@ export class RagSettingsComponent implements OnInit {
             updateData.modules = modules;
         }
         if (memoryChanged) {
-            updateData.memory = memoryPayload;
+            updateData.memory = memoryChanges;
         }
         if (Object.keys(updateData).length > 0) {
             this.configService.updateConfig$(updateData).subscribe({

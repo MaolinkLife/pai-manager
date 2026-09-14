@@ -22,17 +22,6 @@ export interface LocalModelResourcesResponse {
     total_count: number;
 }
 
-export interface ModelCapabilitiesResponse {
-    status: string;
-    model: string;
-    capabilities: {
-        tool: boolean;
-        vision: boolean;
-        thinking: boolean;
-    };
-    details?: Record<string, any>;
-}
-
 export interface OllamaRuntimeModel {
     name: string;
     model: string;
@@ -46,6 +35,20 @@ export interface OllamaRuntimeModel {
     details?: Record<string, any>;
     runtime?: Record<string, any> | null;
 }
+
+/** What a model can do (model index): the owner's marks win over the metadata. */
+export interface ModelIndexEntry {
+    provider: string;
+    name: string;
+    capabilities: string[];
+    declared: string[];
+    declared_known: boolean;
+    owner_marked: boolean;
+    differs: boolean;
+}
+
+/** Every capability Ollama knows, in the order the settings show them. */
+export const MODEL_CAPABILITY_KEYS: readonly string[] = ['completion', 'vision', 'tools', 'thinking', 'embedding', 'insert'];
 
 export interface OllamaRuntimeModelsResponse {
     status: string;
@@ -157,7 +160,6 @@ export interface SandboxImagePipelineRequest extends Omit<SandboxPipelineRequest
     sampler?: string | null;
     scheduler?: string | null;
     comfyui_checkpoint?: string | null;
-    use_unified_router?: boolean | null;
     use_prompt_builder?: boolean | null;
     image_prompt_policy?: string;
     image_style_prompt?: string;
@@ -195,28 +197,9 @@ export class ApiService {
     private resourcesApiUrl = `${environment.apiBaseUrl}/resources`;
     private sandboxApiUrl = `${environment.apiBaseUrl}/sandbox`;
     private hfApiUrl = `${environment.apiBaseUrl}/hf`;
+    private modelIndexApiUrl = `${environment.apiBaseUrl}/models/index`;
 
     constructor(private http: HttpClient) { }
-
-    getOllamaModels$(): Observable<string[]> {
-        return this.http.get<{ status: string; models: string[] }>(`${this.apiUrl}/models`).pipe(
-            map(({ models }) => models),
-            catchError((_err) => of([]))
-        );
-    }
-
-    checkOllamaCapabilities$(model: string): Observable<ModelCapabilitiesResponse | null> {
-        return this.http
-            .post<ModelCapabilitiesResponse>(`${this.apiUrl}/capabilities/check`, {
-                model,
-                checks: {
-                    tool: true,
-                    vision: true,
-                    thinking: true,
-                },
-            })
-            .pipe(catchError((_err) => of(null)));
-    }
 
     getOllamaRuntimeModels$(): Observable<OllamaRuntimeModelsResponse | null> {
         return this.http
@@ -255,6 +238,26 @@ export class ApiService {
         return this.http
             .post<{ status: string; message?: string }>(`${this.apiUrl}/models/delete`, { model })
             .pipe(catchError((_err) => of(null)));
+    }
+
+    /** The model index, synced with what Ollama has installed; null when the server refused. */
+    getModelIndex$(provider = 'ollama'): Observable<ModelIndexEntry[] | null> {
+        return this.http
+            .get<{ status: string; models: ModelIndexEntry[] }>(this.modelIndexApiUrl, { params: { provider } })
+            .pipe(
+                map((response) => (Array.isArray(response?.models) ? response.models : [])),
+                catchError((_err) => of(null))
+            );
+    }
+
+    /** The owner's marks for a model; `null` goes back to what the metadata declares. */
+    setModelCapabilities$(name: string, capabilities: string[] | null, provider = 'ollama'): Observable<ModelIndexEntry | null> {
+        return this.http
+            .put<{ status: string; model: ModelIndexEntry }>(`${this.modelIndexApiUrl}/capabilities`, { provider, name, capabilities })
+            .pipe(
+                map((response) => response?.model ?? null),
+                catchError((_err) => of(null))
+            );
     }
 
     searchHfModels$(query: string, limit = 20): Observable<HfSearchResult[]> {

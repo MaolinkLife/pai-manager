@@ -144,6 +144,69 @@ SYNTHESIS_IMAGE_ASSESSMENT_USER_TEMPLATE = (
     "{description}\n"
 )
 
+SYNTHESIS_IMAGE_CHECK_DESCRIBE_PROMPT = (
+    "Describe this generated image factually: subject, pose, expression, clothing, setting, lighting, style. "
+    "Be concise."
+)
+
+SYNTHESIS_IMAGE_CHECK_SYSTEM_PROMPT = (
+    "You check a generated image against the request it was made for.\n"
+    "You do not see the image: you get a factual vision description of it.\n\n"
+    "relevance (0..1): how well the image shows what was requested - subject, action, setting, mood. "
+    "Judge the request, not the character's usual look and not artistic taste.\n"
+    "quality (0..1): how close the image is to flawless - anatomy, composition, coherence, artifacts. Be strict.\n\n"
+    "Score only the checks listed after \"Scores:\"; set the others to null.\n"
+    "Return ONLY JSON: {\"relevance\": number or null, \"quality\": number or null, "
+    "\"mismatches\": [short strings - what differs from the request], "
+    "\"feedback\": \"one sentence on how to change the generation prompt\"}"
+)
+
+SYNTHESIS_IMAGE_CHECK_USER_TEMPLATE = (
+    "Scores: {scores}\n\n"
+    "Request:\n"
+    "{request}\n\n"
+    "Generation prompt:\n"
+    "{prompt}\n\n"
+    "Vision description of the result:\n"
+    "{description}\n"
+)
+
+# The scene the model writes for a chat or proactive image. This part is creative
+# and stays in code.
+IMAGE_SCENE_SYSTEM_PROMPT = (
+    "You write the scene for an image the character attaches in a chat.\n"
+    "Write one concise, visually concrete description in English for an image generator: "
+    "what is in the picture, what is happening, the place, the light and the mood.\n"
+    "Use the request, the recent conversation and the visual context if present.\n"
+    "Keep text, captions, watermarks, UI and logos out of the image."
+)
+
+# The answer format of that call is technical: an answer the system cannot read
+# falls back. Preset in the config and editable.
+IMAGE_SCENE_FORMAT_PROMPT = (
+    "Return ONLY valid JSON with the fields: subject, prompt, negative_prompt.\n"
+    "subject is one of:\n"
+    "- \"self\": the picture shows the character herself, e.g. \"draw yourself\", "
+    "\"what are you doing now, show me?\";\n"
+    "- \"other\": the request names what to draw: people, places, things, or a ready prompt to improve;\n"
+    "- \"free\": the request asks for an image without saying what it should show; "
+    "then draw what if_the_request_names_no_subject_the_image_shows says.\n"
+    "If subject_is_decided is given, use it.\n"
+    "prompt is the scene. When the picture shows the character, describe her situation, pose, place and mood, "
+    "never her appearance: it is added separately. When subject is \"other\", describe only what was asked."
+)
+
+# Vision: what the vision model is asked to describe. Technical, preset in the
+# config and editable.
+VISION_ATTACHMENT_PROMPT = "Describe the user-provided image in detail in English."
+VISION_SCREEN_PROMPT = "Describe the current user screen in detail in English."
+VISION_GENERATED_IMAGE_PROMPT = (
+    "Describe this generated image for the assistant before it writes the final reply. "
+    "Be concise and factual."
+)
+# Used only when a caller passes no prompt at all; every caller passes one of the above.
+VISION_FALLBACK_PROMPT = "Describe the image in detail in English."
+
 COGNITIVE_ANALYSIS_PROMPT = """
 You are the Input Perception Layer of a cognitive AI system.
 

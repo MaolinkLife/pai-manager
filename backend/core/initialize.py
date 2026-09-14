@@ -19,6 +19,7 @@ from modules.system.service import (
     migrate_split_settings_if_needed,
 )
 from constants.paths import MODEL_SUBDIRS
+from modules.system.config import drop_retired_config_keys
 from modules.system.logger import (
     initialize_logger_runtime,
     log_audit_entry,
@@ -106,6 +107,10 @@ def run_startup_checks():
     else:
         log_console("Startup", "Разделенные настройки уже актуальны.")
 
+    retired = drop_retired_config_keys()
+    if retired:
+        log_console("Startup", "Из конфигов убраны настройки, которые больше не используются.", {"configs": retired})
+
     log_console("Startup", "Синхронизируем short-term память.")
     ensure_short_term_schema()
     log_console("Startup", "Синхронизируем knowledge-память.")
@@ -133,10 +138,13 @@ def run_startup_checks():
     # - presence of directories
     # - presence of char_name
     # - config.json structure
-    vision_enabled = bool(get_config_value("vision.enabled", False))
-    if vision_enabled:
+    from modules.vision.worker import screen_capture_enabled
+
+    # Only background screen capture needs the service at startup; pictures sent to
+    # the chat are described without it.
+    if screen_capture_enabled():
         try:
-            log_console("Startup", "Запускаем визуальный сервис.")
+            log_console("Startup", "Запускаем фоновый захват экрана.")
             vision_service = VisionService()
             vision_service.start()
             print(
@@ -177,14 +185,9 @@ def run_startup_checks():
 
 
 def start_async_warmups() -> None:
+    # Only the setting decides: this is managed from the UI, not the environment.
     enabled = bool(get_config_value("memory.short_term.startup_refresh_enabled", False))
-    env_enabled = str(os.getenv("STARTUP_SHORT_MEMORY_REFRESH", "")).strip().lower() in {
-        "1",
-        "true",
-        "yes",
-        "on",
-    }
-    if not enabled and not env_enabled:
+    if not enabled:
         log_audit_entry(
             event_type="short_memory_refresh_background_skipped",
             msg="[Initialize] Background short-term memory refresh skipped on startup.",

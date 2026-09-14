@@ -1,7 +1,9 @@
 import { ChangeDetectorRef, Component, OnInit } from '@angular/core';
 import { UntypedFormBuilder, UntypedFormGroup, Validators } from '@angular/forms';
 import { ConfigService } from '../../../../../core/services/config.service';
-import { ApiService } from '../../../../../core/services/api.service';
+import { ApiService, ModelIndexEntry } from '../../../../../core/services/api.service';
+import { buildModelOptions, modelOptionLabels } from '../../../../../core/utils/model-options';
+import { LocalizationService } from '../../../../../shared/pipes/translation/localization.service';
 import { BehaviorSubject } from 'rxjs';
 import { finalize, take } from 'rxjs/operators';
 import { NotificationService } from '../../../../../shared/components/notification/notification.service';
@@ -19,6 +21,7 @@ export class AnalyzerSettingsComponent implements OnInit {
     ollamaModelOptions: UiSelectOption[] = [
         { value: '', label: 'Модели не найдены', disabled: true },
     ];
+    private modelIndex: ModelIndexEntry[] | null = null;
     private readonly defaultAnalyzerSystemPrompt = `You are a cognitive filter of an AI system. Your task is to analyze incoming messages and return STRICTLY structured JSON with metadata. NEVER generate text responses for the user.`;
 
     constructor(
@@ -27,6 +30,7 @@ export class AnalyzerSettingsComponent implements OnInit {
         private apiService: ApiService,
         private notificationService: NotificationService,
         private cdr: ChangeDetectorRef,
+        private localizationService: LocalizationService,
     ) {
         this.analyzerForm = this.createForm();
     }
@@ -157,35 +161,22 @@ export class AnalyzerSettingsComponent implements OnInit {
     }
 
     private loadOllamaModels(): void {
-        this.apiService.getOllamaModels$().pipe(take(1)).subscribe({
-            next: (models: string[]) => {
-                const cleaned = (Array.isArray(models) ? models : [])
-                    .map((item) => String(item || '').trim())
-                    .filter((item) => item.length > 0);
-                if (cleaned.length > 0) {
-                    this.ollamaModelOptions = cleaned.map((model) => ({ value: model, label: model }));
-                    this.ensureCurrentOllamaModelOption();
-                    this.cdr.markForCheck();
-                    return;
-                }
-                this.ollamaModelOptions = [{ value: '', label: 'Модели не найдены', disabled: true }];
-                this.ensureCurrentOllamaModelOption();
-                this.cdr.markForCheck();
-            },
-            error: () => {
-                this.ollamaModelOptions = [{ value: '', label: 'Модели не найдены', disabled: true }];
-                this.ensureCurrentOllamaModelOption();
-                this.cdr.markForCheck();
-            },
+        this.apiService.getModelIndex$().pipe(take(1)).subscribe((entries) => {
+            this.modelIndex = entries;
+            this.ensureCurrentOllamaModelOption();
+            this.cdr.markForCheck();
         });
     }
 
+    /** Text models from the model index; the chosen one stays with a note when it is not marked. */
     private ensureCurrentOllamaModelOption(): void {
         const current = String(this.providersForm.get('ollama.model')?.value || '').trim();
-        if (!current || this.ollamaModelOptions.some((item) => item.value === current)) {
-            return;
-        }
-        this.ollamaModelOptions = [{ value: current, label: current }, ...this.ollamaModelOptions];
+        this.ollamaModelOptions = buildModelOptions(
+            this.modelIndex,
+            'completion',
+            current,
+            modelOptionLabels((key) => this.localizationService.t(key), 'completion'),
+        );
     }
 
     private toggleFallbackControls(activeProvider: string): void {
@@ -234,6 +225,31 @@ export class AnalyzerSettingsComponent implements OnInit {
                 });
             }
         });
+    }
+
+    /** Puts the built-in prompt back into the field; saving keeps it. */
+    resetPrompt(controlPath: string, configPath: string): void {
+        const control = this.analyzerForm.get(controlPath);
+        if (!control) {
+            return;
+        }
+        this.configService
+            .getDefaultValue$(configPath)
+            .pipe(take(1))
+            .subscribe((value) => {
+                if (typeof value !== 'string') {
+                    this.notificationService.open({
+                        title: 'Error',
+                        type: 'error',
+                        message: 'Failed to load the default prompt',
+                        autoClose: true,
+                    });
+                    return;
+                }
+                control.setValue(value);
+                control.markAsDirty();
+                this.cdr.markForCheck();
+            });
     }
 
     private buildAnalyzerConfigFromForm(): any {

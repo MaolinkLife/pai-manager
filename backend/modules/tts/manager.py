@@ -764,15 +764,17 @@ class TTSManager:
 
         return self._speak_immediate(text, refuse_pause=refuse_pause)
 
-    def enqueue(self, text: str, refuse_pause: bool = False) -> None:
+    def enqueue(self, text: str, refuse_pause: bool = False, message_id: Optional[str] = None) -> None:
         """
         Add text to the speaking queue for processing.
 
         Args:
             text: Text to add to queue
             refuse_pause: Whether to refuse pauses between sentences
+            message_id: Chat message the text belongs to; the voice state names
+                it while the text sounds
         """
-        request = TTSRequest(text=text)
+        request = TTSRequest(text=text, metadata={"message_id": message_id} if message_id else {})
 
         log_audit_entry(
             "tts_enqueue",
@@ -782,6 +784,7 @@ class TTSManager:
                 "text_length": len(text),
                 "refuse_pause": refuse_pause,
                 "queue_size": self._queue.qsize(),
+                "message_id": message_id,
             },
         )
         self._debug(
@@ -871,7 +874,11 @@ class TTSManager:
                     queue_remaining=self._queue.qsize(),
                 )
 
-                result = self._speak_immediate(request.text, refuse_pause=refuse_pause)
+                result = self._speak_immediate(
+                    request.text,
+                    refuse_pause=refuse_pause,
+                    message_id=request.metadata.get("message_id"),
+                )
                 self._debug(
                     "worker_processing_done",
                     success=result.success if result else None,
@@ -899,13 +906,16 @@ class TTSManager:
         )
         self._debug("worker_stopped")
 
-    def _speak_immediate(self, text: str, refuse_pause: bool = False) -> TTSResult:
+    def _speak_immediate(
+        self, text: str, refuse_pause: bool = False, message_id: Optional[str] = None
+    ) -> TTSResult:
         """
         Internal method to speak text immediately without queuing.
 
         Args:
             text: Text to speak
             refuse_pause: Whether to refuse pauses between sentences
+            message_id: Chat message being voiced, if any
 
         Returns:
             TTSResult: Result of the speaking operation
@@ -950,7 +960,7 @@ class TTSManager:
             self._debug("no_chunks_after_cleanup")
             return TTSResult(success=False, error="empty_text")
 
-        voice_state.enter_speaking("tts_active")
+        voice_state.enter_speaking("tts_active", message_id=message_id)
         self._interrupt.clear()
 
         log_audit_entry(
