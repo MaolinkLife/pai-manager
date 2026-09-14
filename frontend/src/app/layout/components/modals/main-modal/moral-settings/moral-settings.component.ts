@@ -105,8 +105,9 @@ export class MoralSettingsComponent implements OnInit {
             }),
             innerVoice: this.fb.group({
                 enabled: [true],
-                maxTokens: [80, [Validators.min(1), Validators.max(1024)]],
+                maxTokens: [160, [Validators.min(1), Validators.max(1024)]],
                 temperature: [0.7, [Validators.min(0), Validators.max(2)]],
+                undercurrentThreshold: [0.5, [Validators.min(0), Validators.max(1)]],
                 language: [''],
                 systemPrompt: [''],
             }),
@@ -258,8 +259,9 @@ export class MoralSettingsComponent implements OnInit {
                     const innerVoice = moral.innerVoice || moral.inner_voice || {};
                     this.moralForm.get('innerVoice')!.patchValue({
                         enabled: innerVoice.enabled ?? true,
-                        maxTokens: innerVoice.maxTokens ?? innerVoice.max_tokens ?? 80,
+                        maxTokens: innerVoice.maxTokens ?? innerVoice.max_tokens ?? 160,
                         temperature: innerVoice.temperature ?? 0.7,
+                        undercurrentThreshold: innerVoice.undercurrentThreshold ?? 0.5,
                         language: innerVoice.language ?? '',
                         systemPrompt: innerVoice.systemPrompt ?? innerVoice.system_prompt ?? '',
                     });
@@ -426,8 +428,9 @@ export class MoralSettingsComponent implements OnInit {
             },
             innerVoice: {
                 enabled: !!formValue.innerVoice?.enabled,
-                maxTokens: Number(formValue.innerVoice?.maxTokens ?? 80),
+                maxTokens: Number(formValue.innerVoice?.maxTokens ?? 160),
                 temperature: Number(formValue.innerVoice?.temperature ?? 0.7),
+                undercurrentThreshold: Number(formValue.innerVoice?.undercurrentThreshold ?? 0.5),
                 language: String(formValue.innerVoice?.language ?? '').trim(),
                 systemPrompt: String(formValue.innerVoice?.systemPrompt ?? ''),
             },

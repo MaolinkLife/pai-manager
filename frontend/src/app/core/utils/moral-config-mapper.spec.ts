@@ -25,6 +25,35 @@ describe('moral config mapper: inner voice prompt', () => {
     });
 });
 
+describe('moral config mapper: inner voice undercurrent', () => {
+    it('carries the undercurrent threshold from the server into the form and back', () => {
+        const model = mapMoralDtoToModel({
+            enabled: true,
+            active_provider: 'ollama',
+            fallback_order: [],
+            providers: {},
+            inner_voice: { undercurrent_threshold: 0.6 },
+        } as MoralConfigDto);
+
+        expect(model.innerVoice?.undercurrentThreshold).toBe(0.6);
+        const dto = mapMoralPartialModelToDto({ innerVoice: { undercurrentThreshold: 0.4 } as MoralInnerVoiceConfig } as Partial<MoralConfig>);
+        expect(dto?.inner_voice?.undercurrent_threshold).toBe(0.4);
+    });
+
+    it('falls back to the server defaults when the values are missing', () => {
+        const model = mapMoralDtoToModel({
+            enabled: true,
+            active_provider: 'ollama',
+            fallback_order: [],
+            providers: {},
+            inner_voice: {},
+        } as MoralConfigDto);
+
+        expect(model.innerVoice?.maxTokens).toBe(160);
+        expect(model.innerVoice?.undercurrentThreshold).toBe(0.5);
+    });
+});
+
 describe('moral config mapper: partial saves', () => {
     it('switching scars does not send an empty trigger list', () => {
         const dto = mapMoralPartialModelToDto({ scars: { enabled: true } } as Partial<MoralConfig>);

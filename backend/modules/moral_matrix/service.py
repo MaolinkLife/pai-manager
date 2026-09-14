@@ -583,8 +583,10 @@ class MoralMatrixModule:
         intensity: float,
         cause: str,
         language_hint: str,
+        undercurrent: Optional[Tuple[str, float]] = None,
+        desired_behavior: str = "",
     ) -> str:
-        """One short first-person sentence explaining the current emotional shift.
+        """Two or three first-person sentences: what I feel, why, how I want to answer.
 
         Used by ``_persist_state``: feeds into ``EmotionalTrace.notes.inner_voice``
         and into ``result.meta["inner_voice"]`` so the existing WS ``moral_state``
@@ -612,7 +614,7 @@ class MoralMatrixModule:
             return ""
 
         max_tokens = int(
-            config_service.get_config_value("moral.inner_voice.max_tokens", 80) or 80
+            config_service.get_config_value("moral.inner_voice.max_tokens", 160) or 160
         )
         temperature = float(
             config_service.get_config_value("moral.inner_voice.temperature", 0.7) or 0.7
@@ -626,12 +628,17 @@ class MoralMatrixModule:
             or resolve_user_language(fallback="en-US")
         )
 
-        user_payload = (
-            f"Language: {language}\n"
-            f"Current emotion: {emotion}\n"
-            f"Intensity: {round(float(intensity or 0.0), 3)}\n"
-            f"Trigger: {str(cause or '').strip()[:600]}"
-        )
+        payload_lines = [
+            f"Language: {language}",
+            f"Current emotion: {emotion}",
+            f"Intensity: {round(float(intensity or 0.0), 3)}",
+            f"Trigger: {str(cause or '').strip()[:600]}",
+        ]
+        if undercurrent:
+            payload_lines.append(f"Undercurrent: {undercurrent[0]} ({round(float(undercurrent[1]), 2)})")
+        if str(desired_behavior or "").strip():
+            payload_lines.append(f"Wanted response: {str(desired_behavior).strip()[:200]}")
+        user_payload = "\n".join(payload_lines)
 
         try:
             result = generation_manager.generate(
@@ -676,14 +683,29 @@ class MoralMatrixModule:
         for prefix in ("Inner voice:", "PAI:", "Lim:", "Лим:", "ПАИ:"):
             if text.lower().startswith(prefix.lower()):
                 text = text[len(prefix):].strip()
-        # Trim to a single sentence — model sometimes ignores the rule.
-        # Take everything up to the first sentence terminator + 1 char.
-        for terminator in (". ", "! ", "? ", "\n"):
-            idx = text.find(terminator)
-            if 0 < idx < 240:
-                text = text[: idx + 1].strip()
-                break
+        # Keep at most three sentences — the model sometimes writes more.
+        sentence_ends = 0
+        for idx, char in enumerate(text):
+            if char in ".!?…" and (idx + 1 == len(text) or text[idx + 1].isspace()):
+                sentence_ends += 1
+                if sentence_ends == 3:
+                    text = text[: idx + 1].strip()
+                    break
         return text
+
+    @staticmethod
+    def _pick_undercurrent(
+        emotion_vector: Dict[str, float], dominant: str, threshold: float
+    ) -> Optional[Tuple[str, float]]:
+        """The strongest emotion besides the dominant one, when it is strong itself."""
+        candidates = [
+            (name, float(value))
+            for name, value in (emotion_vector or {}).items()
+            if name != dominant and isinstance(value, (int, float)) and float(value) >= threshold
+        ]
+        if not candidates:
+            return None
+        return max(candidates, key=lambda item: item[1])
 
     @staticmethod
     def _match_scar_trigger(
@@ -1496,11 +1518,18 @@ class MoralMatrixModule:
                 details={"error": str(exc), "character_id": character_id},
             )
 
-        # Inner voice — one short first-person sentence explaining "why I feel this".
+        # Inner voice — what I feel, why, and how I want to answer, in first person.
         # Feeds back into both the persisted trace (for later RAG / UI timeline)
         # and result.meta (the WS moral_state event already serialises meta).
         try:
             if bool(config_service.get_config_value("moral.inner_voice.enabled", True)):
+                raw_threshold = config_service.get_config_value(
+                    "moral.inner_voice.undercurrent_threshold", 0.5
+                )
+                try:
+                    threshold = float(raw_threshold)
+                except (TypeError, ValueError):
+                    threshold = 0.5
                 inner_voice = self._generate_inner_voice(
                     emotion=result.current_emotion,
                     intensity=result.emotion_intensity,
@@ -1509,6 +1538,10 @@ class MoralMatrixModule:
                         character_id=character_id,
                         fallback="",
                     ),
+                    undercurrent=self._pick_undercurrent(
+                        result.emotion_vector, result.current_emotion, threshold
+                    ),
+                    desired_behavior=str((result.influence or {}).get("behavior") or ""),
                 )
                 if inner_voice:
                     notes = trace_payload.get("notes")

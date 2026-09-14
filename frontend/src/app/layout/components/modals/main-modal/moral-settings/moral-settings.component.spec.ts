@@ -19,7 +19,7 @@ describe('MoralSettingsComponent: partial saves', () => {
                 enabled: false,
                 triggers: [{ name: 'insult', intents: ['insult'], tones: [], keywords: [], persistenceFloor: 0.4, intensityBoost: 0.2 }],
             },
-            innerVoice: { enabled: true, maxTokens: 80, temperature: 0.7, language: '', systemPrompt: '' },
+            innerVoice: { enabled: true, maxTokens: 80, temperature: 0.7, undercurrentThreshold: 0.5, language: '', systemPrompt: '' },
         },
     });
 
@@ -65,6 +65,16 @@ describe('MoralSettingsComponent: partial saves', () => {
         component.saveChanges();
 
         expect(saved).toEqual([{ moral: { scars: { enabled: true } } }]);
+    });
+
+    it('shows the stored undercurrent threshold and saves a change of it alone', () => {
+        const component = create();
+
+        expect(component.moralForm.get('innerVoice.undercurrentThreshold')!.value).toBe(0.5);
+        component.moralForm.get('innerVoice.undercurrentThreshold')!.setValue(0.6);
+        component.saveChanges();
+
+        expect(saved).toEqual([{ moral: { innerVoice: { undercurrentThreshold: 0.6 } } }]);
     });
 
     it('does not save when the settings could not be loaded', () => {

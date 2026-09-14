@@ -117,8 +117,9 @@ const mapInnerVoiceDtoToModel = (
     }
     return {
         enabled: dto.enabled ?? true,
-        maxTokens: dto.max_tokens ?? 80,
+        maxTokens: dto.max_tokens ?? 160,
         temperature: dto.temperature ?? 0.7,
+        undercurrentThreshold: dto.undercurrent_threshold ?? 0.5,
         language: dto.language ?? '',
         systemPrompt: dto.system_prompt ?? '',
     };
@@ -134,6 +135,7 @@ const mapInnerVoiceModelToDto = (
         enabled: model.enabled,
         max_tokens: model.maxTokens,
         temperature: model.temperature,
+        undercurrent_threshold: model.undercurrentThreshold,
         language: model.language,
         ...promptField('system_prompt', model.systemPrompt),
     };

@@ -528,12 +528,15 @@ DEFAULT_CONFIG = {
             "global_rate": 0.05,
         },
         "inner_voice": {
-            # One short first-person sentence on each turn, explaining why PAI
-            # feels what she feels right now. Costs a small LLM call per turn,
-            # so the operator can turn it off if latency matters more.
+            # Two or three short first-person sentences on each turn: what PAI
+            # feels, why, and how she wants to answer. The undercurrent is the
+            # strongest other emotion at or above undercurrent_threshold. Costs
+            # a small LLM call per turn, so the operator can turn it off if
+            # latency matters more.
             "enabled": True,
-            "max_tokens": 80,
+            "max_tokens": 160,
             "temperature": 0.7,
+            "undercurrent_threshold": 0.5,
             "language": "",  # fallback to system.language if blank
             # Technical prompt, editable in the settings; empty = built-in.
             "system_prompt": MORAL_INNER_VOICE_PROMPT,

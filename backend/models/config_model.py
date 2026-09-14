@@ -579,13 +579,15 @@ class MoralDecayConfig(BaseModel):
 
 
 class MoralInnerVoiceConfig(BaseModel):
-    # Single-sentence first-person explanation written by a small LLM after
-    # each emotional shift. Surfaces in the existing WS moral_state event
-    # via result.meta.inner_voice. Adds one short LLM call per turn —
-    # disable when latency matters more than introspection UX.
+    # Two or three first-person sentences written by a small LLM after each
+    # emotional shift: what PAI feels, why, and how she wants to answer.
+    # Surfaces in the existing WS moral_state event via result.meta.inner_voice.
+    # Adds one short LLM call per turn — disable when latency matters more
+    # than introspection UX.
     enabled: bool = True
-    max_tokens: int = 80
+    max_tokens: int = 160
     temperature: float = 0.7
+    undercurrent_threshold: float = 0.5
     language: str = ""  # blank → falls back to system.language
     system_prompt: str = MORAL_INNER_VOICE_PROMPT
 

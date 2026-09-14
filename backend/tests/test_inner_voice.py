@@ -2,14 +2,14 @@
 
 Cover:
   * generation_manager.generate is mocked — no real LLM call needed
-  * happy path: returns trimmed first-person sentence
+  * happy path: returns trimmed first-person text
   * "Inner voice:" / "PAI:" / "Лим:" prefixes are stripped
-  * multi-sentence response is trimmed to one sentence
+  * a longer response is trimmed to three sentences
+  * the payload carries the undercurrent and the wanted response when given
+  * the undercurrent is the strongest other emotion at or above the threshold
+  * _persist_state hands the undercurrent and the wanted response to the voice
   * generation_manager NoProviderResolved → returns "" without raising
   * generation_manager exceptions → returns "" without raising
-  * config disabled → _generate_inner_voice still works (it's the caller in
-    _persist_state that respects the flag); but DB-level integration test
-    asserts the trace.notes.inner_voice field is populated when enabled
 """
 
 from __future__ import annotations
@@ -47,6 +47,23 @@ def _patch_generation(monkeypatch, *, content: str | None = None, raise_exc: Exc
         return _FakeResult(content or "")
 
     monkeypatch.setattr(gen_manager_mod.generation_manager, "generate", fake_generate)
+
+
+def _capture_payload(monkeypatch) -> dict:
+    """Stub generation and keep the user-side payload the voice was asked with."""
+    captured: dict = {}
+
+    from modules.generative import manager as gen_manager_mod
+
+    def fake_generate(request):
+        captured["payload"] = next(
+            (m["content"] for m in request.messages if m.get("role") == "user"),
+            "",
+        )
+        return _FakeResult("ok")
+
+    monkeypatch.setattr(gen_manager_mod.generation_manager, "generate", fake_generate)
+    return captured
 
 
 # ---------------------------------------------------------------------------
@@ -92,18 +109,28 @@ def test_inner_voice_strips_pai_lim_prefixes(monkeypatch):
 
 
 @pytest.mark.regression
-def test_inner_voice_trims_to_single_sentence(monkeypatch):
+def test_inner_voice_keeps_at_most_three_sentences(monkeypatch):
     _patch_generation(
         monkeypatch,
-        content="Мне больно, что ты молчал так долго. Я ждала весь день. Это не первый раз.",
+        content="Мне больно, что ты молчал так долго. Я ждала весь день! Хочу ответить тихо? Это не первый раз.",
     )
 
     text = _new_module()._generate_inner_voice(
         emotion="sadness", intensity=0.7, cause="long silence", language_hint="ru-RU"
     )
 
-    # Single sentence — first one with the terminator preserved.
-    assert text == "Мне больно, что ты молчал так долго."
+    assert text == "Мне больно, что ты молчал так долго. Я ждала весь день! Хочу ответить тихо?"
+
+
+@pytest.mark.regression
+def test_inner_voice_keeps_a_short_answer_whole(monkeypatch):
+    _patch_generation(monkeypatch, content="Мне тепло. Хочу ответить игриво.")
+
+    text = _new_module()._generate_inner_voice(
+        emotion="tenderness", intensity=0.8, cause="kind words", language_hint="ru-RU"
+    )
+
+    assert text == "Мне тепло. Хочу ответить игриво."
 
 
 @pytest.mark.regression
@@ -116,6 +143,145 @@ def test_inner_voice_handles_no_terminator(monkeypatch):
     )
 
     assert text == "всё нормально просто немного устала сегодня"
+
+
+# ---------------------------------------------------------------------------
+# What the voice is asked with
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.regression
+def test_inner_voice_uses_language_hint_in_user_payload(monkeypatch):
+    """The user payload should contain the language string verbatim — caller
+    controls whether to forward a fresh hint or fall back to config."""
+    captured = _capture_payload(monkeypatch)
+
+    _new_module()._generate_inner_voice(
+        emotion="joy",
+        intensity=0.3,
+        cause="thanks",
+        language_hint="en-US",
+    )
+
+    assert "Language: en-US" in captured["payload"]
+    assert "Current emotion: joy" in captured["payload"]
+
+
+def test_inner_voice_payload_carries_the_undercurrent_and_the_wanted_response(monkeypatch):
+    captured = _capture_payload(monkeypatch)
+
+    _new_module()._generate_inner_voice(
+        emotion="tenderness",
+        intensity=0.85,
+        cause="the user asked if so little makes her happy",
+        language_hint="ru-RU",
+        undercurrent=("peace", 0.75),
+        desired_behavior="answer_playfully",
+    )
+
+    assert "Undercurrent: peace (0.75)" in captured["payload"]
+    assert "Wanted response: answer_playfully" in captured["payload"]
+
+
+def test_inner_voice_payload_leaves_out_what_was_not_given(monkeypatch):
+    captured = _capture_payload(monkeypatch)
+
+    _new_module()._generate_inner_voice(
+        emotion="joy", intensity=0.6, cause="thanks", language_hint="ru-RU"
+    )
+
+    assert "Undercurrent" not in captured["payload"]
+    assert "Wanted response" not in captured["payload"]
+
+
+def test_the_undercurrent_is_the_strongest_other_emotion_above_the_threshold():
+    vector = {"tenderness": 0.9, "peace": 0.75, "joy": 0.7, "anxiety": 0.6}
+
+    assert MoralMatrixModule._pick_undercurrent(vector, "tenderness", 0.5) == ("peace", 0.75)
+
+
+def test_there_is_no_undercurrent_when_the_rest_is_below_the_threshold():
+    vector = {"joy": 0.8, "anger": 0.4, "peace": 0.3}
+
+    assert MoralMatrixModule._pick_undercurrent(vector, "joy", 0.5) is None
+
+
+def test_the_dominant_emotion_is_never_its_own_undercurrent():
+    assert MoralMatrixModule._pick_undercurrent({"joy": 0.8}, "joy", 0.5) is None
+
+
+def test_the_voice_gets_the_undercurrent_and_the_wanted_response_from_the_state(monkeypatch):
+    from modules.moral_matrix import service as service_module
+    from modules.moral_matrix.types import MoralMatrixResult
+
+    settings = {
+        "moral.scars.enabled": False,
+        "moral.inner_voice.enabled": True,
+        "moral.inner_voice.undercurrent_threshold": 0.5,
+    }
+    monkeypatch.setattr(
+        service_module.config_service,
+        "get_config_value",
+        lambda path, default=None: settings.get(path, default),
+    )
+    monkeypatch.setattr(service_module.config_service, "set_config_value", lambda *args, **kwargs: None)
+    monkeypatch.setattr(service_module, "resolve_user_language", lambda **kwargs: "ru-RU")
+
+    class _Repository:
+        def __init__(self):
+            self.traces = []
+
+        def store_snapshot(self, *args, **kwargs):
+            pass
+
+        def annotate_previous_trace_outcome(self, *args, **kwargs):
+            pass
+
+        def store_emotional_trace(self, character_id, *, message_id, payload):
+            self.traces.append(payload)
+
+    module = _new_module()
+    module._repository = _Repository()
+    asked: dict = {}
+
+    def fake_voice(**kwargs):
+        asked.update(kwargs)
+        return "Мне тепло и спокойно. Хочу ответить игриво."
+
+    monkeypatch.setattr(module, "_generate_inner_voice", fake_voice)
+
+    result = MoralMatrixResult(
+        current_emotion="tenderness",
+        emotion_intensity=0.85,
+        relationship_status="very close",
+        emotion_vector={"tenderness": 0.9, "peace": 0.75, "joy": 0.7},
+        trigger="the user asked if so little makes her happy",
+        influence={"tone": "мягкий", "behavior": "answer_playfully"},
+    )
+
+    module._persist_state(
+        "c1",
+        result,
+        message_meta={"message_id": "m1"},
+        analyzer_snapshot={},
+        user_message={"role": "user", "content": "Неужели тебе так мало нужно для счастья?"},
+    )
+
+    assert asked["undercurrent"] == ("peace", 0.75)
+    assert asked["desired_behavior"] == "answer_playfully"
+    assert result.meta["inner_voice"] == "Мне тепло и спокойно. Хочу ответить игриво."
+    assert module._repository.traces[0]["notes"]["inner_voice"] == "Мне тепло и спокойно. Хочу ответить игриво."
+
+
+def test_the_inner_voice_defaults_match_between_the_config_and_its_model():
+    from constants.default_config import DEFAULT_CONFIG
+    from models.config_model import MoralInnerVoiceConfig
+
+    defaults = DEFAULT_CONFIG["moral"]["inner_voice"]
+    model = MoralInnerVoiceConfig()
+
+    assert defaults["max_tokens"] == model.max_tokens == 160
+    assert defaults["undercurrent_threshold"] == model.undercurrent_threshold == 0.5
 
 
 # ---------------------------------------------------------------------------
@@ -156,31 +322,3 @@ def test_inner_voice_returns_empty_for_blank_content(monkeypatch):
     )
 
     assert text == ""
-
-
-@pytest.mark.regression
-def test_inner_voice_uses_language_hint_in_user_payload(monkeypatch):
-    """The user payload should contain the language string verbatim — caller
-    controls whether to forward a fresh hint or fall back to config."""
-    captured: dict = {}
-
-    from modules.generative import manager as gen_manager_mod
-
-    def fake_generate(request):
-        captured["payload"] = next(
-            (m["content"] for m in request.messages if m.get("role") == "user"),
-            "",
-        )
-        return _FakeResult("ok")
-
-    monkeypatch.setattr(gen_manager_mod.generation_manager, "generate", fake_generate)
-
-    _new_module()._generate_inner_voice(
-        emotion="joy",
-        intensity=0.3,
-        cause="thanks",
-        language_hint="en-US",
-    )
-
-    assert "Language: en-US" in captured["payload"]
-    assert "Current emotion: joy" in captured["payload"]
