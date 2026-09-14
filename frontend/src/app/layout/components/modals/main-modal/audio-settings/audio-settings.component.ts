@@ -1,6 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { UntypedFormBuilder, UntypedFormGroup } from '@angular/forms';
 import { ConfigService } from '../../../../../core/services/config.service';
+import { pickChangedFields } from '../../../../../core/utils/changed-fields';
 import { ResourcesService } from '../../../../../core/services/resources.service';
 import { Observable, BehaviorSubject, combineLatest } from 'rxjs';
 import { map, startWith, tap, finalize } from 'rxjs/operators';
@@ -49,6 +50,8 @@ export class AudioSettingsComponent implements OnInit {
         { value: 'cuda', label: 'CUDA' },
     ];
     private originalSttSnapshot: any = {};
+    /** Without the stored values a save could not tell what changed. */
+    loadFailed = false;
 
     constructor(
         private fb: UntypedFormBuilder,
@@ -147,10 +150,6 @@ export class AudioSettingsComponent implements OnInit {
         return JSON.parse(JSON.stringify(this.audioForm.get('stt')!.value));
     }
 
-    private sttHasChanges(): boolean {
-        return JSON.stringify(this.buildSttPayload()) !== JSON.stringify(this.originalSttSnapshot);
-    }
-
     private loadConfigAndDevices(): void {
         combineLatest([
             this.configService.getConfig$(),
@@ -158,12 +157,12 @@ export class AudioSettingsComponent implements OnInit {
         ]).pipe(
             tap(() => this.isLoading$.next(true)),
             map(([config, devices]) => {
+                this.loadFailed = !config;
                 this.originalModules = this.normalizeModulesPayload(config?.modules);
                 // Load config
                 if (config && config.audio) {
-                    this.originalConfig = this.normalizeAudioPayload(config.audio);
                     this.audioForm.patchValue({
-                        ...this.originalConfig,
+                        ...this.normalizeAudioPayload(config.audio),
                         sttEnabled: this.originalModules.whisper,
                     });
                 } else {
@@ -171,6 +170,8 @@ export class AudioSettingsComponent implements OnInit {
                         sttEnabled: this.originalModules.whisper,
                     });
                 }
+                // A save compares with the form as loaded, so it sends only what was edited.
+                this.originalConfig = this.normalizeAudioPayload(this.audioForm.value);
 
                 // STT block (0.7.2)
                 this.patchSttSection((config as any)?.stt);
@@ -199,60 +200,64 @@ export class AudioSettingsComponent implements OnInit {
     }
 
     saveChanges(): void {
+        if (!this.hasChanges()) {
+            return;
+        }
         const normalized = this.normalizeAudioPayload(this.audioForm.value);
         const modules = this.buildModulesPayload();
         const sttPayload = this.buildSttPayload();
-        const sttDirty = this.sttHasChanges();
-        const updateData: any = {};
-        if (this.hasPayloadChanged(normalized)) {
-            updateData.audio = normalized;
-        }
-        if (JSON.stringify(modules) !== JSON.stringify(this.originalModules)) {
-            updateData.modules = modules;
-        }
-        if (sttDirty) {
-            updateData.stt = sttPayload;
-        }
-        if (Object.keys(updateData).length > 0) {
-            this.configService.updateConfig$(updateData).subscribe({
-                next: (response) => {
-                    console.log('Audio settings updated:', response);
-                    this.originalConfig = normalized;
-                    if (sttDirty) {
-                        this.originalSttSnapshot = sttPayload;
-                    }
-                    this.notificationService.open({
-                        title: 'Success',
-                        type: 'success',
-                        message: 'Audio settings updated successfully',
-                        autoClose: true,
-                    });
-                },
-                error: (error) => {
-                    console.error('Error updating audio settings:', error);
-                    this.notificationService.open({
-                        title: 'Error',
-                        type: 'error',
-                        message: 'Failed to update audio settings',
-                        autoClose: true,
-                    });
-                }
-            });
-        }
-    }
-
-    private hasPayloadChanged(current: any): boolean {
-        return JSON.stringify(current) !== JSON.stringify(this.originalConfig);
+        const changes = this.collectChanges(normalized, modules, sttPayload);
+        this.configService.updateConfig$(changes).subscribe({
+            next: (response) => {
+                console.log('Audio settings updated:', response);
+                this.originalConfig = normalized;
+                this.originalModules = modules;
+                this.originalSttSnapshot = sttPayload;
+                this.notificationService.open({
+                    title: 'Success',
+                    type: 'success',
+                    message: 'Audio settings updated successfully',
+                    autoClose: true,
+                });
+            },
+            error: (error) => {
+                console.error('Error updating audio settings:', error);
+                this.notificationService.open({
+                    title: 'Error',
+                    type: 'error',
+                    message: 'Failed to update audio settings',
+                    autoClose: true,
+                });
+            }
+        });
     }
 
     hasChanges(): boolean {
-        const normalized = this.normalizeAudioPayload(this.audioForm.value);
-        const modules = this.buildModulesPayload();
-        return (
-            this.hasPayloadChanged(normalized) ||
-            JSON.stringify(modules) !== JSON.stringify(this.originalModules) ||
-            this.sttHasChanges()
+        if (this.loadFailed) {
+            return false;
+        }
+        const changes = this.collectChanges(
+            this.normalizeAudioPayload(this.audioForm.value),
+            this.buildModulesPayload(),
+            this.buildSttPayload(),
         );
+        return Object.keys(changes).length > 0;
+    }
+
+    /** Only the fields that differ from what the tab loaded, per config section. */
+    private collectChanges(audio: any, modules: any, stt: any): Record<string, unknown> {
+        const changes: Record<string, unknown> = {};
+        const sections: Array<[string, Record<string, unknown>]> = [
+            ['audio', pickChangedFields(audio, this.originalConfig)],
+            ['modules', pickChangedFields(modules, this.originalModules)],
+            ['stt', pickChangedFields(stt, this.originalSttSnapshot)],
+        ];
+        sections.forEach(([key, diff]) => {
+            if (Object.keys(diff).length > 0) {
+                changes[key] = diff;
+            }
+        });
+        return changes;
     }
 
     private normalizeModulesPayload(modules: any): any {

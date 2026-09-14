@@ -21,22 +21,33 @@ const mapSherpaDtoToModel = (dto?: SttSherpaOnnxConfigDto): SttSherpaOnnxConfig 
     provider: dto?.provider ?? 'cpu',
 });
 
-const mapSherpaModelToDto = (model?: SttSherpaOnnxConfig): SttSherpaOnnxConfigDto => ({
-    model_type: model?.modelType ?? 'transducer',
-    encoder: model?.encoder ?? '',
-    decoder: model?.decoder ?? '',
-    joiner: model?.joiner ?? '',
-    paraformer: model?.paraformer ?? '',
-    whisper_encoder: model?.whisperEncoder ?? '',
-    whisper_decoder: model?.whisperDecoder ?? '',
-    moonshine_preprocessor: model?.moonshinePreprocessor ?? '',
-    moonshine_encoder: model?.moonshineEncoder ?? '',
-    moonshine_uncached_decoder: model?.moonshineUncachedDecoder ?? '',
-    moonshine_cached_decoder: model?.moonshineCachedDecoder ?? '',
-    tokens: model?.tokens ?? '',
-    num_threads: model?.numThreads ?? 1,
-    provider: model?.provider ?? 'cpu',
-});
+const SHERPA_FIELD_NAMES: Array<[keyof SttSherpaOnnxConfig, string]> = [
+    ['modelType', 'model_type'],
+    ['encoder', 'encoder'],
+    ['decoder', 'decoder'],
+    ['joiner', 'joiner'],
+    ['paraformer', 'paraformer'],
+    ['whisperEncoder', 'whisper_encoder'],
+    ['whisperDecoder', 'whisper_decoder'],
+    ['moonshinePreprocessor', 'moonshine_preprocessor'],
+    ['moonshineEncoder', 'moonshine_encoder'],
+    ['moonshineUncachedDecoder', 'moonshine_uncached_decoder'],
+    ['moonshineCachedDecoder', 'moonshine_cached_decoder'],
+    ['tokens', 'tokens'],
+    ['numThreads', 'num_threads'],
+    ['provider', 'provider'],
+];
+
+const mapSherpaModelToDto = (model?: Partial<SttSherpaOnnxConfig>): SttSherpaOnnxConfigDto => {
+    const dto: Record<string, unknown> = {};
+    SHERPA_FIELD_NAMES.forEach(([from, to]) => {
+        const value = model?.[from];
+        if (value !== undefined) {
+            dto[to] = value;
+        }
+    });
+    return dto as SttSherpaOnnxConfigDto;
+};
 
 export const mapSttDtoToModel = (dto?: SttConfigDto): SttConfig => ({
     language: dto?.language ?? 'en-US',
@@ -45,9 +56,20 @@ export const mapSttDtoToModel = (dto?: SttConfigDto): SttConfig => ({
     sherpaOnnx: mapSherpaDtoToModel(dto?.sherpa_onnx),
 });
 
-export const mapSttModelToDto = (model?: SttConfig): SttConfigDto => ({
-    language: model?.language ?? 'en-US',
-    auto_detect: model?.autoDetect ?? false,
-    provider: model?.provider ?? 'whisper',
-    sherpa_onnx: mapSherpaModelToDto(model?.sherpaOnnx),
-});
+/** A settings save sends only the fields it carries — nothing is filled with defaults. */
+export const mapSttModelToDto = (model?: Partial<SttConfig>): SttConfigDto => {
+    const dto: Record<string, unknown> = {};
+    if (model?.language !== undefined) {
+        dto['language'] = model.language;
+    }
+    if (model?.autoDetect !== undefined) {
+        dto['auto_detect'] = model.autoDetect;
+    }
+    if (model?.provider !== undefined) {
+        dto['provider'] = model.provider;
+    }
+    if (model?.sherpaOnnx !== undefined) {
+        dto['sherpa_onnx'] = mapSherpaModelToDto(model.sherpaOnnx);
+    }
+    return dto as SttConfigDto;
+};
