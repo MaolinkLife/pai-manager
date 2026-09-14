@@ -100,10 +100,13 @@ const mapScarsModelToDto = (model?: MoralScarsConfig): MoralScarsConfigDto | und
     if (!model) {
         return undefined;
     }
-    return {
-        enabled: model.enabled,
-        triggers: (model.triggers ?? []).map(mapScarTriggerModelToDto),
-    };
+    const dto: MoralScarsConfigDto = { enabled: model.enabled };
+    // A list is replaced whole on the server: a save that did not touch the
+    // triggers must not send an empty list and wipe them.
+    if (model.triggers !== undefined) {
+        dto.triggers = model.triggers.map(mapScarTriggerModelToDto);
+    }
+    return dto;
 };
 
 const mapInnerVoiceDtoToModel = (

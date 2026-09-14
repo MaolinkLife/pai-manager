@@ -24,3 +24,21 @@ describe('moral config mapper: inner voice prompt', () => {
         expect('system_prompt' in (dto?.inner_voice ?? {})).toBeFalse();
     });
 });
+
+describe('moral config mapper: partial saves', () => {
+    it('switching scars does not send an empty trigger list', () => {
+        const dto = mapMoralPartialModelToDto({ scars: { enabled: true } } as Partial<MoralConfig>);
+
+        expect(dto?.scars).toEqual({ enabled: true } as any);
+    });
+
+    it('edited triggers are sent as the whole list', () => {
+        const trigger = { name: 'insult', intents: ['insult'], tones: [], keywords: [], persistenceFloor: 0.4, intensityBoost: 0.2 };
+
+        const dto = mapMoralPartialModelToDto({ scars: { triggers: [trigger] } } as unknown as Partial<MoralConfig>);
+
+        expect(dto?.scars?.triggers).toEqual([{
+            name: 'insult', intents: ['insult'], tones: [], keywords: [], persistence_floor: 0.4, intensity_boost: 0.2,
+        }]);
+    });
+});

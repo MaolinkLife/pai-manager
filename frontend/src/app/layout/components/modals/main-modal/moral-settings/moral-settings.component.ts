@@ -23,6 +23,8 @@ export class MoralSettingsComponent implements OnInit {
     moralForm: UntypedFormGroup;
     isLoading$ = new BehaviorSubject<boolean>(true);
     originalConfig: any = {};
+    /** Without the stored values a save could not tell what changed. */
+    loadFailed = false;
     ollamaModelOptions: UiSelectOption[] = [
         { value: '', label: 'Модели не найдены', disabled: true },
     ];
@@ -268,6 +270,7 @@ export class MoralSettingsComponent implements OnInit {
                     this.cdr.markForCheck();
                 },
                 error: (error) => {
+                    this.loadFailed = true;
                     console.error('Error loading moral config:', error);
                     this.notificationService.open({
                         title: 'Error',
@@ -320,10 +323,10 @@ export class MoralSettingsComponent implements OnInit {
     }
 
     saveChanges(): void {
-        const changes = this.getChanges();
-        if (Object.keys(changes).length === 0) {
+        if (!this.hasChanges()) {
             return;
         }
+        const changes = this.getChanges();
 
         this.configService.updateConfig$({ moral: changes }).subscribe({
             next: () => {
@@ -492,7 +495,7 @@ export class MoralSettingsComponent implements OnInit {
     }
 
     hasChanges(): boolean {
-        return Object.keys(this.getChanges()).length > 0;
+        return !this.loadFailed && Object.keys(this.getChanges()).length > 0;
     }
 
     get providersForm(): UntypedFormGroup {
