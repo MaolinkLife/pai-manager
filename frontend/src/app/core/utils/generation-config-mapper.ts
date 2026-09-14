@@ -1,3 +1,4 @@
+import { ProjectConfigDto } from '../models/project-config.dto';
 import { ProjectConfig } from '../models/project-config.model';
 
 const DEFAULT_GENERATION = {
@@ -39,18 +40,39 @@ export const mapGenerationDtoToModel = (dto: any) => ({
     description: dto?.description ?? DEFAULT_GENERATION.description,
 });
 
-export const mapGenerationModelToDto = (generation: ProjectConfig['generateSettings']) => ({
-    temperature: numberFrom(generation?.temperature, DEFAULT_GENERATION.temperature),
-    min_p: numberFrom(generation?.minP, DEFAULT_GENERATION.minP),
-    top_p: numberFrom(generation?.topP, DEFAULT_GENERATION.topP),
-    top_k: numberFrom(generation?.topK, DEFAULT_GENERATION.topK),
-    repeat_penalty: numberFrom(
-        generation?.repeatPenalty,
-        DEFAULT_GENERATION.repeatPenalty
-    ),
-    stop: generation?.stop ?? DEFAULT_GENERATION.stop,
-    num_predict: numberFrom(generation?.numPredict, DEFAULT_GENERATION.numPredict),
-    normalize_messages: Boolean(generation?.normalizeMessages ?? DEFAULT_GENERATION.normalizeMessages),
-    name: generation?.name ?? DEFAULT_GENERATION.name,
-    description: generation?.description ?? DEFAULT_GENERATION.description,
-});
+/** A settings save sends only the fields it carries — nothing is filled with defaults. */
+export const mapGenerationModelToDto = (
+    generation: Partial<ProjectConfig['generateSettings']> | undefined
+): ProjectConfigDto['generate_settings'] => {
+    const dto: Record<string, any> = {};
+    if (!generation) {
+        return dto as ProjectConfigDto['generate_settings'];
+    }
+    const numbers: Array<[string, unknown]> = [
+        ['temperature', generation.temperature],
+        ['min_p', generation.minP],
+        ['top_p', generation.topP],
+        ['top_k', generation.topK],
+        ['repeat_penalty', generation.repeatPenalty],
+        ['num_predict', generation.numPredict],
+    ];
+    numbers.forEach(([key, value]) => {
+        const parsed = Number(value);
+        if (value !== undefined && value !== null && Number.isFinite(parsed)) {
+            dto[key] = parsed;
+        }
+    });
+    if (generation.stop !== undefined) {
+        dto['stop'] = generation.stop;
+    }
+    if (generation.normalizeMessages !== undefined) {
+        dto['normalize_messages'] = Boolean(generation.normalizeMessages);
+    }
+    if (generation.name !== undefined) {
+        dto['name'] = generation.name;
+    }
+    if (generation.description !== undefined) {
+        dto['description'] = generation.description;
+    }
+    return dto as ProjectConfigDto['generate_settings'];
+};

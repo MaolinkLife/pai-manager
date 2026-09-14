@@ -1,3 +1,4 @@
+import { ProjectConfigDto } from '../models/project-config.dto';
 import { ProjectConfig } from '../models/project-config.model';
 
 export const mapApiDtoToModel = (dto: any) => {
@@ -34,36 +35,56 @@ export const mapApiDtoToModel = (dto: any) => {
     };
 };
 
-export const mapApiModelToDto = (api: ProjectConfig['api']) => {
-    const providers: Record<string, any> = {};
-    Object.keys(api.providers ?? {}).forEach((key: string) => {
-        const value = api.providers?.[key];
-        if (!value) {
-            return;
+const API_FIELD_NAMES: Array<[string, string]> = [
+    ['type', 'type'],
+    ['streaming', 'streaming'],
+    ['model', 'model'],
+    ['tokenLimit', 'token_limit'],
+    ['messagePairLimit', 'message_pair_limit'],
+    ['activeProvider', 'active_provider'],
+    ['fallbackOrder', 'fallback_order'],
+];
+
+const PROVIDER_FIELD_NAMES: Array<[string, string]> = [
+    ['maxTokens', 'max_tokens'],
+    ['apiKey', 'api_key'],
+    ['baseUrl', 'base_url'],
+];
+
+/** A settings save sends only the fields it carries — nothing is filled in. */
+export const mapApiModelToDto = (api: Partial<ProjectConfig['api']>): ProjectConfigDto['api'] => {
+    const dto: Record<string, any> = {};
+    API_FIELD_NAMES.forEach(([from, to]) => {
+        const value = (api as Record<string, any>)[from];
+        if (value !== undefined) {
+            dto[to] = value;
         }
-        const providerModel = api.activeProvider === key ? api.model : value.model;
-        providers[key] = {
-            ...value,
-            model: providerModel,
-            temperature: value.temperature,
-            max_tokens: value.maxTokens,
-            streaming: value.streaming,
-            api_key: value.apiKey,
-            base_url: value.baseUrl,
-        };
-        delete providers[key].maxTokens;
-        delete providers[key].apiKey;
-        delete providers[key].baseUrl;
     });
 
-    return {
-        type: api.type,
-        streaming: api.streaming,
-        model: api.model,
-        token_limit: api.tokenLimit,
-        message_pair_limit: api.messagePairLimit,
-        active_provider: api.activeProvider,
-        fallback_order: api.fallbackOrder,
-        providers,
-    };
+    if (api.providers) {
+        const providers: Record<string, any> = {};
+        Object.keys(api.providers).forEach((key: string) => {
+            const value = api.providers?.[key];
+            if (!value) {
+                return;
+            }
+            const provider: Record<string, any> = { ...value };
+            PROVIDER_FIELD_NAMES.forEach(([from, to]) => {
+                if (from in provider) {
+                    if (provider[from] !== undefined) {
+                        provider[to] = provider[from];
+                    }
+                    delete provider[from];
+                }
+            });
+            // The active provider's model follows api.model when the save carries both.
+            if (api.activeProvider === key && api.model !== undefined) {
+                provider['model'] = api.model;
+            }
+            providers[key] = provider;
+        });
+        dto['providers'] = providers;
+    }
+
+    return dto as ProjectConfigDto['api'];
 };

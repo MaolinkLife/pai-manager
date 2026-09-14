@@ -3,6 +3,7 @@ import { UntypedFormBuilder, UntypedFormGroup } from '@angular/forms';
 import { BehaviorSubject } from 'rxjs';
 import { finalize, take } from 'rxjs/operators';
 import { ConfigService } from '../../../../core/services/config.service';
+import { pickChangedFields } from '../../../../core/utils/changed-fields';
 import { NotificationService } from '../../../../shared/components/notification/notification.service';
 import { LocalizationService } from '../../../../shared/pipes/translation/localization.service';
 
@@ -14,8 +15,8 @@ import { LocalizationService } from '../../../../shared/pipes/translation/locali
  * Generation parameters (temperature, tokens, etc.) stay in the Generation
  * tab — this tab is only about where PAI connects to.
  *
- * The PATCH body must carry the FULL api model (the mapper serializes every
- * field), so the form is merged into the api object loaded from config.
+ * The form is merged into the api object loaded from config, and a save sends
+ * only the fields that differ from what the form loaded.
  */
 @Component({
     selector: 'app-connections-settings',
@@ -132,7 +133,44 @@ export class ConnectionsSettingsComponent implements OnInit {
         if (!this.apiModel || !this.hasChanges() || this.isSaving) {
             return;
         }
-        const v = this.form.getRawValue();
+        const api = this.buildApi(this.form.getRawValue());
+        // Compared with the api built from the values the form loaded, so the form's
+        // defaults for providers the config does not have are not written.
+        const changes = pickChangedFields(api, this.buildApi(JSON.parse(this.originalSnapshot)));
+        if (Object.keys(changes).length === 0) {
+            return;
+        }
+
+        this.isSaving = true;
+        this.configService
+            .updateConfig$({ api: changes })
+            .pipe(finalize(() => {
+                this.isSaving = false;
+                this.cdr.markForCheck();
+            }))
+            .subscribe({
+                next: () => {
+                    this.apiModel = api;
+                    this.originalSnapshot = JSON.stringify(this.form.getRawValue());
+                    this.notificationService.open({
+                        title: 'Success',
+                        type: 'success',
+                        message: this.t('settingsPage.connections.saved'),
+                        autoClose: true,
+                    });
+                },
+                error: () => {
+                    this.notificationService.open({
+                        title: 'Error',
+                        type: 'error',
+                        message: this.t('settingsPage.connections.saveError'),
+                        autoClose: true,
+                    });
+                },
+            });
+    }
+
+    private buildApi(v: any): any {
         const api = JSON.parse(JSON.stringify(this.apiModel));
         api.providers = api.providers || {};
 
@@ -164,33 +202,6 @@ export class ConnectionsSettingsComponent implements OnInit {
         if (activeModel) {
             api.model = activeModel;
         }
-
-        this.isSaving = true;
-        this.configService
-            .updateConfig$({ api })
-            .pipe(finalize(() => {
-                this.isSaving = false;
-                this.cdr.markForCheck();
-            }))
-            .subscribe({
-                next: () => {
-                    this.apiModel = api;
-                    this.originalSnapshot = JSON.stringify(this.form.getRawValue());
-                    this.notificationService.open({
-                        title: 'Success',
-                        type: 'success',
-                        message: this.t('settingsPage.connections.saved'),
-                        autoClose: true,
-                    });
-                },
-                error: () => {
-                    this.notificationService.open({
-                        title: 'Error',
-                        type: 'error',
-                        message: this.t('settingsPage.connections.saveError'),
-                        autoClose: true,
-                    });
-                },
-            });
+        return api;
     }
 }

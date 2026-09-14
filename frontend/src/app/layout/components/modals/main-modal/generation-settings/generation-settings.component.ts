@@ -3,6 +3,7 @@ import { UntypedFormBuilder, UntypedFormGroup } from '@angular/forms';
 import { ConfigService } from '../../../../../core/services/config.service';
 import { ApiService, ModelIndexEntry } from '../../../../../core/services/api.service';
 import { buildModelOptions, modelOptionLabels } from '../../../../../core/utils/model-options';
+import { pickChangedFields } from '../../../../../core/utils/changed-fields';
 import { GenerationPreset } from '../../../../../core/models/generation-preset.model';
 import { combineLatest, BehaviorSubject, Subject } from 'rxjs';
 import { LocalizationService } from '../../../../../shared/pipes/translation/localization.service';
@@ -134,8 +135,6 @@ export class GenerationSettingsComponent implements OnInit, OnDestroy {
         ).pipe(takeUntil(this.destroy$)).subscribe(([config, presets, models]) => {
             // Load config
             if (config) {
-                this.originalConfig = JSON.parse(JSON.stringify(config));
-
                 this.initializeProviders(config.api?.providers || {});
                 const normalizedActiveProvider = this.normalizeProviderKey(
                     config.api?.activeProvider || this.providerKeys[0] || 'ollama'
@@ -147,10 +146,6 @@ export class GenerationSettingsComponent implements OnInit, OnDestroy {
                     1,
                     50
                 );
-                if (this.originalConfig?.api) {
-                    this.originalConfig.api.tokenLimit = tokenLimit;
-                }
-
                 this.generationForm.patchValue({
                     apiType: this.capitalize(config.api.activeProvider || config.api.type || 'ollama'),
                     activeProvider: normalizedActiveProvider,
@@ -176,6 +171,12 @@ export class GenerationSettingsComponent implements OnInit, OnDestroy {
                 const activeProvider = normalizedActiveProvider;
                 this.selectedModel = this.getProviderModel(activeProvider);
                 this.updateAvailableModels(activeProvider);
+
+                // A save compares with what the form loaded, so only edits are sent.
+                this.originalConfig = JSON.parse(JSON.stringify({
+                    api: this.buildCurrentApiConfig(),
+                    generateSettings: this.generationSettingsForm.value,
+                }));
             }
 
             // Load presets
@@ -369,13 +370,15 @@ export class GenerationSettingsComponent implements OnInit, OnDestroy {
         const updateData: any = {};
         const currentApi = this.buildCurrentApiConfig();
         const currentGenerateSettings = this.generationSettingsForm.value;
+        const apiChanges = pickChangedFields(currentApi, this.originalConfig?.api);
+        const generationChanges = pickChangedFields(currentGenerateSettings, this.originalConfig?.generateSettings);
 
-        if (!this.deepEqual(currentApi, this.originalConfig?.api)) {
-            updateData.api = currentApi;
+        if (Object.keys(apiChanges).length > 0) {
+            updateData.api = apiChanges;
         }
 
-        if (!this.deepEqual(currentGenerateSettings, this.originalConfig?.generateSettings)) {
-            updateData.generateSettings = currentGenerateSettings;
+        if (Object.keys(generationChanges).length > 0) {
+            updateData.generateSettings = generationChanges;
         }
 
         if (Object.keys(updateData).length > 0) {

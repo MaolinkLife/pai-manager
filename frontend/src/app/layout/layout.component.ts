@@ -13,7 +13,8 @@ import { AuthService } from '../core/services/auth.service';
 import { AuthUser } from '../core/models/auth.model';
 import { LocalizationService } from '../shared/pipes/translation/localization.service';
 import { WebsocketService } from '../core/services/websocket.service';
-import { Subscription } from 'rxjs';
+import { pickChangedFields } from '../core/utils/changed-fields';
+import { of, Subscription } from 'rxjs';
 
 @Component({
     selector: 'app-layout',
@@ -531,11 +532,21 @@ export class LayoutComponent implements OnInit, OnDestroy {
         };
         const showAllSources = !!this.showAllChatSources;
 
+        // Only what the panel changed goes out: the snapshot can be older than a
+        // save made in the settings meanwhile, and resending it would undo that save.
+        const changes: Record<string, unknown> = {};
+        const apiChanges = pickChangedFields(apiUpdate, currentConfig.api);
+        const generationChanges = pickChangedFields(generationUpdate, currentConfig.generateSettings);
+        if (Object.keys(apiChanges).length > 0) {
+            changes['api'] = apiChanges;
+        }
+        if (Object.keys(generationChanges).length > 0) {
+            changes['generateSettings'] = generationChanges;
+        }
+
         this.generationPanelSaving = true;
-        this.configService.updateConfig$({
-            api: apiUpdate,
-            generateSettings: generationUpdate,
-        }).subscribe({
+        const save$ = Object.keys(changes).length > 0 ? this.configService.updateConfig$(changes) : of({});
+        save$.subscribe({
             next: () => {
                 this.persistShowAllChatSources(showAllSources);
                 window.dispatchEvent(new CustomEvent('chat-history-source-filter-changed', {
