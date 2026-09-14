@@ -321,6 +321,18 @@ class Instructor:
                 return f"[OK]: lorebook matches found:\n{lines}"
         return NO_LOREBOOK_ENTRIES
 
+    @staticmethod
+    def _describe_strength(intensity: Any) -> str:
+        """The model gets the strength of a feeling in words; the numbers stay in the matrix."""
+        if not isinstance(intensity, (int, float)):
+            return ""
+        value = float(intensity)
+        if value >= 0.7:
+            return "strong"
+        if value >= 0.35:
+            return "noticeable"
+        return "slight"
+
     def _build_emotion_tool_content(self, moral_state: Dict[str, Any]) -> str:
         state = moral_state or {}
         emotion = str(state.get("current_emotion") or "neutral").strip() or "neutral"
@@ -339,7 +351,6 @@ class Instructor:
             if isinstance(affective_state.get("associated_events"), list)
             else []
         )
-        metrics = state.get("metrics") if isinstance(state.get("metrics"), dict) else {}
         recommendations = [
             str(item or "").strip()
             for item in (state.get("recommendations") or [])
@@ -350,43 +361,55 @@ class Instructor:
             for item in (state.get("hard_directives") or [])
             if str(item or "").strip()
         ]
+        meta = state.get("meta") if isinstance(state.get("meta"), dict) else {}
+        inner_voice = str(meta.get("inner_voice") or "").strip()
+
+        events_block = (
+            "Associated events:\n" + "\n".join(f"- {str(item)[:220]}" for item in associated_events[:5])
+            if associated_events
+            else ""
+        )
+        recommendations_block = (
+            "Recommendations:\n" + "\n".join(f"- {item}" for item in recommendations[:6])
+            if recommendations
+            else ""
+        )
+        directives_block = (
+            "Hard directives:\n" + "\n".join(f"- {item}" for item in directives[:6])
+            if directives
+            else ""
+        )
+
+        if inner_voice:
+            # The inner voice already says what I feel, why, and how I want to answer.
+            blocks = [inner_voice, events_block, recommendations_block, directives_block]
+            return "\n".join(block for block in blocks if block)
 
         label = str(affective_state.get("label") or emotion).strip()
         parts: List[str] = [f"Current emotional state: {label} ({emotion})"]
-        if isinstance(intensity, (int, float)):
-            parts.append(f"intensity={round(float(intensity), 3)}")
+        strength = self._describe_strength(intensity)
+        if strength:
+            parts.append(f"strength={strength}")
         if relationship_status:
             parts.append(f"relationship={relationship_status}")
-        if metrics:
-            metric_text = ", ".join(
-                f"{key}={round(float(value), 3)}"
-                for key, value in metrics.items()
-                if isinstance(value, (int, float))
-            )
-            if metric_text:
-                parts.append(f"metrics: {metric_text}")
 
-        lines = ["; ".join(parts)]
-        if trigger:
-            lines.append(f"Why this state changed: {trigger[:700]}")
-        if influence:
-            influence_text = ", ".join(
-                f"{key}={value}" for key, value in influence.items() if value not in (None, "")
-            )
-            if influence_text:
-                lines.append(f"Behavior influence: {influence_text}")
-        if associated_events:
-            lines.append(
-                "Associated events:\n"
-                + "\n".join(f"- {str(item)[:220]}" for item in associated_events[:5])
-            )
-        if narrative:
-            lines.append(f"Self-expression guidance: {narrative[:800]}")
-        if recommendations:
-            lines.append("Recommendations:\n" + "\n".join(f"- {item}" for item in recommendations[:6]))
-        if directives:
-            lines.append("Hard directives:\n" + "\n".join(f"- {item}" for item in directives[:6]))
-        return "\n".join(lines)
+        influence_text = ", ".join(
+            f"{key}={value}"
+            for key, value in influence.items()
+            if key not in ("initiative", "reaction_delay")
+            and value not in (None, "")
+            and not isinstance(value, (int, float))
+        )
+        blocks = [
+            "; ".join(parts),
+            f"Why this state changed: {trigger[:700]}" if trigger else "",
+            f"Behavior influence: {influence_text}" if influence_text else "",
+            events_block,
+            f"Self-expression guidance: {narrative[:800]}" if narrative else "",
+            recommendations_block,
+            directives_block,
+        ]
+        return "\n".join(block for block in blocks if block)
 
     def _build_persona_section(self, analysis: Dict[str, Any]) -> str:
         persona_constraints = (

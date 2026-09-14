@@ -152,6 +152,7 @@ def test_moral_matrix_applies_provider_transition_and_persists_current_state(mon
     assert payload["emotion_vector"]["joy"] >= 0.82
     assert payload["metrics"]["trust"] > 0.7
     assert payload["meta"]["transition_provider"] == "test"
+    assert payload["recommendations"] == ["respond with visible joy"]
     assert fake_repo.snapshots
     assert fake_repo.traces[0][2]["notes"]["affective_state"]["state"] == "joy"
     assert fake_repo.outcomes

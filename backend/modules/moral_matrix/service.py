@@ -372,7 +372,7 @@ class MoralMatrixModule:
         self._apply_risk_bias(metrics, analysis_result)
         metrics.clamp()
         relationship_status = self._derive_relationship_status(metrics.trust)
-        recommendations = self._derive_recommendations(current_emotion)
+        recommendations = self._pick_recommendations(transition, current_emotion)
         hard_directives = self._derive_directives(metrics, analysis_result)
 
         narrative: Optional[str] = None
@@ -1281,7 +1281,8 @@ class MoralMatrixModule:
             "summary": reaction.get("reaction_summary"),
             "soft_recommendations": strings(behavior.get("response_constraints"))
             + strings(behavior.get("notes_for_generator")),
-            "hard_directives": [f"behavior:{desired}"] if influence else [],
+            # The wanted response travels as influence.behavior: a wish, not a hard directive.
+            "hard_directives": [],
             "memory_recommendation": (
                 memory_recommendation if isinstance(memory_recommendation, dict) else None
             ),
@@ -1410,6 +1411,16 @@ class MoralMatrixModule:
     @staticmethod
     def _derive_recommendations(emotion: str) -> List[str]:
         return BEHAVIORAL_RECOMMENDATIONS.get(emotion, FALLBACK_RECOMMENDATION)
+
+    @staticmethod
+    def _pick_recommendations(transition: Optional[Dict[str, Any]], emotion: str) -> List[str]:
+        """The matrix's own advice for this turn; the emotion table only when it gave none."""
+        advice = [
+            str(item).strip()
+            for item in ((transition or {}).get("soft_recommendations") or [])
+            if str(item).strip()
+        ]
+        return advice or list(BEHAVIORAL_RECOMMENDATIONS.get(emotion, FALLBACK_RECOMMENDATION))
 
     @staticmethod
     def _derive_directives(
