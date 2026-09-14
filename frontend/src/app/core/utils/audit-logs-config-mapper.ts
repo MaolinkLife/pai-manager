@@ -11,7 +11,7 @@ import {
 const DEFAULT_AGE_DAYS: Record<string, number> = {
     debug: 7,
     info: 7,
-    success: 14,
+    success: 7,
     warning: 30,
     error: 90,
     audit_fail: 90,

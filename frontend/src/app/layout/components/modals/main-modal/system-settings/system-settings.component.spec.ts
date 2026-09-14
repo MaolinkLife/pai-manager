@@ -177,6 +177,18 @@ describe('SystemSettingsComponent partial saves', () => {
         expect(component.hasChanges()).toBeFalse();
     });
 
+    it('falls back to the server retention defaults when the settings did not load', () => {
+        const component = create(null);
+
+        expect(component.systemForm.get('auditRetention')!.value).toEqual(jasmine.objectContaining({
+            ageInfo: 7,
+            ageSuccess: 7,
+            ageWarning: 30,
+            ageError: 90,
+            ageAuditFail: 90,
+        }));
+    });
+
     it('does not send a request when nothing changed', () => {
         const component = create();
 
