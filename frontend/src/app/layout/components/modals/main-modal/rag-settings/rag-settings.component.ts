@@ -666,7 +666,9 @@ export class RagSettingsComponent implements OnInit {
 
                 if (typeof currentValue === 'object' && currentValue !== null && !Array.isArray(currentValue)) {
                     compareObjects(currentValue, originalValue, currentPath);
-                } else if (currentValue !== originalValue) {
+                } else if (JSON.stringify(currentValue) !== JSON.stringify(originalValue)) {
+                    // By value: a list such as the stopwords is rebuilt on every
+                    // read, so comparing references marked it changed every time.
                     changes[currentPath] = currentValue;
                 }
             });

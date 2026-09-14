@@ -50,4 +50,22 @@ describe('RagSettingsComponent memory save', () => {
 
         expect(updates.every((body) => !('memory' in body))).toBeTrue();
     });
+
+    it('does not send untouched stopwords', () => {
+        const component = create();
+        component.ragForm.get('daySummaryStartupRefresh')!.setValue(true);
+
+        component.saveChanges();
+
+        expect(updates).toEqual([{ memory: { shortTerm: { startupRefreshEnabled: true } } }]);
+    });
+
+    it('sends edited stopwords as the whole list, and nothing else of retrieval', () => {
+        const component = create();
+        component.ragForm.get('retrievalKeywordStopwords')!.setValue('and, the');
+
+        component.saveChanges();
+
+        expect(updates).toEqual([{ rag: { retrieval: { keyword: { stopwords: ['and', 'the'] } } } }]);
+    });
 });
