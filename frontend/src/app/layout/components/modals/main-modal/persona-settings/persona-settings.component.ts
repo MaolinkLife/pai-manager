@@ -3,6 +3,7 @@ import { UntypedFormArray, UntypedFormBuilder, UntypedFormGroup } from '@angular
 import { BehaviorSubject, forkJoin } from 'rxjs';
 import { finalize } from 'rxjs/operators';
 import { CharacterDeletionPreview, ConfigService, SystemCharacter } from '../../../../../core/services/config.service';
+import { pickChangedFields } from '../../../../../core/utils/changed-fields';
 import { TelegramChatPeer, TelegramService } from '../../../../../core/services/telegram.service';
 import { UiSelectOption } from '../../../../../shared/ui/components/ui-select/ui-select.component';
 import { LocalizationService } from '../../../../../shared/pipes/translation/localization.service';
@@ -44,6 +45,8 @@ function buildDeleteSummaryRows(counts: Record<string, number>): DeleteSummaryRo
 export class PersonaSettingsComponent implements OnInit {
     personaForm: UntypedFormGroup;
     originalState: any = {};
+    /** Without the stored values a save could not tell what changed. */
+    loadFailed = false;
     isLoading$ = new BehaviorSubject<boolean>(true);
     isCharacterImportBusy = false;
     isCharacterCreateBusy = false;
@@ -181,6 +184,7 @@ export class PersonaSettingsComponent implements OnInit {
                 this.loadTelegramChats();
             },
             error: (error) => {
+                this.loadFailed = true;
                 console.error('Persona settings load error:', error);
                 this.uiNotificationService.error(
                     this.localizationService.t('personaSettings.loadFailedMessage'),
@@ -244,10 +248,10 @@ export class PersonaSettingsComponent implements OnInit {
     }
 
     saveChanges(): void {
-        const nextState = this.buildStateForSave();
-        if (JSON.stringify(nextState) === JSON.stringify(this.originalState)) {
+        if (!this.hasChanges()) {
             return;
         }
+        const nextState = this.buildStateForSave();
 
         const requests = [];
         const configUpdate: any = {};
@@ -263,11 +267,14 @@ export class PersonaSettingsComponent implements OnInit {
                 )
             );
         }
-        if (JSON.stringify(nextState.synthesis) !== JSON.stringify(this.originalState.synthesis)) {
-            configUpdate.synthesis = nextState.synthesis;
+        // Only what differs from the loaded settings goes out.
+        const synthesisChanges = pickChangedFields(nextState.synthesis, this.originalState.synthesis);
+        if (Object.keys(synthesisChanges).length > 0) {
+            configUpdate.synthesis = synthesisChanges;
         }
-        if (JSON.stringify(nextState.telegram) !== JSON.stringify(this.originalState.telegram)) {
-            configUpdate.telegram = nextState.telegram;
+        const telegramChanges = pickChangedFields(nextState.telegram, this.originalState.telegram);
+        if (Object.keys(telegramChanges).length > 0) {
+            configUpdate.telegram = telegramChanges;
         }
         if (Object.keys(configUpdate).length > 0) {
             requests.push(this.configService.updateConfig$(configUpdate));
@@ -301,7 +308,8 @@ export class PersonaSettingsComponent implements OnInit {
     }
 
     hasChanges(): boolean {
-        return JSON.stringify(this.buildStateForSave()) !== JSON.stringify(this.originalState);
+        return !this.loadFailed
+            && Object.keys(pickChangedFields(this.buildStateForSave(), this.originalState)).length > 0;
     }
 
     onCharacterFileSelected(event: Event): void {

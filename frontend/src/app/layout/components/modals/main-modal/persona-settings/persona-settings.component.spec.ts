@@ -157,3 +157,73 @@ describe('PersonaSettingsComponent character create and delete', () => {
         expect(errors).toEqual(['Only the owner can do this']);
     });
 });
+
+describe('PersonaSettingsComponent partial saves', () => {
+    let saved: any[];
+
+    function create(config$: Observable<any> = of({ synthesis: { prompting: { appearance_prompt: '' } }, telegram: { enabled: false } })) {
+        saved = [];
+        const configService: any = {
+            getConfig$: () => config$,
+            getSystem$: () => of({ system: { prompt: 'A prompt', active_character_id: 'c1', char_name: 'Test' } }),
+            getSystemCharacters$: () => of({ characters: [{ id: 'c1', name: 'Test', prompt: 'A prompt' }], active_character_id: 'c1' }),
+            updateConfig$: (payload: any) => {
+                saved.push(payload);
+                return of({});
+            },
+            invalidateConfig: () => undefined,
+        };
+        // Only what the tab reads on load; any other Telegram call fails the test instead of reaching a network.
+        const telegramService: any = {
+            listChats$: () => of({ chats: [{ chat_id: 101, title: 'Chat', chat_kind: 'private', username: '' }] }),
+        };
+        const localization: any = { init: () => undefined, t: (key: string) => key };
+        const notifications: any = { success: () => undefined, error: () => undefined };
+        const component = new PersonaSettingsComponent(
+            new UntypedFormBuilder(), configService, telegramService, localization, notifications,
+        );
+        component.ngOnInit();
+        return component;
+    }
+
+    it('has nothing to save right after loading', () => {
+        const component = create();
+
+        expect(component.hasChanges()).toBeFalse();
+    });
+
+    it('saves one appearance field without the rest of the image settings', () => {
+        const component = create();
+
+        component.personaForm.get('visual_profile.default_outfit')!.setValue('a grey coat');
+        component.saveChanges();
+
+        expect(saved).toEqual([{
+            synthesis: {
+                prompting: {
+                    visual_profile: { default_outfit: 'a grey coat' },
+                    per_character_visual_profiles: { Test: { default_outfit: 'a grey coat' } },
+                },
+            },
+        }]);
+    });
+
+    it('saves a chat binding without the rest of the Telegram settings', () => {
+        const component = create();
+
+        component.chatBindingControls.at(0).get('character_id')!.setValue('c1');
+        component.saveChanges();
+
+        expect(saved).toEqual([{ telegram: { persona_bindings: { chat_character_map: { '101': 'c1' } } } }]);
+    });
+
+    it('does not save when the settings could not be loaded', () => {
+        const component = create(throwError(() => new Error('offline')));
+
+        component.personaForm.get('visual_profile.default_outfit')!.setValue('a grey coat');
+        component.saveChanges();
+
+        expect(component.hasChanges()).toBeFalse();
+        expect(saved).toEqual([]);
+    });
+});

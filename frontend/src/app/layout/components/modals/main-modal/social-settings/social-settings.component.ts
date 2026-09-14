@@ -1,6 +1,7 @@
 import { ChangeDetectorRef, Component, NgZone, OnInit } from '@angular/core';
 import { UntypedFormBuilder, UntypedFormGroup } from '@angular/forms';
 import { ConfigService } from '../../../../../core/services/config.service';
+import { pickChangedFields } from '../../../../../core/utils/changed-fields';
 import { TelegramBridgeStatus, TelegramChatPeer, TelegramService } from '../../../../../core/services/telegram.service';
 import { LocalizationService } from '../../../../../shared/pipes/translation/localization.service';
 import { UiNotificationService } from '../../../../../shared/ui/services/ui-notification.service';
@@ -270,18 +271,9 @@ export class SocialSettingsComponent implements OnInit {
         };
     }
 
+    /** Only what differs from the loaded settings: unchanged credentials and routing are not sent again. */
     private buildChangedConfigPayload(current: any): any {
-        const updateData: any = {};
-        if (JSON.stringify(current.modules) !== JSON.stringify(this.originalConfig.modules)) {
-            updateData.modules = current.modules;
-        }
-        if (JSON.stringify(current.telegram) !== JSON.stringify(this.originalConfig.telegram)) {
-            updateData.telegram = current.telegram;
-        }
-        if (JSON.stringify(current.communication) !== JSON.stringify(this.originalConfig.communication)) {
-            updateData.communication = current.communication;
-        }
-        return updateData;
+        return pickChangedFields(current, this.originalConfig);
     }
 
     private normalizeModulesPayload(modules: any): any {
