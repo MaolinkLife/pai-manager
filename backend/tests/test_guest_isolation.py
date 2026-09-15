@@ -47,6 +47,24 @@ def test_system_events_reach_only_the_owners_sockets():
     assert guest.accepted
 
 
+def test_a_users_live_sockets_are_found_by_the_token_user_newest_first():
+    manager = ConnectionManager()
+    first, second, guest = FakeSocket(), FakeSocket(), FakeSocket()
+
+    async def scenario():
+        await manager.connect(first, owner=True, user_uuid="owner-uuid")
+        await manager.connect(second, owner=True, user_uuid="owner-uuid")
+        await manager.connect(guest)
+
+    asyncio.run(scenario())
+
+    assert manager.sockets_for_user("owner-uuid") == [second, first]
+    assert manager.sockets_for_user(None) == []
+    assert manager.sockets_for_user("") == []
+    manager.disconnect(second)
+    assert manager.sockets_for_user("owner-uuid") == [first]
+
+
 def test_a_disconnected_owner_socket_is_forgotten():
     manager = ConnectionManager()
     owner = FakeSocket()

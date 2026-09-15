@@ -9,6 +9,9 @@ from datetime import datetime, timezone
 from typing import Optional
 
 
+# A main chat reply restarted without thinking keeps its place ahead of the
+# messages that were waiting behind it.
+PRIORITY_MAIN_CHAT_RESTART = 9
 PRIORITY_MAIN_CHAT = 10
 PRIORITY_TELEGRAM_INCOMING = 20
 PRIORITY_TELEGRAM_NOTIFICATION = 30

@@ -21,7 +21,8 @@ from modules.system.logger import log_audit_entry, AuditStatus
 from core.interaction import resolve_interaction_policy
 from core.decision_layer import decision_layer
 from core.channel_router import can_accept_ingress
-from core.generation_gate import PRIORITY_MAIN_CHAT, generation_gate
+from core.generation_gate import PRIORITY_MAIN_CHAT, PRIORITY_MAIN_CHAT_RESTART, generation_gate
+from core.ws_runs import ConnectionRuns, RunSocket
 from core import tool_event_bus
 from modules.web_runtime import build_chat_context_block
 
@@ -300,12 +301,13 @@ async def websocket_endpoint(websocket: WebSocket):
             session_user_uuid = None
 
     session_policy = resolve_interaction_policy(session_user_uuid)
-    await manager.connect(websocket, owner=session_policy.actor_role == "owner")
-    active_generation_task = None
-    active_stop_event = None
-    active_run_id = None
-    active_prepared_generation = None
-    active_skip_restart_run_id = None
+    await manager.connect(
+        websocket,
+        owner=session_policy.actor_role == "owner",
+        user_uuid=session_user_uuid,
+    )
+    # Every message gets its own run, and a run outlives this socket (core.ws_runs).
+    runs = ConnectionRuns()
 
     try:
         while True:
@@ -570,29 +572,20 @@ async def websocket_endpoint(websocket: WebSocket):
                         "media_count": len((data or {}).get("media") or []),
                     },
                 )
-                if active_generation_task and not active_generation_task.done():
-                    if not await _safe_send_json(
-                        websocket,
-                        {
-                            "type": "error",
-                            "message": "Generation is already running",
-                            "code": "generation_busy",
-                            "run_id": active_run_id,
-                        },
-                    ):
-                        break
-                    continue
-
+                # A message sent while another reply is being written is not
+                # refused: its run waits for the model in the generation gate.
                 run_id = data.get("run_id") or str(uuid.uuid4())
-                stop_event = asyncio.Event()
-                active_run_id = run_id
-                active_stop_event = stop_event
+                if runs.get(run_id) is not None:
+                    run_id = str(uuid.uuid4())
+                run = runs.add(run_id)
 
-                async def _run_generation(payload_data: dict, payload_run_id: str):
-                    nonlocal active_generation_task, active_stop_event, active_run_id, active_prepared_generation, active_skip_restart_run_id
+                # The run talks to a RunSocket, not to this connection: when the
+                # socket goes, the reply still finishes and is saved.
+                async def _run_generation(payload_data: dict, payload_run_id: str, run, websocket):
                     config_ctx_token = None
                     current_task = asyncio.current_task()
                     generation_ticket = None
+                    stop_event = run.stop_event
                     try:
                         generation_ticket = generation_gate.enqueue(
                             run_id=payload_run_id,
@@ -625,6 +618,7 @@ async def websocket_endpoint(websocket: WebSocket):
                                 tags=["tool", "pipeline", "pending"],
                             )
                         await generation_gate.wait(generation_ticket)
+                        run.started = True
                         if stop_event.is_set():
                             await _safe_send_json(
                                 websocket,
@@ -653,7 +647,8 @@ async def websocket_endpoint(websocket: WebSocket):
                         final_message_reasoning_elapsed = None
                         final_message_answer_elapsed = None
                         final_message_meta = None
-                        if not await _safe_send_json(
+                        # No live socket is no reason to stop: the reply is still saved.
+                        await _safe_send_json(
                             websocket,
                             {
                                 "type": "run_status",
@@ -661,8 +656,7 @@ async def websocket_endpoint(websocket: WebSocket):
                                 "status": "started",
                                 "timestamp": datetime.now(timezone.utc).isoformat(),
                             },
-                        ):
-                            return
+                        )
 
                         async def trace_hook(trace_payload: dict):
                             event_payload = {
@@ -782,7 +776,7 @@ async def websocket_endpoint(websocket: WebSocket):
                                 visual_context=processing_result.get("visual_context"),
                                 module_tasks=processing_result.get("module_tasks"),
                             )
-                            active_prepared_generation = {
+                            run.prepared = {
                                 "processing_result": processing_result,
                                 "formatted_history": formatted_history,
                                 "media_payload": media_payload,
@@ -795,7 +789,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
                             async def emit(payload: dict) -> bool:
                                 nonlocal final_message_id, final_message_model, final_message_usage, final_message_provider, final_message_stopped, final_message_reasoning_elapsed, final_message_answer_elapsed, final_message_meta
-                                if active_stop_event and active_stop_event.is_set():
+                                if stop_event.is_set():
                                     return False
                                 if payload.get("type") == "message_end":
                                     final_message_id = payload.get("id")
@@ -806,7 +800,9 @@ async def websocket_endpoint(websocket: WebSocket):
                                     final_message_reasoning_elapsed = payload.get("reasoning_elapsed_ms")
                                     final_message_answer_elapsed = payload.get("answer_elapsed_ms")
                                     final_message_meta = payload.get("meta")
-                                return await _safe_send_json(websocket, payload)
+                                # A failed send does not stop the reply; only the stop button does.
+                                await _safe_send_json(websocket, payload)
+                                return True
 
                             generation_started = time.perf_counter()
                             await trace_hook({"stage": "generation", "state": "start"})
@@ -893,7 +889,8 @@ async def websocket_endpoint(websocket: WebSocket):
                                 },
                             )
                         except asyncio.CancelledError:
-                            if active_skip_restart_run_id == payload_run_id:
+                            if run.task is not current_task:
+                                # A restart without thinking took this reply over.
                                 return
                             await _safe_send_json(
                                 websocket,
@@ -957,26 +954,17 @@ async def websocket_endpoint(websocket: WebSocket):
                             generation_gate.release(generation_ticket)
                         if config_ctx_token is not None:
                             reset_user_context(config_ctx_token)
-                        if active_run_id == payload_run_id and active_generation_task is current_task:
-                            active_generation_task = None
-                            active_stop_event = None
-                            active_run_id = None
-                            active_prepared_generation = None
-                            if active_skip_restart_run_id == payload_run_id:
-                                active_skip_restart_run_id = None
+                        runs.finish(payload_run_id, current_task)
 
-                active_generation_task = asyncio.create_task(
-                    _run_generation(data, run_id)
+                run.task = asyncio.create_task(
+                    _run_generation(data, run_id, run, RunSocket(websocket, session_user_uuid, manager))
                 )
                 continue
 
             elif action == "skip_thinking":
                 requested_run_id = data.get("run_id")
-                if (
-                    not active_generation_task
-                    or active_generation_task.done()
-                    or not active_run_id
-                ):
+                run = runs.running(requested_run_id)
+                if run is None:
                     if not await _safe_send_json(
                         websocket,
                         {
@@ -988,54 +976,24 @@ async def websocket_endpoint(websocket: WebSocket):
                         break
                     continue
 
-                if requested_run_id and requested_run_id != active_run_id:
-                    if not await _safe_send_json(
-                        websocket,
-                        {
-                            "type": "error",
-                            "message": "run_id does not match active run",
-                            "code": "run_mismatch",
-                            "run_id": requested_run_id,
-                        },
-                    ):
-                        break
-                    continue
-
-                if not active_prepared_generation:
+                if not run.prepared:
                     if not await _safe_send_json(
                         websocket,
                         {
                             "type": "system",
                             "event": "skip_thinking_failed",
-                            "run_id": active_run_id,
+                            "run_id": run.run_id,
                             "message": "Пропуск размышления пока недоступен: запрос еще не подготовлен.",
                         },
                     ):
                         break
                     continue
 
-                prepared_generation = dict(active_prepared_generation)
-                retry_run_id = active_run_id
-                active_skip_restart_run_id = retry_run_id
-                if active_stop_event:
-                    active_stop_event.set()
-                if active_generation_task and not active_generation_task.done():
-                    active_generation_task.cancel()
+                prepared_generation = dict(run.prepared)
+                retry_run_id = run.run_id
 
-                await _safe_send_json(
-                    websocket,
-                    {
-                        "type": "system",
-                        "event": "skip_thinking_requested",
-                        "run_id": retry_run_id,
-                        "message": "Пропускаю размышление и перезапускаю генерацию ответа.",
-                    },
-                )
-
-                async def _run_skip_thinking_generation(prepared: dict, payload_run_id: str):
-                    nonlocal active_generation_task, active_stop_event, active_run_id, active_prepared_generation, active_skip_restart_run_id
+                async def _run_skip_thinking_generation(prepared: dict, payload_run_id: str, run, websocket, generation_ticket):
                     current_task = asyncio.current_task()
-                    generation_ticket = None
                     run_started = time.perf_counter()
                     trace_events = list(prepared.get("trace_events") or [])
                     final_message_id = None
@@ -1046,10 +1004,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     final_message_reasoning_elapsed = None
                     final_message_answer_elapsed = None
                     final_message_meta = None
-                    stop_event = asyncio.Event()
-                    active_stop_event = stop_event
-                    active_run_id = payload_run_id
-                    active_prepared_generation = prepared
+                    stop_event = run.stop_event
 
                     async def trace_hook(trace_payload: dict):
                         event_payload = {
@@ -1071,7 +1026,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
                     async def emit(payload: dict) -> bool:
                         nonlocal final_message_id, final_message_model, final_message_usage, final_message_provider, final_message_stopped, final_message_reasoning_elapsed, final_message_answer_elapsed, final_message_meta
-                        if active_stop_event and active_stop_event.is_set():
+                        if stop_event.is_set():
                             return False
                         if payload.get("type") == "message_end":
                             final_message_id = payload.get("id")
@@ -1082,15 +1037,11 @@ async def websocket_endpoint(websocket: WebSocket):
                             final_message_reasoning_elapsed = payload.get("reasoning_elapsed_ms")
                             final_message_answer_elapsed = payload.get("answer_elapsed_ms")
                             final_message_meta = payload.get("meta")
-                        return await _safe_send_json(websocket, payload)
+                        # A failed send does not stop the reply; only the stop button does.
+                        await _safe_send_json(websocket, payload)
+                        return True
 
                     try:
-                        generation_ticket = generation_gate.enqueue(
-                            run_id=payload_run_id,
-                            channel="main_chat",
-                            kind="skip_thinking",
-                            priority=PRIORITY_MAIN_CHAT,
-                        )
                         if generation_ticket.was_blocked:
                             await _safe_send_json(
                                 websocket,
@@ -1181,6 +1132,9 @@ async def websocket_endpoint(websocket: WebSocket):
                             },
                         )
                     except asyncio.CancelledError:
+                        if run.task is not current_task:
+                            # Another restart without thinking took this reply over.
+                            return
                         await _safe_send_json(
                             websocket,
                             {
@@ -1212,25 +1166,49 @@ async def websocket_endpoint(websocket: WebSocket):
                     finally:
                         if generation_ticket is not None:
                             generation_gate.release(generation_ticket)
-                        if active_run_id == payload_run_id and active_generation_task is current_task:
-                            active_generation_task = None
-                            active_stop_event = None
-                            active_run_id = None
-                            active_prepared_generation = None
-                            active_skip_restart_run_id = None
+                        runs.finish(payload_run_id, current_task)
 
-                active_generation_task = asyncio.create_task(
-                    _run_skip_thinking_generation(prepared_generation, retry_run_id)
+                # The restarted reply takes the model before any message that was
+                # waiting behind it: its ticket is in the gate before the old reply lets go.
+                restart_ticket = generation_gate.enqueue(
+                    run_id=retry_run_id,
+                    channel="main_chat",
+                    kind="skip_thinking",
+                    priority=PRIORITY_MAIN_CHAT_RESTART,
+                )
+                previous_task = run.task
+                run.stop_event.set()
+                run.stop_event = asyncio.Event()
+                # Nothing awaits between the cancel and the hand-over, so the old
+                # reply sees it was taken over and stays quiet.
+                if previous_task and not previous_task.done():
+                    previous_task.cancel()
+                run.task = asyncio.create_task(
+                    _run_skip_thinking_generation(
+                        prepared_generation,
+                        retry_run_id,
+                        run,
+                        RunSocket(websocket, session_user_uuid, manager),
+                        restart_ticket,
+                    )
+                )
+
+                await _safe_send_json(
+                    websocket,
+                    {
+                        "type": "system",
+                        "event": "skip_thinking_requested",
+                        "run_id": retry_run_id,
+                        "message": "Пропускаю размышление и перезапускаю генерацию ответа.",
+                    },
                 )
                 continue
 
             elif action == "stop_generation":
                 requested_run_id = data.get("run_id")
-                if (
-                    not active_generation_task
-                    or active_generation_task.done()
-                    or not active_run_id
-                ):
+                # Stop ends the reply being written; a message still waiting stays.
+                run = runs.running(requested_run_id)
+                if run is None:
                     if not await _safe_send_json(
                         websocket,
                         {
@@ -1242,28 +1220,14 @@ async def websocket_endpoint(websocket: WebSocket):
                         break
                     continue
 
-                if requested_run_id and requested_run_id != active_run_id:
-                    if not await _safe_send_json(
-                        websocket,
-                        {
-                            "type": "error",
-                            "message": "run_id does not match active run",
-                            "code": "run_mismatch",
-                            "run_id": requested_run_id,
-                        },
-                    ):
-                        break
-                    continue
-
-                if active_stop_event:
-                    active_stop_event.set()
-                if active_generation_task and not active_generation_task.done():
-                    active_generation_task.cancel()
+                run.stop_event.set()
+                if run.task and not run.task.done():
+                    run.task.cancel()
                 if not await _safe_send_json(
                     websocket,
                     {
                         "type": "run_status",
-                        "run_id": active_run_id,
+                        "run_id": run.run_id,
                         "status": "stopping",
                         "timestamp": datetime.now(timezone.utc).isoformat(),
                     },
@@ -1353,8 +1317,6 @@ async def websocket_endpoint(websocket: WebSocket):
             AuditStatus.INFO,
         )
     finally:
-        if active_stop_event:
-            active_stop_event.set()
-        if active_generation_task and not active_generation_task.done():
-            active_generation_task.cancel()
+        # Runs are not stopped when the socket goes: they finish, are saved and
+        # send what is left to the same user's live socket (core.ws_runs).
         manager.disconnect(websocket)
