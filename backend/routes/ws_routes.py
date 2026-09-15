@@ -16,13 +16,13 @@ from core import access_guard
 from core.websocket_manager import manager
 from modules.generative import conversation
 from modules.database import service as database_service
-from modules.system import auth as auth_service
 from modules.system.logger import log_audit_entry, AuditStatus
 from core.interaction import resolve_interaction_policy
 from core.decision_layer import decision_layer
 from core.channel_router import can_accept_ingress
 from core.generation_gate import PRIORITY_MAIN_CHAT, PRIORITY_MAIN_CHAT_RESTART, generation_gate
 from core.ws_runs import ConnectionRuns, RunSocket
+from core import ws_tickets
 from core import tool_event_bus
 from modules.web_runtime import build_chat_context_block
 
@@ -290,15 +290,16 @@ async def websocket_endpoint(websocket: WebSocket):
     if not await access_guard.accept_ws(websocket):
         return
 
+    # Who is on the socket comes from a one-time pass (core.ws_tickets): an access
+    # token in the address would land in every log that prints addresses.
     session_user_uuid = None
-    access_token = websocket.query_params.get("access_token")
-    if access_token:
-        try:
-            token_user = auth_service.get_user_from_access_token(access_token)
-            if token_user:
-                session_user_uuid = token_user.uuid
-        except Exception:
-            session_user_uuid = None
+    ticket = websocket.query_params.get("ticket")
+    if ticket or websocket.query_params.get("access_token"):
+        session_user_uuid = ws_tickets.store.redeem(ticket)
+        if session_user_uuid is None:
+            await websocket.accept()
+            await websocket.close(code=ws_tickets.WS_CLOSE_PASS_REFUSED)
+            return
 
     session_policy = resolve_interaction_policy(session_user_uuid)
     await manager.connect(

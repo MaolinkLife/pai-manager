@@ -4,6 +4,7 @@ from typing import Optional
 from fastapi import APIRouter, Header, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
+from core import ws_tickets
 from modules.system import auth as auth_service
 
 router = APIRouter(prefix="/api/auth", tags=["Auth"])
@@ -150,6 +151,26 @@ async def me(authorization: Optional[str] = Header(default=None)):
             detail="User not found or inactive",
         )
     return {"user": auth_service.serialize_user(user)}
+
+
+@router.post("/ws-ticket")
+async def issue_ws_ticket(authorization: Optional[str] = Header(default=None)):
+    """A one-time pass for opening the chat WebSocket (core.ws_tickets).
+
+    The access token comes in the header here, so it never has to appear in the
+    socket's address.
+    """
+    token = _extract_bearer_token(authorization)
+    try:
+        user = auth_service.get_user_from_access_token(token)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc))
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found or inactive",
+        )
+    return {"ticket": ws_tickets.store.issue(user.uuid), "expires_in": ws_tickets.store.ttl_seconds}
 
 
 class UpdateMeSettingsRequest(BaseModel):

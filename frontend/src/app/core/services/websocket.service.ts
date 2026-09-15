@@ -23,6 +23,8 @@ export class WebsocketService {
     private reconnectAttempts = 0;
     private manualDisconnect = false;
     private connecting = false;
+    // Which connect is current: a pass that arrives for an older one is ignored.
+    private connectAttempt = 0;
     private readonly reconnectBaseDelayMs = 1000;
     private readonly reconnectMaxDelayMs = 10000;
 
@@ -39,10 +41,35 @@ export class WebsocketService {
         this.manualDisconnect = false;
         this.clearReconnectTimer();
         this.connecting = true;
+        const attempt = ++this.connectAttempt;
 
+        // A signed-in page opens the socket with a one-time pass: the access token
+        // never goes into the address, where logs would keep it.
+        if (!this.authService.isAuthenticated()) {
+            this.openSocket(attempt, null);
+            return;
+        }
+        this.authService.requestWsTicket$().subscribe({
+            next: (ticket) => this.openSocket(attempt, ticket),
+            error: () => {
+                if (attempt !== this.connectAttempt) {
+                    return;
+                }
+                this.connecting = false;
+                if (!this.manualDisconnect && this.shouldAutoReconnect()) {
+                    this.scheduleReconnect();
+                }
+            },
+        });
+    }
+
+    private openSocket(attempt: number, ticket: string | null): void {
+        // A disconnect or a newer connect while the pass was on its way wins.
+        if (attempt !== this.connectAttempt || this.manualDisconnect) {
+            return;
+        }
         const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
-        const token = this.authService.getAccessToken();
-        const query = token ? `?access_token=${encodeURIComponent(token)}` : '';
+        const query = ticket ? `?ticket=${encodeURIComponent(ticket)}` : '';
         this.socket = new WebSocket(`${protocol}://${window.location.host}/api/ws${query}`);
 
         this.socket.onopen = () => {

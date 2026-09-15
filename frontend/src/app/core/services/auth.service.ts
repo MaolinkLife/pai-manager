@@ -75,6 +75,16 @@ export class AuthService {
         return !!this.getAccessToken();
     }
 
+    /**
+     * A one-time pass for opening the chat WebSocket. The access token goes in
+     * the request header, so it never has to appear in the socket's address.
+     */
+    requestWsTicket$(): Observable<string> {
+        return this.http
+            .post<{ ticket: string; expires_in: number }>(`${this.apiUrl}/ws-ticket`, {})
+            .pipe(map((response) => response.ticket));
+    }
+
     isAnonymousMode(): boolean {
         return localStorage.getItem(this.anonymousModeKey) === '1';
     }

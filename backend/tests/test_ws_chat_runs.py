@@ -7,7 +7,8 @@ same user's new socket — never to another user's, and not at all for an
 anonymous guest.
 
 The pipeline around the model is replaced: a scripted reply waits for the test
-to release it, so every step is deterministic.
+to release it, so every step is deterministic. Sockets of known users open with
+a one-time pass, as the page does.
 """
 
 from __future__ import annotations
@@ -21,16 +22,15 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from core import ws_tickets
 from core.generation_gate import GenerationGate
 from core.interaction import InteractionPolicy
 from core.websocket_manager import ConnectionManager
+from core.ws_tickets import WsTicketStore
 from routes import ws_routes
 
 pytestmark = pytest.mark.regression
 
-TOKENS = {"owner-token": "owner-uuid", "other-token": "other-uuid"}
-OWNER = "/api/ws?access_token=owner-token"
-OTHER_USER = "/api/ws?access_token=other-token"
 GUEST = "/api/ws"
 
 
@@ -107,20 +107,17 @@ def send(session, run_id: str, content: str = "hi") -> None:
 def chat(monkeypatch):
     script = Script()
     gate = GenerationGate()
+    tickets = WsTicketStore()
     saved_meta: list[str] = []
 
     monkeypatch.setattr(ws_routes, "manager", ConnectionManager())
     monkeypatch.setattr(ws_routes, "generation_gate", gate)
+    monkeypatch.setattr(ws_tickets, "store", tickets)
 
     async def accept(websocket):
         return True
 
     monkeypatch.setattr(ws_routes.access_guard, "accept_ws", accept)
-    monkeypatch.setattr(
-        ws_routes.auth_service,
-        "get_user_from_access_token",
-        lambda token: SimpleNamespace(uuid=TOKENS[token]) if token in TOKENS else None,
-    )
 
     def policy(user_uuid):
         role = "owner" if user_uuid == "owner-uuid" else ("user" if user_uuid else "anonymous")
@@ -184,14 +181,19 @@ def chat(monkeypatch):
     app.include_router(ws_routes.ws_router)
     with TestClient(app) as client:
         try:
-            yield SimpleNamespace(client=client, script=script, saved_meta=saved_meta)
+            yield SimpleNamespace(
+                client=client,
+                script=script,
+                saved_meta=saved_meta,
+                url=lambda user_uuid: f"/api/ws?ticket={tickets.issue(user_uuid)}",
+            )
         finally:
             script.release_all()
             wait_until(lambda: not gate.is_busy() and gate.queue_size() == 0)
 
 
 def test_a_reply_is_finished_and_saved_after_the_socket_drops(chat):
-    with chat.client.websocket_connect(OWNER) as socket:
+    with chat.client.websocket_connect(chat.url("owner-uuid")) as socket:
         send(socket, "m1")
         assert wait_until(lambda: "m1" in chat.script.started)
 
@@ -202,13 +204,13 @@ def test_a_reply_is_finished_and_saved_after_the_socket_drops(chat):
 
 
 def test_the_rest_of_a_reply_reaches_only_the_same_users_new_socket(chat):
-    with chat.client.websocket_connect(OTHER_USER) as stranger, chat.client.websocket_connect(GUEST) as guest:
+    with chat.client.websocket_connect(chat.url("other-uuid")) as stranger, chat.client.websocket_connect(GUEST) as guest:
         stranger_reader, guest_reader = Reader(stranger), Reader(guest)
-        with chat.client.websocket_connect(OWNER) as first:
+        with chat.client.websocket_connect(chat.url("owner-uuid")) as first:
             send(first, "m1")
             assert wait_until(lambda: "m1" in chat.script.started)
 
-        with chat.client.websocket_connect(OWNER) as second:
+        with chat.client.websocket_connect(chat.url("owner-uuid")) as second:
             reader = Reader(second)
             chat.script.gate("m1").set()
             assert wait_until(lambda: reader.has("m1", "message_end"))
@@ -232,7 +234,7 @@ def test_an_anonymous_guests_reply_is_not_forwarded_to_another_socket(chat):
 
 
 def test_a_second_message_waits_for_the_first_instead_of_failing(chat):
-    with chat.client.websocket_connect(OWNER) as socket:
+    with chat.client.websocket_connect(chat.url("owner-uuid")) as socket:
         reader = Reader(socket)
         send(socket, "m1")
         assert wait_until(lambda: "m1" in chat.script.started)
@@ -251,7 +253,7 @@ def test_a_second_message_waits_for_the_first_instead_of_failing(chat):
 
 
 def test_stop_stops_only_the_reply_being_written(chat):
-    with chat.client.websocket_connect(OWNER) as socket:
+    with chat.client.websocket_connect(chat.url("owner-uuid")) as socket:
         send(socket, "m1")
         assert wait_until(lambda: "m1" in chat.script.started)
         send(socket, "m2")
@@ -267,7 +269,7 @@ def test_stop_stops_only_the_reply_being_written(chat):
 
 
 def test_stop_does_not_drop_a_message_that_is_still_waiting(chat):
-    with chat.client.websocket_connect(OWNER) as socket:
+    with chat.client.websocket_connect(chat.url("owner-uuid")) as socket:
         send(socket, "m1")
         assert wait_until(lambda: "m1" in chat.script.started)
         send(socket, "m2")
@@ -286,7 +288,7 @@ def test_stop_does_not_drop_a_message_that_is_still_waiting(chat):
 
 
 def test_skipping_the_thinking_restarts_the_reply_before_the_next_message(chat):
-    with chat.client.websocket_connect(OWNER) as socket:
+    with chat.client.websocket_connect(chat.url("owner-uuid")) as socket:
         send(socket, "m1")
         assert wait_until(lambda: "m1" in chat.script.started)
         send(socket, "m2")
