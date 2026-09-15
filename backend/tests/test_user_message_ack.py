@@ -22,7 +22,8 @@ def db(monkeypatch):
         return state["rows"].get(message_id)
 
     def add_message_to_history(**kwargs):
-        row = SimpleNamespace(id=f"db-{len(state['added']) + 1}", media_payload=[], **kwargs)
+        row_id = kwargs.get("message_id") or f"db-{len(state['added']) + 1}"
+        row = SimpleNamespace(id=row_id, media_payload=[], **kwargs)
         state["added"].append(kwargs)
         state["rows"][row.id] = row
         return row
@@ -46,6 +47,13 @@ def test_a_new_message_is_stored_once(db):
     assert len(db["added"]) == 1
     assert _store({"id": row.id, "content": "привет"}) is None
     assert len(db["added"]) == 1
+
+
+def test_a_queued_message_is_stored_under_the_id_the_queue_gave_it(db):
+    row = _store({"id": "temp-1", "history_message_id": "hist-1", "content": "привет"})
+
+    assert row.id == "hist-1"
+    assert db["added"][0]["message_id"] == "hist-1"
 
 
 def test_a_reroll_never_stores_the_user_message(db):

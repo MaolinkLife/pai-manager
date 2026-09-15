@@ -2043,6 +2043,8 @@ def _store_user_message_once(
         timestamp=datetime.now(timezone.utc),
         media=media,
         tags=tags,
+        # A message the turn queue kept comes with the id it was given on arrival.
+        message_id=str(last_user_message.get("history_message_id") or "").strip() or None,
     )
 
 

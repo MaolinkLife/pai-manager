@@ -44,6 +44,7 @@ class Script:
         self.finished: list[str] = []
         self.stopped: list[str] = []
         self.skip_restarts: list[str] = []
+        self.payloads: dict[str, dict] = {}
         self._release: dict[str, threading.Event] = {}
         self._all_released = False
 
@@ -142,7 +143,23 @@ def chat(monkeypatch):
         lambda message_id, meta, merge=False: saved_meta.append(message_id),
     )
 
+    # The turn queue is replaced too: the test sees what was queued and how each turn ended.
+    queued = SimpleNamespace(accepted={}, finished=[])
+
+    def accept(payload, *, run_id, channel="main_chat"):
+        queued.accepted[run_id] = dict(payload)
+        return f"turn-{run_id}", f"hist-{run_id}"
+
+    def finish(turn_id, status, *, error=None):
+        queued.finished.append((turn_id, status, error))
+
+    monkeypatch.setattr(ws_routes.turn_queue, "accept", accept)
+    monkeypatch.setattr(ws_routes.turn_queue, "finish", finish)
+
     async def process_message(payload, websocket, trace_hook=None):
+        script.payloads[payload.get("run_id")] = dict(payload)
+        if payload.get("content") == "boom":
+            raise RuntimeError("the analyzer fell over")
         return {
             "decisions": {},
             "memory_context": {},
@@ -187,6 +204,7 @@ def chat(monkeypatch):
                 client=client,
                 script=script,
                 saved_meta=saved_meta,
+                queued=queued,
                 url=lambda user_uuid: f"/api/ws?ticket={tickets.issue(user_uuid, f'sign-in-{user_uuid}')}",
             )
         finally:
@@ -307,3 +325,85 @@ def test_skipping_the_thinking_restarts_the_reply_before_the_next_message(chat):
         assert wait_until(lambda: "m2" in chat.script.finished)
 
     assert chat.script.finished == ["m1", "m2"]
+
+
+def test_a_new_message_is_queued_before_it_waits_for_the_model(chat):
+    with chat.client.websocket_connect(chat.url("owner-uuid")) as socket:
+        send(socket, "m1")
+        assert wait_until(lambda: "m1" in chat.script.started)
+        send(socket, "m2", "второе")
+
+        assert wait_until(lambda: "m2" in chat.queued.accepted)
+        assert "m2" not in chat.script.started
+        assert chat.queued.accepted["m2"]["content"] == "второе"
+
+        chat.script.gate("m1").set()
+        chat.script.gate("m2").set()
+        assert wait_until(lambda: len(chat.queued.finished) == 2)
+
+    # The turn stores the message under the id the queue gave it.
+    assert chat.script.payloads["m2"]["history_message_id"] == "hist-m2"
+    assert chat.queued.finished == [("turn-m1", "completed", None), ("turn-m2", "completed", None)]
+
+
+def test_a_stopped_reply_finishes_its_turn_as_stopped(chat):
+    with chat.client.websocket_connect(chat.url("owner-uuid")) as socket:
+        send(socket, "m1")
+        assert wait_until(lambda: "m1" in chat.script.started)
+
+        socket.send_json({"action": "stop_generation", "payload": {"run_id": "m1"}})
+
+        assert wait_until(lambda: chat.queued.finished)
+
+    assert chat.queued.finished == [("turn-m1", "stopped", None)]
+
+
+def test_a_turn_that_fails_is_finished_as_failed(chat):
+    with chat.client.websocket_connect(chat.url("owner-uuid")) as socket:
+        send(socket, "m1", "boom")
+
+        assert wait_until(lambda: chat.queued.finished)
+
+    assert chat.queued.finished == [("turn-m1", "failed", "the analyzer fell over")]
+
+
+def test_messages_that_are_not_stored_are_not_queued(chat):
+    chat.script.release_all()
+    with chat.client.websocket_connect(GUEST) as guest, chat.client.websocket_connect(chat.url("other-uuid")) as user:
+        send(guest, "g1")
+        send(user, "u1")
+
+        assert wait_until(lambda: {"g1", "u1"} <= set(chat.script.finished))
+
+    assert chat.queued.accepted == {}
+    assert chat.queued.finished == []
+
+
+def test_a_reroll_is_not_queued(chat, monkeypatch):
+    monkeypatch.setattr(
+        ws_routes.database_service,
+        "prepare_reroll_payload",
+        lambda message_id: {"id": message_id, "role": "user", "content": "hi", "reroll_target_message_id": "reply-1"},
+    )
+    chat.script.release_all()
+    with chat.client.websocket_connect(chat.url("owner-uuid")) as socket:
+        socket.send_json({"action": "reroll_message", "payload": {"message_id": "db-user-1", "run_id": "r1"}})
+
+        assert wait_until(lambda: "r1" in chat.script.finished)
+
+    assert chat.queued.accepted == {}
+
+
+def test_a_restart_without_thinking_finishes_the_turn_once(chat):
+    with chat.client.websocket_connect(chat.url("owner-uuid")) as socket:
+        send(socket, "m1")
+        assert wait_until(lambda: "m1" in chat.script.started)
+
+        socket.send_json({"action": "skip_thinking", "payload": {"run_id": "m1"}})
+
+        assert wait_until(lambda: "m1" in chat.script.skip_restarts)
+        chat.script.gate("m1").set()
+        assert wait_until(lambda: "m1" in chat.script.finished)
+        time.sleep(0.3)
+
+    assert chat.queued.finished == [("turn-m1", "completed", None)]

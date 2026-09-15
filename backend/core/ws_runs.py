@@ -22,6 +22,8 @@ class ChatRun:
     started: bool = False
     # What a restart without thinking needs: the prepared prompt and context.
     prepared: Optional[Dict[str, Any]] = None
+    # The turn queue row keeping this run's message (modules.generative.turn_queue).
+    turn_id: Optional[str] = None
 
 
 class ConnectionRuns:

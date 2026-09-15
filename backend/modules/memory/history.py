@@ -29,6 +29,7 @@ def add_history(
     variant_group_id: Optional[str] = None,
     variant_index: Optional[int] = None,
     active_variant: bool = True,
+    message_id: Optional[str] = None,
 ):
     own_session = False
     if session is None:
@@ -51,7 +52,8 @@ def add_history(
             )
 
         entry = History(
-            id=str(uuid.uuid4()),
+            # A queued message comes with the id it was given on arrival.
+            id=message_id or str(uuid.uuid4()),
             character_id=character_id,
             role=role,
             content=content,

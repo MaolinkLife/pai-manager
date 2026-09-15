@@ -63,6 +63,26 @@ class History(Base):
     )
 
 
+class QueuedTurn(Base):
+    """A new human message on its way to the history (modules.generative.turn_queue).
+
+    The row lives only while the turn runs; the message itself goes to the history.
+    """
+
+    __tablename__ = "turn_queue"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    run_id = Column(String, nullable=False)
+    channel = Column(String, nullable=False, default="main_chat")
+    # The id the message's history row gets, whether the turn or the queue stores it.
+    history_message_id = Column(String, nullable=False)
+    character_name = Column(String, nullable=False)
+    actor_user_uuid = Column(String, nullable=True)
+    content = Column(Text, nullable=False, default="")
+    media = Column(Text, nullable=False, default="[]")
+    received_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc), index=True)
+
+
 class TelegramChat(Base):
     __tablename__ = "telegram_chats"
 

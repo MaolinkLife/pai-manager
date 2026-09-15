@@ -23,6 +23,7 @@ from core.channel_router import can_accept_ingress
 from core.generation_gate import PRIORITY_MAIN_CHAT, PRIORITY_MAIN_CHAT_RESTART, generation_gate
 from core.ws_runs import ConnectionRuns, RunSocket
 from core import ws_tickets
+from modules.generative import turn_queue
 from modules.system import auth as auth_service
 from core import tool_event_bus
 from modules.web_runtime import build_chat_context_block
@@ -348,6 +349,8 @@ async def websocket_endpoint(websocket: WebSocket):
                 continue
 
             action = payload.get("action")
+            # Reroll, continue and edit turn into send_message below; only a new message is queued.
+            incoming_action = action
             data = payload.get("payload", {})
             data = _bind_session_actor(data, session_user_uuid)
 
@@ -590,6 +593,20 @@ async def websocket_endpoint(websocket: WebSocket):
                 if runs.get(run_id) is not None:
                     run_id = str(uuid.uuid4())
                 run = runs.add(run_id)
+                # A new message is kept from the moment it arrives: however its turn
+                # ends, the turn queue makes sure the message is in the history.
+                if incoming_action == "send_message" and resolve_interaction_policy(
+                    data.get("actor_user_uuid")
+                ).can_affect_global_memory:
+                    try:
+                        run.turn_id, data["history_message_id"] = turn_queue.accept(data, run_id=run_id)
+                    except Exception as exc:
+                        log_audit_entry(
+                            "turn_queue_accept_failed",
+                            "[WS] The message could not be queued; its turn goes on as before.",
+                            AuditStatus.ERROR,
+                            details={"run_id": run_id, "error": str(exc)},
+                        )
 
                 # The run talks to a RunSocket, not to this connection: when the
                 # socket goes, the reply still finishes and is saved.
@@ -598,6 +615,8 @@ async def websocket_endpoint(websocket: WebSocket):
                     current_task = asyncio.current_task()
                     generation_ticket = None
                     stop_event = run.stop_event
+                    turn_status = None
+                    turn_error = None
                     try:
                         generation_ticket = generation_gate.enqueue(
                             run_id=payload_run_id,
@@ -632,6 +651,7 @@ async def websocket_endpoint(websocket: WebSocket):
                         await generation_gate.wait(generation_ticket)
                         run.started = True
                         if stop_event.is_set():
+                            turn_status = turn_queue.STOPPED
                             await _safe_send_json(
                                 websocket,
                                 {
@@ -891,6 +911,7 @@ async def websocket_endpoint(websocket: WebSocket):
                                     },
                                 )
                             status = "stopped" if stop_event.is_set() else "completed"
+                            turn_status = status
                             await _safe_send_json(
                                 websocket,
                                 {
@@ -904,6 +925,10 @@ async def websocket_endpoint(websocket: WebSocket):
                             if run.task is not current_task:
                                 # A restart without thinking took this reply over.
                                 return
+                            # Without the stop button this is a shutdown: the row
+                            # waits for the next start.
+                            if stop_event.is_set():
+                                turn_status = turn_queue.STOPPED
                             await _safe_send_json(
                                 websocket,
                                 {
@@ -934,6 +959,8 @@ async def websocket_endpoint(websocket: WebSocket):
                                 },
                                 tags=["tool", "pipeline", "error"],
                             )
+                            turn_status = turn_queue.FAILED
+                            turn_error = str(e)
                             log_audit_entry(
                                 "ws_send_message_error",
                                 "[WS] Error while processing message.",
@@ -966,6 +993,8 @@ async def websocket_endpoint(websocket: WebSocket):
                             generation_gate.release(generation_ticket)
                         if config_ctx_token is not None:
                             reset_user_context(config_ctx_token)
+                        if run.turn_id and turn_status and run.task is current_task:
+                            turn_queue.finish(run.turn_id, turn_status, error=turn_error)
                         runs.finish(payload_run_id, current_task)
 
                 run.task = asyncio.create_task(
@@ -1017,6 +1046,8 @@ async def websocket_endpoint(websocket: WebSocket):
                     final_message_answer_elapsed = None
                     final_message_meta = None
                     stop_event = run.stop_event
+                    turn_status = None
+                    turn_error = None
 
                     async def trace_hook(trace_payload: dict):
                         event_payload = {
@@ -1068,6 +1099,7 @@ async def websocket_endpoint(websocket: WebSocket):
                             )
                         await generation_gate.wait(generation_ticket)
                         if stop_event.is_set():
+                            turn_status = turn_queue.STOPPED
                             await _safe_send_json(
                                 websocket,
                                 {
@@ -1134,6 +1166,7 @@ async def websocket_endpoint(websocket: WebSocket):
                                 }),
                                 merge=True,
                             )
+                        turn_status = turn_queue.STOPPED if stop_event.is_set() else turn_queue.COMPLETED
                         await _safe_send_json(
                             websocket,
                             {
@@ -1147,6 +1180,10 @@ async def websocket_endpoint(websocket: WebSocket):
                         if run.task is not current_task:
                             # Another restart without thinking took this reply over.
                             return
+                        # Without the stop button this is a shutdown: the row waits
+                        # for the next start.
+                        if stop_event.is_set():
+                            turn_status = turn_queue.STOPPED
                         await _safe_send_json(
                             websocket,
                             {
@@ -1157,6 +1194,8 @@ async def websocket_endpoint(websocket: WebSocket):
                             },
                         )
                     except Exception as exc:
+                        turn_status = turn_queue.FAILED
+                        turn_error = str(exc)
                         await _safe_send_json(
                             websocket,
                             {
@@ -1178,6 +1217,8 @@ async def websocket_endpoint(websocket: WebSocket):
                     finally:
                         if generation_ticket is not None:
                             generation_gate.release(generation_ticket)
+                        if run.turn_id and turn_status and run.task is current_task:
+                            turn_queue.finish(run.turn_id, turn_status, error=turn_error)
                         runs.finish(payload_run_id, current_task)
 
                 # The restarted reply takes the model before any message that was

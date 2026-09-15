@@ -55,6 +55,7 @@ def add_message_to_history(
     variant_group_id: str | None = None,
     variant_index: int | None = None,
     active_variant: bool = True,
+    message_id: str | None = None,
 ):
     if isinstance(timestamp, str):
         try:
@@ -79,6 +80,7 @@ def add_message_to_history(
         variant_group_id=variant_group_id,
         variant_index=variant_index,
         active_variant=active_variant,
+        message_id=message_id,
     )
 
 

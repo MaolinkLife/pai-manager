@@ -211,6 +211,10 @@ def app_startup() -> None:
     from core.event_loop_registry import register_main_loop
 
     register_main_loop()
+    from modules.generative import turn_queue
+
+    # Messages whose turns a restart cut off go to the history; nothing answers them.
+    turn_queue.recover_interrupted()
     start_async_warmups()
     tunnel_service.autostart_owner_tunnel()
     autostart_telegram_bridge()
