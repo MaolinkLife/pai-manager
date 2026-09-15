@@ -133,6 +133,13 @@ export class AuthService {
             .pipe(
                 tap((response) => this.storeSession(response)),
                 catchError((error: HttpErrorResponse) => {
+                    // Another tab may have renewed first with the same refresh token:
+                    // its new pair is already stored, so this tab keeps the session.
+                    const storedRefreshToken = this.getRefreshToken();
+                    const storedAccessToken = this.getAccessToken();
+                    if (storedRefreshToken && storedAccessToken && storedRefreshToken !== refreshToken) {
+                        return of(this.storedSession(storedAccessToken, storedRefreshToken));
+                    }
                     if ([400, 401].includes(error?.status)) {
                         this.clearSession();
                     }
@@ -144,6 +151,15 @@ export class AuthService {
                 shareReplay(1)
             );
         return this.refreshInFlight$;
+    }
+
+    private storedSession(accessToken: string, refreshToken: string): AuthTokenResponse {
+        return {
+            token_type: 'Bearer',
+            access_token: accessToken,
+            refresh_token: refreshToken,
+            user: this.loadStoredUser() as AuthUser,
+        };
     }
 
     logout$(): Observable<boolean> {

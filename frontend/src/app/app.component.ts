@@ -23,17 +23,25 @@ export class AppComponent implements OnInit {
 
     ngOnInit() {
         this.localizationService.init();
-        let lastAccessToken = this.authService.getAccessToken();
-        let lastAnonymousMode = this.authService.isAnonymousMode();
+        // The socket follows who is signed in, not the access token: a token that is
+        // only renewed keeps the connection, and a reply being written, as they are.
+        const identity = (): string | null => {
+            if (this.authService.isAnonymousMode()) {
+                return 'anonymous';
+            }
+            if (!this.authService.getAccessToken()) {
+                return null;
+            }
+            return this.authService.getCurrentUser()?.uuid ?? 'signed-in';
+        };
+        let lastIdentity = identity();
         this.authService.currentUser$
             .pipe(takeUntilDestroyed(this.destroyRef))
             .subscribe(() => {
-                const nextToken = this.authService.getAccessToken();
-                const nextAnonymousMode = this.authService.isAnonymousMode();
-                if (nextToken !== lastAccessToken || nextAnonymousMode !== lastAnonymousMode) {
-                    lastAccessToken = nextToken;
-                    lastAnonymousMode = nextAnonymousMode;
-                    if (nextToken || nextAnonymousMode) {
+                const nextIdentity = identity();
+                if (nextIdentity !== lastIdentity) {
+                    lastIdentity = nextIdentity;
+                    if (nextIdentity) {
                         this.websocketService.reconnect();
                     } else {
                         this.websocketService.disconnect();

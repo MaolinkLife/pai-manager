@@ -18,7 +18,10 @@ export class AuthInterceptor implements HttpInterceptor {
     intercept(req: HttpRequest<unknown>, next: HttpHandler): Observable<HttpEvent<unknown>> {
         const token = this.authService.getAccessToken();
         const isApiRequest = req.url.includes('/api/');
-        const isAuthEndpoint = req.url.includes('/api/auth/');
+        // Only the credential endpoints answer 401 for wrong credentials or a dead
+        // refresh token; anywhere else, /api/auth/ws-ticket and /me included, a 401
+        // means the access token ran out and is renewed quietly.
+        const isAuthEndpoint = /\/api\/auth\/(login|register|refresh|logout)(?:[/?]|$)/.test(req.url);
         const isRefreshEndpoint = req.url.includes('/api/auth/refresh');
         const alreadyRetried = req.headers.has('x-auth-retry');
         const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
