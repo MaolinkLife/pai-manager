@@ -49,3 +49,13 @@ export interface AuthBootstrapState {
     first_registration_role: 'owner' | 'user';
     allow_anonymous: boolean;
 }
+
+/** A device signed in to the account (GET /api/auth/me/sessions). */
+export interface AuthDevice {
+    id: string;
+    user_agent: string | null;
+    ip_address: string | null;
+    last_active_at: string | null;
+    expires_at: string;
+    current: boolean;
+}

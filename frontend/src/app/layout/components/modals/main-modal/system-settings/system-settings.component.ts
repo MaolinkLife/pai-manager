@@ -4,7 +4,7 @@ import { ConfigService, SystemCharacter } from '../../../../../core/services/con
 import { pickChangedFields } from '../../../../../core/utils/changed-fields';
 import { AuthService } from '../../../../../core/services/auth.service';
 import { ThemeService } from '../../../../../core/services/theme.service';
-import { combineLatest, BehaviorSubject, forkJoin } from 'rxjs';
+import { combineLatest, BehaviorSubject, forkJoin, Observable } from 'rxjs';
 import { map, tap, finalize } from 'rxjs/operators';
 import { LocalizationService } from '../../../../../shared/pipes/translation/localization.service';
 import { UiSelectOption } from '../../../../../shared/ui/components/ui-select/ui-select.component';
@@ -15,6 +15,16 @@ import {
     UpdateRunResult,
     UpdateService,
 } from '../../../../../core/services/update.service';
+import { deviceLabel } from '../../../../../core/utils/device-label';
+
+/** A signed-in device as the security section shows it. */
+export interface DeviceRow {
+    id: string;
+    label: string;
+    ipAddress: string;
+    lastActiveAt: string | null;
+    current: boolean;
+}
 
 @Component({
     selector: 'app-system-settings',
@@ -117,6 +127,84 @@ export class SystemSettingsComponent implements OnInit {
             });
     }
 
+    /** Signed-in devices (owner only): any other device can be signed out, or all of them at once. */
+    devices: DeviceRow[] = [];
+    isDevicesBusy = false;
+
+    loadDevices(): void {
+        this.authService.listSessions$().subscribe({
+            next: ({ sessions }) => {
+                const unknown = this.localizationService.t('systemSettings.devicesUnknown');
+                this.devices = sessions.map((session) => ({
+                    id: session.id,
+                    label: deviceLabel(session.user_agent) || unknown,
+                    ipAddress: session.ip_address || '',
+                    lastActiveAt: session.last_active_at,
+                    current: session.current,
+                }));
+            },
+            error: () => {
+                this.uiNotificationService.error(
+                    this.localizationService.t('systemSettings.devicesLoadFailed'),
+                    this.localizationService.t('systemSettings.devicesTitle'),
+                );
+            },
+        });
+    }
+
+    hasOtherDevices(): boolean {
+        return this.devices.some((device) => !device.current);
+    }
+
+    trackDevice(_index: number, device: DeviceRow): string {
+        return device.id;
+    }
+
+    signOutDevice(device: DeviceRow): void {
+        // This device signs out through the regular logout, not from the list.
+        if (device.current || this.isDevicesBusy) {
+            return;
+        }
+        this.runDeviceSignOut(
+            this.authService.revokeSession$(device.id),
+            () => this.localizationService.t('systemSettings.devicesSignedOutOne'),
+        );
+    }
+
+    signOutOtherDevices(): void {
+        if (this.isDevicesBusy || !window.confirm(this.localizationService.t('systemSettings.devicesSignOutOthersConfirm'))) {
+            return;
+        }
+        this.runDeviceSignOut(
+            this.authService.revokeOtherSessions$(),
+            (result) => this.localizationService
+                .t('systemSettings.devicesSignedOutOthers')
+                .replace('{count}', String(result?.revoked_sessions ?? 0)),
+        );
+    }
+
+    private runDeviceSignOut(request: Observable<any>, message: (result: any) => string): void {
+        const title = this.localizationService.t('systemSettings.devicesTitle');
+        this.isDevicesBusy = true;
+        request
+            .pipe(finalize(() => {
+                this.isDevicesBusy = false;
+            }))
+            .subscribe({
+                next: (result) => {
+                    this.uiNotificationService.success(message(result), title);
+                    this.loadDevices();
+                },
+                error: (error) => {
+                    const detail = error?.error?.detail;
+                    this.uiNotificationService.error(
+                        typeof detail === 'string' && detail ? detail : this.localizationService.t('systemSettings.devicesSignOutFailed'),
+                        title,
+                    );
+                },
+            });
+    }
+
     ngOnInit(): void {
         this.initialize();
         this.localizationService.init();
@@ -130,6 +218,9 @@ export class SystemSettingsComponent implements OnInit {
     private loadUserLanguage(): void {
         this.authService.me$().subscribe((user) => {
             this.isOwner = user?.role === 'owner';
+            if (this.isOwner) {
+                this.loadDevices();
+            }
             const lang = user?.settings?.language || 'en-US';
             this.originalUserLanguage = lang;
             this.systemForm.get('userLanguage')?.setValue(lang, { emitEvent: false });

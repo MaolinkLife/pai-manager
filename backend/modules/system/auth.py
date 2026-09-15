@@ -663,17 +663,7 @@ def change_password(
         if not verify_password(current_password or "", user.password_hash):
             raise ValueError("The current password is wrong")
         user.password_hash = hash_password(new_password)
-        now = _utcnow()
-        others = session.query(AuthSession).filter(
-            AuthSession.user_uuid == user_uuid,
-            AuthSession.revoked_at.is_(None),
-        )
-        if keep_session_id:
-            others = others.filter(AuthSession.id != keep_session_id)
-        revoked = 0
-        for other in others.all():
-            other.revoked_at = now
-            revoked += 1
+        revoked = _revoke_live_sessions(session, user_uuid, keep_session_id=keep_session_id)
         session.commit()
     except Exception:
         session.rollback()
@@ -687,6 +677,95 @@ def change_password(
         details={"user_uuid": user_uuid, "revoked_sessions": revoked},
     )
     return revoked
+
+
+def _live_sessions(session: Session, user_uuid: str) -> list[AuthSession]:
+    """The user's sign-ins that still work: not revoked and not expired, newest first."""
+    now = _utcnow()
+    rows = (
+        session.query(AuthSession)
+        .filter(AuthSession.user_uuid == user_uuid, AuthSession.revoked_at.is_(None))
+        .all()
+    )
+    live = [row for row in rows if _as_utc(row.expires_at) > now]
+    return sorted(live, key=lambda row: _as_utc(row.created_at) or now, reverse=True)
+
+
+def _revoke_live_sessions(session: Session, user_uuid: str, *, keep_session_id: Optional[str] = None) -> int:
+    """Revoke every live sign-in of the user except keep_session_id; the caller commits."""
+    now = _utcnow()
+    revoked = 0
+    for row in _live_sessions(session, user_uuid):
+        if keep_session_id and row.id == keep_session_id:
+            continue
+        row.revoked_at = now
+        revoked += 1
+    return revoked
+
+
+def list_active_sessions(user_uuid: str) -> list[dict]:
+    """The devices signed in to the account, newest activity first.
+
+    A refresh rotates the sign-in into a new row, so the row's creation time is
+    the device's last activity.
+    """
+    session: Session = SessionLocal()
+    try:
+        return [
+            {
+                "id": row.id,
+                "user_agent": row.user_agent,
+                "ip_address": row.ip_address,
+                "last_active_at": _as_utc(row.created_at).isoformat() if row.created_at else None,
+                "expires_at": _as_utc(row.expires_at).isoformat(),
+            }
+            for row in _live_sessions(session, user_uuid)
+        ]
+    finally:
+        session.close()
+
+
+def revoke_other_sessions(user_uuid: str, *, keep_session_id: Optional[str] = None) -> int:
+    """Sign out every device of the user except the one that asks. Returns how many."""
+    session: Session = SessionLocal()
+    try:
+        revoked = _revoke_live_sessions(session, user_uuid, keep_session_id=keep_session_id)
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
+    log_audit_entry(
+        "auth_other_sessions_revoked",
+        "[Auth] Other devices signed out.",
+        AuditStatus.INFO,
+        details={"user_uuid": user_uuid, "revoked_sessions": revoked},
+    )
+    return revoked
+
+
+def revoke_session(user_uuid: str, session_id: str) -> bool:
+    """Sign out one device of the user. False when the user has no such live sign-in."""
+    session: Session = SessionLocal()
+    try:
+        target = next((row for row in _live_sessions(session, user_uuid) if row.id == session_id), None)
+        if target is None:
+            return False
+        target.revoked_at = _utcnow()
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
+    log_audit_entry(
+        "auth_session_revoked",
+        "[Auth] Device signed out.",
+        AuditStatus.INFO,
+        details={"user_uuid": user_uuid, "session_id": session_id},
+    )
+    return True
 
 
 def get_user_by_uuid(user_uuid: str) -> Optional[User]:

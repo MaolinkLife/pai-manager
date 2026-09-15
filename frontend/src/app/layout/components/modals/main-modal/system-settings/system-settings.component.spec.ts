@@ -75,6 +75,136 @@ describe('SystemSettingsComponent password change', () => {
     });
 });
 
+describe('SystemSettingsComponent devices', () => {
+    let calls: string[];
+    let successes: string[];
+    let errors: string[];
+
+    const devices = [
+        {
+            id: 'this-device',
+            user_agent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36',
+            ip_address: '127.0.0.1',
+            last_active_at: '2031-01-01T10:00:00+00:00',
+            expires_at: '2031-01-31T10:00:00+00:00',
+            current: true,
+        },
+        {
+            id: 'phone',
+            user_agent: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Mobile Safari/537.36',
+            ip_address: '10.0.0.2',
+            last_active_at: '2031-01-01T11:00:00+00:00',
+            expires_at: '2031-01-31T11:00:00+00:00',
+            current: false,
+        },
+        {
+            id: 'robot',
+            user_agent: null,
+            ip_address: null,
+            last_active_at: null,
+            expires_at: '2031-01-31T12:00:00+00:00',
+            current: false,
+        },
+    ];
+
+    function create(options: { others?: Observable<any>; one?: Observable<any> } = {}) {
+        calls = [];
+        successes = [];
+        errors = [];
+        const authService: any = {
+            listSessions$: () => {
+                calls.push('list');
+                return of({ sessions: devices });
+            },
+            revokeOtherSessions$: () => {
+                calls.push('revoke-others');
+                return options.others ?? of({ status: 'ok', revoked_sessions: 2 });
+            },
+            revokeSession$: (id: string) => {
+                calls.push(`revoke:${id}`);
+                return options.one ?? of({ status: 'ok' });
+            },
+        };
+        const localization: any = {
+            t: (key: string) => (key === 'systemSettings.devicesSignedOutOthers' ? 'signed out on {count}' : key),
+        };
+        const notifications: any = {
+            success: (message: string) => successes.push(message),
+            error: (message: string) => errors.push(message),
+        };
+        return new SystemSettingsComponent(
+            new UntypedFormBuilder(), {} as any, authService, {} as any, localization, {} as any, notifications, {} as any,
+        );
+    }
+
+    it('lists the devices with a readable name and marks this one', () => {
+        const component = create();
+
+        component.loadDevices();
+
+        expect(calls).toEqual(['list']);
+        expect(component.devices.map((device) => [device.id, device.label, device.ipAddress, device.current])).toEqual([
+            ['this-device', 'Chrome · Windows', '127.0.0.1', true],
+            ['phone', 'Chrome · Android', '10.0.0.2', false],
+            ['robot', 'systemSettings.devicesUnknown', '', false],
+        ]);
+    });
+
+    it('signs out one device and reloads the list', () => {
+        const component = create();
+        component.loadDevices();
+
+        component.signOutDevice(component.devices[1]);
+
+        expect(calls).toEqual(['list', 'revoke:phone', 'list']);
+        expect(successes).toEqual(['systemSettings.devicesSignedOutOne']);
+        expect(component.isDevicesBusy).toBeFalse();
+    });
+
+    it('never signs out this device from the list', () => {
+        const component = create();
+        component.loadDevices();
+
+        component.signOutDevice(component.devices[0]);
+
+        expect(calls).toEqual(['list']);
+    });
+
+    it('signs out the other devices after confirmation and says on how many', () => {
+        const component = create();
+        const confirm = spyOn(window, 'confirm').and.returnValue(true);
+
+        component.signOutOtherDevices();
+
+        expect(confirm).toHaveBeenCalled();
+        expect(calls).toEqual(['revoke-others', 'list']);
+        expect(successes).toEqual(['signed out on 2']);
+        expect(component.isDevicesBusy).toBeFalse();
+    });
+
+    it('sends nothing when the confirmation is cancelled', () => {
+        const component = create();
+        spyOn(window, 'confirm').and.returnValue(false);
+
+        component.signOutOtherDevices();
+
+        expect(calls).toEqual([]);
+        expect(successes).toEqual([]);
+    });
+
+    it('says why when the server refuses and keeps the list', () => {
+        const component = create({ one: throwError({ error: { detail: 'No such signed-in device' } }) });
+        component.loadDevices();
+
+        component.signOutDevice(component.devices[1]);
+
+        expect(calls).toEqual(['list', 'revoke:phone']);
+        expect(errors).toEqual(['No such signed-in device']);
+        expect(component.devices.length).toBe(3);
+        expect(component.isDevicesBusy).toBeFalse();
+    });
+});
+
 describe('SystemSettingsComponent partial saves', () => {
     let saved: any[];
 
@@ -109,6 +239,7 @@ describe('SystemSettingsComponent partial saves', () => {
         const authService: any = {
             me$: () => of({ role: 'owner', settings: { language: 'en-US' } }),
             updateMeSettings$: () => of(null),
+            listSessions$: () => of({ sessions: [] }),
         };
         const themeService: any = { getTheme: () => 'dark', setTheme: () => undefined };
         const localization: any = { init: () => undefined, t: (key: string) => key, setLanguage: () => undefined };

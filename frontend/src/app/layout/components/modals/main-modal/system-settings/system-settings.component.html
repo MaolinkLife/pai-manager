@@ -247,6 +247,48 @@
                     ></app-ui-input>
                     <p class="hint">{{ "systemSettings.securityRefreshTtlHint" | translate }}</p>
                 </div>
+
+                <div class="devices">
+                    <h4>{{ "systemSettings.devicesTitle" | translate }}</h4>
+                    <p class="hint">{{ "systemSettings.devicesHint" | translate }}</p>
+
+                    <ul class="device-list">
+                        <li class="device" *ngFor="let device of devices; trackBy: trackDevice">
+                            <div class="device-info">
+                                <span class="device-name">{{ device.label }}</span>
+                                <span class="device-current" *ngIf="device.current">{{
+                                    "systemSettings.devicesThisDevice" | translate
+                                }}</span>
+                                <small class="device-meta">
+                                    <span *ngIf="device.ipAddress">{{ device.ipAddress }}</span>
+                                    <span *ngIf="device.lastActiveAt"
+                                        >{{ "systemSettings.devicesLastActive" | translate }}
+                                        {{ device.lastActiveAt | date: "dd.MM.yyyy HH:mm" }}</span
+                                    >
+                                </small>
+                            </div>
+                            <button
+                                type="button"
+                                class="device-sign-out"
+                                *ngIf="!device.current"
+                                [disabled]="isDevicesBusy"
+                                (click)="signOutDevice(device)"
+                            >
+                                {{ "systemSettings.devicesSignOut" | translate }}
+                            </button>
+                        </li>
+                    </ul>
+
+                    <div class="button-row">
+                        <button
+                            type="button"
+                            [disabled]="isDevicesBusy || !hasOtherDevices()"
+                            (click)="signOutOtherDevices()"
+                        >
+                            {{ "systemSettings.devicesSignOutOthers" | translate }}
+                        </button>
+                    </div>
+                </div>
             </div>
 
             <div class="section">

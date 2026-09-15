@@ -85,6 +85,24 @@ def _extract_bearer_token(authorization: Optional[str]) -> str:
     return token
 
 
+def _owner_session(authorization: Optional[str], forbidden_detail: str) -> tuple:
+    """The signed-in owner and the id of the session that asks; 401 or 403 otherwise."""
+    token = _extract_bearer_token(authorization)
+    try:
+        user = auth_service.get_user_from_access_token(token)
+        session_id = auth_service.decode_access_token(token).get("sid")
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc))
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found or inactive",
+        )
+    if (user.role or "").strip().lower() != "owner":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=forbidden_detail)
+    return user, session_id
+
+
 @router.post("/register")
 async def register(payload: RegisterRequest, request: Request):
     try:
@@ -226,22 +244,7 @@ async def change_my_password(
 
     Owner only for now: `user` accounts get it when guests are wired in.
     """
-    token = _extract_bearer_token(authorization)
-    try:
-        user = auth_service.get_user_from_access_token(token)
-        session_id = auth_service.decode_access_token(token).get("sid")
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc))
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found or inactive",
-        )
-    if (user.role or "").strip().lower() != "owner":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only the owner can change the password here",
-        )
+    user, session_id = _owner_session(authorization, "Only the owner can change the password here")
     try:
         revoked = auth_service.change_password(
             user.uuid,
@@ -252,6 +255,36 @@ async def change_my_password(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
     return {"status": "ok", "revoked_sessions": revoked}
+
+
+@router.get("/me/sessions")
+async def list_my_sessions(authorization: Optional[str] = Header(default=None)):
+    """The devices signed in to the owner account; the one that asks is marked current."""
+    user, session_id = _owner_session(authorization, "Only the owner can see the devices here")
+    sessions = auth_service.list_active_sessions(user.uuid)
+    return {"sessions": [{**item, "current": item["id"] == session_id} for item in sessions]}
+
+
+@router.post("/me/sessions/revoke-others")
+async def revoke_my_other_sessions(authorization: Optional[str] = Header(default=None)):
+    """Sign out every other device; the one that asks stays signed in."""
+    user, session_id = _owner_session(authorization, "Only the owner can sign out the devices here")
+    revoked = auth_service.revoke_other_sessions(user.uuid, keep_session_id=session_id)
+    return {"status": "ok", "revoked_sessions": revoked}
+
+
+@router.post("/me/sessions/{target_session_id}/revoke")
+async def revoke_my_session(target_session_id: str, authorization: Optional[str] = Header(default=None)):
+    """Sign out one other device. The device that asks signs out through /logout."""
+    user, session_id = _owner_session(authorization, "Only the owner can sign out the devices here")
+    if target_session_id == session_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This device signs out through logout",
+        )
+    if not auth_service.revoke_session(user.uuid, target_session_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No such signed-in device")
+    return {"status": "ok"}
 
 
 @router.get("/bootstrap-state")

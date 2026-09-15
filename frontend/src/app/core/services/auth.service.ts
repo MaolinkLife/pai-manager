@@ -5,6 +5,7 @@ import { catchError, finalize, map, shareReplay, switchMap, tap } from 'rxjs/ope
 import { environment } from '../../../environments/environment';
 import {
     AuthBootstrapState,
+    AuthDevice,
     AuthLoginRequest,
     AuthRegisterRequest,
     AuthTokenResponse,
@@ -213,6 +214,21 @@ export class AuthService {
     /** Changes the signed-in owner's password; the owner's other sessions are signed out. */
     changePassword$(payload: { current_password: string; new_password: string }): Observable<{ status: string; revoked_sessions: number }> {
         return this.http.post<{ status: string; revoked_sessions: number }>(`${this.apiUrl}/me/password`, payload);
+    }
+
+    /** The devices signed in to the owner account; the one that asks is marked current. */
+    listSessions$(): Observable<{ sessions: AuthDevice[] }> {
+        return this.http.get<{ sessions: AuthDevice[] }>(`${this.apiUrl}/me/sessions`);
+    }
+
+    /** Signs out every other device of the owner account; this one stays signed in. */
+    revokeOtherSessions$(): Observable<{ status: string; revoked_sessions: number }> {
+        return this.http.post<{ status: string; revoked_sessions: number }>(`${this.apiUrl}/me/sessions/revoke-others`, {});
+    }
+
+    /** Signs out one other device of the owner account. */
+    revokeSession$(sessionId: string): Observable<{ status: string }> {
+        return this.http.post<{ status: string }>(`${this.apiUrl}/me/sessions/${encodeURIComponent(sessionId)}/revoke`, {});
     }
 
     /** The server's answer, or null when it refused or did not answer (see `bootstrapError`). */
