@@ -653,6 +653,24 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy {
         this.websocketService.bufferedMessages$
             .pipe(takeUntilDestroyed(this.destroyRef))
             .subscribe(handleBufferedWebsocketMessage);
+        this.websocketService.reconnected$
+            .pipe(takeUntilDestroyed(this.destroyRef))
+            .subscribe(() => this.onReconnected());
+    }
+
+    /**
+     * The connection dropped and came back. The chat must not stay frozen on a
+     * run it no longer hears: a reply still being written sends its next events
+     * to this socket, and what the server saved meanwhile is reloaded. A guest's
+     * chat is not stored, so there is nothing to reload.
+     */
+    private onReconnected(): void {
+        this.loading = false;
+        this.activeGenerationRunId = null;
+        this.chatRunStore.setActiveRunId(null);
+        if (this.isOwner) {
+            this.loadHistory();
+        }
     }
 
     ngAfterViewInit(): void {
@@ -907,10 +925,8 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy {
 
     // Message handling methods
     async sendMessage(): Promise<void> {
-        if (this.loading && this.activeGenerationRunId) {
-            return;
-        }
-
+        // A message sent while a reply is being written is not held back: the
+        // server keeps it and answers it after the current reply.
         if (!this.websocketService.isConnected()) {
             this.websocketService.reconnect();
             this.notificationService.open({
@@ -1064,18 +1080,17 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy {
         return content;
     }
 
+    // The last message sent may still be waiting for its turn, so stop and skip
+    // name no run: the server acts on the reply being written and reports which
+    // one it stopped (run_status "stopping").
     stopGeneration(): void {
         if (!this.activeGenerationRunId) {
             return;
         }
         this.websocketService.send(JSON.stringify({
             action: 'stop_generation',
-            payload: { run_id: this.activeGenerationRunId },
+            payload: {},
         }));
-        const runtime = this.ensureRuntime(this.activeGenerationRunId);
-        if (runtime) {
-            runtime.status = 'stopping';
-        }
     }
 
     skipThinking(): void {
@@ -1084,7 +1099,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy {
         }
         this.websocketService.send(JSON.stringify({
             action: 'skip_thinking',
-            payload: { run_id: this.activeGenerationRunId },
+            payload: {},
         }));
     }
 

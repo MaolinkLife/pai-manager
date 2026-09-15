@@ -29,10 +29,19 @@ export class ChatMessageStoreService {
         return this.findById(this.currentStreamingMessageId) || null;
     }
 
+    /**
+     * Replaces the chat with the history the server sent. A user message the
+     * server has not saved yet stays at the end, so a reload after a dropped
+     * connection does not swallow it; a half-streamed reply does not.
+     */
     setHistory(messages: Message[]): void {
         this.currentStreamingMessageId = null;
         this.clearPendingStream();
-        this.emit(messages);
+        const savedIds = new Set(messages.map((message) => message.id));
+        const unsaved = this.messages.filter((message) => (
+            message.role === 'user' && message.isPending && !savedIds.has(message.id)
+        ));
+        this.emit([...messages, ...unsaved]);
     }
 
     prependHistory(messages: Message[]): void {
@@ -199,6 +208,14 @@ export class ChatMessageStoreService {
         const current = this.findById(tempId);
         if (!current) {
             return undefined;
+        }
+        if (tempId !== realId && this.findById(realId)) {
+            // The saved copy is already shown (a history reload came first): drop the temporary one.
+            if (this.currentStreamingMessageId === tempId) {
+                this.currentStreamingMessageId = realId;
+            }
+            this.emit(this.messages.filter((message) => message.id !== tempId));
+            return this.findById(realId);
         }
         const messages = this.messages.map((message) => (
             message.id === tempId

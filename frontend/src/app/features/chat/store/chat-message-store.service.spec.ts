@@ -31,6 +31,36 @@ describe('ChatMessageStoreService', () => {
         expect(store.currentStreamingMessage?.isPending).toBeFalse();
     });
 
+    it('keeps a sent message the server has not saved yet when the history is reloaded', () => {
+        store.setHistory([message({ id: 'u1', role: 'user', content: 'saved' })]);
+        store.push(message({ id: 'temp-2', role: 'user', content: 'not saved yet', isPending: true }));
+
+        store.setHistory([
+            message({ id: 'u1', role: 'user', content: 'saved' }),
+            message({ id: 'a1', role: 'assistant', content: 'reply' }),
+        ]);
+
+        expect(store.messages.map((item) => item.id)).toEqual(['u1', 'a1', 'temp-2']);
+    });
+
+    it('drops a half-streamed reply when the history is reloaded', () => {
+        store.startStreaming(message({ id: 'tmp-a', role: 'assistant', content: 'part', isPending: true }));
+
+        store.setHistory([message({ id: 'u1', role: 'user', content: 'hello' })]);
+
+        expect(store.messages.map((item) => item.id)).toEqual(['u1']);
+        expect(store.currentStreamingMessage).toBeNull();
+    });
+
+    it('drops a temporary message whose saved copy is already shown instead of doubling it', () => {
+        store.setHistory([message({ id: 'real-1', role: 'user', content: 'hi' })]);
+        store.push(message({ id: 'temp-1', role: 'user', content: 'hi', isPending: true }));
+
+        store.replaceTempId('temp-1', 'real-1', { isPending: false });
+
+        expect(store.messages.map((item) => item.id)).toEqual(['real-1']);
+    });
+
     it('removes chained assistant response after deleted user message', () => {
         store.setHistory([
             message({ id: 'u1', role: 'user', content: 'hello' }),

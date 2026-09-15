@@ -28,6 +28,9 @@ export class WebsocketService {
 
     messages$ = new Subject<string>();
     bufferedMessages$ = new Subject<BufferedWebsocketMessage>();
+    /** A connection came back after it had been open before: what the server did meanwhile must be reloaded. */
+    reconnected$ = new Subject<void>();
+    private hasBeenOpen = false;
     constructor(private authService: AuthService) { }
 
     connect(): void {
@@ -51,6 +54,10 @@ export class WebsocketService {
                 const msg = this.messageQueue.shift();
                 if (msg && sock) sock.send(msg);
             }
+            if (this.hasBeenOpen) {
+                this.reconnected$.next();
+            }
+            this.hasBeenOpen = true;
         };
 
         this.socket.onmessage = (event) => this.recordIncomingMessage(String(event.data || ''));
