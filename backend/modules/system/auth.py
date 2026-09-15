@@ -4,6 +4,7 @@ import hmac
 import json
 import os
 import secrets
+import time
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -19,9 +20,16 @@ from modules.database.core import SessionLocal
 from modules.system.logger import AuditStatus, log_audit_entry, log_console
 
 PBKDF2_ITERATIONS = 210_000
-DEFAULT_ACCESS_TTL_MINUTES = 60 * 24 * 365 * 10
-DEFAULT_REFRESH_TTL_DAYS = 365 * 10
-DEFAULT_ACCESS_TOKEN_SKEW_SECONDS = 30
+# How long a sign-in lasts is set in the owner account config (system.security);
+# these are its defaults and bounds.
+DEFAULT_ACCESS_TTL_MINUTES = 15
+DEFAULT_REFRESH_TTL_DAYS = 30
+ACCESS_TTL_MINUTES_BOUNDS = (1, 1440)
+REFRESH_TTL_DAYS_BOUNDS = (1, 365)
+# The clocks of the page and the server may differ a little.
+ACCESS_TOKEN_SKEW_SECONDS = 30
+# The settings are read on every request; a short cache spares the database.
+SECURITY_SETTINGS_CACHE_SECONDS = 5
 
 _dotenv_loaded = False
 
@@ -57,30 +65,53 @@ def _get_auth_secret() -> str:
     return os.getenv("AUTH_SECRET", "dev-only-change-me-auth-secret")
 
 
-def _get_int_env(name: str, default: int, minimum: int = 1) -> int:
-    raw = (os.getenv(name) or "").strip()
-    if not raw:
+_security_settings_cache: Optional[tuple[float, dict]] = None
+
+
+def _read_owner_security_settings() -> dict:
+    """Security settings from the owner account config: a guest's own config never decides how long tokens live."""
+    try:
+        from modules.system import config as config_service  # local import to avoid cycles
+
+        owner_config = config_service.get_owner_default_config() or {}
+    except Exception:
+        return {}
+    security = (owner_config.get("system") or {}).get("security")
+    return dict(security) if isinstance(security, dict) else {}
+
+
+def _security_settings() -> dict:
+    global _security_settings_cache
+    now = time.monotonic()
+    if _security_settings_cache is None or _security_settings_cache[0] <= now:
+        _security_settings_cache = (now + SECURITY_SETTINGS_CACHE_SECONDS, _read_owner_security_settings())
+    return _security_settings_cache[1]
+
+
+def _bounded_setting(value, default: int, bounds: tuple[int, int]) -> int:
+    if isinstance(value, bool):
         return default
     try:
-        value = int(raw)
-    except Exception:
+        number = int(value)
+    except (TypeError, ValueError):
         return default
-    return max(minimum, value)
+    low, high = bounds
+    return max(low, min(high, number))
 
 
 def _get_access_ttl_minutes() -> int:
-    return _get_int_env("AUTH_ACCESS_TTL_MINUTES", DEFAULT_ACCESS_TTL_MINUTES, minimum=1)
+    return _bounded_setting(
+        _security_settings().get("access_token_ttl_minutes"),
+        DEFAULT_ACCESS_TTL_MINUTES,
+        ACCESS_TTL_MINUTES_BOUNDS,
+    )
 
 
 def _get_refresh_ttl_days() -> int:
-    return _get_int_env("AUTH_REFRESH_TTL_DAYS", DEFAULT_REFRESH_TTL_DAYS, minimum=1)
-
-
-def _get_access_token_skew_seconds() -> int:
-    return _get_int_env(
-        "AUTH_ACCESS_TOKEN_SKEW_SECONDS",
-        DEFAULT_ACCESS_TOKEN_SKEW_SECONDS,
-        minimum=0,
+    return _bounded_setting(
+        _security_settings().get("refresh_ttl_days"),
+        DEFAULT_REFRESH_TTL_DAYS,
+        REFRESH_TTL_DAYS_BOUNDS,
     )
 
 
@@ -132,8 +163,12 @@ def decode_access_token(token: str) -> dict:
 
     exp = int(payload.get("exp", 0))
     now = int(_utcnow().timestamp())
-    skew_seconds = _get_access_token_skew_seconds()
-    if exp <= (now - skew_seconds):
+    if exp <= (now - ACCESS_TOKEN_SKEW_SECONDS):
+        raise ValueError("Token expired")
+    # A token lives no longer than the current setting allows, whatever expiry it
+    # was issued with: lowering the setting ends older tokens at once.
+    issued_at = int(payload.get("iat", 0) or 0)
+    if issued_at + _get_access_ttl_minutes() * 60 <= (now - ACCESS_TOKEN_SKEW_SECONDS):
         raise ValueError("Token expired")
 
     if payload.get("type") != "access":

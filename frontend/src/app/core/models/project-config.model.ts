@@ -115,6 +115,11 @@ export interface ModuleConfig {
 
 export type VisionModuleConfig = Record<string, any>;
 
+export interface SystemSecurityConfig {
+    accessTokenTtlMinutes: number;
+    refreshTtlDays: number;
+}
+
 export interface SystemConfig {
     userId: string;
     charName: string;
@@ -125,6 +130,7 @@ export interface SystemConfig {
     runtime?: {
         modelMemoryProfile?: string;
     };
+    security?: SystemSecurityConfig;
 }
 
 export interface VisionConfig {

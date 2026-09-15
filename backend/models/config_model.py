@@ -38,6 +38,12 @@ from typing import Optional, List, Dict, Any
 # ---------------------------
 # New: System + Core configs
 # ---------------------------
+class SystemSecurityConfig(BaseModel):
+    # How long a sign-in lasts; modules.system.auth keeps the values within bounds.
+    access_token_ttl_minutes: int = 15
+    refresh_ttl_days: int = 30
+
+
 class SystemConfig(BaseModel):
     user_id: Optional[str] = None
     user_name: str = "You"
@@ -53,6 +59,7 @@ class SystemConfig(BaseModel):
             "model_memory_profile": "low_memory_strict",
         }
     )
+    security: SystemSecurityConfig = SystemSecurityConfig()
 
 
 class CoreConfig(BaseModel):

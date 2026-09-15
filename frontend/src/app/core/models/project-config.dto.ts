@@ -575,6 +575,10 @@ export interface SystemConfigDto {
     runtime?: {
         model_memory_profile?: string;
     };
+    security?: {
+        access_token_ttl_minutes?: number;
+        refresh_ttl_days?: number;
+    };
 }
 
 export interface InitiativeConfigDto {

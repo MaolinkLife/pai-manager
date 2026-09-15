@@ -189,6 +189,32 @@ describe('SystemSettingsComponent partial saves', () => {
         }));
     });
 
+    it('shows the stored sign-in lifetimes', () => {
+        const base = stored();
+        const component = create({
+            ...base,
+            system: { ...base.system, security: { accessTokenTtlMinutes: 20, refreshTtlDays: 60 } },
+        });
+
+        expect(component.systemForm.get('security')!.value).toEqual({ accessTokenTtlMinutes: 20, refreshTtlDays: 60 });
+        expect(component.hasChanges()).toBeFalse();
+    });
+
+    it('falls back to fifteen minutes and thirty days when no lifetimes are stored', () => {
+        const component = create();
+
+        expect(component.systemForm.get('security')!.value).toEqual({ accessTokenTtlMinutes: 15, refreshTtlDays: 30 });
+    });
+
+    it('saves a changed sign-in lifetime alone', () => {
+        const component = create();
+
+        component.systemForm.get('security.refreshTtlDays')!.setValue(60);
+        component.saveChanges();
+
+        expect(saved).toEqual([{ system: { security: { refreshTtlDays: 60 } } }]);
+    });
+
     it('does not send a request when nothing changed', () => {
         const component = create();
 

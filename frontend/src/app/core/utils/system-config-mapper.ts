@@ -1,5 +1,13 @@
-import { ProjectConfig } from '../models/project-config.model';
+import { ProjectConfig, SystemSecurityConfig } from '../models/project-config.model';
 import { SystemConfigDto } from '../models/project-config.dto';
+
+// How long a sign-in lasts; the server keeps the values within bounds.
+const DEFAULT_SECURITY: SystemSecurityConfig = { accessTokenTtlMinutes: 15, refreshTtlDays: 30 };
+
+const mapSecurityDtoToModel = (dto: any): SystemSecurityConfig => ({
+    accessTokenTtlMinutes: dto?.access_token_ttl_minutes ?? DEFAULT_SECURITY.accessTokenTtlMinutes,
+    refreshTtlDays: dto?.refresh_ttl_days ?? DEFAULT_SECURITY.refreshTtlDays,
+});
 
 export const mapSystemDtoToModel = (dto: any, language?: string) => {
     if (!dto || typeof dto !== 'object') {
@@ -10,6 +18,7 @@ export const mapSystemDtoToModel = (dto: any, language?: string) => {
             systemPrompt: "",
             language: language || "en-US",
             theme: "Dark",
+            security: mapSecurityDtoToModel(undefined),
         };
     }
 
@@ -24,6 +33,7 @@ export const mapSystemDtoToModel = (dto: any, language?: string) => {
             modelMemoryProfile:
                 dto?.runtime?.model_memory_profile || "low_memory_strict",
         },
+        security: mapSecurityDtoToModel(dto.security),
     };
 };
 
@@ -52,6 +62,17 @@ export const mapSystemModelToDto = (system: Partial<ProjectConfig['system']>): P
         dto.runtime = {
             model_memory_profile: system.runtime.modelMemoryProfile,
         };
+    }
+    // A save carries only the lifetime it changed.
+    const security: NonNullable<SystemConfigDto['security']> = {};
+    if (system.security?.accessTokenTtlMinutes !== undefined) {
+        security.access_token_ttl_minutes = system.security.accessTokenTtlMinutes;
+    }
+    if (system.security?.refreshTtlDays !== undefined) {
+        security.refresh_ttl_days = system.security.refreshTtlDays;
+    }
+    if (Object.keys(security).length) {
+        dto.security = security;
     }
 
     return dto;

@@ -220,6 +220,35 @@
                 </div>
             </div>
 
+            <div class="section" *ngIf="isOwner" formGroupName="security">
+                <h3>🔒 {{ "systemSettings.securityTitle" | translate }}</h3>
+                <p class="hint">{{ "systemSettings.securityHint" | translate }}</p>
+
+                <div class="form-group">
+                    <label for="accessTokenTtlMinutes">{{ "systemSettings.securityAccessTtl" | translate }}</label>
+                    <app-ui-input
+                        id="accessTokenTtlMinutes"
+                        type="number"
+                        min="1"
+                        max="1440"
+                        formControlName="accessTokenTtlMinutes"
+                    ></app-ui-input>
+                    <p class="hint">{{ "systemSettings.securityAccessTtlHint" | translate }}</p>
+                </div>
+
+                <div class="form-group">
+                    <label for="refreshTtlDays">{{ "systemSettings.securityRefreshTtl" | translate }}</label>
+                    <app-ui-input
+                        id="refreshTtlDays"
+                        type="number"
+                        min="1"
+                        max="365"
+                        formControlName="refreshTtlDays"
+                    ></app-ui-input>
+                    <p class="hint">{{ "systemSettings.securityRefreshTtlHint" | translate }}</p>
+                </div>
+            </div>
+
             <div class="section">
                 <h3>{{ "settings.modules" | translate }}</h3>
 

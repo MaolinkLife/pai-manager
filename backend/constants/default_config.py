@@ -43,6 +43,12 @@ DEFAULT_CONFIG = {
             "repo": "MaolinkLife/pai-manager",
             "branch": "master",
         },
+        "security": {
+            # How long a sign-in lasts. The access token is renewed quietly while
+            # the page is in use; a sign-in not renewed for refresh_ttl_days ends.
+            "access_token_ttl_minutes": 15,
+            "refresh_ttl_days": 30,
+        },
     },
     "core": {
         "version": "1.0.0",

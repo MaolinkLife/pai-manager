@@ -211,6 +211,10 @@ export class SystemSettingsComponent implements OnInit {
                         },
                     },
                     auditLogs: config?.auditLogs,
+                    security: {
+                        accessTokenTtlMinutes: config?.system?.security?.accessTokenTtlMinutes ?? 15,
+                        refreshTtlDays: config?.system?.security?.refreshTtlDays ?? 30,
+                    },
                 };
 
                 return combinedConfig;
@@ -257,6 +261,11 @@ export class SystemSettingsComponent implements OnInit {
             // Source of truth for generation language (User.language).
             // Loaded separately via /api/auth/me, saved via PATCH /api/auth/me/settings.
             userLanguage: ['en-US'],
+            // How long a sign-in lasts (system.security); the server keeps the values within bounds.
+            security: this.fb.group({
+                accessTokenTtlMinutes: [15],
+                refreshTtlDays: [30],
+            }),
             // 0.9.0 §3.6-bis — audit_logs retention
             auditRetention: this.fb.group({
                 enabled: [true],
@@ -341,6 +350,7 @@ export class SystemSettingsComponent implements OnInit {
             modules: this.mapModulesModelToForm(config.modules),
             communication: this.mapCommunicationToForm(config.communication),
             connector: config.connector ?? {},
+            security: config.security ?? {},
         });
         this.patchAuditSection(config.auditLogs || config.audit_logs);
     }
@@ -358,6 +368,10 @@ export class SystemSettingsComponent implements OnInit {
             modules: this.mapModulesFormToModel(formValue.modules),
             communication: this.mapCommunicationFromForm(formValue.communication),
             connector: formValue.connector,
+            security: {
+                accessTokenTtlMinutes: Number(formValue.security?.accessTokenTtlMinutes),
+                refreshTtlDays: Number(formValue.security?.refreshTtlDays),
+            },
         };
     }
 
@@ -419,6 +433,10 @@ export class SystemSettingsComponent implements OnInit {
             }
             if (changes.connector !== undefined) {
                 updateData.connector = changes.connector;
+            }
+            if (changes.security !== undefined) {
+                updateData.system = updateData.system || {};
+                updateData.system.security = changes.security;
             }
             if (auditDirty) {
                 updateData.auditLogs = auditChanges;
