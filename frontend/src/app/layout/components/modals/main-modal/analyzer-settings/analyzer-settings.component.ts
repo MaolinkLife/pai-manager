@@ -22,7 +22,6 @@ export class AnalyzerSettingsComponent implements OnInit {
         { value: '', label: 'Модели не найдены', disabled: true },
     ];
     private modelIndex: ModelIndexEntry[] | null = null;
-    private readonly defaultAnalyzerSystemPrompt = `You are a cognitive filter of an AI system. Your task is to analyze incoming messages and return STRICTLY structured JSON with metadata. NEVER generate text responses for the user.`;
 
     constructor(
         private fb: UntypedFormBuilder,
@@ -53,7 +52,7 @@ export class AnalyzerSettingsComponent implements OnInit {
             fallbackOllama: [true],
             fallbackLlamaCpp: [false],
             releaseAfterUse: [true],
-            systemPrompt: [this.defaultAnalyzerSystemPrompt, Validators.required],
+            systemPrompt: ['', Validators.required],
             providers: this.fb.group({
                 openrouter: this.createProviderGroup({}),
                 ollama: this.createProviderGroup({}),
@@ -101,7 +100,7 @@ export class AnalyzerSettingsComponent implements OnInit {
                     fallbackOllama: (analyzer.fallbackOrder || []).includes('ollama'),
                     fallbackLlamaCpp: (analyzer.fallbackOrder || []).includes('llama_cpp'),
                     releaseAfterUse: analyzer.releaseAfterUse ?? true,
-                    systemPrompt: analyzer.systemPrompt || this.defaultAnalyzerSystemPrompt,
+                    systemPrompt: analyzer.systemPrompt || '',
                 });
 
                 // Загружаем провайдеров в динамическую форму
@@ -143,6 +142,7 @@ export class AnalyzerSettingsComponent implements OnInit {
                 });
 
                 this.originalConfig = this.buildAnalyzerConfigFromForm();
+                this.showBuiltInPromptWhenEmpty();
                 this.toggleFallbackControls(this.analyzerForm.get('activeProvider')?.value);
                 this.ensureCurrentOllamaModelOption();
                 this.cdr.markForCheck();
@@ -225,6 +225,29 @@ export class AnalyzerSettingsComponent implements OnInit {
                 });
             }
         });
+    }
+
+    /**
+     * Nothing stored means the built-in prompt: the field shows its text from the
+     * server, so the screen shows the prompt the analyzer gets. Showing it is no
+     * change to save, and the screen never makes up a prompt of its own.
+     */
+    private showBuiltInPromptWhenEmpty(): void {
+        const control = this.analyzerForm.get('systemPrompt');
+        if (!control || String(control.value || '').trim()) {
+            return;
+        }
+        this.configService
+            .getDefaultValue$('analyzer.system_prompt')
+            .pipe(take(1))
+            .subscribe((value) => {
+                if (typeof value !== 'string' || String(control.value || '').trim()) {
+                    return;
+                }
+                control.setValue(value, { emitEvent: false });
+                this.originalConfig = { ...this.originalConfig, systemPrompt: value.trim() };
+                this.cdr.markForCheck();
+            });
     }
 
     /** Puts the built-in prompt back into the field; saving keeps it. */

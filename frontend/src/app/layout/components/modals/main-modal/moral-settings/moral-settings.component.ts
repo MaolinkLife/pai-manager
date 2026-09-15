@@ -29,7 +29,6 @@ export class MoralSettingsComponent implements OnInit {
         { value: '', label: 'Модели не найдены', disabled: true },
     ];
     private modelIndex: ModelIndexEntry[] | null = null;
-    private readonly defaultMoralSystemPrompt = `You are the MoralMatrix governor. Your output augments an AI companion's emotional behaviour. Receive the current evaluation payload (JSON) and respond with STRICT JSON containing guidance.`;
 
     constructor(
         private fb: UntypedFormBuilder,
@@ -64,7 +63,7 @@ export class MoralSettingsComponent implements OnInit {
             fallbackOpenrouter: [false],
             fallbackLlamaCpp: [false],
             releaseAfterUse: [true],
-            systemPrompt: [this.defaultMoralSystemPrompt, Validators.required],
+            systemPrompt: ['', Validators.required],
             providers: this.fb.group({
                 ollama: this.fb.group({
                     model: ['', Validators.required],
@@ -174,7 +173,7 @@ export class MoralSettingsComponent implements OnInit {
                         fallbackOpenrouter: (moral.fallbackOrder || []).includes('openrouter'),
                         fallbackLlamaCpp: (moral.fallbackOrder || []).includes('llama_cpp'),
                         releaseAfterUse: moral.releaseAfterUse ?? true,
-                        systemPrompt: moral.systemPrompt || this.defaultMoralSystemPrompt,
+                        systemPrompt: moral.systemPrompt || '',
                     });
 
                     const providersGroup = this.moralForm.get('providers') as UntypedFormGroup;
@@ -267,6 +266,7 @@ export class MoralSettingsComponent implements OnInit {
                     });
 
                     this.originalConfig = this.buildMoralConfigFromForm();
+                    this.showBuiltInPromptWhenEmpty();
                     this.toggleFallbackControls(this.activeProvider);
                     this.ensureCurrentOllamaModelOption();
                     this.cdr.markForCheck();
@@ -435,6 +435,29 @@ export class MoralSettingsComponent implements OnInit {
                 systemPrompt: String(formValue.innerVoice?.systemPrompt ?? ''),
             },
         };
+    }
+
+    /**
+     * Nothing stored means the built-in prompt: the field shows its text from the
+     * server, so the screen shows the prompt the matrix gets. Showing it is no
+     * change to save, and the screen never makes up a prompt of its own.
+     */
+    private showBuiltInPromptWhenEmpty(): void {
+        const control = this.moralForm.get('systemPrompt');
+        if (!control || String(control.value || '').trim()) {
+            return;
+        }
+        this.configService
+            .getDefaultValue$('moral.system_prompt')
+            .pipe(take(1))
+            .subscribe((value) => {
+                if (typeof value !== 'string' || String(control.value || '').trim()) {
+                    return;
+                }
+                control.setValue(value, { emitEvent: false });
+                this.originalConfig = { ...this.originalConfig, systemPrompt: value.trim() };
+                this.cdr.markForCheck();
+            });
     }
 
     /** Puts the built-in prompt back into the field; saving keeps it. */

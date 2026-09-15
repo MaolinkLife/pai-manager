@@ -23,13 +23,23 @@ describe('MoralSettingsComponent: partial saves', () => {
         },
     });
 
-    function create(config$: Observable<any> = of(stored())): MoralSettingsComponent {
+    let defaultsAsked: string[];
+
+    function create(
+        config$: Observable<any> = of(stored()),
+        defaults: Record<string, any> | null = { 'moral.system_prompt': 'Built-in matrix prompt.' },
+    ): MoralSettingsComponent {
         saved = [];
+        defaultsAsked = [];
         const configService: any = {
             getConfig$: () => config$,
             updateConfig$: (payload: any) => {
                 saved.push(payload);
                 return of({});
+            },
+            getDefaultValue$: (path: string) => {
+                defaultsAsked.push(path);
+                return of(defaults ? defaults[path] ?? null : null);
             },
         };
         const apiService: any = { getModelIndex$: () => of([]) };
@@ -75,6 +85,35 @@ describe('MoralSettingsComponent: partial saves', () => {
         component.saveChanges();
 
         expect(saved).toEqual([{ moral: { innerVoice: { undercurrentThreshold: 0.6 } } }]);
+    });
+
+    it('shows the stored matrix prompt as it is', () => {
+        const component = create();
+
+        expect(component.moralForm.get('systemPrompt')!.value).toBe('Matrix prompt.');
+        expect(defaultsAsked).toEqual([]);
+    });
+
+    it('shows the built-in matrix prompt from the server when none is stored, with nothing to save', () => {
+        const withoutPrompt = stored();
+        withoutPrompt.moral.systemPrompt = '';
+        const component = create(of(withoutPrompt));
+
+        expect(defaultsAsked).toEqual(['moral.system_prompt']);
+        expect(component.moralForm.get('systemPrompt')!.value).toBe('Built-in matrix prompt.');
+        expect(component.hasChanges()).toBeFalse();
+    });
+
+    it('never puts a prompt of its own into the field', () => {
+        const withoutPrompt = stored();
+        withoutPrompt.moral.systemPrompt = '';
+        const component = create(of(withoutPrompt), null);
+
+        expect(component.moralForm.get('systemPrompt')!.value).toBe('');
+        component.moralForm.get('decay.globalRate')!.setValue(0.1);
+        component.saveChanges();
+
+        expect(saved).toEqual([{ moral: { decay: { globalRate: 0.1 } } }]);
     });
 
     it('does not save when the settings could not be loaded', () => {
