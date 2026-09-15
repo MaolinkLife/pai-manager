@@ -163,6 +163,12 @@ def chat(monkeypatch):
     monkeypatch.setattr(auth, "change_password", end_the_phone)
     monkeypatch.setattr(auth, "logout", lambda refresh_token: end_the_phone() == 1)
 
+    def retired_token_came_back(**kwargs):
+        end_the_phone()
+        raise auth.RefreshTokenReused("Refresh token was already used")
+
+    monkeypatch.setattr(auth, "refresh_tokens", retired_token_came_back)
+
     app = FastAPI()
     app.include_router(ws_routes.ws_router)
     app.include_router(auth_routes.router)
@@ -176,16 +182,18 @@ def history_seen(socket) -> list:
 
 
 SIGN_OUTS = {
-    "one device": ("/api/auth/me/sessions/phone-row/revoke", {}),
-    "other devices": ("/api/auth/me/sessions/revoke-others", {}),
-    "password change": ("/api/auth/me/password", {"current_password": PASSWORD, "new_password": "new-password-2"}),
-    "logout": ("/api/auth/logout", {"refresh_token": "phone-refresh-token"}),
+    "one device": ("/api/auth/me/sessions/phone-row/revoke", {}, 200),
+    "other devices": ("/api/auth/me/sessions/revoke-others", {}, 200),
+    "password change": ("/api/auth/me/password", {"current_password": PASSWORD, "new_password": "new-password-2"}, 200),
+    "logout": ("/api/auth/logout", {"refresh_token": "phone-refresh-token"}, 200),
+    # A copied renewal token came back: the sign-in ends and its chat closes.
+    "retired renewal token": ("/api/auth/refresh", {"refresh_token": "phone-refresh-token"}, 401),
 }
 
 
 @pytest.mark.parametrize("sign_out", list(SIGN_OUTS))
 def test_signing_out_a_device_closes_its_open_chat(chat, sign_out):
-    path, body = SIGN_OUTS[sign_out]
+    path, body, expected_status = SIGN_OUTS[sign_out]
     phone = chat.http.websocket_connect(f"/api/ws?ticket={chat.store.issue('owner-uuid', 'phone')}")
     here = chat.http.websocket_connect(f"/api/ws?ticket={chat.store.issue('owner-uuid', 'this-device')}")
     guest = chat.http.websocket_connect("/api/ws")
@@ -195,7 +203,7 @@ def test_signing_out_a_device_closes_its_open_chat(chat, sign_out):
 
         response = chat.http.post(path, json=body, headers={"Authorization": "Bearer token"})
 
-        assert response.status_code == 200
+        assert response.status_code == expected_status
         with pytest.raises(WebSocketDisconnect) as closed:
             phone_socket.receive_json()
         assert closed.value.code == 4401

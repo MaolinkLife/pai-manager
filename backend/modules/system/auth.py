@@ -487,6 +487,27 @@ def login_user(
         session.close()
 
 
+# Two tabs renewing at the same moment present the same refresh token twice; a
+# repeat within this window is only refused, a later one means a copied token.
+REFRESH_REUSE_GRACE_SECONDS = 30
+
+
+class RefreshTokenReused(ValueError):
+    """A retired refresh token came back after its renewal; its sign-in has been ended."""
+
+
+def _live_rows_of_sign_in(session: Session, sign_in_id: Optional[str]) -> list[AuthSession]:
+    if not sign_in_id:
+        return []
+    now = _utcnow()
+    rows = (
+        session.query(AuthSession)
+        .filter(AuthSession.sign_in_id == sign_in_id, AuthSession.revoked_at.is_(None))
+        .all()
+    )
+    return [row for row in rows if _as_utc(row.expires_at) > now]
+
+
 def refresh_tokens(
     *,
     refresh_token: str,
@@ -505,6 +526,26 @@ def refresh_tokens(
         if not current_session:
             raise ValueError("Invalid refresh token")
         if current_session.revoked_at is not None:
+            # A retired token whose sign-in still lives was retired by a renewal: only
+            # a copy can present it again. A signed-out device's sign-in has no live
+            # rows left, so its token is simply refused.
+            live_rows = _live_rows_of_sign_in(session, current_session.sign_in_id)
+            retired_for = now - _as_utc(current_session.revoked_at)
+            if live_rows and retired_for > timedelta(seconds=REFRESH_REUSE_GRACE_SECONDS):
+                for row in live_rows:
+                    row.revoked_at = now
+                session.commit()
+                log_audit_entry(
+                    "auth_refresh_reuse_detected",
+                    "[Auth] A retired refresh token came back; the whole sign-in is ended.",
+                    AuditStatus.WARNING,
+                    details={
+                        "user_uuid": current_session.user_uuid,
+                        "sign_in_id": current_session.sign_in_id,
+                        "revoked_sessions": len(live_rows),
+                    },
+                )
+                raise RefreshTokenReused("Refresh token was already used")
             raise ValueError("Refresh token is revoked")
         if _as_utc(current_session.expires_at) <= now:
             raise ValueError("Refresh token is expired")

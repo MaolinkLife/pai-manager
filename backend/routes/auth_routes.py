@@ -152,6 +152,10 @@ async def refresh(payload: RefreshRequest, request: Request):
             ip_address=_extract_client_ip(request),
         )
         return _token_response(result)
+    except auth_service.RefreshTokenReused as exc:
+        # The whole sign-in was ended as stolen: its open chat closes too.
+        await _close_chats_of_ended_sign_ins()
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc))
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc))
 
