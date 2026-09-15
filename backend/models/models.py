@@ -258,6 +258,8 @@ class AuthSession(Base):
     __tablename__ = "auth_sessions"
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    # Each renewal stores a new row; the sign-in id stays the same through all of them.
+    sign_in_id = Column(String, nullable=True, index=True)
     user_uuid = Column(String, ForeignKey("users.uuid", ondelete="CASCADE"), nullable=False)
     refresh_token_hash = Column(String, nullable=False, index=True)
     user_agent = Column(String, nullable=True)

@@ -41,6 +41,7 @@ def create_database():
     _ensure_history_variant_columns()
     _ensure_telegram_sync_tables()
     _ensure_users_auth_columns()
+    _ensure_auth_sessions_sign_in_column()
     _ensure_user_settings_active_character_column()
     _ensure_emotional_trace_decay_columns()
     _ensure_forgiveness_events_table()
@@ -435,6 +436,25 @@ def _ensure_users_auth_columns() -> None:
                 "CREATE UNIQUE INDEX IF NOT EXISTS ix_users_login_unique "
                 "ON users(login) WHERE login IS NOT NULL"
             )
+        )
+
+
+def _ensure_auth_sessions_sign_in_column() -> None:
+    """One id for a whole sign-in: each renewal stores a new row, the sign-in id stays.
+
+    Rows stored before the column existed are each a sign-in of their own.
+    """
+    with engine.begin() as conn:
+        table_info = conn.execute(text("PRAGMA table_info(auth_sessions)")).fetchall()
+        if not table_info:
+            return
+
+        columns = {row[1] for row in table_info}
+        if "sign_in_id" not in columns:
+            conn.execute(text("ALTER TABLE auth_sessions ADD COLUMN sign_in_id TEXT"))
+        conn.execute(text("UPDATE auth_sessions SET sign_in_id = id WHERE sign_in_id IS NULL"))
+        conn.execute(
+            text("CREATE INDEX IF NOT EXISTS ix_auth_sessions_sign_in_id ON auth_sessions(sign_in_id)")
         )
 
 

@@ -4,7 +4,7 @@ from typing import Optional
 from fastapi import APIRouter, Header, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
-from core import ws_tickets
+from core import websocket_manager, ws_tickets
 from modules.system import auth as auth_service
 
 router = APIRouter(prefix="/api/auth", tags=["Auth"])
@@ -85,6 +85,13 @@ def _extract_bearer_token(authorization: Optional[str]) -> str:
     return token
 
 
+async def _close_chats_of_ended_sign_ins() -> None:
+    """A signed-out device loses the chat socket it holds open, not only its tokens."""
+    await websocket_manager.manager.close_ended_sign_ins(
+        auth_service.live_sign_ins, ws_tickets.WS_CLOSE_PASS_REFUSED
+    )
+
+
 def _owner_session(authorization: Optional[str], forbidden_detail: str) -> tuple:
     """The signed-in owner and the id of the session that asks; 401 or 403 otherwise."""
     token = _extract_bearer_token(authorization)
@@ -152,6 +159,8 @@ async def refresh(payload: RefreshRequest, request: Request):
 @router.post("/logout")
 async def logout(payload: LogoutRequest):
     revoked = auth_service.logout(payload.refresh_token)
+    if revoked:
+        await _close_chats_of_ended_sign_ins()
     return {"status": "ok" if revoked else "not_found", "revoked": revoked}
 
 
@@ -181,6 +190,7 @@ async def issue_ws_ticket(authorization: Optional[str] = Header(default=None)):
     token = _extract_bearer_token(authorization)
     try:
         user = auth_service.get_user_from_access_token(token)
+        session_id = auth_service.decode_access_token(token).get("sid")
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc))
     if not user:
@@ -188,7 +198,9 @@ async def issue_ws_ticket(authorization: Optional[str] = Header(default=None)):
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found or inactive",
         )
-    return {"ticket": ws_tickets.store.issue(user.uuid), "expires_in": ws_tickets.store.ttl_seconds}
+    # The pass names the sign-in, so signing this device out closes the socket too.
+    ticket = ws_tickets.store.issue(user.uuid, auth_service.sign_in_of_session(session_id))
+    return {"ticket": ticket, "expires_in": ws_tickets.store.ttl_seconds}
 
 
 class UpdateMeSettingsRequest(BaseModel):
@@ -254,6 +266,7 @@ async def change_my_password(
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    await _close_chats_of_ended_sign_ins()
     return {"status": "ok", "revoked_sessions": revoked}
 
 
@@ -270,6 +283,7 @@ async def revoke_my_other_sessions(authorization: Optional[str] = Header(default
     """Sign out every other device; the one that asks stays signed in."""
     user, session_id = _owner_session(authorization, "Only the owner can sign out the devices here")
     revoked = auth_service.revoke_other_sessions(user.uuid, keep_session_id=session_id)
+    await _close_chats_of_ended_sign_ins()
     return {"status": "ok", "revoked_sessions": revoked}
 
 
@@ -284,6 +298,7 @@ async def revoke_my_session(target_session_id: str, authorization: Optional[str]
         )
     if not auth_service.revoke_session(user.uuid, target_session_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No such signed-in device")
+    await _close_chats_of_ended_sign_ins()
     return {"status": "ok"}
 
 

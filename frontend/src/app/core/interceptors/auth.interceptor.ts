@@ -20,8 +20,11 @@ export class AuthInterceptor implements HttpInterceptor {
         const isApiRequest = req.url.includes('/api/');
         // Only the credential endpoints answer 401 for wrong credentials or a dead
         // refresh token; anywhere else, /api/auth/ws-ticket and /me included, a 401
-        // means the access token ran out and is renewed quietly.
+        // means the access token ran out and is renewed quietly. Under /api/auth/ a
+        // 401 is always about the sign-in, whatever its text: a device signed out
+        // elsewhere fails the renewal and leaves.
         const isAuthEndpoint = /\/api\/auth\/(login|register|refresh|logout)(?:[/?]|$)/.test(req.url);
+        const isAuthApi = req.url.includes('/api/auth/');
         const isRefreshEndpoint = req.url.includes('/api/auth/refresh');
         const alreadyRetried = req.headers.has('x-auth-retry');
         const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
@@ -44,7 +47,7 @@ export class AuthInterceptor implements HttpInterceptor {
 
         return next.handle(requestToSend).pipe(
             catchError((error: HttpErrorResponse) => {
-                const authRelated401 = this.isAuthRelated401(error);
+                const authRelated401 = error.status === 401 && (isAuthApi || this.isAuthRelated401(error));
                 if (error.status === 401 && isApiRequest && authRelated401 && (isAuthEndpoint || alreadyRetried)) {
                     this.handleAuthFailure();
                     return throwError(() => error);

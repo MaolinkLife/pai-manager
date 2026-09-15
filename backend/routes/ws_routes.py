@@ -23,6 +23,7 @@ from core.channel_router import can_accept_ingress
 from core.generation_gate import PRIORITY_MAIN_CHAT, PRIORITY_MAIN_CHAT_RESTART, generation_gate
 from core.ws_runs import ConnectionRuns, RunSocket
 from core import ws_tickets
+from modules.system import auth as auth_service
 from core import tool_event_bus
 from modules.web_runtime import build_chat_context_block
 
@@ -293,20 +294,30 @@ async def websocket_endpoint(websocket: WebSocket):
     # Who is on the socket comes from a one-time pass (core.ws_tickets): an access
     # token in the address would land in every log that prints addresses.
     session_user_uuid = None
+    session_sign_in_id = None
     ticket = websocket.query_params.get("ticket")
     if ticket or websocket.query_params.get("access_token"):
-        session_user_uuid = ws_tickets.store.redeem(ticket)
-        if session_user_uuid is None:
+        ws_pass = ws_tickets.store.redeem(ticket)
+        if ws_pass is None:
             await websocket.accept()
             await websocket.close(code=ws_tickets.WS_CLOSE_PASS_REFUSED)
             return
+        session_user_uuid = ws_pass.user_uuid
+        session_sign_in_id = ws_pass.sign_in_id
 
     session_policy = resolve_interaction_policy(session_user_uuid)
     await manager.connect(
         websocket,
         owner=session_policy.actor_role == "owner",
         user_uuid=session_user_uuid,
+        sign_in_id=session_sign_in_id,
     )
+    # A pass given just before its sign-in ended must not keep the socket. The
+    # check runs once the socket is registered, so any later sign-out closes it.
+    if session_user_uuid is not None and session_sign_in_id not in auth_service.live_sign_ins({session_sign_in_id}):
+        manager.disconnect(websocket)
+        await websocket.close(code=ws_tickets.WS_CLOSE_PASS_REFUSED)
+        return
     # Every message gets its own run, and a run outlives this socket (core.ws_runs).
     runs = ConnectionRuns()
 

@@ -280,11 +280,15 @@ def _create_refresh_session(
     *,
     user_agent: Optional[str] = None,
     ip_address: Optional[str] = None,
+    sign_in_id: Optional[str] = None,
 ) -> tuple[str, AuthSession]:
+    """A new session row; a renewal passes the sign-in it continues, a new sign-in starts its own."""
     refresh_token = secrets.token_urlsafe(64)
     expires_at = _utcnow() + timedelta(days=_get_refresh_ttl_days())
+    row_id = str(uuid.uuid4())
     db_session = AuthSession(
-        id=str(uuid.uuid4()),
+        id=row_id,
+        sign_in_id=sign_in_id or row_id,
         user_uuid=user.uuid,
         refresh_token_hash=_hash_refresh_token(refresh_token),
         user_agent=user_agent,
@@ -515,6 +519,7 @@ def refresh_tokens(
             user,
             user_agent=user_agent or current_session.user_agent,
             ip_address=ip_address or current_session.ip_address,
+            sign_in_id=current_session.sign_in_id,
         )
         access_token, access_expires_at = create_access_token(user, next_session.id)
         user.last_login_at = now
@@ -577,9 +582,9 @@ def get_user_from_access_token(token: str) -> Optional[User]:
         raise ValueError("Invalid access token payload")
     session: Session = SessionLocal()
     try:
-        # An access token lives for years; it is only as good as its session. A
-        # revoked session (logout, the other devices after a password change)
-        # signs its access token out too.
+        # An access token is only as good as its session. A revoked session
+        # (logout, a signed-out device, the other devices after a password
+        # change) signs its access token out too.
         auth_session = (
             session.query(AuthSession)
             .filter(AuthSession.id == payload.get("sid"))
@@ -701,6 +706,36 @@ def _revoke_live_sessions(session: Session, user_uuid: str, *, keep_session_id: 
         row.revoked_at = now
         revoked += 1
     return revoked
+
+
+def sign_in_of_session(session_id: Optional[str]) -> Optional[str]:
+    """The sign-in a session row belongs to; renewals keep it."""
+    if not session_id:
+        return None
+    session: Session = SessionLocal()
+    try:
+        row = session.query(AuthSession.sign_in_id).filter(AuthSession.id == session_id).first()
+        return row[0] if row else None
+    finally:
+        session.close()
+
+
+def live_sign_ins(sign_in_ids) -> set[str]:
+    """Which of these sign-ins still work: one of their rows is neither revoked nor expired."""
+    wanted = {value for value in sign_in_ids if value}
+    if not wanted:
+        return set()
+    now = _utcnow()
+    session: Session = SessionLocal()
+    try:
+        rows = (
+            session.query(AuthSession.sign_in_id, AuthSession.expires_at)
+            .filter(AuthSession.sign_in_id.in_(wanted), AuthSession.revoked_at.is_(None))
+            .all()
+        )
+        return {sign_in_id for sign_in_id, expires_at in rows if _as_utc(expires_at) > now}
+    finally:
+        session.close()
 
 
 def list_active_sessions(user_uuid: str) -> list[dict]:

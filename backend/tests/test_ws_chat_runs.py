@@ -27,6 +27,7 @@ from core.generation_gate import GenerationGate
 from core.interaction import InteractionPolicy
 from core.websocket_manager import ConnectionManager
 from core.ws_tickets import WsTicketStore
+from modules.system import auth as auth_module
 from routes import ws_routes
 
 pytestmark = pytest.mark.regression
@@ -113,6 +114,7 @@ def chat(monkeypatch):
     monkeypatch.setattr(ws_routes, "manager", ConnectionManager())
     monkeypatch.setattr(ws_routes, "generation_gate", gate)
     monkeypatch.setattr(ws_tickets, "store", tickets)
+    monkeypatch.setattr(auth_module, "live_sign_ins", lambda sign_in_ids: set(sign_in_ids))
 
     async def accept(websocket):
         return True
@@ -185,7 +187,7 @@ def chat(monkeypatch):
                 client=client,
                 script=script,
                 saved_meta=saved_meta,
-                url=lambda user_uuid: f"/api/ws?ticket={tickets.issue(user_uuid)}",
+                url=lambda user_uuid: f"/api/ws?ticket={tickets.issue(user_uuid, f'sign-in-{user_uuid}')}",
             )
         finally:
             script.release_all()

@@ -20,7 +20,7 @@ from starlette.websockets import WebSocketDisconnect
 from core import ws_tickets
 from core.interaction import InteractionPolicy
 from core.websocket_manager import ConnectionManager
-from core.ws_tickets import WsTicketStore
+from core.ws_tickets import WsPass, WsTicketStore
 from modules.system import auth as auth_module
 from routes import auth_routes, ws_routes
 
@@ -35,18 +35,18 @@ class Clock:
         return self.now
 
 
-def test_a_pass_names_its_user_once():
+def test_a_pass_names_its_user_and_sign_in_once():
     store = WsTicketStore()
-    ticket = store.issue("owner-uuid")
+    ticket = store.issue("owner-uuid", "sign-in-1")
 
-    assert store.redeem(ticket) == "owner-uuid"
+    assert store.redeem(ticket) == WsPass(user_uuid="owner-uuid", sign_in_id="sign-in-1")
     assert store.redeem(ticket) is None
 
 
 def test_a_pass_expires():
     clock = Clock()
     store = WsTicketStore(ttl_seconds=30, clock=clock)
-    ticket = store.issue("owner-uuid")
+    ticket = store.issue("owner-uuid", "sign-in-1")
 
     clock.now += 31
 
@@ -56,7 +56,7 @@ def test_a_pass_expires():
 def test_passes_are_long_random_and_unguessable():
     store = WsTicketStore()
 
-    tickets = {store.issue("owner-uuid") for _ in range(50)}
+    tickets = {store.issue("owner-uuid", "sign-in-1") for _ in range(50)}
 
     assert len(tickets) == 50
     assert all(len(ticket) >= 40 for ticket in tickets)
@@ -72,6 +72,8 @@ def test_a_pass_is_given_only_for_a_valid_access_token(monkeypatch):
         "get_user_from_access_token",
         lambda token: SimpleNamespace(uuid="owner-uuid") if token == "good" else None,
     )
+    monkeypatch.setattr(auth_routes.auth_service, "decode_access_token", lambda token: {"sid": "row-1"})
+    monkeypatch.setattr(auth_routes.auth_service, "sign_in_of_session", lambda session_id: "sign-in-1")
 
     with pytest.raises(HTTPException) as missing:
         asyncio.run(auth_routes.issue_ws_ticket(authorization=None))
@@ -82,7 +84,7 @@ def test_a_pass_is_given_only_for_a_valid_access_token(monkeypatch):
     assert missing.value.status_code == 401
     assert stale.value.status_code == 401
     assert response["expires_in"] == 30
-    assert store.redeem(response["ticket"]) == "owner-uuid"
+    assert store.redeem(response["ticket"]).user_uuid == "owner-uuid"
 
 
 @pytest.fixture
@@ -97,6 +99,7 @@ def client(monkeypatch):
     monkeypatch.setattr(ws_routes.access_guard, "accept_ws", accept)
     # Even a valid token must not open the socket from the address.
     monkeypatch.setattr(auth_module, "get_user_from_access_token", lambda token: SimpleNamespace(uuid="owner-uuid"))
+    monkeypatch.setattr(auth_module, "live_sign_ins", lambda sign_in_ids: set(sign_in_ids))
 
     def policy(user_uuid):
         role = "owner" if user_uuid == "owner-uuid" else "anonymous"
@@ -123,7 +126,7 @@ def history_seen(socket) -> list:
 
 
 def test_a_socket_opened_with_a_pass_belongs_to_its_user(client):
-    ticket = client.store.issue("owner-uuid")
+    ticket = client.store.issue("owner-uuid", "sign-in-1")
 
     with client.http.websocket_connect(f"/api/ws?ticket={ticket}") as socket:
         assert history_seen(socket) == [{"id": "m1"}]
@@ -135,7 +138,7 @@ def test_a_socket_without_a_pass_is_an_anonymous_guest(client):
 
 
 def test_a_used_pass_does_not_open_the_socket(client):
-    ticket = client.store.issue("owner-uuid")
+    ticket = client.store.issue("owner-uuid", "sign-in-1")
     with client.http.websocket_connect(f"/api/ws?ticket={ticket}") as socket:
         history_seen(socket)
 

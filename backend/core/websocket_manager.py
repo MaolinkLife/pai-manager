@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional
+from typing import Callable, Dict, List, Optional, Set
 from fastapi import WebSocket
 
 
@@ -13,24 +13,58 @@ class ConnectionManager:
     A socket opened with a session token is also known by its user, so a chat
     run whose own socket dropped can reach the same user on a newer one
     (core.ws_runs). A socket without a token belongs to nobody.
+
+    Such a socket also knows its sign-in, so signing a device out closes the
+    chat that device holds open.
     """
 
     def __init__(self):
         self.active_connections: List[WebSocket] = []
         self._owner_sockets: set[int] = set()
         self._user_sockets: Dict[str, List[WebSocket]] = {}
+        self._sign_ins: Dict[int, str] = {}
 
-    async def connect(self, websocket: WebSocket, *, owner: bool = False, user_uuid: Optional[str] = None):
+    async def connect(
+        self,
+        websocket: WebSocket,
+        *,
+        owner: bool = False,
+        user_uuid: Optional[str] = None,
+        sign_in_id: Optional[str] = None,
+    ):
         await websocket.accept()
         self.active_connections.append(websocket)
         if owner:
             self._owner_sockets.add(id(websocket))
         if user_uuid:
             self._user_sockets.setdefault(user_uuid, []).append(websocket)
+        if sign_in_id:
+            self._sign_ins[id(websocket)] = sign_in_id
+
+    async def close_ended_sign_ins(self, live_sign_ins: Callable[[Set[str]], Set[str]], code: int) -> int:
+        """Close the sockets whose sign-in has ended; returns how many were closed."""
+        signed_in = set(self._sign_ins.values())
+        if not signed_in:
+            return 0
+        live = live_sign_ins(signed_in)
+        ended = [
+            socket
+            for socket in list(self.active_connections)
+            if id(socket) in self._sign_ins and self._sign_ins[id(socket)] not in live
+        ]
+        for socket in ended:
+            self.disconnect(socket)
+            try:
+                await socket.close(code=code)
+            except Exception:
+                # The socket dropped on its own meanwhile: nothing left to close.
+                pass
+        return len(ended)
 
     def disconnect(self, websocket: WebSocket):
         self.active_connections = [socket for socket in self.active_connections if socket is not websocket]
         self._owner_sockets.discard(id(websocket))
+        self._sign_ins.pop(id(websocket), None)
         for user_uuid in list(self._user_sockets):
             remaining = [socket for socket in self._user_sockets[user_uuid] if socket is not websocket]
             if remaining:

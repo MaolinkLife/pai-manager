@@ -53,6 +53,18 @@ describe('AuthInterceptor: an expired access token', () => {
         });
     }
 
+    for (const url of ['/api/auth/ws-ticket', '/api/auth/me']) {
+        it(`signs out when the sign-in has ended and ${url} refuses`, () => {
+            auth.refresh$.and.returnValue(of(null));
+            http.post(url, {}).subscribe({ error: () => undefined });
+
+            backend.expectOne(url).flush({ detail: 'User not found or inactive' }, { status: 401, statusText: 'Unauthorized' });
+
+            expect(auth.refresh$).toHaveBeenCalledTimes(1);
+            expect(auth.clearSession).toHaveBeenCalled();
+        });
+    }
+
     it('does not treat wrong credentials at sign-in as an expired token', () => {
         http.post('/api/auth/login', {}).subscribe({ error: () => undefined });
 
