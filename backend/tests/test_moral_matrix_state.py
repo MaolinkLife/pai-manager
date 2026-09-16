@@ -80,9 +80,12 @@ class _FakeMoralRepository:
 
 class _FakeProviderManager:
     async def run(self, payload):
-        assert payload["previous_state"]["state"] == "peace"
-        assert payload["current_state"]["state"] in payload["allowed_emotions"]
-        assert payload["memory_traces"]
+        # Her state arrives as it was stored, his tone as his, the past as memory.
+        assert payload["currentState"]["emotion"] == "peace"
+        assert payload["currentState"]["emotion_vector"]["peace"] == 0.34
+        assert payload["userMessage"] == "Лим, спасибо, ты умница"
+        assert payload["userAnalysis"]["tone"] == "joy"
+        assert payload["memoryState"]["similar_traces"]
         return ProviderRunResult(
             provider="test",
             payload={

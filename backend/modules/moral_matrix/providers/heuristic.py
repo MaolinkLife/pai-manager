@@ -13,9 +13,12 @@ class HeuristicMoralProvider(MoralMatrixProvider):
     name = "heuristic"
 
     async def run(self, payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        metrics = payload.get("metrics") or {}
-        emotion = payload.get("current_emotion", "neutral")
-        intensity = payload.get("emotion_intensity", 0.0)
+        # No model answered: her state stays the one she came in with. The tone of
+        # the human is his, and without a verdict nothing about her has changed.
+        current_state = payload.get("currentState") or {}
+        metrics = current_state.get("metrics") or payload.get("metrics") or {}
+        emotion = current_state.get("emotion") or payload.get("current_emotion") or "neutral"
+        intensity = float(current_state.get("intensity") or payload.get("emotion_intensity") or 0.0)
 
         trust = metrics.get("trust", 0.5)
         resentment = metrics.get("resentment", 0.0)

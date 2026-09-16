@@ -285,25 +285,20 @@ class MoralMatrixModule:
         print("[MoralMatrix] Repo snapshot successful")
 
         metrics = self._bootstrap_metrics(latest_snapshot, daily_summary)
-        emotion_vector = self._bootstrap_emotion_vector(
-            latest_snapshot, daily_summary, recent_traces
-        )
-
-        self._apply_trace_context(emotion_vector, matched_traces, recent_traces)
+        # What she carries into this message is what the last turn stored. The traces
+        # are material for the matrix to weigh, not a silent push on her state, and
+        # the tone of the human is his, not hers.
+        emotion_vector = self._stored_emotion_vector(latest_snapshot, daily_summary)
         analyzer_snapshot = self._extract_analyzer_emotion(analysis_result)
         heuristic_snapshot = None
         if user_message and (
             not analyzer_snapshot.get("primary")
             or analyzer_snapshot["primary"] == "neutral"
         ):
-            heuristic_snapshot = self._merge_heuristics(
-                analyzer_snapshot,
-                emotion_vector,
-                user_message.get("content", ""),
-            )
+            heuristic_snapshot = self._heuristic_user_tone(user_message.get("content", ""))
 
-        current_emotion, emotion_intensity = self._blend_emotions(
-            emotion_vector, analyzer_snapshot
+        current_emotion, emotion_intensity, stored_trigger = self._stored_state(
+            latest_snapshot, daily_summary, emotion_vector
         )
         trigger = self._derive_trigger(user_message, analyzer_snapshot, matched_traces)
         associated_events = self._derive_associated_events(
@@ -323,27 +318,28 @@ class MoralMatrixModule:
         recommendations = self._derive_recommendations(current_emotion)
         hard_directives = self._derive_directives(metrics, analysis_result)
 
+        # The input the matrix prompt describes: her state apart from his message,
+        # his tone named as his, the past as memory to compare against.
         provider_payload = {
-            "allowed_emotions": list(DEFAULT_EMOTIONAL_STATE.keys()),
-            "emotion_definitions": EMOTIONAL_STATE_DEFINITIONS,
-            "previous_state": self._previous_state_payload(latest_snapshot, daily_summary),
-            "current_emotion": current_emotion,
-            "emotion_intensity": emotion_intensity,
-            "emotion_vector": emotion_vector,
-            "metrics": metrics.as_dict(),
-            "memory_traces": matched_traces,
-            "recent_traces": recent_traces,
-            "analysis_result": analysis_result,
-            "user_message": {
-                "id": (user_message or {}).get("id") or (user_message or {}).get("message_id"),
-                "role": (user_message or {}).get("role"),
-                "content": (user_message or {}).get("content"),
+            "currentState": {
+                "emotion": current_emotion,
+                "intensity": emotion_intensity,
+                "emotion_vector": emotion_vector,
+                "trigger": stored_trigger,
+                "metrics": metrics.as_dict(),
+                "relationship_status": relationship_status,
             },
-            "relationship_status": relationship_status,
-            "affective_state": affective_state,
-            "current_state": affective_state,
-            "heuristics": heuristic_snapshot,
-            "conversation_state": (memory_context or {}).get("conversation_state", {}),
+            "lastState": self._previous_turn_state(recent_traces),
+            "activePing": self._active_ping(latest_snapshot),
+            "userMessage": str((user_message or {}).get("content") or ""),
+            "userAnalysis": self._user_analysis_payload(
+                analyzer_snapshot, heuristic_snapshot, analysis_result
+            ),
+            "memoryState": {
+                "recent_traces": [self._trace_for_matrix(trace) for trace in recent_traces],
+                "similar_traces": [self._trace_for_matrix(trace) for trace in matched_traces],
+                "conversation_state": (memory_context or {}).get("conversation_state", {}),
+            },
         }
         provider_result = await self._provider_manager.run(provider_payload)
         transition = self._normalize_provider_transition(provider_result.payload)
@@ -399,6 +395,7 @@ class MoralMatrixModule:
             "heuristics": heuristic_snapshot,
             "transition_provider": provider_result.provider,
             "transition": transition,
+            "active_ping": (transition or {}).get("active_ping") or self._active_ping(latest_snapshot),
             "memory_recommendation": (transition or {}).get("memory_recommendation"),
         }
 
@@ -525,22 +522,20 @@ class MoralMatrixModule:
             ) / 2
         return metrics
 
-    def _bootstrap_emotion_vector(
+    def _stored_emotion_vector(
         self,
         latest_snapshot: Optional[Dict[str, Any]],
         daily_summary: Optional[Dict[str, Any]],
-        recent_traces: Sequence[Dict[str, Any]],
     ) -> Dict[str, float]:
+        """Her emotion vector exactly as the last turn stored it."""
         vector = {
             key: max(0.0, min(float(value or 0.0), 1.0))
             for key, value in DEFAULT_EMOTIONAL_STATE.items()
         }
-        snapshot_meta = (latest_snapshot or {}).get("meta") or {}
-        snapshot_state = snapshot_meta.get("affective_state") or snapshot_meta.get("current_state") or {}
-        snapshot_vector = snapshot_state.get("emotion_vector") if isinstance(snapshot_state, dict) else None
-        source_vector = snapshot_vector if isinstance(snapshot_vector, dict) else None
-        if source_vector is None and isinstance(daily_summary, dict):
-            source_vector = daily_summary.get("emotion_vector")
+        stored_state = self._stored_affective_state(latest_snapshot)
+        source_vector = stored_state.get("emotion_vector")
+        if not isinstance(source_vector, dict) or not source_vector:
+            source_vector = (daily_summary or {}).get("emotion_vector") if isinstance(daily_summary, dict) else None
         if isinstance(source_vector, dict) and source_vector:
             vector = {
                 self._normalize_emotion(str(key)): max(0.0, min(float(value or 0.0), 1.0))
@@ -549,32 +544,100 @@ class MoralMatrixModule:
             }
             for key, value in DEFAULT_EMOTIONAL_STATE.items():
                 vector.setdefault(key, max(0.0, min(float(value or 0.0), 1.0)))
-
-        # Emotional inertia: older traces nudge the state but cannot dominate
-        # over the current event forever.
-        for index, trace in enumerate(recent_traces or []):
-            emotion = self._normalize_emotion(trace.get("primary_emotion") or "")
-            if emotion not in DEFAULT_EMOTIONAL_STATE:
-                continue
-            intensity = max(0.0, min(float(trace.get("intensity") or 0.0), 1.0))
-            weight = max(0.08, 0.22 - index * 0.025)
-            vector[emotion] = vector.get(emotion, 0.0) * (1.0 - weight) + intensity * weight
         return self._normalize_vector(vector)
 
     @staticmethod
-    def _apply_trace_context(
+    def _stored_affective_state(latest_snapshot: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        meta = (latest_snapshot or {}).get("meta")
+        if isinstance(meta, dict):
+            state = meta.get("affective_state") or meta.get("current_state")
+            if isinstance(state, dict):
+                return state
+        return {}
+
+    def _stored_state(
+        self,
+        latest_snapshot: Optional[Dict[str, Any]],
+        daily_summary: Optional[Dict[str, Any]],
         emotion_vector: Dict[str, float],
-        matched_traces: Sequence[Dict[str, Any]],
-        recent_traces: Sequence[Dict[str, Any]],
-    ) -> None:
-        for trace in (matched_traces or []) + (recent_traces or []):
-            emotion = MoralMatrixModule._normalize_emotion(trace.get("primary_emotion") or "")
-            if emotion not in DEFAULT_EMOTIONAL_STATE:
-                continue
-            intensity = float(trace.get("intensity") or 0.0)
-            # Similar situations matter, but should be interpreted as context,
-            # not copied as the new dominant emotion.
-            emotion_vector[emotion] = min(1.0, emotion_vector.get(emotion, 0.0) + intensity * 0.12)
+    ) -> Tuple[str, float, str]:
+        """The emotion she carries into this message, and why it was set."""
+        stored_state = self._stored_affective_state(latest_snapshot)
+        emotion = self._known_emotion(stored_state.get("state") or (latest_snapshot or {}).get("mood"))
+        if not emotion:
+            emotion = self._known_emotion((daily_summary or {}).get("dominant_emotion"))
+        if not emotion:
+            emotion = self._dominant_emotion(emotion_vector)[0]
+        intensity = stored_state.get("intensity")
+        if intensity is None:
+            intensity = emotion_vector.get(emotion, 0.0)
+        return emotion, self._clamp_float(intensity, 0.0, 1.0), str(stored_state.get("trigger") or "")
+
+    @staticmethod
+    def _dominant_emotion(emotion_vector: Dict[str, float]) -> Tuple[str, float]:
+        dominant = max(
+            ((key, emotion_vector.get(key, 0.0) or 0.0) for key in DEFAULT_EMOTIONAL_STATE),
+            key=lambda item: item[1],
+        )
+        return dominant[0], float(dominant[1] or 0.0)
+
+    @staticmethod
+    def _previous_turn_state(recent_traces: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
+        """The state recorded one message earlier; the latest trace is the state she is in now."""
+        for trace in list(recent_traces or [])[1:2]:
+            notes = trace.get("notes")
+            state = notes.get("affective_state") if isinstance(notes, dict) else None
+            if isinstance(state, dict):
+                return {
+                    "emotion": state.get("state"),
+                    "intensity": state.get("intensity"),
+                    "trigger": state.get("trigger"),
+                }
+        return {}
+
+    @staticmethod
+    def _active_ping(latest_snapshot: Optional[Dict[str, Any]]) -> Optional[str]:
+        """The reason of the last strong change, as the matrix named it."""
+        meta = (latest_snapshot or {}).get("meta")
+        ping = meta.get("active_ping") if isinstance(meta, dict) else None
+        return str(ping).strip() if isinstance(ping, str) and ping.strip() else None
+
+    @staticmethod
+    def _trace_for_matrix(trace: Dict[str, Any]) -> Dict[str, Any]:
+        """A past situation as material for the verdict: what she felt and why."""
+        return {
+            "id": trace.get("id"),
+            "primary_emotion": trace.get("primary_emotion"),
+            "intensity": trace.get("intensity"),
+            "cause": trace.get("cause"),
+            "user_tone": trace.get("user_tone"),
+            "created_at": str(trace.get("created_at") or ""),
+        }
+
+    @staticmethod
+    def _user_analysis_payload(
+        analyzer_snapshot: Dict[str, Any],
+        heuristic_snapshot: Optional[Dict[str, Any]],
+        analysis_result: Optional[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        """What the analyzer read in the human's message. It describes him, not her."""
+        input_analysis = (analysis_result or {}).get("input_analysis") if isinstance(analysis_result, dict) else {}
+        input_analysis = input_analysis if isinstance(input_analysis, dict) else {}
+        payload: Dict[str, Any] = {
+            "tone": analyzer_snapshot.get("primary")
+            or (heuristic_snapshot or {}).get("primary")
+            or "neutral",
+            "tone_intensity": round(float(analyzer_snapshot.get("intensity") or 0.0), 3),
+            "secondary_tones": [str(item) for item in (analyzer_snapshot.get("secondary") or [])],
+            "intent": input_analysis.get("intent") or input_analysis.get("intents") or {},
+            "recommendations": input_analysis.get("recommendations") or [],
+        }
+        if heuristic_snapshot:
+            payload["keyword_read"] = {
+                "tone": heuristic_snapshot.get("primary"),
+                "confidence": round(float(heuristic_snapshot.get("intensity") or 0.0), 3),
+            }
+        return payload
 
     def _generate_inner_voice(
         self,
@@ -927,12 +990,12 @@ class MoralMatrixModule:
             "raw": tone,
         }
 
-    def _merge_heuristics(
-        self,
-        analyzer_snapshot: Dict[str, Any],
-        emotion_vector: Dict[str, float],
-        message_text: str,
-    ) -> Optional[Dict[str, Any]]:
+    def _heuristic_user_tone(self, message_text: str) -> Optional[Dict[str, Any]]:
+        """A keyword read of the human's message, used when the analyzer named no tone.
+
+        It describes what he wrote. It never becomes her emotion: only the matrix
+        says what she feels about it.
+        """
         content = (message_text or "").strip()
         if not content:
             return None
@@ -945,36 +1008,23 @@ class MoralMatrixModule:
         normalized_primary = self._normalize_emotion(dominant[0])
         confidence = float(heuristic_analysis.get("confidence", 0.4))
         intensity = max(confidence, 0.35)
-        emotion_vector[normalized_primary] = max(
-            emotion_vector.get(normalized_primary, 0.0), intensity
-        )
-
-        if analyzer_snapshot.get("primary") in (None, "", "neutral"):
-            analyzer_snapshot["primary"] = normalized_primary
-            analyzer_snapshot["intensity"] = intensity
-
-        analyzer_snapshot.setdefault("secondary", [])
-        secondary = heuristic_analysis["meta"]["secondary_emotions"]
-        for item in secondary:
-            normalized_secondary = self._normalize_emotion(item)
-            if normalized_secondary not in analyzer_snapshot["secondary"]:
-                analyzer_snapshot["secondary"].append(normalized_secondary)
-            emotion_vector[normalized_secondary] = max(
-                emotion_vector.get(normalized_secondary, 0.0), 0.3
-            )
+        secondary = [
+            self._normalize_emotion(item)
+            for item in heuristic_analysis["meta"]["secondary_emotions"]
+        ]
 
         log_audit_entry(
-            "moral_matrix_heuristic_merge",
-            "[MoralMatrix] Applied heuristic emotion snapshot.",
+            "moral_matrix_user_tone_keywords",
+            "[MoralMatrix] Keyword read of the human's message.",
             AuditStatus.INFO,
             details={
                 "primary": normalized_primary,
                 "intensity": intensity,
-                "secondary": analyzer_snapshot.get("secondary", []),
+                "secondary": secondary,
             },
         )
         print(
-            "[MoralMatrix] Heuristic snapshot merged ->",
+            "[MoralMatrix] Keyword read of the message ->",
             pformat(
                 {
                     "primary": normalized_primary,
@@ -987,32 +1037,9 @@ class MoralMatrixModule:
         return {
             "primary": normalized_primary,
             "intensity": intensity,
+            "secondary": secondary,
             "analysis": heuristic_analysis,
         }
-
-    def _blend_emotions(
-        self,
-        emotion_vector: Dict[str, float],
-        analyzer_snapshot: Dict[str, Any],
-    ) -> Tuple[str, float]:
-        primary = self._normalize_emotion(analyzer_snapshot.get("primary", "neutral"))
-        if primary not in DEFAULT_EMOTIONAL_STATE:
-            primary = "peace"
-        intensity = min(max(analyzer_snapshot.get("intensity", 0.3), 0.0), 1.0)
-        emotion_vector[primary] = max(emotion_vector.get(primary, 0.0), intensity)
-
-        for secondary in analyzer_snapshot.get("secondary", []):
-            normalized = self._normalize_emotion(secondary)
-            if normalized not in DEFAULT_EMOTIONAL_STATE:
-                continue
-            emotion_vector[normalized] = max(emotion_vector.get(normalized, 0.0), 0.4)
-
-        emotion_vector.update(self._normalize_vector(emotion_vector))
-        dominant_emotion = max(
-            ((key, emotion_vector.get(key, 0.0)) for key in DEFAULT_EMOTIONAL_STATE),
-            key=lambda item: item[1] if item[1] is not None else 0.0,
-        )
-        return dominant_emotion[0], float(dominant_emotion[1] or 0.0)
 
     @staticmethod
     def _normalize_vector(vector: Dict[str, float]) -> Dict[str, float]:
@@ -1110,25 +1137,6 @@ class MoralMatrixModule:
                 "arises_when": definition.get("arises_when", ""),
                 "behavior": definition.get("behavior", ""),
             },
-        }
-
-    @staticmethod
-    def _previous_state_payload(
-        latest_snapshot: Optional[Dict[str, Any]],
-        daily_summary: Optional[Dict[str, Any]],
-    ) -> Dict[str, Any]:
-        snapshot_meta = (latest_snapshot or {}).get("meta")
-        if isinstance(snapshot_meta, dict):
-            state = snapshot_meta.get("affective_state") or snapshot_meta.get("current_state")
-            if isinstance(state, dict):
-                return state
-        return {
-            "state": (latest_snapshot or {}).get("mood")
-            or (daily_summary or {}).get("dominant_emotion")
-            or "peace",
-            "intensity": (daily_summary or {}).get("average_intensity", 0.0),
-            "trigger": "previous stored state",
-            "emotion_vector": (daily_summary or {}).get("emotion_vector", {}),
         }
 
     def _normalize_provider_transition(
@@ -1240,6 +1248,12 @@ class MoralMatrixModule:
         reaction = section("emotional_reaction")
         update = section("state_update")
         behavior = section("behavior_formation")
+        # The reason of a strong change, as the matrix named it: the next turn gets
+        # it back as activePing.
+        ping_update = update.get("active_ping_update")
+        active_ping = ""
+        if isinstance(ping_update, dict) and ping_update.get("should_update"):
+            active_ping = str(ping_update.get("new_active_ping") or "").strip()
         target_raw = update.get("recommended_new_state")
         target_raw = target_raw if isinstance(target_raw, dict) else {}
 
@@ -1293,6 +1307,7 @@ class MoralMatrixModule:
             # The wanted response travels as influence.behavior: a wish, not a hard directive.
             "hard_directives": [],
             "desire_vector": desires,
+            "active_ping": active_ping,
             "memory_recommendation": (
                 memory_recommendation if isinstance(memory_recommendation, dict) else None
             ),

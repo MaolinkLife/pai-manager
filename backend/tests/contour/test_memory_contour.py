@@ -253,18 +253,24 @@ def test_moral_matrix_does_not_silently_accept_an_answer_it_cannot_use(pai):
     assert meta["transition_provider"] == "heuristic", meta
 
 
-def test_moral_matrix_partial_answer_keeps_the_current_state(pai):
-    """An answer that says nothing about the emotion must not wipe the state the
-    matrix computed before asking the model (it used to become calm with 0)."""
+def test_moral_matrix_partial_answer_keeps_the_current_state(pai, moral_answer):
+    """An answer that says nothing about the emotion must leave the state she is in
+    untouched (it used to become calm with 0)."""
+    pai.moral_response = json.dumps(
+        moral_answer(dominant="joy", strength=0.7, reason="he thanked me"), ensure_ascii=False
+    )
+    pai.turn("Спасибо тебе, ты очень помогла.", tone="joy")
+
     summary = "Мне тепло от этих слов."
     pai.moral_response = json.dumps({"summary": summary}, ensure_ascii=False)
 
-    turn = pai.turn("Спасибо тебе, ты очень помогла.", tone="joy")
+    turn = pai.turn("И вообще ты молодец.", tone="joy")
 
     state = turn.processing["moral_state"]
     assert state["meta"]["transition_provider"] == "ollama", state["meta"]
+    # The state she came in with stays hers; the answer only adds its words.
     assert state["current_emotion"] == "joy", state
-    assert state["emotion_intensity"] > 0, state
+    assert state["emotion_intensity"] == pytest.approx(0.7, abs=0.01), state
     assert state["narrative"] == summary, state
 
 
