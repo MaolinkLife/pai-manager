@@ -332,3 +332,18 @@ BEHAVIORAL_RECOMMENDATIONS = {
 }
 
 FALLBACK_RECOMMENDATION = ["be natural"]
+
+# What the matrix answers it wants (behavior_formation.desire_vector), said in
+# words for the inner voice. The numbers stay with the matrix.
+DESIRE_LABELS = {
+    "help_owner": "to help him",
+    "comfort_owner": "to comfort him",
+    "seek_closeness": "to be close",
+    "protect_owner": "to protect him",
+    "protect_self": "to protect myself",
+    "maintain_boundary": "to keep a boundary",
+    "avoid_conflict": "to avoid a fight",
+    "express_hurt": "to show that it hurt",
+    "express_playfulness": "to play",
+    "refuse_access": "to refuse access",
+}

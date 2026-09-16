@@ -245,6 +245,8 @@
         "innerVoiceEnable": "Generate inner voice",
         "innerVoiceUndercurrent": "Undercurrent threshold",
         "innerVoiceUndercurrentHint": "The second strongest emotion shows as an undercurrent when it is at or above this threshold (0–1).",
+        "innerVoiceDesire": "Desire threshold",
+        "innerVoiceDesireHint": "The two strongest wishes of the matrix reach the inner voice when they are at or above this threshold (0–1).",
         "innerVoiceLanguage": "Language",
         "innerVoiceLanguageHint": "Empty = use User.language (recommended).",
         "innerVoicePrompt": "Inner voice prompt",

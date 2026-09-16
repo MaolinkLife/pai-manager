@@ -87,6 +87,16 @@ describe('MoralSettingsComponent: partial saves', () => {
         expect(saved).toEqual([{ moral: { innerVoice: { undercurrentThreshold: 0.6 } } }]);
     });
 
+    it('shows the stored desire threshold and saves a change of it alone', () => {
+        const component = create();
+
+        expect(component.moralForm.get('innerVoice.desireThreshold')!.value).toBe(0.6);
+        component.moralForm.get('innerVoice.desireThreshold')!.setValue(0.7);
+        component.saveChanges();
+
+        expect(saved).toEqual([{ moral: { innerVoice: { desireThreshold: 0.7 } } }]);
+    });
+
     it('shows the stored matrix prompt as it is', () => {
         const component = create();
 

@@ -192,6 +192,54 @@ def test_inner_voice_payload_leaves_out_what_was_not_given(monkeypatch):
 
     assert "Undercurrent" not in captured["payload"]
     assert "Wanted response" not in captured["payload"]
+    assert "Wants" not in captured["payload"]
+
+
+def test_the_voice_hears_what_she_wants_in_words(monkeypatch):
+    """What the matrix wants is said plainly; the numbers stay with the matrix."""
+    captured = _capture_payload(monkeypatch)
+
+    _new_module()._generate_inner_voice(
+        emotion="tenderness",
+        intensity=0.85,
+        cause="he asked how her day went",
+        language_hint="ru-RU",
+        desires=[("seek_closeness", 0.8), ("express_playfulness", 0.7)],
+    )
+
+    assert "Wants: to be close, to play" in captured["payload"]
+    assert "0.8" not in captured["payload"].split("Wants:", 1)[1]
+
+
+def test_the_two_strongest_desires_are_taken():
+    wanted = {
+        "seek_closeness": 0.8,
+        "express_playfulness": 0.7,
+        "comfort_owner": 0.65,
+        "help_owner": 0.62,
+    }
+
+    assert MoralMatrixModule._pick_desires(wanted, 0.6) == [
+        ("seek_closeness", 0.8),
+        ("express_playfulness", 0.7),
+    ]
+
+
+def test_desires_below_the_threshold_stay_silent():
+    assert MoralMatrixModule._pick_desires({"seek_closeness": 0.4, "help_owner": 0.2}, 0.6) == []
+    assert MoralMatrixModule._pick_desires({}, 0.6) == []
+
+
+def test_junk_in_the_desire_vector_is_ignored():
+    wanted = {
+        "seek_closeness": 0.9,
+        "refuse_access": True,
+        "express_hurt": "a lot",
+        "": 0.9,
+        "unknown_wish": 0.95,
+    }
+
+    assert MoralMatrixModule._pick_desires(wanted, 0.6) == [("seek_closeness", 0.9)]
 
 
 def test_the_undercurrent_is_the_strongest_other_emotion_above_the_threshold():
@@ -218,6 +266,7 @@ def test_the_voice_gets_the_undercurrent_and_the_wanted_response_from_the_state(
         "moral.scars.enabled": False,
         "moral.inner_voice.enabled": True,
         "moral.inner_voice.undercurrent_threshold": 0.5,
+        "moral.inner_voice.desire_threshold": 0.6,
     }
     monkeypatch.setattr(
         service_module.config_service,
@@ -257,6 +306,15 @@ def test_the_voice_gets_the_undercurrent_and_the_wanted_response_from_the_state(
         emotion_vector={"tenderness": 0.9, "peace": 0.75, "joy": 0.7},
         trigger="the user asked if so little makes her happy",
         influence={"tone": "мягкий", "behavior": "answer_playfully"},
+        meta={
+            "transition": {
+                "desire_vector": {
+                    "seek_closeness": 0.8,
+                    "express_playfulness": 0.7,
+                    "avoid_conflict": 0.2,
+                }
+            }
+        },
     )
 
     module._persist_state(
@@ -269,6 +327,8 @@ def test_the_voice_gets_the_undercurrent_and_the_wanted_response_from_the_state(
 
     assert asked["undercurrent"] == ("peace", 0.75)
     assert asked["desired_behavior"] == "answer_playfully"
+    # What the matrix answered it wants reaches the voice, strongest first.
+    assert asked["desires"] == [("seek_closeness", 0.8), ("express_playfulness", 0.7)]
     assert result.meta["inner_voice"] == "Мне тепло и спокойно. Хочу ответить игриво."
     assert module._repository.traces[0]["notes"]["inner_voice"] == "Мне тепло и спокойно. Хочу ответить игриво."
 
@@ -282,6 +342,7 @@ def test_the_inner_voice_defaults_match_between_the_config_and_its_model():
 
     assert defaults["max_tokens"] == model.max_tokens == 160
     assert defaults["undercurrent_threshold"] == model.undercurrent_threshold == 0.5
+    assert defaults["desire_threshold"] == model.desire_threshold == 0.6
 
 
 # ---------------------------------------------------------------------------

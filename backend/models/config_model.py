@@ -595,6 +595,7 @@ class MoralInnerVoiceConfig(BaseModel):
     max_tokens: int = 160
     temperature: float = 0.7
     undercurrent_threshold: float = 0.5
+    desire_threshold: float = 0.6
     language: str = ""  # blank → falls back to system.language
     system_prompt: str = MORAL_INNER_VOICE_PROMPT
 

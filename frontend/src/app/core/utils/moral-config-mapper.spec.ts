@@ -40,6 +40,20 @@ describe('moral config mapper: inner voice undercurrent', () => {
         expect(dto?.inner_voice?.undercurrent_threshold).toBe(0.4);
     });
 
+    it('carries the desire threshold from the server into the form and back', () => {
+        const model = mapMoralDtoToModel({
+            enabled: true,
+            active_provider: 'ollama',
+            fallback_order: [],
+            providers: {},
+            inner_voice: { desire_threshold: 0.7 },
+        } as MoralConfigDto);
+
+        expect(model.innerVoice?.desireThreshold).toBe(0.7);
+        const dto = mapMoralPartialModelToDto({ innerVoice: { desireThreshold: 0.5 } as MoralInnerVoiceConfig } as Partial<MoralConfig>);
+        expect(dto?.inner_voice?.desire_threshold).toBe(0.5);
+    });
+
     it('falls back to the server defaults when the values are missing', () => {
         const model = mapMoralDtoToModel({
             enabled: true,
@@ -51,6 +65,7 @@ describe('moral config mapper: inner voice undercurrent', () => {
 
         expect(model.innerVoice?.maxTokens).toBe(160);
         expect(model.innerVoice?.undercurrentThreshold).toBe(0.5);
+        expect(model.innerVoice?.desireThreshold).toBe(0.6);
     });
 });
 

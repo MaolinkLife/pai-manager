@@ -260,6 +260,7 @@ export interface MoralInnerVoiceConfigDto {
     max_tokens?: number;
     temperature?: number;
     undercurrent_threshold?: number;
+    desire_threshold?: number;
     language?: string;
     system_prompt?: string;
 }

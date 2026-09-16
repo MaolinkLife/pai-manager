@@ -543,6 +543,9 @@ DEFAULT_CONFIG = {
             "max_tokens": 160,
             "temperature": 0.7,
             "undercurrent_threshold": 0.5,
+            # The two strongest wishes of the matrix answer at or above this
+            # threshold are said to the voice in words.
+            "desire_threshold": 0.6,
             "language": "",  # fallback to system.language if blank
             # Technical prompt, editable in the settings; empty = built-in.
             "system_prompt": MORAL_INNER_VOICE_PROMPT,

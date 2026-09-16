@@ -648,6 +648,7 @@ class MoralMatrixModule:
         language_hint: str,
         undercurrent: Optional[Tuple[str, float]] = None,
         desired_behavior: str = "",
+        desires: Optional[Sequence[Tuple[str, float]]] = None,
     ) -> str:
         """Two or three first-person sentences: what I feel, why, how I want to answer.
 
@@ -699,6 +700,15 @@ class MoralMatrixModule:
         ]
         if undercurrent:
             payload_lines.append(f"Undercurrent: {undercurrent[0]} ({round(float(undercurrent[1]), 2)})")
+        if desires:
+            # What she wants, said plainly: the numbers stay with the matrix.
+            from constants.moral import DESIRE_LABELS
+
+            wants = ", ".join(
+                DESIRE_LABELS.get(name, str(name).replace("_", " ")) for name, _ in desires
+            )
+            if wants:
+                payload_lines.append(f"Wants: {wants}")
         if str(desired_behavior or "").strip():
             payload_lines.append(f"Wanted response: {str(desired_behavior).strip()[:200]}")
         user_payload = "\n".join(payload_lines)
@@ -769,6 +779,23 @@ class MoralMatrixModule:
         if not candidates:
             return None
         return max(candidates, key=lambda item: item[1])
+
+    @staticmethod
+    def _pick_desires(
+        desire_vector: Dict[str, Any], threshold: float, limit: int = 2
+    ) -> List[Tuple[str, float]]:
+        """The strongest wishes of the matrix answer, strongest first; weak ones stay silent."""
+        from constants.moral import DESIRE_LABELS
+
+        candidates = [
+            (str(name), float(value))
+            for name, value in (desire_vector or {}).items()
+            if str(name) in DESIRE_LABELS
+            and not isinstance(value, bool)
+            and isinstance(value, (int, float))
+            and float(value) >= threshold
+        ]
+        return sorted(candidates, key=lambda item: item[1], reverse=True)[:limit]
 
     @staticmethod
     def _match_scar_trigger(
@@ -1566,6 +1593,13 @@ class MoralMatrixModule:
                     threshold = float(raw_threshold)
                 except (TypeError, ValueError):
                     threshold = 0.5
+                raw_desire_threshold = config_service.get_config_value(
+                    "moral.inner_voice.desire_threshold", 0.6
+                )
+                try:
+                    desire_threshold = float(raw_desire_threshold)
+                except (TypeError, ValueError):
+                    desire_threshold = 0.6
                 inner_voice = self._generate_inner_voice(
                     emotion=result.current_emotion,
                     intensity=result.emotion_intensity,
@@ -1578,6 +1612,10 @@ class MoralMatrixModule:
                         result.emotion_vector, result.current_emotion, threshold
                     ),
                     desired_behavior=str((result.influence or {}).get("behavior") or ""),
+                    desires=self._pick_desires(
+                        ((result.meta or {}).get("transition") or {}).get("desire_vector") or {},
+                        desire_threshold,
+                    ),
                 )
                 if inner_voice:
                     notes = trace_payload.get("notes")

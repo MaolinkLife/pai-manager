@@ -246,6 +246,8 @@
         "innerVoiceEnable": "Генерировать inner voice",
         "innerVoiceUndercurrent": "Порог подтекста",
         "innerVoiceUndercurrentHint": "Вторая по силе эмоция звучит подтекстом, если она не ниже этого порога (0–1).",
+        "innerVoiceDesire": "Порог желаний",
+        "innerVoiceDesireHint": "Два самых сильных желания матрицы попадают во внутренний голос, если они не ниже этого порога (0–1).",
         "innerVoiceLanguage": "Язык фразы",
         "innerVoiceLanguageHint": "Пусто = использовать User.language (рекомендуется).",
         "innerVoicePrompt": "Промпт внутреннего голоса",

@@ -120,6 +120,7 @@ const mapInnerVoiceDtoToModel = (
         maxTokens: dto.max_tokens ?? 160,
         temperature: dto.temperature ?? 0.7,
         undercurrentThreshold: dto.undercurrent_threshold ?? 0.5,
+        desireThreshold: dto.desire_threshold ?? 0.6,
         language: dto.language ?? '',
         systemPrompt: dto.system_prompt ?? '',
     };
@@ -136,6 +137,7 @@ const mapInnerVoiceModelToDto = (
         max_tokens: model.maxTokens,
         temperature: model.temperature,
         undercurrent_threshold: model.undercurrentThreshold,
+        desire_threshold: model.desireThreshold,
         language: model.language,
         ...promptField('system_prompt', model.systemPrompt),
     };

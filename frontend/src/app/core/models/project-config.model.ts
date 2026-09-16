@@ -228,6 +228,7 @@ export interface MoralInnerVoiceConfig {
     maxTokens: number;
     temperature: number;
     undercurrentThreshold: number;
+    desireThreshold: number;
     language: string;
     systemPrompt?: string;
 }
