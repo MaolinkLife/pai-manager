@@ -28,7 +28,7 @@ describe('ChatMessageStoreService', () => {
         store.replaceTempId('tmp-1', 'real-1', { isPending: false });
 
         expect(store.currentStreamingMessage?.id).toBe('real-1');
-        expect(store.currentStreamingMessage?.isPending).toBeFalse();
+        expect(store.currentStreamingMessage?.isPending).toBe(false);
     });
 
     it('keeps a sent message the server has not saved yet when the history is reloaded', () => {

@@ -5,14 +5,14 @@ describe('vision config mapper', () => {
     it('keeps background screen capture off when the server sends no switch', () => {
         const model = mapVisionDtoToModel({ enabled: true } as ProjectConfigDto['vision']);
 
-        expect(model.enabled).toBeTrue();
-        expect(model.screenCaptureEnabled).toBeFalse();
+        expect(model.enabled).toBe(true);
+        expect(model.screenCaptureEnabled).toBe(false);
     });
 
     it('carries the background screen capture switch both ways', () => {
         const model = mapVisionDtoToModel({ enabled: true, screen_capture_enabled: true } as ProjectConfigDto['vision']);
 
-        expect(model.screenCaptureEnabled).toBeTrue();
+        expect(model.screenCaptureEnabled).toBe(true);
         expect(mapVisionModelToDto({ screenCaptureEnabled: false })).toEqual({ screen_capture_enabled: false } as ProjectConfigDto['vision']);
     });
 

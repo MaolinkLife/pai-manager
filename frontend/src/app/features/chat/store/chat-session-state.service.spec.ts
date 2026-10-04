@@ -30,7 +30,7 @@ describe('ChatSessionStateService', () => {
         leaveChatPage(first);
 
         const second = openChatPage(session);
-        expect(second.loading).toBeTrue();
+        expect(second.loading).toBe(true);
         expect(second.activeGenerationRunId).toBe('run-1');
         expect(second.refreshHistoryAfterRunId).toBe('run-1');
 
@@ -39,7 +39,7 @@ describe('ChatSessionStateService', () => {
         leaveChatPage(second);
 
         const third = openChatPage(session);
-        expect(third.loading).toBeFalse();
+        expect(third.loading).toBe(false);
         expect(third.activeGenerationRunId).toBeNull();
     });
 
@@ -52,8 +52,8 @@ describe('ChatSessionStateService', () => {
 
         const second = openChatPage(session);
         expect(second.illustratingMessageId).toBe('m1');
-        expect(second.recording).toBeTrue();
-        expect(second.isProcessingAttachments).toBeTrue();
+        expect(second.recording).toBe(true);
+        expect(second.isProcessingAttachments).toBe(true);
     });
 
     it('keeps the unsent draft text and attachments when the chat is left', () => {

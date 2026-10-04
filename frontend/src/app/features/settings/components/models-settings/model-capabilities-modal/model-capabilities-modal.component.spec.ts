@@ -43,21 +43,21 @@ describe('ModelCapabilitiesModalComponent', () => {
         const component = create();
 
         expect(component.selected()).toEqual(['tools', 'embedding']);
-        expect(component.isDeclared('tools')).toBeTrue();
-        expect(component.differsFromOllama()).toBeFalse();
+        expect(component.isDeclared('tools')).toBe(true);
+        expect(component.differsFromOllama()).toBe(false);
     });
 
     it('saves the ticks and closes with the updated entry', () => {
         const component = create();
         component.form.get('tools')!.setValue(false);
 
-        expect(component.differsFromOllama()).toBeTrue();
+        expect(component.differsFromOllama()).toBe(true);
         component.save();
 
         expect(saved).toEqual([{ name: 'qwen3-embedding:latest', capabilities: ['embedding'], provider: 'ollama' }]);
         expect(closedWith.length).toBe(1);
         expect(closedWith[0]!.capabilities).toEqual(['embedding']);
-        expect(component.saving).toBeFalse();
+        expect(component.saving).toBe(false);
     });
 
     it('"As Ollama says" puts back the declared ticks without saving', () => {
@@ -66,7 +66,7 @@ describe('ModelCapabilitiesModalComponent', () => {
         component.resetToOllama();
 
         expect(component.selected()).toEqual(['tools', 'embedding']);
-        expect(component.differsFromOllama()).toBeFalse();
+        expect(component.differsFromOllama()).toBe(false);
         expect(saved).toEqual([]);
     });
 
@@ -76,7 +76,7 @@ describe('ModelCapabilitiesModalComponent', () => {
         component.save();
 
         expect(closedWith).toEqual([]);
-        expect(component.saving).toBeFalse();
+        expect(component.saving).toBe(false);
         expect(component.saveError).toBe('settingsPage.models.capabilitiesSaveError');
     });
 

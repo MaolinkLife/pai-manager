@@ -50,22 +50,22 @@ describe('MediaSettingsComponent image check', () => {
 
         expect(control(component, 'quality.threshold').value).toBe(0.9);
         expect(control(component, 'system_prompt').value).toBe('Judge.');
-        expect(control(component, 'quality.threshold').disabled).toBeTrue();
-        expect(control(component, 'quality.reroll').disabled).toBeTrue();
-        expect(control(component, 'relevance.threshold').enabled).toBeTrue();
-        expect(control(component, 'relevance.reroll').enabled).toBeTrue();
-        expect(control(component, 'max_generations').disabled).toBeTrue();
+        expect(control(component, 'quality.threshold').disabled).toBe(true);
+        expect(control(component, 'quality.reroll').disabled).toBe(true);
+        expect(control(component, 'relevance.threshold').enabled).toBe(true);
+        expect(control(component, 'relevance.reroll').enabled).toBe(true);
+        expect(control(component, 'max_generations').disabled).toBe(true);
     });
 
     it('unlocks the generation count only while an enabled check may request a new image', () => {
         const component = create({});
 
         control(component, 'relevance.reroll').setValue(true);
-        expect(control(component, 'max_generations').enabled).toBeTrue();
+        expect(control(component, 'max_generations').enabled).toBe(true);
 
         control(component, 'relevance.enabled').setValue(false);
-        expect(control(component, 'relevance.reroll').disabled).toBeTrue();
-        expect(control(component, 'max_generations').disabled).toBeTrue();
+        expect(control(component, 'relevance.reroll').disabled).toBe(true);
+        expect(control(component, 'max_generations').disabled).toBe(true);
     });
 
     it('warns above three generations only while a new image can be requested', () => {
@@ -73,12 +73,12 @@ describe('MediaSettingsComponent image check', () => {
         control(component, 'relevance.reroll').setValue(true);
 
         control(component, 'max_generations').setValue(3);
-        expect(component.showGenerationsWarning).toBeFalse();
+        expect(component.showGenerationsWarning).toBe(false);
         control(component, 'max_generations').setValue(4);
-        expect(component.showGenerationsWarning).toBeTrue();
+        expect(component.showGenerationsWarning).toBe(true);
 
         control(component, 'relevance.reroll').setValue(false);
-        expect(component.showGenerationsWarning).toBeFalse();
+        expect(component.showGenerationsWarning).toBe(false);
     });
 
     it('falls back to the defaults when the config has no check', () => {
@@ -121,7 +121,7 @@ describe('MediaSettingsComponent image check', () => {
         const component = create({ prompting: { enabled: false, default_negative_prompt: 'x' } });
 
         ['assess_enabled', 'quality_threshold', 'max_attempts', 'retry_enabled', 'enabled'].forEach((key) => {
-            expect(component.mediaForm.get(`prompting.${key}`)).withContext(key).toBeNull();
+            expect(component.mediaForm.get(`prompting.${key}`), key).toBeNull();
         });
 
         control(component, 'relevance.threshold').setValue(0.7);
@@ -156,7 +156,7 @@ describe('MediaSettingsComponent image check', () => {
         control(component, 'relevance.threshold').setValue(0.7);
         component.saveChanges();
 
-        expect(component.hasChanges()).toBeFalse();
+        expect(component.hasChanges()).toBe(false);
         expect(saved).toEqual([]);
     });
 

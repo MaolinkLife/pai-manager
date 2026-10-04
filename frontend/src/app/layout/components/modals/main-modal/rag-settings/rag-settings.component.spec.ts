@@ -30,7 +30,7 @@ describe('RagSettingsComponent memory save', () => {
     it('shows the summaries-on-start switch as loaded', () => {
         const component = create();
 
-        expect(component.ragForm.get('daySummaryStartupRefresh')!.value).toBeFalse();
+        expect(component.ragForm.get('daySummaryStartupRefresh')!.value).toBe(false);
     });
 
     it('sends only the summaries-on-start switch when it alone changed', () => {
@@ -48,7 +48,7 @@ describe('RagSettingsComponent memory save', () => {
 
         component.saveChanges();
 
-        expect(updates.every((body) => !('memory' in body))).toBeTrue();
+        expect(updates.every((body) => !('memory' in body))).toBe(true);
     });
 
     it('does not send untouched stopwords', () => {

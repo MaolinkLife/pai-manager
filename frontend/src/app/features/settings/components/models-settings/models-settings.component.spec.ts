@@ -68,7 +68,7 @@ describe('ModelsSettingsComponent model capabilities', () => {
         closed.next(entry({ capabilities: ['completion', 'vision'], owner_marked: true, differs: true }));
 
         expect(component.indexByName['llava:latest'].capabilities).toEqual(['completion', 'vision']);
-        expect(component.indexByName['llava:latest'].differs).toBeTrue();
+        expect(component.indexByName['llava:latest'].differs).toBe(true);
     });
 
     it('closing without saving keeps the row as it was', () => {

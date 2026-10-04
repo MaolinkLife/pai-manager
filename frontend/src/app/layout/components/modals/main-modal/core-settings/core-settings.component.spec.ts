@@ -63,6 +63,6 @@ describe('CoreSettingsComponent router model capabilities', () => {
     it('keeps no capabilities of its own in the saved settings', () => {
         const component = create([]);
 
-        expect('capabilities' in (component as any).buildDecisionLayerConfigFromForm()).toBeFalse();
+        expect('capabilities' in (component as any).buildDecisionLayerConfigFromForm()).toBe(false);
     });
 });

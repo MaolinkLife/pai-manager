@@ -47,7 +47,7 @@ describe('SocialSettingsComponent: partial saves', () => {
     it('has nothing to save right after loading', () => {
         const component = create();
 
-        expect(component.hasChanges()).toBeFalse();
+        expect(component.hasChanges()).toBe(false);
     });
 
     it('saves one Telegram field without the credentials and the rest of the bridge settings', () => {

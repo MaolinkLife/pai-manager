@@ -5,7 +5,7 @@ describe('audit logs config mapper: defaults', () => {
     it('fills missing retention values with the same defaults as the server', () => {
         const retention = mapAuditLogsDtoToModel({}).retention;
 
-        expect(retention.ageDays).toEqual(jasmine.objectContaining({ info: 7, success: 7, warning: 30, error: 90, audit_fail: 90 }));
+        expect(retention.ageDays).toEqual(expect.objectContaining({ info: 7, success: 7, warning: 30, error: 90, audit_fail: 90 }));
         expect(retention.hardCap).toEqual({ info: 50000, success: 50000, warning: 10000, error: 5000, audit_fail: 5000 });
     });
 });

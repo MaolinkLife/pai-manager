@@ -34,13 +34,13 @@ describe('image check settings', () => {
 
     it('regenerates only when an enabled check may request a new image', () => {
         const quality = { enabled: false, threshold: 0.82, reroll: true };
-        expect(canRegenerate({ ...IMAGE_CHECK_DEFAULTS, quality })).toBeFalse();
-        expect(canRegenerate({ ...IMAGE_CHECK_DEFAULTS, quality: { ...quality, enabled: true } })).toBeTrue();
-        expect(canRegenerate(IMAGE_CHECK_DEFAULTS)).toBeFalse();
+        expect(canRegenerate({ ...IMAGE_CHECK_DEFAULTS, quality })).toBe(false);
+        expect(canRegenerate({ ...IMAGE_CHECK_DEFAULTS, quality: { ...quality, enabled: true } })).toBe(true);
+        expect(canRegenerate(IMAGE_CHECK_DEFAULTS)).toBe(false);
     });
 
     it('warns above three generations', () => {
-        expect(generationsWarning(3)).toBeFalse();
-        expect(generationsWarning(4)).toBeTrue();
+        expect(generationsWarning(3)).toBe(false);
+        expect(generationsWarning(4)).toBe(true);
     });
 });

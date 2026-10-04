@@ -60,7 +60,7 @@ describe('VoiceSettingsComponent: partial saves', () => {
     it('has nothing to save right after loading', () => {
         const voice = create();
 
-        expect(voice.hasChanges()).toBeFalse();
+        expect(voice.hasChanges()).toBe(false);
     });
 
     it('saves a switch without the provider settings', () => {
@@ -96,7 +96,7 @@ describe('VoiceSettingsComponent: partial saves', () => {
         voice.voiceForm.get('enabled')!.setValue(true);
         voice.saveChanges();
 
-        expect(voice.hasChanges()).toBeFalse();
+        expect(voice.hasChanges()).toBe(false);
         expect(saved).toEqual([]);
     });
 });

@@ -21,7 +21,7 @@ describe('moral config mapper: inner voice prompt', () => {
 
         const dto = mapMoralPartialModelToDto(changed);
 
-        expect('system_prompt' in (dto?.inner_voice ?? {})).toBeFalse();
+        expect('system_prompt' in (dto?.inner_voice ?? {})).toBe(false);
     });
 });
 

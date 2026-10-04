@@ -56,7 +56,7 @@ describe('AnalyzerSettingsComponent: the analyzer prompt', () => {
 
         expect(component.analyzerForm.get('systemPrompt')!.value).toBe('Analyzer prompt.');
         expect(defaultsAsked).toEqual([]);
-        expect(component.hasChanges()).toBeFalse();
+        expect(component.hasChanges()).toBe(false);
     });
 
     it('shows the built-in analyzer prompt from the server when none is stored, with nothing to save', () => {
@@ -64,7 +64,7 @@ describe('AnalyzerSettingsComponent: the analyzer prompt', () => {
 
         expect(defaultsAsked).toEqual(['analyzer.system_prompt']);
         expect(component.analyzerForm.get('systemPrompt')!.value).toBe('Built-in analyzer prompt.');
-        expect(component.hasChanges()).toBeFalse();
+        expect(component.hasChanges()).toBe(false);
     });
 
     it('never puts a prompt of its own into the field', () => {

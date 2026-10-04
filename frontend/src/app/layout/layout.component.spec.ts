@@ -90,6 +90,6 @@ describe('LayoutComponent: quick generation panel saves', () => {
         component.saveQuickGenerationSettings();
 
         expect(saved).toEqual([]);
-        expect(component.generationPanelSaving).toBeFalse();
+        expect(component.generationPanelSaving).toBe(false);
     });
 });

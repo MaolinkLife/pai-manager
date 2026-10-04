@@ -65,7 +65,7 @@ describe('AudioSettingsComponent: partial saves', () => {
     it('has nothing to save right after loading', () => {
         const component = create();
 
-        expect(component.hasChanges()).toBeFalse();
+        expect(component.hasChanges()).toBe(false);
     });
 
     it('saves one audio field alone', () => {
@@ -112,7 +112,7 @@ describe('AudioSettingsComponent: partial saves', () => {
         component.audioForm.get('vadThreshold')!.setValue(0.7);
         component.saveChanges();
 
-        expect(component.hasChanges()).toBeFalse();
+        expect(component.hasChanges()).toBe(false);
         expect(saved).toEqual([]);
     });
 });

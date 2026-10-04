@@ -65,8 +65,8 @@ describe('PersonaSettingsComponent character create and delete', () => {
 
         component.deleteSelectedCharacter();
 
-        expect(component.showDeleteCharacterModal).toBeTrue();
-        expect(component.deletePreviewLoading).toBeFalse();
+        expect(component.showDeleteCharacterModal).toBe(true);
+        expect(component.deletePreviewLoading).toBe(false);
         expect(component.deleteSummaryRows).toEqual([
             { labelKey: 'personaSettings.deleteCounts.history', count: 44 },
             { labelKey: 'personaSettings.deleteCounts.diary', count: 2 },
@@ -80,17 +80,17 @@ describe('PersonaSettingsComponent character create and delete', () => {
         const component = create();
         component.deleteSelectedCharacter();
 
-        expect(component.canConfirmDelete()).toBeFalse();
+        expect(component.canConfirmDelete()).toBe(false);
         component.deleteConfirmName = 'Kat';
-        expect(component.canConfirmDelete()).toBeFalse();
+        expect(component.canConfirmDelete()).toBe(false);
         component.deleteConfirmName = 'Kate';
-        expect(component.canConfirmDelete()).toBeTrue();
+        expect(component.canConfirmDelete()).toBe(true);
 
         component.confirmDeleteCharacter();
 
         expect(deleted).toEqual(['kate']);
-        expect(component.isCharacterDeleteBusy).toBeFalse();
-        expect(component.showDeleteCharacterModal).toBeFalse();
+        expect(component.isCharacterDeleteBusy).toBe(false);
+        expect(component.showDeleteCharacterModal).toBe(false);
         expect(successes).toEqual(['personaSettings.deletedToArchive Kate_20260913-230000.zip']);
     });
 
@@ -99,9 +99,9 @@ describe('PersonaSettingsComponent character create and delete', () => {
         component.deleteSelectedCharacter();
 
         expect(component.deleteSummaryRows).toEqual([]);
-        expect(component.canConfirmDelete()).toBeFalse();
+        expect(component.canConfirmDelete()).toBe(false);
         component.deleteConfirmName = 'Kate';
-        expect(component.canConfirmDelete()).toBeTrue();
+        expect(component.canConfirmDelete()).toBe(true);
     });
 
     it('does not confirm a character with Telegram messages', () => {
@@ -112,7 +112,7 @@ describe('PersonaSettingsComponent character create and delete', () => {
         component.deleteConfirmName = 'Kate';
 
         expect(component.deleteBlockedMessage).toBe('personaSettings.deleteBlockedTelegram');
-        expect(component.canConfirmDelete()).toBeFalse();
+        expect(component.canConfirmDelete()).toBe(false);
         component.confirmDeleteCharacter();
         expect(deleted).toEqual([]);
     });
@@ -126,8 +126,8 @@ describe('PersonaSettingsComponent character create and delete', () => {
 
         component.confirmDeleteCharacter();
 
-        expect(component.isCharacterDeleteBusy).toBeFalse();
-        expect(component.showDeleteCharacterModal).toBeTrue();
+        expect(component.isCharacterDeleteBusy).toBe(false);
+        expect(component.showDeleteCharacterModal).toBe(true);
         expect(errors).toEqual(['The character archive failed, nothing was deleted']);
     });
 
@@ -141,8 +141,8 @@ describe('PersonaSettingsComponent character create and delete', () => {
         component.createCharacter();
 
         expect(created).toEqual(['Kate']);
-        expect(component.isCharacterCreateBusy).toBeFalse();
-        expect(component.showCreateCharacterModal).toBeTrue();
+        expect(component.isCharacterCreateBusy).toBe(false);
+        expect(component.showCreateCharacterModal).toBe(true);
         expect(component.newCharacterName).toBe('Kate');
         expect(errors).toEqual(['A character with this name already exists']);
     });
@@ -152,8 +152,8 @@ describe('PersonaSettingsComponent character create and delete', () => {
 
         component.deleteSelectedCharacter();
 
-        expect(component.showDeleteCharacterModal).toBeFalse();
-        expect(component.deletePreviewLoading).toBeFalse();
+        expect(component.showDeleteCharacterModal).toBe(false);
+        expect(component.deletePreviewLoading).toBe(false);
         expect(errors).toEqual(['Only the owner can do this']);
     });
 });
@@ -189,7 +189,7 @@ describe('PersonaSettingsComponent partial saves', () => {
     it('has nothing to save right after loading', () => {
         const component = create();
 
-        expect(component.hasChanges()).toBeFalse();
+        expect(component.hasChanges()).toBe(false);
     });
 
     it('saves one appearance field without the rest of the image settings', () => {
@@ -223,7 +223,7 @@ describe('PersonaSettingsComponent partial saves', () => {
         component.personaForm.get('visual_profile.default_outfit')!.setValue('a grey coat');
         component.saveChanges();
 
-        expect(component.hasChanges()).toBeFalse();
+        expect(component.hasChanges()).toBe(false);
         expect(saved).toEqual([]);
     });
 });

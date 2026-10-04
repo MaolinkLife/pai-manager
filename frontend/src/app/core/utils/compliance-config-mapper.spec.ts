@@ -43,7 +43,7 @@ describe('compliance config mapper: technical prompts', () => {
         const { systemPrompt, ...validator } = mapValidatorDtoToModel({});
         const { reflectionPrompt, ...selfWatcher } = mapSelfWatcherDtoToModel({});
 
-        expect('system_prompt' in mapValidatorModelToDto(validator as ValidatorConfig)).toBeFalse();
-        expect('reflection_prompt' in mapSelfWatcherModelToDto(selfWatcher as SelfWatcherConfig)).toBeFalse();
+        expect('system_prompt' in mapValidatorModelToDto(validator as ValidatorConfig)).toBe(false);
+        expect('reflection_prompt' in mapSelfWatcherModelToDto(selfWatcher as SelfWatcherConfig)).toBe(false);
     });
 });

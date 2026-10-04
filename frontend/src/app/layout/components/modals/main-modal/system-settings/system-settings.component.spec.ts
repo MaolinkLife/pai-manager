@@ -35,8 +35,8 @@ describe('SystemSettingsComponent password change', () => {
         const component = create();
         type(component, 'old-password-1', 'new-password-2', 'new-password-3');
 
-        expect(component.passwordsDiffer()).toBeTrue();
-        expect(component.canChangePassword()).toBeFalse();
+        expect(component.passwordsDiffer()).toBe(true);
+        expect(component.canChangePassword()).toBe(false);
         component.changePassword();
 
         expect(requests).toEqual([]);
@@ -59,7 +59,7 @@ describe('SystemSettingsComponent password change', () => {
 
         expect(requests).toEqual([{ current_password: 'old-password-1', new_password: 'new-password-2' }]);
         expect(component.passwordForm.value).toEqual({ currentPassword: '', newPassword: '', repeatPassword: '' });
-        expect(component.isPasswordBusy).toBeFalse();
+        expect(component.isPasswordBusy).toBe(false);
         expect(successes).toEqual(['systemSettings.passwordChanged']);
     });
 
@@ -69,7 +69,7 @@ describe('SystemSettingsComponent password change', () => {
 
         component.changePassword();
 
-        expect(component.isPasswordBusy).toBeFalse();
+        expect(component.isPasswordBusy).toBe(false);
         expect(component.passwordForm.value.newPassword).toBe('new-password-2');
         expect(errors).toEqual(['The current password is wrong']);
     });
@@ -158,7 +158,7 @@ describe('SystemSettingsComponent devices', () => {
 
         expect(calls).toEqual(['list', 'revoke:phone', 'list']);
         expect(successes).toEqual(['systemSettings.devicesSignedOutOne']);
-        expect(component.isDevicesBusy).toBeFalse();
+        expect(component.isDevicesBusy).toBe(false);
     });
 
     it('never signs out this device from the list', () => {
@@ -172,19 +172,19 @@ describe('SystemSettingsComponent devices', () => {
 
     it('signs out the other devices after confirmation and says on how many', () => {
         const component = create();
-        const confirm = spyOn(window, 'confirm').and.returnValue(true);
+        const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
 
         component.signOutOtherDevices();
 
         expect(confirm).toHaveBeenCalled();
         expect(calls).toEqual(['revoke-others', 'list']);
         expect(successes).toEqual(['signed out on 2']);
-        expect(component.isDevicesBusy).toBeFalse();
+        expect(component.isDevicesBusy).toBe(false);
     });
 
     it('sends nothing when the confirmation is cancelled', () => {
         const component = create();
-        spyOn(window, 'confirm').and.returnValue(false);
+        vi.spyOn(window, 'confirm').mockReturnValue(false);
 
         component.signOutOtherDevices();
 
@@ -201,7 +201,7 @@ describe('SystemSettingsComponent devices', () => {
         expect(calls).toEqual(['list', 'revoke:phone']);
         expect(errors).toEqual(['No such signed-in device']);
         expect(component.devices.length).toBe(3);
-        expect(component.isDevicesBusy).toBeFalse();
+        expect(component.isDevicesBusy).toBe(false);
     });
 });
 
@@ -257,7 +257,7 @@ describe('SystemSettingsComponent partial saves', () => {
     it('has nothing to save right after loading', () => {
         const component = create();
 
-        expect(component.hasChanges()).toBeFalse();
+        expect(component.hasChanges()).toBe(false);
     });
 
     it('saves one tunnel field without the rest of the tunnel settings', () => {
@@ -299,19 +299,19 @@ describe('SystemSettingsComponent partial saves', () => {
             },
         });
 
-        expect(component.systemForm.get('auditRetention')!.value).toEqual(jasmine.objectContaining({
+        expect(component.systemForm.get('auditRetention')!.value).toEqual(expect.objectContaining({
             enabled: false,
             ageInfo: 21,
             ageSuccess: 7,
             capError: 1000,
         }));
-        expect(component.hasChanges()).toBeFalse();
+        expect(component.hasChanges()).toBe(false);
     });
 
     it('falls back to the server retention defaults when the settings did not load', () => {
         const component = create(null);
 
-        expect(component.systemForm.get('auditRetention')!.value).toEqual(jasmine.objectContaining({
+        expect(component.systemForm.get('auditRetention')!.value).toEqual(expect.objectContaining({
             ageInfo: 7,
             ageSuccess: 7,
             ageWarning: 30,
@@ -328,7 +328,7 @@ describe('SystemSettingsComponent partial saves', () => {
         });
 
         expect(component.systemForm.get('security')!.value).toEqual({ accessTokenTtlMinutes: 20, refreshTtlDays: 60 });
-        expect(component.hasChanges()).toBeFalse();
+        expect(component.hasChanges()).toBe(false);
     });
 
     it('falls back to fifteen minutes and thirty days when no lifetimes are stored', () => {

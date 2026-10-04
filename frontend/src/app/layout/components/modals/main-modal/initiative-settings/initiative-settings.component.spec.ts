@@ -34,7 +34,7 @@ describe('InitiativeSettingsComponent', () => {
             chat: { enabled: true },
             selfie: { enabled: false, chance: 0.7 },
         });
-        expect(component.hasChanges()).toBeFalse();
+        expect(component.hasChanges()).toBe(false);
     });
 
     it('saves only the changed field', () => {
@@ -89,7 +89,7 @@ describe('InitiativeSettingsComponent', () => {
         component.initiativeForm.get('enabled')!.setValue(true);
         component.saveChanges();
 
-        expect(component.hasChanges()).toBeFalse();
+        expect(component.hasChanges()).toBe(false);
         expect(saved).toEqual([]);
     });
 });

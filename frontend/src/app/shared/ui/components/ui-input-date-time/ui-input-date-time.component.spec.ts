@@ -22,7 +22,7 @@ describe('UiInputDateTimeComponent: a click on the document', () => {
 
         component.onDocumentClick(document.createElement('div'));
 
-        expect(component.open).toBeFalse();
+        expect(component.open).toBe(false);
         expect(touched).toBe(1);
     });
 
@@ -31,7 +31,7 @@ describe('UiInputDateTimeComponent: a click on the document', () => {
 
         component.onDocumentClick(inner);
 
-        expect(component.open).toBeTrue();
+        expect(component.open).toBe(true);
         expect(touched).toBe(0);
     });
 
@@ -40,7 +40,7 @@ describe('UiInputDateTimeComponent: a click on the document', () => {
 
         component.onDocumentClick(null);
 
-        expect(component.open).toBeFalse();
+        expect(component.open).toBe(false);
     });
 
     it('does nothing while the calendar is closed', () => {

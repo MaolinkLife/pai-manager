@@ -10,19 +10,19 @@ describe('chat thinking rendering', () => {
         const content = '<think>reasoning</think>answer chunk';
 
         expect(getStreamingRenderContent(content)).toBe(content);
-        expect(hasClosedThinkingBlock(content)).toBeTrue();
-        expect(shouldCollapseThinkingBlock(true, content)).toBeTrue();
+        expect(hasClosedThinkingBlock(content)).toBe(true);
+        expect(shouldCollapseThinkingBlock(true, content)).toBe(true);
     });
 
     it('detects open reasoning blocks without collapsing them', () => {
         const content = '<think>still reasoning';
 
-        expect(hasOpenThinkingBlock(content)).toBeTrue();
-        expect(hasClosedThinkingBlock(content)).toBeFalse();
-        expect(shouldCollapseThinkingBlock(true, content)).toBeFalse();
+        expect(hasOpenThinkingBlock(content)).toBe(true);
+        expect(hasClosedThinkingBlock(content)).toBe(false);
+        expect(shouldCollapseThinkingBlock(true, content)).toBe(false);
     });
 
     it('does not collapse completed messages just because they contain reasoning', () => {
-        expect(shouldCollapseThinkingBlock(false, '<think>done</think>answer')).toBeFalse();
+        expect(shouldCollapseThinkingBlock(false, '<think>done</think>answer')).toBe(false);
     });
 });
