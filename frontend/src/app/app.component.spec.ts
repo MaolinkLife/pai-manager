@@ -16,16 +16,16 @@ describe('AppComponent: the chat socket follows who is signed in', () => {
             bootstrapSession$: () => of(user$.value),
         };
         const socket: any = {
-            connect: jasmine.createSpy('connect'),
-            reconnect: jasmine.createSpy('reconnect'),
-            disconnect: jasmine.createSpy('disconnect'),
+            connect: vi.fn(),
+            reconnect: vi.fn(),
+            disconnect: vi.fn(),
         };
         const localization: any = { init: () => undefined };
         const component = TestBed.runInInjectionContext(() => new AppComponent(socket, localization, auth));
         component.ngOnInit();
-        socket.connect.calls.reset();
-        socket.reconnect.calls.reset();
-        socket.disconnect.calls.reset();
+        socket.connect.mockClear();
+        socket.reconnect.mockClear();
+        socket.disconnect.mockClear();
         return { auth, socket, user$ };
     }
 

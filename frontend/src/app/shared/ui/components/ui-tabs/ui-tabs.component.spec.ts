@@ -1,7 +1,7 @@
 import { Component } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
-import { UiTabComponent } from './ui-tab.component';
+import { UiModule } from '../../ui.module';
 import { UiTabsComponent } from './ui-tabs.component';
 
 @Component({
@@ -12,7 +12,7 @@ import { UiTabsComponent } from './ui-tabs.component';
             <app-ui-tab key="bridge">Bridge</app-ui-tab>
         </app-ui-tabs>
     `,
-    standalone: false
+    imports: [UiModule],
 })
 class TabsHostComponent {
     active: string | null = 'general';
@@ -36,7 +36,7 @@ describe('UiTabsComponent', () => {
 
     beforeEach(() => {
         TestBed.configureTestingModule({
-            declarations: [TabsHostComponent, UiTabsComponent, UiTabComponent],
+            imports: [TabsHostComponent],
         });
         fixture = TestBed.createComponent(TabsHostComponent);
         host = fixture.componentInstance;

@@ -40,11 +40,11 @@ describe('WebsocketService', () => {
         FakeSocket.instances = [];
         passes = 0;
         (window as any).WebSocket = FakeSocket;
-        jasmine.clock().install();
+        vi.useFakeTimers();
     });
 
     afterEach(() => {
-        jasmine.clock().uninstall();
+        vi.useRealTimers();
         (window as any).WebSocket = realWebSocket;
     });
 
@@ -53,7 +53,7 @@ describe('WebsocketService', () => {
             getAccessToken: () => 'secret-access-token',
             isAuthenticated: () => true,
             isAnonymousMode: () => false,
-            requestWsTicket$: jasmine.createSpy('requestWsTicket$').and.callFake(requestWsTicket$),
+            requestWsTicket$: vi.fn().mockImplementation(requestWsTicket$),
         };
     }
 
@@ -67,7 +67,7 @@ describe('WebsocketService', () => {
         expect(reconnects).toBe(0);
 
         FakeSocket.instances[0].drop();
-        jasmine.clock().tick(1000);
+        vi.advanceTimersByTime(1000);
         FakeSocket.instances[1].open();
 
         expect(reconnects).toBe(1);
@@ -89,7 +89,7 @@ describe('WebsocketService', () => {
         service.connect();
         FakeSocket.instances[0].open();
         FakeSocket.instances[0].drop();
-        jasmine.clock().tick(1000);
+        vi.advanceTimersByTime(1000);
 
         expect(FakeSocket.instances[1].url).toMatch(/\?ticket=pass-2$/);
     });
@@ -99,7 +99,7 @@ describe('WebsocketService', () => {
             getAccessToken: () => null,
             isAuthenticated: () => false,
             isAnonymousMode: () => true,
-            requestWsTicket$: jasmine.createSpy('requestWsTicket$'),
+            requestWsTicket$: vi.fn(),
         };
         const service = new WebsocketService(auth);
 
@@ -116,7 +116,7 @@ describe('WebsocketService', () => {
         service.connect();
         expect(FakeSocket.instances.length).toBe(0);
 
-        jasmine.clock().tick(1000);
+        vi.advanceTimersByTime(1000);
 
         expect(FakeSocket.instances.length).toBe(1);
         expect(FakeSocket.instances[0].url).toMatch(/\?ticket=pass-late$/);

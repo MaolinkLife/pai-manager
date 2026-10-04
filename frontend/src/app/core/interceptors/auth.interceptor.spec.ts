@@ -15,12 +15,12 @@ describe('AuthInterceptor: an expired access token', () => {
         auth = {
             token: 'old-access',
             getAccessToken: () => auth.token,
-            refresh$: jasmine.createSpy('refresh$').and.callFake(() => {
+            refresh$: vi.fn().mockImplementation(() => {
                 auth.token = 'new-access';
                 return of({ access_token: 'new-access' });
             }),
-            clearSession: jasmine.createSpy('clearSession'),
-            exitAnonymousMode: jasmine.createSpy('exitAnonymousMode'),
+            clearSession: vi.fn(),
+            exitAnonymousMode: vi.fn(),
         };
         TestBed.configureTestingModule({
             providers: [
@@ -55,7 +55,7 @@ describe('AuthInterceptor: an expired access token', () => {
 
     for (const url of ['/api/auth/ws-ticket', '/api/auth/me']) {
         it(`signs out when the sign-in has ended and ${url} refuses`, () => {
-            auth.refresh$.and.returnValue(of(null));
+            auth.refresh$.mockReturnValue(of(null));
             http.post(url, {}).subscribe({ error: () => undefined });
 
             backend.expectOne(url).flush({ detail: 'User not found or inactive' }, { status: 401, statusText: 'Unauthorized' });

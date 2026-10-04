@@ -17,7 +17,7 @@ describe('memory settings save: only the changed fields go to the server', () =>
         }) as Record<string, unknown>;
 
         ['deep_memory_enabled', 'recent_limit', 'similarity_threshold', 'session_window', 'session_enabled', 'embedding_provider', 'embedding_model']
-            .forEach((key) => expect(key in dto).withContext(key).toBeFalse());
+            .forEach((key) => expect(key in dto, key).toBe(false));
         expect(dto).toEqual({
             consolidation: {
                 importance_threshold: 0.3,
@@ -79,8 +79,8 @@ describe('memory config mapper: technical prompts', () => {
 
         const dto = mapMemoryModelToDto(partial);
 
-        expect('system_prompt' in (dto.diary ?? {})).toBeFalse();
-        expect('user_template' in (dto.diary ?? {})).toBeFalse();
+        expect('system_prompt' in (dto.diary ?? {})).toBe(false);
+        expect('user_template' in (dto.diary ?? {})).toBe(false);
         expect(dto.short_term).toBeUndefined();
     });
 });

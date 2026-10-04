@@ -44,7 +44,7 @@ describe('VisionSettingsComponent: module flag save', () => {
     it('has nothing to save right after loading', () => {
         const component = create();
 
-        expect(component.hasChanges()).toBeFalse();
+        expect(component.hasChanges()).toBe(false);
     });
 
     it('switching vision sends only its own module flag', () => {

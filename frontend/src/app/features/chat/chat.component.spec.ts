@@ -85,7 +85,7 @@ describe('ChatComponent: a busy chat and a dropped connection', () => {
 
         reconnected$.next();
 
-        expect(component.loading).toBeFalse();
+        expect(component.loading).toBe(false);
         expect(component.activeGenerationRunId).toBeNull();
         expect(sent.map((item) => item.action)).toEqual(['fetch_history']);
     });
@@ -97,7 +97,7 @@ describe('ChatComponent: a busy chat and a dropped connection', () => {
 
         reconnected$.next();
 
-        expect(component.loading).toBeFalse();
+        expect(component.loading).toBe(false);
         expect(component.activeGenerationRunId).toBeNull();
         expect(sent).toEqual([]);
     });
@@ -144,7 +144,7 @@ describe('ChatComponent: the history source filter event', () => {
             detail: { showAllSources: true },
         }));
 
-        expect(component.showAllChatSources).toBeTrue();
+        expect(component.showAllChatSources).toBe(true);
     });
 
     it('turns every-source mode off when the event carries no detail', () => {
@@ -153,6 +153,6 @@ describe('ChatComponent: the history source filter event', () => {
 
         component.onSourceFilterChanged(new Event('chat-history-source-filter-changed'));
 
-        expect(component.showAllChatSources).toBeFalse();
+        expect(component.showAllChatSources).toBe(false);
     });
 });

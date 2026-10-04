@@ -16,7 +16,7 @@ describe('decision layer config mapper: orchestrator prompt', () => {
     it('does not wipe the prompt when a save changes something else', () => {
         const dto = mapDecisionLayerModelToDto({ maxSteps: 6 });
 
-        expect('orchestrator_prompt' in dto).toBeFalse();
+        expect('orchestrator_prompt' in dto).toBe(false);
     });
 });
 
@@ -43,7 +43,7 @@ describe('decision layer settings save: only the changed fields go to the server
     it('carries no capabilities: they come from the model index', () => {
         const dto = mapDecisionLayerModelToDto({ maxSteps: 6 }) as unknown as Record<string, unknown>;
 
-        expect('capabilities' in dto).toBeFalse();
+        expect('capabilities' in dto).toBe(false);
     });
 
     it('sends the orchestrator prompt alone when only it changed', () => {

@@ -76,7 +76,7 @@ describe('ComplianceSettingsComponent', () => {
         component.complianceForm.get('validator.enabled')!.setValue(true);
         component.saveChanges();
 
-        expect(component.hasChanges()).toBeFalse();
+        expect(component.hasChanges()).toBe(false);
         expect(saved).toEqual([]);
     });
 });

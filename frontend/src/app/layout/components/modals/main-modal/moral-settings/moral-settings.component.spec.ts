@@ -56,7 +56,7 @@ describe('MoralSettingsComponent: partial saves', () => {
     it('has nothing to save right after loading', () => {
         const component = create();
 
-        expect(component.hasChanges()).toBeFalse();
+        expect(component.hasChanges()).toBe(false);
     });
 
     it('saves one decay value alone', () => {
@@ -111,7 +111,7 @@ describe('MoralSettingsComponent: partial saves', () => {
 
         expect(defaultsAsked).toEqual(['moral.system_prompt']);
         expect(component.moralForm.get('systemPrompt')!.value).toBe('Built-in matrix prompt.');
-        expect(component.hasChanges()).toBeFalse();
+        expect(component.hasChanges()).toBe(false);
     });
 
     it('never puts a prompt of its own into the field', () => {
@@ -132,7 +132,7 @@ describe('MoralSettingsComponent: partial saves', () => {
         component.moralForm.get('decay.globalRate')!.setValue(0.1);
         component.saveChanges();
 
-        expect(component.hasChanges()).toBeFalse();
+        expect(component.hasChanges()).toBe(false);
         expect(saved).toEqual([]);
     });
 });

@@ -49,7 +49,7 @@ describe('AuthService: sign-in state from the server', () => {
             allow_anonymous: true,
         });
 
-        expect(answer?.has_owner).toBeTrue();
+        expect(answer?.has_owner).toBe(true);
         expect(service.bootstrapError).toBeNull();
     });
 
@@ -59,16 +59,16 @@ describe('AuthService: sign-in state from the server', () => {
     });
 
     it('treats only a signed-in owner as the owner', () => {
-        expect(service.isOwner()).toBeFalse();
+        expect(service.isOwner()).toBe(false);
 
         localStorage.setItem('chat_ai_user', JSON.stringify({ uuid: 'u', name: 'U', role: 'user' }));
-        expect(new AuthService(null as any).isOwner()).toBeFalse();
+        expect(new AuthService(null as any).isOwner()).toBe(false);
 
         localStorage.setItem('chat_ai_user', JSON.stringify({ uuid: 'o', name: 'O', role: 'owner' }));
         const owner = new AuthService(null as any);
-        expect(owner.isOwner()).toBeTrue();
+        expect(owner.isOwner()).toBe(true);
 
         owner.enterAnonymousMode();
-        expect(owner.isOwner()).toBeFalse();
+        expect(owner.isOwner()).toBe(false);
     });
 });

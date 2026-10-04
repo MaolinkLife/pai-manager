@@ -40,7 +40,7 @@ describe('DiaryComponent', () => {
 
         expect(calls).toEqual([{ offset: 0, limit: 30, includeHidden: false }]);
         expect(component.entries.length).toBe(30);
-        expect(component.hasMore).toBeTrue();
+        expect(component.hasMore).toBe(true);
     });
 
     it('show more appends the next page from where the list ends', () => {
@@ -52,7 +52,7 @@ describe('DiaryComponent', () => {
 
         expect(calls[1]).toEqual({ offset: 30, limit: 30, includeHidden: false });
         expect(component.entries.map((entry) => entry.summary)).toEqual(rows(0, 35).map((item) => item.summary));
-        expect(component.hasMore).toBeFalse();
+        expect(component.hasMore).toBe(false);
 
         component.loadMore();
         expect(calls.length).toBe(2);
@@ -61,7 +61,7 @@ describe('DiaryComponent', () => {
     it('has nothing more to show when the first page is everything', () => {
         const component = create(() => of({ entries: rows(0, 4), has_more: false }));
 
-        expect(component.hasMore).toBeFalse();
+        expect(component.hasMore).toBe(false);
     });
 
     it('shows hidden entries on request, marked with the reason', () => {
