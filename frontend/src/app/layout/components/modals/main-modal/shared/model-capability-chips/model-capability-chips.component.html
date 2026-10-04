@@ -1,11 +1,15 @@
-<ng-container *ngIf="entry">
-    <ng-container *ngFor="let key of capabilityKeys; trackBy: trackByKey">
-        <span class="capability-chip" *ngIf="entry.capabilities.includes(key)">
-            <span class="capability-chip__check" aria-hidden="true"></span>
-            {{ "settingsPage.models.capabilities." + key | translate }}
-        </span>
-    </ng-container>
-    <span class="capability-none" *ngIf="!entry.capabilities.length">
-        {{ (entry.declared_known ? "settingsPage.models.capabilitiesNone" : "settingsPage.models.capabilitiesUnknown") | translate }}
-    </span>
-</ng-container>
+    @if (entry) {
+        @for (key of capabilityKeys; track trackByKey($index, key)) {
+            @if (entry.capabilities.includes(key)) {
+                <span class="capability-chip">
+                    <span class="capability-chip__check" aria-hidden="true"></span>
+                    {{ "settingsPage.models.capabilities." + key | translate }}
+                </span>
+            }
+        }
+        @if (!entry.capabilities.length) {
+            <span class="capability-none">
+                {{ (entry.declared_known ? "settingsPage.models.capabilitiesNone" : "settingsPage.models.capabilitiesUnknown") | translate }}
+            </span>
+        }
+    }

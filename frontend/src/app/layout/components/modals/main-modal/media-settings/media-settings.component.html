@@ -20,27 +20,29 @@
             <h3>{{ 'mediaSettings.imageCheckTitle' | translate }}</h3>
             <p class="hint section-hint">{{ 'mediaSettings.imageCheckHint' | translate }}</p>
 
-            <div class="image-check-gate" *ngFor="let gate of imageCheckGateRows" [formGroupName]="gate.name">
-                <app-ui-checkbox formControlName="enabled">
-                    {{ gate.label | translate }}
-                </app-ui-checkbox>
-                <div class="form-group threshold-group">
-                    <label [attr.for]="'image-check-' + gate.name + '-threshold'">
-                        {{ 'mediaSettings.imageCheckThreshold' | translate }}:
-                        <span class="threshold-value">{{ imageCheckGroup.get(gate.name + '.threshold')?.value | number: '1.2-2' }}</span>
-                    </label>
-                    <app-ui-range
-                        [id]="'image-check-' + gate.name + '-threshold'"
-                        formControlName="threshold"
-                        [min]="imageCheckThreshold.min"
-                        [max]="imageCheckThreshold.max"
-                        [step]="imageCheckThreshold.step"
-                    ></app-ui-range>
+            @for (gate of imageCheckGateRows; track gate) {
+                <div class="image-check-gate" [formGroupName]="gate.name">
+                    <app-ui-checkbox formControlName="enabled">
+                        {{ gate.label | translate }}
+                    </app-ui-checkbox>
+                    <div class="form-group threshold-group">
+                        <label [attr.for]="'image-check-' + gate.name + '-threshold'">
+                            {{ 'mediaSettings.imageCheckThreshold' | translate }}:
+                            <span class="threshold-value">{{ imageCheckGroup.get(gate.name + '.threshold')?.value | number: '1.2-2' }}</span>
+                        </label>
+                        <app-ui-range
+                            [id]="'image-check-' + gate.name + '-threshold'"
+                            formControlName="threshold"
+                            [min]="imageCheckThreshold.min"
+                            [max]="imageCheckThreshold.max"
+                            [step]="imageCheckThreshold.step"
+                        ></app-ui-range>
+                    </div>
+                    <app-ui-checkbox class="sub-checkbox" formControlName="reroll">
+                        {{ 'mediaSettings.imageCheckReroll' | translate }}
+                    </app-ui-checkbox>
                 </div>
-                <app-ui-checkbox class="sub-checkbox" formControlName="reroll">
-                    {{ 'mediaSettings.imageCheckReroll' | translate }}
-                </app-ui-checkbox>
-            </div>
+            }
 
             <div class="form-group">
                 <label for="image-check-max-generations">{{ 'mediaSettings.imageCheckMaxGenerations' | translate }}</label>
@@ -53,7 +55,9 @@
                     [step]="1"
                 ></app-ui-input>
                 <p class="hint">{{ 'mediaSettings.imageCheckMaxGenerationsHint' | translate }}</p>
-                <p class="warning" *ngIf="showGenerationsWarning">{{ 'mediaSettings.imageCheckMaxGenerationsWarning' | translate }}</p>
+                @if (showGenerationsWarning) {
+                    <p class="warning">{{ 'mediaSettings.imageCheckMaxGenerationsWarning' | translate }}</p>
+                }
             </div>
 
             <div class="subsection">
@@ -107,241 +111,249 @@
             </div>
         </div>
 
-        <div class="section" formGroupName="sd_webui" *ngIf="isProviderActive('stable_diffusion_webui')">
-            <h3>Stable Diffusion WebUI</h3>
-            <div class="form-group">
-                <app-ui-checkbox formControlName="enabled">
-                    {{ 'mediaSettings.enableSdWebui' | translate }}
-                </app-ui-checkbox>
+        @if (isProviderActive('stable_diffusion_webui')) {
+            <div class="section" formGroupName="sd_webui">
+                <h3>Stable Diffusion WebUI</h3>
+                <div class="form-group">
+                    <app-ui-checkbox formControlName="enabled">
+                        {{ 'mediaSettings.enableSdWebui' | translate }}
+                    </app-ui-checkbox>
+                </div>
+                <div class="grid">
+                    <div class="form-group">
+                        <label for="sd-webui-base-url">{{ 'mediaSettings.baseUrl' | translate }}</label>
+                        <app-ui-input id="sd-webui-base-url" type="text" formControlName="base_url"></app-ui-input>
+                    </div>
+                    <div class="form-group">
+                        <label for="sd-webui-bearer-token">{{ 'mediaSettings.bearerToken' | translate }}</label>
+                        <app-ui-input id="sd-webui-bearer-token" type="password" formControlName="bearer_token"></app-ui-input>
+                    </div>
+                    <div class="form-group">
+                        <label for="sd-webui-timeout">{{ 'mediaSettings.timeoutSec' | translate }}</label>
+                        <app-ui-input id="sd-webui-timeout" type="number" formControlName="timeout_sec"></app-ui-input>
+                    </div>
+                    <div class="form-group">
+                        <label for="sd-webui-checkpoint">{{ 'mediaSettings.checkpoint' | translate }}</label>
+                        <app-ui-input id="sd-webui-checkpoint" type="text" formControlName="checkpoint"></app-ui-input>
+                    </div>
+                    <div class="form-group">
+                        <label for="sd-webui-sampler">{{ 'mediaSettings.sampler' | translate }}</label>
+                        <app-ui-input id="sd-webui-sampler" type="text" formControlName="sampler_name"></app-ui-input>
+                    </div>
+                    <div class="form-group">
+                        <label for="sd-webui-scheduler">{{ 'mediaSettings.scheduler' | translate }}</label>
+                        <app-ui-input id="sd-webui-scheduler" type="text" formControlName="scheduler"></app-ui-input>
+                    </div>
+                    <div class="form-group">
+                        <label for="sd-webui-cfg-scale">{{ 'mediaSettings.defaultCfgScale' | translate }}</label>
+                        <app-ui-input id="sd-webui-cfg-scale" type="number" formControlName="cfg_scale_default"></app-ui-input>
+                    </div>
+                </div>
             </div>
-            <div class="grid">
-                <div class="form-group">
-                    <label for="sd-webui-base-url">{{ 'mediaSettings.baseUrl' | translate }}</label>
-                    <app-ui-input id="sd-webui-base-url" type="text" formControlName="base_url"></app-ui-input>
-                </div>
-                <div class="form-group">
-                    <label for="sd-webui-bearer-token">{{ 'mediaSettings.bearerToken' | translate }}</label>
-                    <app-ui-input id="sd-webui-bearer-token" type="password" formControlName="bearer_token"></app-ui-input>
-                </div>
-                <div class="form-group">
-                    <label for="sd-webui-timeout">{{ 'mediaSettings.timeoutSec' | translate }}</label>
-                    <app-ui-input id="sd-webui-timeout" type="number" formControlName="timeout_sec"></app-ui-input>
-                </div>
-                <div class="form-group">
-                    <label for="sd-webui-checkpoint">{{ 'mediaSettings.checkpoint' | translate }}</label>
-                    <app-ui-input id="sd-webui-checkpoint" type="text" formControlName="checkpoint"></app-ui-input>
-                </div>
-                <div class="form-group">
-                    <label for="sd-webui-sampler">{{ 'mediaSettings.sampler' | translate }}</label>
-                    <app-ui-input id="sd-webui-sampler" type="text" formControlName="sampler_name"></app-ui-input>
-                </div>
-                <div class="form-group">
-                    <label for="sd-webui-scheduler">{{ 'mediaSettings.scheduler' | translate }}</label>
-                    <app-ui-input id="sd-webui-scheduler" type="text" formControlName="scheduler"></app-ui-input>
-                </div>
-                <div class="form-group">
-                    <label for="sd-webui-cfg-scale">{{ 'mediaSettings.defaultCfgScale' | translate }}</label>
-                    <app-ui-input id="sd-webui-cfg-scale" type="number" formControlName="cfg_scale_default"></app-ui-input>
-                </div>
-            </div>
-        </div>
+        }
 
-        <div class="section" formGroupName="comfyui" *ngIf="isProviderActive('comfyui')">
-            <h3>ComfyUI</h3>
-            <div class="form-group">
-                <app-ui-checkbox formControlName="enabled">
-                    {{ 'mediaSettings.enableComfyui' | translate }}
-                </app-ui-checkbox>
-            </div>
-            <div class="grid">
+        @if (isProviderActive('comfyui')) {
+            <div class="section" formGroupName="comfyui">
+                <h3>ComfyUI</h3>
                 <div class="form-group">
-                    <label for="comfy-base-url">{{ 'mediaSettings.baseUrl' | translate }}</label>
-                    <app-ui-input id="comfy-base-url" type="text" formControlName="base_url"></app-ui-input>
+                    <app-ui-checkbox formControlName="enabled">
+                        {{ 'mediaSettings.enableComfyui' | translate }}
+                    </app-ui-checkbox>
                 </div>
-                <div class="form-group">
-                    <label for="comfy-websocket-url">{{ 'mediaSettings.websocketUrl' | translate }}</label>
-                    <app-ui-input id="comfy-websocket-url" type="text" formControlName="websocket_url"></app-ui-input>
-                </div>
-                <div class="form-group">
-                    <label for="comfy-timeout">{{ 'mediaSettings.timeoutSec' | translate }}</label>
-                    <app-ui-input id="comfy-timeout" type="number" formControlName="timeout_sec"></app-ui-input>
-                </div>
-                <div class="form-group">
-                    <label for="comfy-workflow">{{ 'mediaSettings.defaultWorkflow' | translate }}</label>
-                    <app-ui-input id="comfy-workflow" type="text" formControlName="default_workflow"></app-ui-input>
-                </div>
-                <div class="form-group">
-                    <label for="comfy-model">{{ 'mediaSettings.defaultModel' | translate }}</label>
-                    <div class="select-with-action">
+                <div class="grid">
+                    <div class="form-group">
+                        <label for="comfy-base-url">{{ 'mediaSettings.baseUrl' | translate }}</label>
+                        <app-ui-input id="comfy-base-url" type="text" formControlName="base_url"></app-ui-input>
+                    </div>
+                    <div class="form-group">
+                        <label for="comfy-websocket-url">{{ 'mediaSettings.websocketUrl' | translate }}</label>
+                        <app-ui-input id="comfy-websocket-url" type="text" formControlName="websocket_url"></app-ui-input>
+                    </div>
+                    <div class="form-group">
+                        <label for="comfy-timeout">{{ 'mediaSettings.timeoutSec' | translate }}</label>
+                        <app-ui-input id="comfy-timeout" type="number" formControlName="timeout_sec"></app-ui-input>
+                    </div>
+                    <div class="form-group">
+                        <label for="comfy-workflow">{{ 'mediaSettings.defaultWorkflow' | translate }}</label>
+                        <app-ui-input id="comfy-workflow" type="text" formControlName="default_workflow"></app-ui-input>
+                    </div>
+                    <div class="form-group">
+                        <label for="comfy-model">{{ 'mediaSettings.defaultModel' | translate }}</label>
+                        <div class="select-with-action">
+                            <app-ui-select
+                                id="comfy-model"
+                                [options]="comfyuiModelOptions"
+                                formControlName="default_model"
+                            ></app-ui-select>
+                            <button
+                                type="button"
+                                [disabled]="isComfyuiModelsLoading"
+                                (click)="loadComfyuiModelCatalog(true)"
+                            >
+                                {{ isComfyuiModelsLoading ? ('mediaSettings.loading' | translate) : ('mediaSettings.refresh' | translate) }}
+                            </button>
+                        </div>
+                        @if (!isComfyuiModelsLoading && comfyuiModelOptions.length === 0) {
+                            <p class="hint">
+                                {{ 'mediaSettings.comfyuiModelsHint' | translate }}
+                            </p>
+                        }
+                    </div>
+                    <div class="form-group">
+                        <label for="comfy-sampler">{{ 'mediaSettings.sampler' | translate }}</label>
                         <app-ui-select
-                            id="comfy-model"
-                            [options]="comfyuiModelOptions"
-                            formControlName="default_model"
+                            id="comfy-sampler"
+                            [options]="comfyuiSamplerOptions"
+                            formControlName="sampler"
                         ></app-ui-select>
-                        <button
-                            type="button"
-                            [disabled]="isComfyuiModelsLoading"
-                            (click)="loadComfyuiModelCatalog(true)"
-                        >
-                            {{ isComfyuiModelsLoading ? ('mediaSettings.loading' | translate) : ('mediaSettings.refresh' | translate) }}
-                        </button>
-                    </div>
-                    <p class="hint" *ngIf="!isComfyuiModelsLoading && comfyuiModelOptions.length === 0">
-                        {{ 'mediaSettings.comfyuiModelsHint' | translate }}
-                    </p>
-                </div>
-                <div class="form-group">
-                    <label for="comfy-sampler">{{ 'mediaSettings.sampler' | translate }}</label>
-                    <app-ui-select
-                        id="comfy-sampler"
-                        [options]="comfyuiSamplerOptions"
-                        formControlName="sampler"
-                    ></app-ui-select>
-                </div>
-                <div class="form-group">
-                    <label for="comfy-scheduler">{{ 'mediaSettings.scheduler' | translate }}</label>
-                    <app-ui-select
-                        id="comfy-scheduler"
-                        [options]="comfyuiSchedulerOptions"
-                        formControlName="scheduler"
-                    ></app-ui-select>
-                </div>
-                <div class="form-group">
-                    <label for="comfy-steps">{{ 'mediaSettings.steps' | translate }}</label>
-                    <app-ui-input id="comfy-steps" type="number" formControlName="steps"></app-ui-input>
-                </div>
-                <div class="form-group">
-                    <label for="comfy-cfg">{{ 'mediaSettings.cfg' | translate }}</label>
-                    <app-ui-input id="comfy-cfg" type="number" formControlName="cfg"></app-ui-input>
-                </div>
-                <div class="form-group">
-                    <label for="comfy-aspect">{{ 'mediaSettings.sizePreset' | translate }}</label>
-                    <app-ui-select
-                        id="comfy-aspect"
-                        [options]="comfyuiAspectRatioOptions"
-                        formControlName="aspect_ratio"
-                        (change)="onComfyuiAspectRatioChange($event.target.value)"
-                    ></app-ui-select>
-                </div>
-                <div class="dimension-row">
-                    <div class="form-group">
-                        <label for="comfy-width">{{ 'mediaSettings.width' | translate }}</label>
-                        <app-ui-input id="comfy-width" type="number" formControlName="width"></app-ui-input>
                     </div>
                     <div class="form-group">
-                        <label for="comfy-height">{{ 'mediaSettings.height' | translate }}</label>
-                        <app-ui-input id="comfy-height" type="number" formControlName="height"></app-ui-input>
+                        <label for="comfy-scheduler">{{ 'mediaSettings.scheduler' | translate }}</label>
+                        <app-ui-select
+                            id="comfy-scheduler"
+                            [options]="comfyuiSchedulerOptions"
+                            formControlName="scheduler"
+                        ></app-ui-select>
+                    </div>
+                    <div class="form-group">
+                        <label for="comfy-steps">{{ 'mediaSettings.steps' | translate }}</label>
+                        <app-ui-input id="comfy-steps" type="number" formControlName="steps"></app-ui-input>
+                    </div>
+                    <div class="form-group">
+                        <label for="comfy-cfg">{{ 'mediaSettings.cfg' | translate }}</label>
+                        <app-ui-input id="comfy-cfg" type="number" formControlName="cfg"></app-ui-input>
+                    </div>
+                    <div class="form-group">
+                        <label for="comfy-aspect">{{ 'mediaSettings.sizePreset' | translate }}</label>
+                        <app-ui-select
+                            id="comfy-aspect"
+                            [options]="comfyuiAspectRatioOptions"
+                            formControlName="aspect_ratio"
+                            (change)="onComfyuiAspectRatioChange($event.target.value)"
+                        ></app-ui-select>
+                    </div>
+                    <div class="dimension-row">
+                        <div class="form-group">
+                            <label for="comfy-width">{{ 'mediaSettings.width' | translate }}</label>
+                            <app-ui-input id="comfy-width" type="number" formControlName="width"></app-ui-input>
+                        </div>
+                        <div class="form-group">
+                            <label for="comfy-height">{{ 'mediaSettings.height' | translate }}</label>
+                            <app-ui-input id="comfy-height" type="number" formControlName="height"></app-ui-input>
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
+        }
 
-        <div class="section" formGroupName="diffusers" *ngIf="isProviderActive('core')">
-            <h3>pai-image-gen</h3>
-            <div class="form-group">
-                <app-ui-checkbox formControlName="enabled">
-                    {{ 'mediaSettings.enableDiffusers' | translate }}
-                </app-ui-checkbox>
-            </div>
-            <div class="grid">
+        @if (isProviderActive('core')) {
+            <div class="section" formGroupName="diffusers">
+                <h3>pai-image-gen</h3>
                 <div class="form-group">
-                    <label for="diffusers-model">{{ 'mediaSettings.defaultModel' | translate }}</label>
-                    <div class="select-with-action">
+                    <app-ui-checkbox formControlName="enabled">
+                        {{ 'mediaSettings.enableDiffusers' | translate }}
+                    </app-ui-checkbox>
+                </div>
+                <div class="grid">
+                    <div class="form-group">
+                        <label for="diffusers-model">{{ 'mediaSettings.defaultModel' | translate }}</label>
+                        <div class="select-with-action">
+                            <app-ui-select
+                                id="diffusers-model"
+                                [options]="diffusersModelOptions"
+                                formControlName="default_model"
+                            ></app-ui-select>
+                            <button
+                                type="button"
+                                [disabled]="isDiffusersModelsLoading"
+                                (click)="loadLocalModelCatalog()"
+                            >
+                                {{ isDiffusersModelsLoading ? ('mediaSettings.loading' | translate) : ('mediaSettings.refresh' | translate) }}
+                            </button>
+                        </div>
+                        <p class="hint">{{ 'mediaSettings.diffusersModelsHint' | translate }}</p>
+                    </div>
+                    <div class="form-group">
+                        <label for="diffusers-path">{{ 'mediaSettings.localModelsPath' | translate }}</label>
+                        <app-ui-input id="diffusers-path" type="text" formControlName="local_models_path" [readonly]="true"></app-ui-input>
+                    </div>
+                    <div class="form-group">
+                        <label for="core-device">{{ 'mediaSettings.device' | translate }}</label>
                         <app-ui-select
-                            id="diffusers-model"
-                            [options]="diffusersModelOptions"
-                            formControlName="default_model"
+                            id="core-device"
+                            [options]="deviceOptions"
+                            formControlName="device"
                         ></app-ui-select>
-                        <button
-                            type="button"
-                            [disabled]="isDiffusersModelsLoading"
-                            (click)="loadLocalModelCatalog()"
-                        >
-                            {{ isDiffusersModelsLoading ? ('mediaSettings.loading' | translate) : ('mediaSettings.refresh' | translate) }}
-                        </button>
-                    </div>
-                    <p class="hint">{{ 'mediaSettings.diffusersModelsHint' | translate }}</p>
-                </div>
-                <div class="form-group">
-                    <label for="diffusers-path">{{ 'mediaSettings.localModelsPath' | translate }}</label>
-                    <app-ui-input id="diffusers-path" type="text" formControlName="local_models_path" [readonly]="true"></app-ui-input>
-                </div>
-                <div class="form-group">
-                    <label for="core-device">{{ 'mediaSettings.device' | translate }}</label>
-                    <app-ui-select
-                        id="core-device"
-                        [options]="deviceOptions"
-                        formControlName="device"
-                    ></app-ui-select>
-                </div>
-                <div class="form-group">
-                    <label for="core-dtype">{{ 'mediaSettings.torchDtype' | translate }}</label>
-                    <app-ui-select
-                        id="core-dtype"
-                        [options]="dtypeOptions"
-                        formControlName="torch_dtype"
-                    ></app-ui-select>
-                </div>
-                <div class="form-group">
-                    <label for="core-sampler">{{ 'mediaSettings.sampler' | translate }}</label>
-                    <app-ui-select
-                        id="core-sampler"
-                        [options]="comfyuiSamplerOptions"
-                        formControlName="sampler"
-                    ></app-ui-select>
-                </div>
-                <div class="form-group">
-                    <label for="core-scheduler">{{ 'mediaSettings.scheduler' | translate }}</label>
-                    <app-ui-select
-                        id="core-scheduler"
-                        [options]="comfyuiSchedulerOptions"
-                        formControlName="scheduler"
-                    ></app-ui-select>
-                </div>
-                <div class="form-group">
-                    <label for="core-steps">{{ 'mediaSettings.steps' | translate }}</label>
-                    <app-ui-input id="core-steps" type="number" formControlName="steps"></app-ui-input>
-                </div>
-                <div class="form-group">
-                    <label for="core-cfg">{{ 'mediaSettings.cfg' | translate }}</label>
-                    <app-ui-input id="core-cfg" type="number" formControlName="cfg"></app-ui-input>
-                </div>
-                <div class="form-group">
-                    <label for="core-aspect">{{ 'mediaSettings.sizePreset' | translate }}</label>
-                    <app-ui-select
-                        id="core-aspect"
-                        [options]="comfyuiAspectRatioOptions"
-                        formControlName="aspect_ratio"
-                        (change)="onCoreAspectRatioChange($event.target.value)"
-                    ></app-ui-select>
-                </div>
-                <div class="dimension-row">
-                    <div class="form-group">
-                        <label for="core-width">{{ 'mediaSettings.width' | translate }}</label>
-                        <app-ui-input id="core-width" type="number" formControlName="width"></app-ui-input>
                     </div>
                     <div class="form-group">
-                        <label for="core-height">{{ 'mediaSettings.height' | translate }}</label>
-                        <app-ui-input id="core-height" type="number" formControlName="height"></app-ui-input>
+                        <label for="core-dtype">{{ 'mediaSettings.torchDtype' | translate }}</label>
+                        <app-ui-select
+                            id="core-dtype"
+                            [options]="dtypeOptions"
+                            formControlName="torch_dtype"
+                        ></app-ui-select>
                     </div>
-                </div>
-                <div class="form-group fallback-checkbox">
-                    <app-ui-checkbox formControlName="allow_comfyui_fallback">
-                        Use ComfyUI as fallback connector
-                    </app-ui-checkbox>
-                </div>
-                <div class="form-group fallback-checkbox">
-                    <app-ui-checkbox formControlName="keep_loaded">
-                        {{ 'mediaSettings.keepLoaded' | translate }}
-                    </app-ui-checkbox>
-                </div>
-                <div class="form-group fallback-checkbox">
-                    <app-ui-checkbox formControlName="gguf_cpu_offload">
-                        {{ 'mediaSettings.ggufCpuOffload' | translate }}
-                    </app-ui-checkbox>
+                    <div class="form-group">
+                        <label for="core-sampler">{{ 'mediaSettings.sampler' | translate }}</label>
+                        <app-ui-select
+                            id="core-sampler"
+                            [options]="comfyuiSamplerOptions"
+                            formControlName="sampler"
+                        ></app-ui-select>
+                    </div>
+                    <div class="form-group">
+                        <label for="core-scheduler">{{ 'mediaSettings.scheduler' | translate }}</label>
+                        <app-ui-select
+                            id="core-scheduler"
+                            [options]="comfyuiSchedulerOptions"
+                            formControlName="scheduler"
+                        ></app-ui-select>
+                    </div>
+                    <div class="form-group">
+                        <label for="core-steps">{{ 'mediaSettings.steps' | translate }}</label>
+                        <app-ui-input id="core-steps" type="number" formControlName="steps"></app-ui-input>
+                    </div>
+                    <div class="form-group">
+                        <label for="core-cfg">{{ 'mediaSettings.cfg' | translate }}</label>
+                        <app-ui-input id="core-cfg" type="number" formControlName="cfg"></app-ui-input>
+                    </div>
+                    <div class="form-group">
+                        <label for="core-aspect">{{ 'mediaSettings.sizePreset' | translate }}</label>
+                        <app-ui-select
+                            id="core-aspect"
+                            [options]="comfyuiAspectRatioOptions"
+                            formControlName="aspect_ratio"
+                            (change)="onCoreAspectRatioChange($event.target.value)"
+                        ></app-ui-select>
+                    </div>
+                    <div class="dimension-row">
+                        <div class="form-group">
+                            <label for="core-width">{{ 'mediaSettings.width' | translate }}</label>
+                            <app-ui-input id="core-width" type="number" formControlName="width"></app-ui-input>
+                        </div>
+                        <div class="form-group">
+                            <label for="core-height">{{ 'mediaSettings.height' | translate }}</label>
+                            <app-ui-input id="core-height" type="number" formControlName="height"></app-ui-input>
+                        </div>
+                    </div>
+                    <div class="form-group fallback-checkbox">
+                        <app-ui-checkbox formControlName="allow_comfyui_fallback">
+                            Use ComfyUI as fallback connector
+                        </app-ui-checkbox>
+                    </div>
+                    <div class="form-group fallback-checkbox">
+                        <app-ui-checkbox formControlName="keep_loaded">
+                            {{ 'mediaSettings.keepLoaded' | translate }}
+                        </app-ui-checkbox>
+                    </div>
+                    <div class="form-group fallback-checkbox">
+                        <app-ui-checkbox formControlName="gguf_cpu_offload">
+                            {{ 'mediaSettings.ggufCpuOffload' | translate }}
+                        </app-ui-checkbox>
+                    </div>
                 </div>
             </div>
-        </div>
+        }
 
         <div class="section" formGroupName="prompting">
             <h3>{{ 'mediaSettings.promptingTitle' | translate }}</h3>
@@ -390,96 +402,100 @@
                 <p class="hint">{{ 'mediaSettings.imageScenariosHint' | translate }}</p>
 
                 <div class="scenario-list">
-                    <div class="scenario-card" *ngFor="let scenario of scenarioControls.controls; let i = index" [formGroupName]="i">
-                        <div class="scenario-card-header">
-                            <app-ui-checkbox formControlName="enabled">
-                                {{ 'mediaSettings.scenarioEnabled' | translate }}
-                            </app-ui-checkbox>
-                            <button type="button" (click)="removeScenario(i)" *ngIf="scenarioControls.length > 1">
-                                {{ 'mediaSettings.removeScenario' | translate }}
-                            </button>
-                        </div>
+                    @for (scenario of scenarioControls.controls; track scenario; let i = $index) {
+                        <div class="scenario-card" [formGroupName]="i">
+                            <div class="scenario-card-header">
+                                <app-ui-checkbox formControlName="enabled">
+                                    {{ 'mediaSettings.scenarioEnabled' | translate }}
+                                </app-ui-checkbox>
+                                @if (scenarioControls.length > 1) {
+                                    <button type="button" (click)="removeScenario(i)">
+                                        {{ 'mediaSettings.removeScenario' | translate }}
+                                    </button>
+                                }
+                            </div>
 
-                        <div class="grid">
-                            <div class="form-group">
-                                <label>{{ 'mediaSettings.scenarioKey' | translate }}</label>
-                                <app-ui-input type="text" formControlName="key"></app-ui-input>
+                            <div class="grid">
+                                <div class="form-group">
+                                    <label>{{ 'mediaSettings.scenarioKey' | translate }}</label>
+                                    <app-ui-input type="text" formControlName="key"></app-ui-input>
+                                </div>
+                                <div class="form-group">
+                                    <label>{{ 'mediaSettings.scenarioTitle' | translate }}</label>
+                                    <app-ui-input type="text" formControlName="title"></app-ui-input>
+                                </div>
+                                <div class="form-group">
+                                    <label>{{ 'mediaSettings.scenarioProvider' | translate }}</label>
+                                    <app-ui-select [options]="scenarioProviderOptions" formControlName="image_provider"></app-ui-select>
+                                </div>
+                                <div class="form-group">
+                                    <label>{{ 'mediaSettings.scenarioModel' | translate }}</label>
+                                    <app-ui-input type="text" formControlName="image_model"></app-ui-input>
+                                </div>
                             </div>
-                            <div class="form-group">
-                                <label>{{ 'mediaSettings.scenarioTitle' | translate }}</label>
-                                <app-ui-input type="text" formControlName="title"></app-ui-input>
-                            </div>
-                            <div class="form-group">
-                                <label>{{ 'mediaSettings.scenarioProvider' | translate }}</label>
-                                <app-ui-select [options]="scenarioProviderOptions" formControlName="image_provider"></app-ui-select>
-                            </div>
-                            <div class="form-group">
-                                <label>{{ 'mediaSettings.scenarioModel' | translate }}</label>
-                                <app-ui-input type="text" formControlName="image_model"></app-ui-input>
-                            </div>
-                        </div>
 
-                        <div class="grid">
-                            <div class="form-group">
-                                <label>{{ 'mediaSettings.width' | translate }}</label>
-                                <app-ui-input type="number" formControlName="width"></app-ui-input>
+                            <div class="grid">
+                                <div class="form-group">
+                                    <label>{{ 'mediaSettings.width' | translate }}</label>
+                                    <app-ui-input type="number" formControlName="width"></app-ui-input>
+                                </div>
+                                <div class="form-group">
+                                    <label>{{ 'mediaSettings.height' | translate }}</label>
+                                    <app-ui-input type="number" formControlName="height"></app-ui-input>
+                                </div>
+                                <div class="form-group">
+                                    <label>{{ 'mediaSettings.steps' | translate }}</label>
+                                    <app-ui-input type="number" formControlName="steps"></app-ui-input>
+                                </div>
+                                <div class="form-group">
+                                    <label>{{ 'mediaSettings.cfg' | translate }}</label>
+                                    <app-ui-input type="number" formControlName="cfg"></app-ui-input>
+                                </div>
                             </div>
-                            <div class="form-group">
-                                <label>{{ 'mediaSettings.height' | translate }}</label>
-                                <app-ui-input type="number" formControlName="height"></app-ui-input>
-                            </div>
-                            <div class="form-group">
-                                <label>{{ 'mediaSettings.steps' | translate }}</label>
-                                <app-ui-input type="number" formControlName="steps"></app-ui-input>
-                            </div>
-                            <div class="form-group">
-                                <label>{{ 'mediaSettings.cfg' | translate }}</label>
-                                <app-ui-input type="number" formControlName="cfg"></app-ui-input>
-                            </div>
-                        </div>
 
-                        <div class="grid">
-                            <div class="form-group">
-                                <label>{{ 'mediaSettings.sampler' | translate }}</label>
-                                <app-ui-input type="text" formControlName="sampler"></app-ui-input>
+                            <div class="grid">
+                                <div class="form-group">
+                                    <label>{{ 'mediaSettings.sampler' | translate }}</label>
+                                    <app-ui-input type="text" formControlName="sampler"></app-ui-input>
+                                </div>
+                                <div class="form-group">
+                                    <label>{{ 'mediaSettings.scheduler' | translate }}</label>
+                                    <app-ui-input type="text" formControlName="scheduler"></app-ui-input>
+                                </div>
                             </div>
-                            <div class="form-group">
-                                <label>{{ 'mediaSettings.scheduler' | translate }}</label>
-                                <app-ui-input type="text" formControlName="scheduler"></app-ui-input>
-                            </div>
-                        </div>
 
-                        <div class="form-group checkbox-group">
-                            <app-ui-checkbox formControlName="use_prompt_builder">
-                                {{ 'mediaSettings.scenarioUsePromptBuilder' | translate }}
-                            </app-ui-checkbox>
-                            <app-ui-checkbox formControlName="review_generated_image">
-                                {{ 'mediaSettings.scenarioReviewImage' | translate }}
-                            </app-ui-checkbox>
-                            <app-ui-checkbox formControlName="use_visual_intent">
-                                {{ 'mediaSettings.scenarioUseVisualIntent' | translate }}
-                            </app-ui-checkbox>
-                        </div>
+                            <div class="form-group checkbox-group">
+                                <app-ui-checkbox formControlName="use_prompt_builder">
+                                    {{ 'mediaSettings.scenarioUsePromptBuilder' | translate }}
+                                </app-ui-checkbox>
+                                <app-ui-checkbox formControlName="review_generated_image">
+                                    {{ 'mediaSettings.scenarioReviewImage' | translate }}
+                                </app-ui-checkbox>
+                                <app-ui-checkbox formControlName="use_visual_intent">
+                                    {{ 'mediaSettings.scenarioUseVisualIntent' | translate }}
+                                </app-ui-checkbox>
+                            </div>
 
-                        <div class="grid textarea-grid">
-                            <div class="form-group">
-                                <label>{{ 'mediaSettings.scenarioStylePrompt' | translate }}</label>
-                                <app-ui-textarea [rows]="3" [autoResize]="true" formControlName="style_prompt"></app-ui-textarea>
-                            </div>
-                            <div class="form-group">
-                                <label>{{ 'mediaSettings.scenarioPromptPolicy' | translate }}</label>
-                                <app-ui-textarea [rows]="3" [autoResize]="true" formControlName="prompt_policy"></app-ui-textarea>
-                            </div>
-                            <div class="form-group">
-                                <label>{{ 'mediaSettings.defaultNegativePrompt' | translate }}</label>
-                                <app-ui-textarea [rows]="3" [autoResize]="true" formControlName="negative_prompt"></app-ui-textarea>
-                            </div>
-                            <div class="form-group">
-                                <label>{{ 'mediaSettings.scenarioSystemPrompt' | translate }}</label>
-                                <app-ui-textarea [rows]="3" [autoResize]="true" formControlName="system_prompt"></app-ui-textarea>
+                            <div class="grid textarea-grid">
+                                <div class="form-group">
+                                    <label>{{ 'mediaSettings.scenarioStylePrompt' | translate }}</label>
+                                    <app-ui-textarea [rows]="3" [autoResize]="true" formControlName="style_prompt"></app-ui-textarea>
+                                </div>
+                                <div class="form-group">
+                                    <label>{{ 'mediaSettings.scenarioPromptPolicy' | translate }}</label>
+                                    <app-ui-textarea [rows]="3" [autoResize]="true" formControlName="prompt_policy"></app-ui-textarea>
+                                </div>
+                                <div class="form-group">
+                                    <label>{{ 'mediaSettings.defaultNegativePrompt' | translate }}</label>
+                                    <app-ui-textarea [rows]="3" [autoResize]="true" formControlName="negative_prompt"></app-ui-textarea>
+                                </div>
+                                <div class="form-group">
+                                    <label>{{ 'mediaSettings.scenarioSystemPrompt' | translate }}</label>
+                                    <app-ui-textarea [rows]="3" [autoResize]="true" formControlName="system_prompt"></app-ui-textarea>
+                                </div>
                             </div>
                         </div>
-                    </div>
+                    }
                 </div>
             </div>
         </div>

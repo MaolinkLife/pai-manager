@@ -13,8 +13,10 @@
         (blur)="markTouched()"
     />
 
-    <div class="ui-range-labels" *ngIf="showEdgeLabels">
-        <span>{{ minLabel }}</span>
-        <span>{{ maxLabel }}</span>
-    </div>
+    @if (showEdgeLabels) {
+        <div class="ui-range-labels">
+            <span>{{ minLabel }}</span>
+            <span>{{ maxLabel }}</span>
+        </div>
+    }
 </div>

@@ -1,248 +1,272 @@
-<ng-container *ngIf="config$ | async as config">
-    <div class="chat-shell">
-        <main class="chat-main" #messagesContainer>
-            <div class="chat-main-inner">
-                <div class="load-more-container" *ngIf="hasMoreMessages || hiddenOlderCount > 0">
-                    <button
-                        class="load-more-btn"
-                        (click)="loadMoreHistory()"
-                        [disabled]="isLoadingHistory"
-                    >
-                        <span *ngIf="!isLoadingHistory">Загрузить еще сообщения</span>
-                        <span *ngIf="isLoadingHistory">Загрузка...</span>
-                    </button>
+    @if (config$ | async; as config) {
+        <div class="chat-shell">
+            <main class="chat-main" #messagesContainer>
+                <div class="chat-main-inner">
+                    @if (hasMoreMessages || hiddenOlderCount > 0) {
+                        <div class="load-more-container">
+                            <button
+                                class="load-more-btn"
+                                (click)="loadMoreHistory()"
+                                [disabled]="isLoadingHistory"
+                            >
+                                @if (!isLoadingHistory) {
+                                    <span>Загрузить еще сообщения</span>
+                                }
+                                @if (isLoadingHistory) {
+                                    <span>Загрузка...</span>
+                                }
+                            </button>
+                        </div>
+                    }
+
+                    @for (item of chatMessageViews(); track trackByMessageView($index, item)) {
+                        <app-chat-message
+                            [msg]="item.msg"
+                            [index]="item.index"
+                            [charName]="config.charName"
+                            [formattedTimestamp]="item.formattedTimestamp"
+                            [messageSource]="item.messageSource"
+                            [isEditing]="editingMessageId === item.msg.id"
+                            [editMessageControl]="editMessageControl"
+                            [loading]="loading"
+                            [activeGenerationRunId]="activeGenerationRunId"
+                            [currentPlayingMessage]="currentPlayingMessage"
+                            [ownerTools]="isOwner"
+                            [isLatestUserMessage]="item.isLatestUserMessage"
+                            [isLatestAssistantMessage]="item.isLatestAssistantMessage"
+                            [canContinue]="item.canContinue"
+                            [hasRuntime]="item.hasRuntime"
+                            [runtimeSummary]="item.runtimeSummary"
+                            [runtimeActiveLabel]="item.runtimeActiveLabel"
+                            [runtimeStages]="item.runtimeStages"
+                            [renderContent]="item.renderContent"
+                            [isStreaming]="item.isStreaming"
+                            [thinkingDurationMs]="item.thinkingDurationMs"
+                            [collapseThinking]="item.collapseThinking"
+                            [userContentExpandable]="item.userContentExpandable"
+                            [userContentExpanded]="item.userContentExpanded"
+                            [hasUsageMeta]="item.hasUsageMeta"
+                            [usageOpen]="activeUsageMessageId === item.msg.id"
+                            [usageLines]="item.usageLines"
+                            [isIllustrating]="illustratingMessageId === item.msg.id"
+                            (toggleRuntimeDetails)="toggleRuntimeDetails($event)"
+                            (saveEdit)="saveEditMessage($event)"
+                            (cancelEdit)="cancelEditMessage()"
+                            (previewMedia)="previewMedia($event)"
+                            (downloadMedia)="downloadMedia($event)"
+                            (copy)="copyMessage($event)"
+                            (edit)="editMessage($event)"
+                            (delete)="deleteMessage($event, false)"
+                            (toggleVoice)="toggleVoice($event)"
+                            (illustrate)="illustrateMessage($event)"
+                            (continueResponse)="continueMessage($event)"
+                            (reroll)="rerollMessage($event)"
+                            (activateVariant)="activateMessageVariant($event)"
+                            (skipThinking)="skipThinking()"
+                            (toggleUserContent)="toggleUserMessageContent($event)"
+                            (toggleUsageDetails)="toggleUsageDetails($event.message, $event.event)"
+                        ></app-chat-message>
+                    }
+
+                    @if (historyLoaded && !chatHistory.length && !loading && !isLoadingHistory) {
+                        <div class="chat-empty-state">
+                            Пока нет ни одного сообщения
+                        </div>
+                    }
+
+                    @if (shouldShowGlobalLoadingIndicator()) {
+                        <div class="message assistant">
+                            <div class="runtime-live loading-live">
+                                <span class="wave-loader" aria-hidden="true">
+                                    <span></span><span></span><span></span>
+                                </span>
+                                <span class="runtime-live-text">{{ getActiveRuntimeLabel() }}</span>
+                            </div>
+                        </div>
+                    }
+
+                    <div id="bottomAnchor"></div>
                 </div>
+            </main>
 
-                <app-chat-message
-                    *ngFor="let item of chatMessageViews(); trackBy: trackByMessageView"
-                    [msg]="item.msg"
-                    [index]="item.index"
-                    [charName]="config.charName"
-                    [formattedTimestamp]="item.formattedTimestamp"
-                    [messageSource]="item.messageSource"
-                    [isEditing]="editingMessageId === item.msg.id"
-                    [editMessageControl]="editMessageControl"
-                    [loading]="loading"
-                    [activeGenerationRunId]="activeGenerationRunId"
-                    [currentPlayingMessage]="currentPlayingMessage"
-                    [ownerTools]="isOwner"
-                    [isLatestUserMessage]="item.isLatestUserMessage"
-                    [isLatestAssistantMessage]="item.isLatestAssistantMessage"
-                    [canContinue]="item.canContinue"
-                    [hasRuntime]="item.hasRuntime"
-                    [runtimeSummary]="item.runtimeSummary"
-                    [runtimeActiveLabel]="item.runtimeActiveLabel"
-                    [runtimeStages]="item.runtimeStages"
-                    [renderContent]="item.renderContent"
-                    [isStreaming]="item.isStreaming"
-                    [thinkingDurationMs]="item.thinkingDurationMs"
-                    [collapseThinking]="item.collapseThinking"
-                    [userContentExpandable]="item.userContentExpandable"
-                    [userContentExpanded]="item.userContentExpanded"
-                    [hasUsageMeta]="item.hasUsageMeta"
-                    [usageOpen]="activeUsageMessageId === item.msg.id"
-                    [usageLines]="item.usageLines"
-                    [isIllustrating]="illustratingMessageId === item.msg.id"
-                    (toggleRuntimeDetails)="toggleRuntimeDetails($event)"
-                    (saveEdit)="saveEditMessage($event)"
-                    (cancelEdit)="cancelEditMessage()"
-                    (previewMedia)="previewMedia($event)"
-                    (downloadMedia)="downloadMedia($event)"
-                    (copy)="copyMessage($event)"
-                    (edit)="editMessage($event)"
-                    (delete)="deleteMessage($event, false)"
-                    (toggleVoice)="toggleVoice($event)"
-                    (illustrate)="illustrateMessage($event)"
-                    (continueResponse)="continueMessage($event)"
-                    (reroll)="rerollMessage($event)"
-                    (activateVariant)="activateMessageVariant($event)"
-                    (skipThinking)="skipThinking()"
-                    (toggleUserContent)="toggleUserMessageContent($event)"
-                    (toggleUsageDetails)="toggleUsageDetails($event.message, $event.event)"
-                ></app-chat-message>
+            <div class="chat-bottom-fade" aria-hidden="true"></div>
 
-                <div
-                    class="chat-empty-state"
-                    *ngIf="historyLoaded && !chatHistory.length && !loading && !isLoadingHistory"
-                >
-                    Пока нет ни одного сообщения
+            <app-chat-composer
+                [chatInput]="chatInput"
+                [attachments]="attachments"
+                [isProcessingAttachments]="isProcessingAttachments"
+                [activeDropdown]="activeDropdown"
+                [recording]="recording"
+                [voiceModeEnabled]="voiceModeEnabled"
+                [voiceModeLoading]="voiceModeLoading"
+                [ownerTools]="isOwner"
+                [loading]="loading"
+                [activeGenerationRunId]="activeGenerationRunId"
+                [imageGenerationEnabled]="imageGenerationEnabled"
+                [codeInterpreterEnabled]="codeInterpreterEnabled"
+                [contextAttachments]="contextAttachments"
+                [showEmojiPicker]="showEmojiPicker"
+                [emojiPickerMode]="emojiPickerMode"
+                [emojiDropdownPosition]="emojiDropdownPosition"
+                [emojiPickerSide]="emojiPickerSide"
+                (submitMessage)="sendMessage()"
+                (filesSelected)="onFilesSelected($event)"
+                (removeAttachment)="removeAttachment($event)"
+                (removeContextAttachment)="removeContextAttachment($event)"
+                (toggleAttach)="toggleAttachDropdown()"
+                (toggleTools)="toggleToolsDropdown()"
+                (toggleImageGeneration)="toggleImageGeneration()"
+                (toggleCodeInterpreter)="toggleCodeInterpreter()"
+                (openFile)="openFilePicker($event)"
+                (openLibrary)="openLibraryPicker($event)"
+                (captureScreen)="captureScreen($event)"
+                (attachWebpage)="openWebpageModal($event)"
+                (attachNotes)="attachNotes($event)"
+                (toggleEmoji)="toggleEmojiDropdown($event)"
+                (emojiSelect)="addEmoji($event)"
+                (emojiClose)="closeEmojiPicker()"
+                (toggleRecord)="toggleRecording()"
+                (toggleVoice)="toggleVoiceMode()"
+                (stopGeneration)="stopGeneration()"
+                (expandComposer)="onComposerExpandClick($event)"
+            ></app-chat-composer>
+
+            @if (largeMessagePromptOpen) {
+                <div class="large-message-modal-overlay" (click)="closeLargeMessagePrompt()">
+                    <section class="large-message-modal" (click)="$event.stopPropagation()">
+                        <header class="large-message-modal__header">
+                            <strong>Длинное сообщение</strong>
+                            <button type="button" (click)="closeLargeMessagePrompt()" aria-label="Закрыть">
+                                <app-custom-svg name="close" [size]="18"></app-custom-svg>
+                            </button>
+                        </header>
+                        <p>
+                            В тексте больше 1000 символов. Можно отправить его как вложенный .txt документ,
+                            чтобы чат оставался компактным.
+                        </p>
+                        <footer class="large-message-modal__footer">
+                            <button type="button" class="secondary" (click)="sendLargeMessageInline()">Отправить текстом</button>
+                            <button type="button" (click)="sendLargeMessageAsAttachment()">Сделать вложением</button>
+                        </footer>
+                    </section>
                 </div>
+            }
 
-                <div *ngIf="shouldShowGlobalLoadingIndicator()" class="message assistant">
-                    <div class="runtime-live loading-live">
-                        <span class="wave-loader" aria-hidden="true">
-                            <span></span><span></span><span></span>
-                        </span>
-                        <span class="runtime-live-text">{{ getActiveRuntimeLabel() }}</span>
-                    </div>
+            @if (webpageModalOpen) {
+                <div class="webpage-modal-overlay" (click)="closeWebpageModal()">
+                    <section class="webpage-modal" (click)="$event.stopPropagation()">
+                        <header class="webpage-modal__header">
+                            <strong>Прикрепить веб-страницу</strong>
+                            <button type="button" (click)="closeWebpageModal()" aria-label="Закрыть">
+                                <app-custom-svg name="close" [size]="18"></app-custom-svg>
+                            </button>
+                        </header>
+                        <label class="webpage-modal__field">
+                            <span>URL веб-страницы</span>
+                            <textarea
+                                class="custom-scrollbar"
+                                [formControl]="webpageUrlControl"
+                                placeholder="https://example.com"
+                                rows="3"
+                                (keydown.enter)="submitWebpageUrl($event)"
+                            ></textarea>
+                        </label>
+                        <div class="webpage-mode">
+                            <button
+                                type="button"
+                                [class.active]="webpageProcessingMode === 'extract'"
+                                (click)="webpageProcessingMode = 'extract'"
+                            >
+                                Извлечь текст
+                            </button>
+                            <button
+                                type="button"
+                                [class.active]="webpageProcessingMode === 'link'"
+                                (click)="webpageProcessingMode = 'link'"
+                            >
+                                Только ссылка
+                            </button>
+                        </div>
+                        <div class="webpage-modal__hint">
+                            {{ webpageProcessingMode === 'extract'
+                                ? 'PAI загрузит страницу на backend, очистит HTML и добавит текст в контекст.'
+                                : 'PAI передаст модели только URL. Быстрее, но без содержимого страницы.' }}
+                        </div>
+                        @if (webpageUrlError) {
+                            <div class="webpage-modal__error">{{ webpageUrlError }}</div>
+                        }
+                        <footer class="webpage-modal__footer">
+                            <button type="button" (click)="submitWebpageUrl()">Добавить</button>
+                        </footer>
+                    </section>
                 </div>
+            }
 
-                <div id="bottomAnchor"></div>
-            </div>
-        </main>
-
-        <div class="chat-bottom-fade" aria-hidden="true"></div>
-
-        <app-chat-composer
-            [chatInput]="chatInput"
-            [attachments]="attachments"
-            [isProcessingAttachments]="isProcessingAttachments"
-            [activeDropdown]="activeDropdown"
-            [recording]="recording"
-            [voiceModeEnabled]="voiceModeEnabled"
-            [voiceModeLoading]="voiceModeLoading"
-            [ownerTools]="isOwner"
-            [loading]="loading"
-            [activeGenerationRunId]="activeGenerationRunId"
-            [imageGenerationEnabled]="imageGenerationEnabled"
-            [codeInterpreterEnabled]="codeInterpreterEnabled"
-            [contextAttachments]="contextAttachments"
-            [showEmojiPicker]="showEmojiPicker"
-            [emojiPickerMode]="emojiPickerMode"
-            [emojiDropdownPosition]="emojiDropdownPosition"
-            [emojiPickerSide]="emojiPickerSide"
-            (submitMessage)="sendMessage()"
-            (filesSelected)="onFilesSelected($event)"
-            (removeAttachment)="removeAttachment($event)"
-            (removeContextAttachment)="removeContextAttachment($event)"
-            (toggleAttach)="toggleAttachDropdown()"
-            (toggleTools)="toggleToolsDropdown()"
-            (toggleImageGeneration)="toggleImageGeneration()"
-            (toggleCodeInterpreter)="toggleCodeInterpreter()"
-            (openFile)="openFilePicker($event)"
-            (openLibrary)="openLibraryPicker($event)"
-            (captureScreen)="captureScreen($event)"
-            (attachWebpage)="openWebpageModal($event)"
-            (attachNotes)="attachNotes($event)"
-            (toggleEmoji)="toggleEmojiDropdown($event)"
-            (emojiSelect)="addEmoji($event)"
-            (emojiClose)="closeEmojiPicker()"
-            (toggleRecord)="toggleRecording()"
-            (toggleVoice)="toggleVoiceMode()"
-            (stopGeneration)="stopGeneration()"
-            (expandComposer)="onComposerExpandClick($event)"
-        ></app-chat-composer>
-
-        <div class="large-message-modal-overlay" *ngIf="largeMessagePromptOpen" (click)="closeLargeMessagePrompt()">
-            <section class="large-message-modal" (click)="$event.stopPropagation()">
-                <header class="large-message-modal__header">
-                    <strong>Длинное сообщение</strong>
-                    <button type="button" (click)="closeLargeMessagePrompt()" aria-label="Закрыть">
-                        <app-custom-svg name="close" [size]="18"></app-custom-svg>
-                    </button>
-                </header>
-                <p>
-                    В тексте больше 1000 символов. Можно отправить его как вложенный .txt документ,
-                    чтобы чат оставался компактным.
-                </p>
-                <footer class="large-message-modal__footer">
-                    <button type="button" class="secondary" (click)="sendLargeMessageInline()">Отправить текстом</button>
-                    <button type="button" (click)="sendLargeMessageAsAttachment()">Сделать вложением</button>
-                </footer>
-            </section>
-        </div>
-
-        <div class="webpage-modal-overlay" *ngIf="webpageModalOpen" (click)="closeWebpageModal()">
-            <section class="webpage-modal" (click)="$event.stopPropagation()">
-                <header class="webpage-modal__header">
-                    <strong>Прикрепить веб-страницу</strong>
-                    <button type="button" (click)="closeWebpageModal()" aria-label="Закрыть">
-                        <app-custom-svg name="close" [size]="18"></app-custom-svg>
-                    </button>
-                </header>
-                <label class="webpage-modal__field">
-                    <span>URL веб-страницы</span>
-                    <textarea
-                        class="custom-scrollbar"
-                        [formControl]="webpageUrlControl"
-                        placeholder="https://example.com"
-                        rows="3"
-                        (keydown.enter)="submitWebpageUrl($event)"
-                    ></textarea>
-                </label>
-                <div class="webpage-mode">
-                    <button
-                        type="button"
-                        [class.active]="webpageProcessingMode === 'extract'"
-                        (click)="webpageProcessingMode = 'extract'"
-                    >
-                        Извлечь текст
-                    </button>
-                    <button
-                        type="button"
-                        [class.active]="webpageProcessingMode === 'link'"
-                        (click)="webpageProcessingMode = 'link'"
-                    >
-                        Только ссылка
-                    </button>
-                </div>
-                <div class="webpage-modal__hint">
-                    {{ webpageProcessingMode === 'extract'
-                        ? 'PAI загрузит страницу на backend, очистит HTML и добавит текст в контекст.'
-                        : 'PAI передаст модели только URL. Быстрее, но без содержимого страницы.' }}
-                </div>
-                <div class="webpage-modal__error" *ngIf="webpageUrlError">{{ webpageUrlError }}</div>
-                <footer class="webpage-modal__footer">
-                    <button type="button" (click)="submitWebpageUrl()">Добавить</button>
-                </footer>
-            </section>
-        </div>
-
-        <div class="media-preview-overlay" *ngIf="selectedMedia" (click)="closeMediaPreview()">
-            <div class="media-preview" (click)="$event.stopPropagation()">
-                <button
-                    type="button"
-                    class="media-preview__close"
-                    (click)="closeMediaPreview()"
-                    aria-label="Закрыть просмотр"
-                >
-                    <app-custom-svg name="close" [size]="20"></app-custom-svg>
-                </button>
-                <img
-                    *ngIf="selectedMedia.category === 'image'"
-                    [src]="selectedMedia ? getMediaSource(selectedMedia) : null"
-                    [alt]="selectedMedia.name"
-                />
-                <div class="media-preview__name">{{ selectedMedia.name }}</div>
-            </div>
-        </div>
-
-        <div class="library-picker-overlay" *ngIf="libraryPickerOpen" (click)="closeLibraryPicker()">
-            <section class="library-picker" (click)="$event.stopPropagation()">
-                <header class="library-picker__header">
-                    <strong>Добавить из библиотеки</strong>
-                    <button type="button" (click)="closeLibraryPicker()" aria-label="Закрыть">
-                        <app-custom-svg name="close" [size]="18"></app-custom-svg>
-                    </button>
-                </header>
-                <app-ui-input
-                    type="text"
-                    placeholder="Поиск"
-                    [(ngModel)]="libraryPickerQuery"
-                    (ngModelChange)="loadLibraryPicker()"
-                ></app-ui-input>
-                <div class="library-picker__grid custom-scrollbar">
-                    <button
-                        type="button"
-                        class="library-picker__item"
-                        *ngFor="let item of libraryItems; trackBy: trackByLibraryItem"
-                        (click)="attachLibraryItem(item)"
-                    >
-                        <span
-                            class="library-picker__thumb"
-                            [class.file]="item.category !== 'image'"
-                            [style.backgroundImage]="item.category === 'image' ? 'url(' + getLibraryItemUrl(item) + ')' : null"
+            @if (selectedMedia) {
+                <div class="media-preview-overlay" (click)="closeMediaPreview()">
+                    <div class="media-preview" (click)="$event.stopPropagation()">
+                        <button
+                            type="button"
+                            class="media-preview__close"
+                            (click)="closeMediaPreview()"
+                            aria-label="Закрыть просмотр"
                         >
-                            <app-custom-svg *ngIf="item.category !== 'image'" name="file" [size]="24"></app-custom-svg>
-                        </span>
-                        <span class="library-picker__name">{{ item.name }}</span>
-                        <span class="library-picker__meta">{{ item.category }} · {{ formatMediaSize(item.size) }}</span>
-                    </button>
-                    <div class="library-picker__empty" *ngIf="!libraryPickerLoading && libraryItems.length === 0">
-                        Файлы не найдены.
+                            <app-custom-svg name="close" [size]="20"></app-custom-svg>
+                        </button>
+                        @if (selectedMedia.category === 'image') {
+                            <img
+                                [src]="selectedMedia ? getMediaSource(selectedMedia) : null"
+                                [alt]="selectedMedia.name"
+                            />
+                        }
+                        <div class="media-preview__name">{{ selectedMedia.name }}</div>
                     </div>
                 </div>
-            </section>
+            }
+
+            @if (libraryPickerOpen) {
+                <div class="library-picker-overlay" (click)="closeLibraryPicker()">
+                    <section class="library-picker" (click)="$event.stopPropagation()">
+                        <header class="library-picker__header">
+                            <strong>Добавить из библиотеки</strong>
+                            <button type="button" (click)="closeLibraryPicker()" aria-label="Закрыть">
+                                <app-custom-svg name="close" [size]="18"></app-custom-svg>
+                            </button>
+                        </header>
+                        <app-ui-input
+                            type="text"
+                            placeholder="Поиск"
+                            [(ngModel)]="libraryPickerQuery"
+                            (ngModelChange)="loadLibraryPicker()"
+                        ></app-ui-input>
+                        <div class="library-picker__grid custom-scrollbar">
+                            @for (item of libraryItems; track trackByLibraryItem($index, item)) {
+                                <button
+                                    type="button"
+                                    class="library-picker__item"
+                                    (click)="attachLibraryItem(item)"
+                                >
+                                    <span
+                                        class="library-picker__thumb"
+                                        [class.file]="item.category !== 'image'"
+                                        [style.backgroundImage]="item.category === 'image' ? 'url(' + getLibraryItemUrl(item) + ')' : null"
+                                    >
+                                        @if (item.category !== 'image') {
+                                            <app-custom-svg name="file" [size]="24"></app-custom-svg>
+                                        }
+                                    </span>
+                                    <span class="library-picker__name">{{ item.name }}</span>
+                                    <span class="library-picker__meta">{{ item.category }} · {{ formatMediaSize(item.size) }}</span>
+                                </button>
+                            }
+                            @if (!libraryPickerLoading && libraryItems.length === 0) {
+                                <div class="library-picker__empty">
+                                    Файлы не найдены.
+                                </div>
+                            }
+                        </div>
+                    </section>
+                </div>
+            }
         </div>
-    </div>
-</ng-container>
+    }

@@ -7,30 +7,33 @@
         <app-custom-svg name="trash" [size]="20"></app-custom-svg>
     </button>
 
-    <button
-        *ngIf="msg.role === 'user'"
-        class="btn-icon"
-        (click)="deleteChange.emit()"
-        title="Удалить с ответом"
-    >
-        <app-custom-svg name="history" [size]="20"></app-custom-svg>
-    </button>
+    @if (msg.role === 'user') {
+        <button
+            class="btn-icon"
+            (click)="deleteChange.emit()"
+            title="Удалить с ответом"
+        >
+            <app-custom-svg name="history" [size]="20"></app-custom-svg>
+        </button>
+    }
 
-    <button
-        *ngIf="msg.role === 'assistant' && index === lastIndex"
-        class="btn-icon"
-        (click)="rerollChange.emit(msg)"
-        title="Реролл"
-    >
-        <app-custom-svg name="reroll" [size]="20"></app-custom-svg>
-    </button>
+    @if (msg.role === 'assistant' && index === lastIndex) {
+        <button
+            class="btn-icon"
+            (click)="rerollChange.emit(msg)"
+            title="Реролл"
+        >
+            <app-custom-svg name="reroll" [size]="20"></app-custom-svg>
+        </button>
+    }
 
-    <button
-        *ngIf="msg.role === 'assistant'"
-        class="btn-icon"
-        (click)="playVoiceChange.emit(msg)"
-        title="Прослушать"
-    >
-        <app-custom-svg name="volume-2" [size]="20"></app-custom-svg>
-    </button>
+    @if (msg.role === 'assistant') {
+        <button
+            class="btn-icon"
+            (click)="playVoiceChange.emit(msg)"
+            title="Прослушать"
+        >
+            <app-custom-svg name="volume-2" [size]="20"></app-custom-svg>
+        </button>
+    }
 </div>

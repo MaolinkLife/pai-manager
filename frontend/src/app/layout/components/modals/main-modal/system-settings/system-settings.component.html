@@ -1,6 +1,6 @@
 <div class="settings-wrapper">
     <!-- Скелетон, пока данные не загружены -->
-    <ng-container *ngIf="isLoading$ | async; else formContent">
+    @if (isLoading$ | async) {
         <div class="settings-form">
             <h2><app-skeleton height="2rem" width="150px"></app-skeleton></h2>
 
@@ -121,9 +121,7 @@
                 <app-skeleton height="2.5rem" width="150px"></app-skeleton>
             </div>
         </div>
-    </ng-container>
-
-    <ng-template #formContent>
+    } @else {
         <form
             [formGroup]="systemForm"
             (ngSubmit)="saveChanges()"
@@ -193,103 +191,118 @@
                 </div>
             </div>
 
-            <div class="section" *ngIf="isOwner" [formGroup]="passwordForm">
-                <h3>🔑 {{ "systemSettings.passwordTitle" | translate }}</h3>
-                <p class="hint">{{ "systemSettings.passwordHint" | translate }}</p>
+            @if (isOwner) {
+                <div class="section" [formGroup]="passwordForm">
+                    <h3>🔑 {{ "systemSettings.passwordTitle" | translate }}</h3>
+                    <p class="hint">{{ "systemSettings.passwordHint" | translate }}</p>
 
-                <div class="form-group">
-                    <label for="currentPassword">{{ "systemSettings.passwordCurrent" | translate }}</label>
-                    <app-ui-input id="currentPassword" type="password" formControlName="currentPassword"></app-ui-input>
-                </div>
+                    <div class="form-group">
+                        <label for="currentPassword">{{ "systemSettings.passwordCurrent" | translate }}</label>
+                        <app-ui-input id="currentPassword" type="password" formControlName="currentPassword"></app-ui-input>
+                    </div>
 
-                <div class="form-group">
-                    <label for="newPassword">{{ "systemSettings.passwordNew" | translate }}</label>
-                    <app-ui-input id="newPassword" type="password" formControlName="newPassword"></app-ui-input>
-                </div>
+                    <div class="form-group">
+                        <label for="newPassword">{{ "systemSettings.passwordNew" | translate }}</label>
+                        <app-ui-input id="newPassword" type="password" formControlName="newPassword"></app-ui-input>
+                    </div>
 
-                <div class="form-group">
-                    <label for="repeatPassword">{{ "systemSettings.passwordRepeat" | translate }}</label>
-                    <app-ui-input id="repeatPassword" type="password" formControlName="repeatPassword"></app-ui-input>
-                    <p class="hint" *ngIf="passwordsDiffer()">{{ "systemSettings.passwordMismatch" | translate }}</p>
-                </div>
-
-                <div class="button-row">
-                    <button type="button" [disabled]="!canChangePassword()" (click)="changePassword()">
-                        {{ "systemSettings.passwordChange" | translate }}
-                    </button>
-                </div>
-            </div>
-
-            <div class="section" *ngIf="isOwner" formGroupName="security">
-                <h3>🔒 {{ "systemSettings.securityTitle" | translate }}</h3>
-                <p class="hint">{{ "systemSettings.securityHint" | translate }}</p>
-
-                <div class="form-group">
-                    <label for="accessTokenTtlMinutes">{{ "systemSettings.securityAccessTtl" | translate }}</label>
-                    <app-ui-input
-                        id="accessTokenTtlMinutes"
-                        type="number"
-                        min="1"
-                        max="1440"
-                        formControlName="accessTokenTtlMinutes"
-                    ></app-ui-input>
-                    <p class="hint">{{ "systemSettings.securityAccessTtlHint" | translate }}</p>
-                </div>
-
-                <div class="form-group">
-                    <label for="refreshTtlDays">{{ "systemSettings.securityRefreshTtl" | translate }}</label>
-                    <app-ui-input
-                        id="refreshTtlDays"
-                        type="number"
-                        min="1"
-                        max="365"
-                        formControlName="refreshTtlDays"
-                    ></app-ui-input>
-                    <p class="hint">{{ "systemSettings.securityRefreshTtlHint" | translate }}</p>
-                </div>
-
-                <div class="devices">
-                    <h4>{{ "systemSettings.devicesTitle" | translate }}</h4>
-                    <p class="hint">{{ "systemSettings.devicesHint" | translate }}</p>
-
-                    <ul class="device-list">
-                        <li class="device" *ngFor="let device of devices; trackBy: trackDevice">
-                            <div class="device-info">
-                                <span class="device-name">{{ device.label }}</span>
-                                <span class="device-current" *ngIf="device.current">{{
-                                    "systemSettings.devicesThisDevice" | translate
-                                }}</span>
-                                <small class="device-meta">
-                                    <span *ngIf="device.ipAddress">{{ device.ipAddress }}</span>
-                                    <span *ngIf="device.lastActiveAt"
-                                        >{{ "systemSettings.devicesLastActive" | translate }}
-                                        {{ device.lastActiveAt | date: "dd.MM.yyyy HH:mm" }}</span
-                                    >
-                                </small>
-                            </div>
-                            <button
-                                type="button"
-                                class="device-sign-out"
-                                *ngIf="!device.current"
-                                [disabled]="isDevicesBusy"
-                                (click)="signOutDevice(device)"
-                            >
-                                {{ "systemSettings.devicesSignOut" | translate }}
-                            </button>
-                        </li>
-                    </ul>
+                    <div class="form-group">
+                        <label for="repeatPassword">{{ "systemSettings.passwordRepeat" | translate }}</label>
+                        <app-ui-input id="repeatPassword" type="password" formControlName="repeatPassword"></app-ui-input>
+                        @if (passwordsDiffer()) {
+                            <p class="hint">{{ "systemSettings.passwordMismatch" | translate }}</p>
+                        }
+                    </div>
 
                     <div class="button-row">
-                        <button
-                            type="button"
-                            [disabled]="isDevicesBusy || !hasOtherDevices()"
-                            (click)="signOutOtherDevices()"
-                        >
-                            {{ "systemSettings.devicesSignOutOthers" | translate }}
+                        <button type="button" [disabled]="!canChangePassword()" (click)="changePassword()">
+                            {{ "systemSettings.passwordChange" | translate }}
                         </button>
                     </div>
                 </div>
-            </div>
+            }
+
+            @if (isOwner) {
+                <div class="section" formGroupName="security">
+                    <h3>🔒 {{ "systemSettings.securityTitle" | translate }}</h3>
+                    <p class="hint">{{ "systemSettings.securityHint" | translate }}</p>
+
+                    <div class="form-group">
+                        <label for="accessTokenTtlMinutes">{{ "systemSettings.securityAccessTtl" | translate }}</label>
+                        <app-ui-input
+                            id="accessTokenTtlMinutes"
+                            type="number"
+                            min="1"
+                            max="1440"
+                            formControlName="accessTokenTtlMinutes"
+                        ></app-ui-input>
+                        <p class="hint">{{ "systemSettings.securityAccessTtlHint" | translate }}</p>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="refreshTtlDays">{{ "systemSettings.securityRefreshTtl" | translate }}</label>
+                        <app-ui-input
+                            id="refreshTtlDays"
+                            type="number"
+                            min="1"
+                            max="365"
+                            formControlName="refreshTtlDays"
+                        ></app-ui-input>
+                        <p class="hint">{{ "systemSettings.securityRefreshTtlHint" | translate }}</p>
+                    </div>
+
+                    <div class="devices">
+                        <h4>{{ "systemSettings.devicesTitle" | translate }}</h4>
+                        <p class="hint">{{ "systemSettings.devicesHint" | translate }}</p>
+
+                        <ul class="device-list">
+                            @for (device of devices; track trackDevice($index, device)) {
+                                <li class="device">
+                                    <div class="device-info">
+                                        <span class="device-name">{{ device.label }}</span>
+                                        @if (device.current) {
+                                            <span class="device-current">{{
+                                                "systemSettings.devicesThisDevice" | translate
+                                            }}</span>
+                                        }
+                                        <small class="device-meta">
+                                            @if (device.ipAddress) {
+                                                <span>{{ device.ipAddress }}</span>
+                                            }
+                                            @if (device.lastActiveAt) {
+                                                <span
+                                                    >{{ "systemSettings.devicesLastActive" | translate }}
+                                                    {{ device.lastActiveAt | date: "dd.MM.yyyy HH:mm" }}</span
+                                                >
+                                            }
+                                        </small>
+                                    </div>
+                                    @if (!device.current) {
+                                        <button
+                                            type="button"
+                                            class="device-sign-out"
+                                            [disabled]="isDevicesBusy"
+                                            (click)="signOutDevice(device)"
+                                        >
+                                            {{ "systemSettings.devicesSignOut" | translate }}
+                                        </button>
+                                    }
+                                </li>
+                            }
+                        </ul>
+
+                        <div class="button-row">
+                            <button
+                                type="button"
+                                [disabled]="isDevicesBusy || !hasOtherDevices()"
+                                (click)="signOutOtherDevices()"
+                            >
+                                {{ "systemSettings.devicesSignOutOthers" | translate }}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            }
 
             <div class="section">
                 <h3>{{ "settings.modules" | translate }}</h3>
@@ -384,22 +397,24 @@
                     <span class="status-text">
                         {{ tunnelStatus?.running ? ("settings.tunnelRunning" | translate) : ("settings.tunnelStopped" | translate) }}
                     </span>
-                    <a
-                        *ngIf="tunnelStatus?.public_url"
-                        class="status-link"
-                        [href]="tunnelStatus?.public_url"
-                        target="_blank"
-                        rel="noreferrer"
-                    >
-                        {{ tunnelStatus?.public_url }}
-                    </a>
-                    <button
-                        *ngIf="tunnelStatus?.running && tunnelStatus?.public_url"
-                        type="button"
-                        (click)="copyTunnelLink()"
-                    >
-                        {{ "settings.tunnelCopyLink" | translate }}
-                    </button>
+                    @if (tunnelStatus?.public_url) {
+                        <a
+                            class="status-link"
+                            [href]="tunnelStatus?.public_url"
+                            target="_blank"
+                            rel="noreferrer"
+                        >
+                            {{ tunnelStatus?.public_url }}
+                        </a>
+                    }
+                    @if (tunnelStatus?.running && tunnelStatus?.public_url) {
+                        <button
+                            type="button"
+                            (click)="copyTunnelLink()"
+                        >
+                            {{ "settings.tunnelCopyLink" | translate }}
+                        </button>
+                    }
                 </div>
 
                 <div class="tunnel-actions">
@@ -496,10 +511,14 @@
                         {{ "systemSettings.updateCurrent" | translate }}:
                         <strong>{{ updateInfo?.local_version || '—' }}</strong>
                     </span>
-                    <span class="update-chip" *ngIf="updateInfo?.git">
-                        {{ updateInfo?.git?.branch }} · {{ updateInfo?.git?.sha }}
-                        <em *ngIf="updateInfo?.git?.dirty"> ({{ "systemSettings.updateDirty" | translate }})</em>
-                    </span>
+                    @if (updateInfo?.git) {
+                        <span class="update-chip">
+                            {{ updateInfo?.git?.branch }} · {{ updateInfo?.git?.sha }}
+                            @if (updateInfo?.git?.dirty) {
+                                <em> ({{ "systemSettings.updateDirty" | translate }})</em>
+                            }
+                        </span>
+                    }
                     <button
                         type="button"
                         class="secondary"
@@ -510,70 +529,91 @@
                     </button>
                 </div>
 
-                <ng-container *ngIf="updateInfo">
-                    <div class="info-block" *ngIf="!updateInfo.has_branch_update && !updateInfo.has_release_update">
-                        <p>✅ {{ "systemSettings.updateUpToDate" | translate }}</p>
-                    </div>
+                @if (updateInfo) {
+                    @if (!updateInfo.has_branch_update && !updateInfo.has_release_update) {
+                        <div class="info-block">
+                            <p>✅ {{ "systemSettings.updateUpToDate" | translate }}</p>
+                        </div>
+                    }
 
-                    <div class="info-block update-available" *ngIf="updateInfo.has_branch_update">
-                        <strong>{{ "systemSettings.updateBranchAvailable" | translate }}</strong>
-                        <p>
-                            {{ updateInfo.branch }}
-                            <ng-container *ngIf="updateInfo.branch_remote?.version">
-                                → v{{ updateInfo.branch_remote?.version }}
-                            </ng-container>
-                            <ng-container *ngIf="updateInfo.branch_remote?.behind">
-                                · {{ "systemSettings.updateBehind" | translate }}: {{ updateInfo.branch_remote?.behind }}
-                            </ng-container>
-                        </p>
-                        <button
-                            type="button"
-                            *ngIf="updateInfo.git_available"
-                            (click)="runUpdate('branch')"
-                            [disabled]="isUpdateRunning"
-                        >
-                            {{ (isUpdateRunning ? "systemSettings.updateRunning" : "systemSettings.updateRunBranch") | translate }}
-                        </button>
-                    </div>
+                    @if (updateInfo.has_branch_update) {
+                        <div class="info-block update-available">
+                            <strong>{{ "systemSettings.updateBranchAvailable" | translate }}</strong>
+                            <p>
+                                {{ updateInfo.branch }}
+                                @if (updateInfo.branch_remote?.version) {
+                                    → v{{ updateInfo.branch_remote?.version }}
+                                }
+                                @if (updateInfo.branch_remote?.behind) {
+                                    · {{ "systemSettings.updateBehind" | translate }}: {{ updateInfo.branch_remote?.behind }}
+                                }
+                            </p>
+                            @if (updateInfo.git_available) {
+                                <button
+                                    type="button"
+                                    (click)="runUpdate('branch')"
+                                    [disabled]="isUpdateRunning"
+                                >
+                                    {{ (isUpdateRunning ? "systemSettings.updateRunning" : "systemSettings.updateRunBranch") | translate }}
+                                </button>
+                            }
+                        </div>
+                    }
 
-                    <div class="info-block update-available" *ngIf="updateInfo.has_release_update && updateInfo.release">
-                        <strong>{{ "systemSettings.updateReleaseAvailable" | translate }}: {{ updateInfo.release.tag }}</strong>
-                        <p *ngIf="updateInfo.release.name">{{ updateInfo.release.name }}</p>
-                        <p>
-                            <a [href]="updateInfo.release.url" target="_blank" rel="noopener">
-                                {{ "systemSettings.updateReleaseNotes" | translate }}
-                            </a>
-                        </p>
-                        <button
-                            type="button"
-                            *ngIf="updateInfo.git_available"
-                            (click)="runUpdate('release')"
-                            [disabled]="isUpdateRunning"
-                        >
-                            {{ (isUpdateRunning ? "systemSettings.updateRunning" : "systemSettings.updateRunRelease") | translate }}
-                        </button>
-                    </div>
+                    @if (updateInfo.has_release_update && updateInfo.release) {
+                        <div class="info-block update-available">
+                            <strong>{{ "systemSettings.updateReleaseAvailable" | translate }}: {{ updateInfo.release.tag }}</strong>
+                            @if (updateInfo.release.name) {
+                                <p>{{ updateInfo.release.name }}</p>
+                            }
+                            <p>
+                                <a [href]="updateInfo.release.url" target="_blank" rel="noopener">
+                                    {{ "systemSettings.updateReleaseNotes" | translate }}
+                                </a>
+                            </p>
+                            @if (updateInfo.git_available) {
+                                <button
+                                    type="button"
+                                    (click)="runUpdate('release')"
+                                    [disabled]="isUpdateRunning"
+                                >
+                                    {{ (isUpdateRunning ? "systemSettings.updateRunning" : "systemSettings.updateRunRelease") | translate }}
+                                </button>
+                            }
+                        </div>
+                    }
 
-                    <div class="info-block" *ngIf="!updateInfo.git_available && (updateInfo.has_branch_update || updateInfo.has_release_update)">
-                        <p>{{ "systemSettings.updateNoGit" | translate }}</p>
-                    </div>
-                </ng-container>
-
-                <ng-container *ngIf="updateRunResult as run">
-                    <div class="info-block update-result" *ngIf="run.status === 'ok' && run.updated">
-                        <strong>✅ {{ "systemSettings.updateApplied" | translate }}: v{{ run.new_version || run.new_sha }}</strong>
-                        <p *ngIf="run.needs_install">⚠️ {{ "systemSettings.updateNeedsInstall" | translate }}</p>
-                        <p *ngIf="run.needs_restart">🔄 {{ "systemSettings.updateNeedsRestart" | translate }}</p>
-                    </div>
-                    <div class="info-block update-result error" *ngIf="run.status === 'error'">
-                        <strong>{{ run.message }}</strong>
-                        <p *ngIf="run.download_url">
-                            <a [href]="run.download_url" target="_blank" rel="noopener">
-                                {{ "systemSettings.updateManualDownload" | translate }}
-                            </a>
-                        </p>
-                    </div>
-                </ng-container>
+                    @if (!updateInfo.git_available && (updateInfo.has_branch_update || updateInfo.has_release_update)) {
+                        <div class="info-block">
+                            <p>{{ "systemSettings.updateNoGit" | translate }}</p>
+                        </div>
+                    }
+                }
+                @if (updateRunResult; as run) {
+                    @if (run.status === 'ok' && run.updated) {
+                        <div class="info-block update-result">
+                            <strong>✅ {{ "systemSettings.updateApplied" | translate }}: v{{ run.new_version || run.new_sha }}</strong>
+                            @if (run.needs_install) {
+                                <p>⚠️ {{ "systemSettings.updateNeedsInstall" | translate }}</p>
+                            }
+                            @if (run.needs_restart) {
+                                <p>🔄 {{ "systemSettings.updateNeedsRestart" | translate }}</p>
+                            }
+                        </div>
+                    }
+                    @if (run.status === 'error') {
+                        <div class="info-block update-result error">
+                            <strong>{{ run.message }}</strong>
+                            @if (run.download_url) {
+                                <p>
+                                    <a [href]="run.download_url" target="_blank" rel="noopener">
+                                        {{ "systemSettings.updateManualDownload" | translate }}
+                                    </a>
+                                </p>
+                            }
+                        </div>
+                    }
+                }
             </div>
 
             <div class="button-row">
@@ -582,8 +622,6 @@
                 </button>
             </div>
         </form>
-    </ng-template>
+    }
 
 </div>
-
-

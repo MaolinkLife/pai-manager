@@ -2,23 +2,33 @@
     <p class="capabilities-modal__hint">{{ "settingsPage.models.capabilitiesModalHint" | translate }}</p>
 
     <form [formGroup]="form" class="capabilities-modal__list">
-        <div class="capabilities-modal__item" *ngFor="let key of capabilityKeys; trackBy: trackByKey">
-            <app-ui-checkbox [formControlName]="key" [id]="'model-capability-' + key">
-                {{ "settingsPage.models.capabilities." + key | translate }}
-            </app-ui-checkbox>
-            <span class="capabilities-modal__declared" *ngIf="isDeclared(key)">
-                {{ "settingsPage.models.capabilitiesDeclaredByOllama" | translate }}
-            </span>
-        </div>
+        @for (key of capabilityKeys; track trackByKey($index, key)) {
+            <div class="capabilities-modal__item">
+                <app-ui-checkbox [formControlName]="key" [id]="'model-capability-' + key">
+                    {{ "settingsPage.models.capabilities." + key | translate }}
+                </app-ui-checkbox>
+                @if (isDeclared(key)) {
+                    <span class="capabilities-modal__declared">
+                        {{ "settingsPage.models.capabilitiesDeclaredByOllama" | translate }}
+                    </span>
+                }
+            </div>
+        }
     </form>
 
-    <p class="capabilities-modal__note capabilities-modal__note--warning" *ngIf="differsFromOllama()">
-        ⚠ {{ "settingsPage.models.capabilitiesDifferShort" | translate }}
-    </p>
-    <p class="capabilities-modal__note" *ngIf="!entry.declared_known">
-        {{ "settingsPage.models.capabilitiesUnknown" | translate }}
-    </p>
-    <p class="capabilities-modal__note capabilities-modal__note--error" *ngIf="saveError">{{ saveError }}</p>
+    @if (differsFromOllama()) {
+        <p class="capabilities-modal__note capabilities-modal__note--warning">
+            ⚠ {{ "settingsPage.models.capabilitiesDifferShort" | translate }}
+        </p>
+    }
+    @if (!entry.declared_known) {
+        <p class="capabilities-modal__note">
+            {{ "settingsPage.models.capabilitiesUnknown" | translate }}
+        </p>
+    }
+    @if (saveError) {
+        <p class="capabilities-modal__note capabilities-modal__note--error">{{ saveError }}</p>
+    }
 
     <div class="capabilities-modal__actions">
         <app-ui-button

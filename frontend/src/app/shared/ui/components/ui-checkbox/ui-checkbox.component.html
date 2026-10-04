@@ -14,6 +14,8 @@
     <span class="ui-checkbox__box" aria-hidden="true"></span>
     <span class="ui-checkbox__label">
         <ng-content></ng-content>
-        <ng-container *ngIf="label">{{ label }}</ng-container>
+        @if (label) {
+            {{ label }}
+        }
     </span>
 </button>

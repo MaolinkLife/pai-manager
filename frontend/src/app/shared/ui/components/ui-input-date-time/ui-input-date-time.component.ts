@@ -275,10 +275,6 @@ export class UiInputDateTimeComponent implements ControlValueAccessor {
         this.open = false;
     }
 
-    trackByWeek(index: number): number {
-        return index;
-    }
-
     trackByCell(_index: number, cell: CalendarCell): string {
         return cell.key;
     }

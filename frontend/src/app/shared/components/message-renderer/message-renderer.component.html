@@ -1,76 +1,85 @@
 <div class="message-renderer">
-    <ng-container *ngFor="let block of blocks(); let blockIndex = index; trackBy: trackByBlock">
-        <ng-container [ngSwitch]="block.type">
-            <div
-                *ngSwitchCase="'text'"
-                class="block text-block"
-                [class.streaming]="isStreaming"
-                [innerHTML]="block.safeContent"
-            ></div>
-
-            <div
-                *ngSwitchCase="'code'"
-                class="block code-block"
-                [class.streaming]="!block.isComplete"
-            >
-                <div class="code-header">
-                    <span class="language">{{ block.language || "code" }}</span>
-                    <span class="status" *ngIf="!block.isComplete">●</span>
-                </div>
-                <pre class="code-content" [innerHTML]="block.safeContent"></pre>
-            </div>
-
-            <div
-                *ngSwitchCase="'header'"
-                class="block header-block"
-                [innerHTML]="block.safeContent"
-            ></div>
-
-            <div
-                *ngSwitchCase="'list'"
-                class="block list-block"
-                [innerHTML]="block.safeContent"
-            ></div>
-
-            <div
-                *ngSwitchCase="'table'"
-                class="block table-block"
-                [innerHTML]="block.safeContent"
-            ></div>
-
-            <div
-                *ngSwitchCase="'quote'"
-                class="block quote-block"
-                [innerHTML]="block.safeContent"
-            ></div>
-
-            <div
-                *ngSwitchCase="'thinking'"
-                class="block thinking-block"
-                [class.streaming]="isStreaming"
-                [class.expanded]="block.isExpanded || (isStreaming && !collapseThinking)"
-            >
-                <button
-                    type="button"
-                    class="thinking-header"
-                    (click)="toggleThinking(block)"
-                    [disabled]="isStreaming"
-                >
-                    <span class="icon">✦</span>
-                    <span class="label">{{ getThinkingLabel() }}</span>
-                    <span
-                        class="chevron"
-                        [class.rotated]="block.isExpanded || (isStreaming && !collapseThinking)"
-                        >▾</span
-                    >
-                </button>
+    @for (block of blocks(); track trackByBlock(blockIndex, block); let blockIndex = $index) {
+        @switch (block.type) {
+            @case ('text') {
                 <div
-                    class="thinking-body"
-                    [class.expanded]="block.isExpanded || (isStreaming && !collapseThinking)"
-                    [attr.data-thinking-index]="blockIndex"
+                    class="block text-block"
+                    [class.streaming]="isStreaming"
                     [innerHTML]="block.safeContent"
                 ></div>
-            </div>
-        </ng-container>
-    </ng-container>
+            }
+
+            @case ('code') {
+                <div
+                    class="block code-block"
+                    [class.streaming]="!block.isComplete"
+                >
+                    <div class="code-header">
+                        <span class="language">{{ block.language || "code" }}</span>
+                        @if (!block.isComplete) {
+                            <span class="status">●</span>
+                        }
+                    </div>
+                    <pre class="code-content" [innerHTML]="block.safeContent"></pre>
+                </div>
+            }
+
+            @case ('header') {
+                <div
+                    class="block header-block"
+                    [innerHTML]="block.safeContent"
+                ></div>
+            }
+
+            @case ('list') {
+                <div
+                    class="block list-block"
+                    [innerHTML]="block.safeContent"
+                ></div>
+            }
+
+            @case ('table') {
+                <div
+                    class="block table-block"
+                    [innerHTML]="block.safeContent"
+                ></div>
+            }
+
+            @case ('quote') {
+                <div
+                    class="block quote-block"
+                    [innerHTML]="block.safeContent"
+                ></div>
+            }
+
+            @case ('thinking') {
+                <div
+                    class="block thinking-block"
+                    [class.streaming]="isStreaming"
+                    [class.expanded]="block.isExpanded || (isStreaming && !collapseThinking)"
+                >
+                    <button
+                        type="button"
+                        class="thinking-header"
+                        (click)="toggleThinking(block)"
+                        [disabled]="isStreaming"
+                    >
+                        <span class="icon">✦</span>
+                        <span class="label">{{ getThinkingLabel() }}</span>
+                        <span
+                            class="chevron"
+                            [class.rotated]="block.isExpanded || (isStreaming && !collapseThinking)"
+                            >▾</span
+                        >
+                    </button>
+                    <div
+                        class="thinking-body"
+                        [class.expanded]="block.isExpanded || (isStreaming && !collapseThinking)"
+                        [attr.data-thinking-index]="blockIndex"
+                        [innerHTML]="block.safeContent"
+                    ></div>
+                </div>
+            }
+        }
+    }
 </div>

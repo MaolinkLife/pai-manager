@@ -1,157 +1,224 @@
 <div class="diary-page custom-scrollbar">
-    <div class="diary-shell" *ngIf="featureEnabled; else diaryWip">
-        <header class="page-header">
-            <div>
-                <h2>{{ 'diary.title' | translate }}</h2>
-                <p>{{ 'diary.subtitle' | translate }}</p>
-            </div>
-            <div class="actions">
-                <app-ui-checkbox class="hidden-toggle" (checkedChange)="setShowHidden($event)">
-                    {{ 'diary.showHidden' | translate }}
-                </app-ui-checkbox>
-                <app-ui-button (pressed)="refreshEntries()">
-                    Refresh
-                </app-ui-button>
-                <app-ui-button (pressed)="generateDailyEntry()">
-                    {{ generating ? 'Generating...' : ('diary.create' | translate) }}
-                </app-ui-button>
-            </div>
-        </header>
+    @if (featureEnabled) {
+        <div class="diary-shell">
+            <header class="page-header">
+                <div>
+                    <h2>{{ 'diary.title' | translate }}</h2>
+                    <p>{{ 'diary.subtitle' | translate }}</p>
+                </div>
+                <div class="actions">
+                    <app-ui-checkbox class="hidden-toggle" (checkedChange)="setShowHidden($event)">
+                        {{ 'diary.showHidden' | translate }}
+                    </app-ui-checkbox>
+                    <app-ui-button (pressed)="refreshEntries()">
+                        Refresh
+                    </app-ui-button>
+                    <app-ui-button (pressed)="generateDailyEntry()">
+                        {{ generating ? 'Generating...' : ('diary.create' | translate) }}
+                    </app-ui-button>
+                </div>
+            </header>
 
-        <section class="diary-list" *ngIf="entries.length; else emptyState">
-            <article class="diary-item" [class.hidden-entry]="entry.hidden" *ngFor="let entry of entries; trackBy: trackEntry">
-                <div class="timeline-dot"></div>
+            @if (entries.length) {
+                <section class="diary-list">
+                    @for (entry of entries; track trackEntry($index, entry)) {
+                        <article class="diary-item" [class.hidden-entry]="entry.hidden">
+                            <div class="timeline-dot"></div>
 
-                <header>
-                    <time>{{ entry.date | date: 'dd.MM.yyyy, HH:mm:ss' }}</time>
-                    <div class="hidden-mark" *ngIf="entry.hidden">
-                        {{ 'diary.hiddenMark' | translate }}:
-                        <ng-container *ngIf="hiddenReasonKey(entry.hiddenReason) as reasonKey; else rawReason">{{ reasonKey | translate }}</ng-container>
-                        <ng-template #rawReason>{{ entry.hiddenReason }}</ng-template>
-                    </div>
-                    <div class="mood">{{ 'diary.mood' | translate }}: {{ entry.mood }}</div>
-                </header>
+                            <header>
+                                <time>{{ entry.date | date: 'dd.MM.yyyy, HH:mm:ss' }}</time>
+                                @if (entry.hidden) {
+                                    <div class="hidden-mark">
+                                        {{ 'diary.hiddenMark' | translate }}:
+                                        @if (hiddenReasonKey(entry.hiddenReason); as reasonKey) {
+                                            {{ reasonKey | translate }}
+                                        } @else {
+                                            {{ entry.hiddenReason }}
+                                        }
+                                    </div>
+                                }
+                                <div class="mood">{{ 'diary.mood' | translate }}: {{ entry.mood }}</div>
+                            </header>
 
-                <section class="lead" *ngIf="entry.structured?.title">
-                    <h3>{{ entry.structured?.title }}</h3>
+                            @if (entry.structured?.title) {
+                                <section class="lead">
+                                    <h3>{{ entry.structured?.title }}</h3>
+                                </section>
+                            }
+
+                            @if (entry.narrative) {
+                                <section class="diary-narrative">
+                                    <p>{{ entry.narrative }}</p>
+                                </section>
+                            }
+
+                            @if (entry.selfReflection) {
+                                <section class="diary-self-reflection">
+                                    <h4>🪞 {{ 'diary.selfReflection' | translate }}</h4>
+                                    <p>{{ entry.selfReflection }}</p>
+                                </section>
+                            }
+
+                            @if (entry.summary) {
+                                <div class="content">{{ entry.summary }}</div>
+                            }
+
+                            @if (entry.structured; as structured) {
+                                <section class="detail-grid">
+                                    @if (structured.importance_score !== null) {
+                                        <div class="detail-row">
+                                            <span class="label">Importance</span>
+                                            <span class="value">{{ structured.importance_score }}</span>
+                                        </div>
+                                    }
+                                    @if (structured.emotion) {
+                                        <div class="detail-row">
+                                            <span class="label">Emotion</span>
+                                            <span class="value">
+                                                {{ structured.emotion.valence || 'neutral' }}
+                                                @if (structured.emotion.arousal) {
+                                                    / {{ structured.emotion.arousal }}
+                                                }
+                                            </span>
+                                        </div>
+                                    }
+                                </section>
+                            }
+
+                            @if (entry.structured?.source_event) {
+                                <section class="diary-block">
+                                    <h4>Source Event</h4>
+                                    <p>{{ entry.structured?.source_event }}</p>
+                                </section>
+                            }
+
+                            @if (entry.structured?.outcomes?.length) {
+                                <section class="diary-block">
+                                    <h4>Outcomes</h4>
+                                    <ul>
+                                        @for (item of entry.structured?.outcomes; track item) {
+                                            <li>{{ item }}</li>
+                                        }
+                                    </ul>
+                                </section>
+                            }
+
+                            @if (entry.structured?.entities?.length) {
+                                <section class="diary-block">
+                                    <h4>Entities</h4>
+                                    <p>{{ entry.structured?.entities?.join(', ') }}</p>
+                                </section>
+                            }
+
+                            @if (entry.structured?.key_messages?.length) {
+                                <section class="diary-block">
+                                    <h4>Key Messages</h4>
+                                    <ul>
+                                        @for (item of entry.structured?.key_messages; track item) {
+                                            <li>{{ item }}</li>
+                                        }
+                                    </ul>
+                                </section>
+                            }
+
+                            @if (entry.structured?.importance_notes) {
+                                <section class="diary-block">
+                                    <h4>Importance</h4>
+                                    <p>{{ entry.structured?.importance_notes }}</p>
+                                </section>
+                            }
+
+                            @if (entry.structured?.emotion?.notes) {
+                                <section class="diary-block">
+                                    <h4>Emotion / Affect</h4>
+                                    <p>{{ entry.structured?.emotion?.notes }}</p>
+                                </section>
+                            }
+
+                            @if (entry.structured?.relationships) {
+                                <section class="diary-block">
+                                    <h4>Relationships</h4>
+                                    <p>{{ entry.structured?.relationships }}</p>
+                                </section>
+                            }
+
+                            @if (entry.structured?.retrieval_cues?.length) {
+                                <section class="diary-block">
+                                    <h4>Retrieval Cues</h4>
+                                    <p>{{ entry.structured?.retrieval_cues?.join(' · ') }}</p>
+                                </section>
+                            }
+
+                            @if (entry.structured?.similarities?.length) {
+                                <section class="diary-block">
+                                    <h4>Similarities</h4>
+                                    <ul>
+                                        @for (item of entry.structured?.similarities; track item) {
+                                            <li>{{ item }}</li>
+                                        }
+                                    </ul>
+                                </section>
+                            }
+
+                            @if (entry.structured?.photo_descriptions?.length) {
+                                <section class="diary-block">
+                                    <h4>Photo Descriptions</h4>
+                                    <ul>
+                                        @for (item of entry.structured?.photo_descriptions; track item) {
+                                            <li>{{ item }}</li>
+                                        }
+                                    </ul>
+                                </section>
+                            }
+
+                            @if (entry.structured?.contradictions?.length) {
+                                <section class="diary-block">
+                                    <h4>Contradictions / Uncertainties</h4>
+                                    <ul>
+                                        @for (item of entry.structured?.contradictions; track item) {
+                                            <li>{{ item }}</li>
+                                        }
+                                    </ul>
+                                </section>
+                            }
+
+                            <footer>
+                                @for (tag of entry.tags; track tag) {
+                                    <span>#{{ tag }}</span>
+                                }
+                            </footer>
+                        </article>
+                    }
                 </section>
-
-                <section class="diary-narrative" *ngIf="entry.narrative">
-                    <p>{{ entry.narrative }}</p>
+            } @else {
+                <section class="empty-state">
+                    <app-skeleton width="100%" height="120px"></app-skeleton>
+                    @if (loading) {
+                        <p>Loading diary entries...</p>
+                    }
+                    @if (!loading && error) {
+                        <p>{{ error }}</p>
+                    }
+                    @if (!loading && !error) {
+                        <p>{{ 'diary.empty' | translate }}</p>
+                    }
                 </section>
+            }
+            @if (entries.length && (hasMore || error)) {
+                <div class="load-more">
+                    @if (error) {
+                        <p class="load-error">{{ error }}</p>
+                    }
+                    @if (hasMore) {
+                        <app-ui-button variant="secondary" [loading]="loadingMore" (pressed)="loadMore()">
+                            {{ (loadingMore ? 'diary.loadingMore' : 'diary.loadMore') | translate }}
+                        </app-ui-button>
+                    }
+                </div>
+            }
 
-                <section class="diary-self-reflection" *ngIf="entry.selfReflection">
-                    <h4>🪞 {{ 'diary.selfReflection' | translate }}</h4>
-                    <p>{{ entry.selfReflection }}</p>
-                </section>
-
-                <div class="content" *ngIf="entry.summary">{{ entry.summary }}</div>
-
-                <section class="detail-grid" *ngIf="entry.structured as structured">
-                    <div class="detail-row" *ngIf="structured.importance_score !== null">
-                        <span class="label">Importance</span>
-                        <span class="value">{{ structured.importance_score }}</span>
-                    </div>
-                    <div class="detail-row" *ngIf="structured.emotion">
-                        <span class="label">Emotion</span>
-                        <span class="value">
-                            {{ structured.emotion.valence || 'neutral' }}
-                            <ng-container *ngIf="structured.emotion.arousal">
-                                / {{ structured.emotion.arousal }}
-                            </ng-container>
-                        </span>
-                    </div>
-                </section>
-
-                <section class="diary-block" *ngIf="entry.structured?.source_event">
-                    <h4>Source Event</h4>
-                    <p>{{ entry.structured?.source_event }}</p>
-                </section>
-
-                <section class="diary-block" *ngIf="entry.structured?.outcomes?.length">
-                    <h4>Outcomes</h4>
-                    <ul>
-                        <li *ngFor="let item of entry.structured?.outcomes">{{ item }}</li>
-                    </ul>
-                </section>
-
-                <section class="diary-block" *ngIf="entry.structured?.entities?.length">
-                    <h4>Entities</h4>
-                    <p>{{ entry.structured?.entities?.join(', ') }}</p>
-                </section>
-
-                <section class="diary-block" *ngIf="entry.structured?.key_messages?.length">
-                    <h4>Key Messages</h4>
-                    <ul>
-                        <li *ngFor="let item of entry.structured?.key_messages">{{ item }}</li>
-                    </ul>
-                </section>
-
-                <section class="diary-block" *ngIf="entry.structured?.importance_notes">
-                    <h4>Importance</h4>
-                    <p>{{ entry.structured?.importance_notes }}</p>
-                </section>
-
-                <section class="diary-block" *ngIf="entry.structured?.emotion?.notes">
-                    <h4>Emotion / Affect</h4>
-                    <p>{{ entry.structured?.emotion?.notes }}</p>
-                </section>
-
-                <section class="diary-block" *ngIf="entry.structured?.relationships">
-                    <h4>Relationships</h4>
-                    <p>{{ entry.structured?.relationships }}</p>
-                </section>
-
-                <section class="diary-block" *ngIf="entry.structured?.retrieval_cues?.length">
-                    <h4>Retrieval Cues</h4>
-                    <p>{{ entry.structured?.retrieval_cues?.join(' · ') }}</p>
-                </section>
-
-                <section class="diary-block" *ngIf="entry.structured?.similarities?.length">
-                    <h4>Similarities</h4>
-                    <ul>
-                        <li *ngFor="let item of entry.structured?.similarities">{{ item }}</li>
-                    </ul>
-                </section>
-
-                <section class="diary-block" *ngIf="entry.structured?.photo_descriptions?.length">
-                    <h4>Photo Descriptions</h4>
-                    <ul>
-                        <li *ngFor="let item of entry.structured?.photo_descriptions">{{ item }}</li>
-                    </ul>
-                </section>
-
-                <section class="diary-block" *ngIf="entry.structured?.contradictions?.length">
-                    <h4>Contradictions / Uncertainties</h4>
-                    <ul>
-                        <li *ngFor="let item of entry.structured?.contradictions">{{ item }}</li>
-                    </ul>
-                </section>
-
-                <footer>
-                    <span *ngFor="let tag of entry.tags">#{{ tag }}</span>
-                </footer>
-            </article>
-        </section>
-
-        <div class="load-more" *ngIf="entries.length && (hasMore || error)">
-            <p class="load-error" *ngIf="error">{{ error }}</p>
-            <app-ui-button *ngIf="hasMore" variant="secondary" [loading]="loadingMore" (pressed)="loadMore()">
-                {{ (loadingMore ? 'diary.loadingMore' : 'diary.loadMore') | translate }}
-            </app-ui-button>
         </div>
-
-        <ng-template #emptyState>
-            <section class="empty-state">
-                <app-skeleton width="100%" height="120px"></app-skeleton>
-                <p *ngIf="loading">Loading diary entries...</p>
-                <p *ngIf="!loading && error">{{ error }}</p>
-                <p *ngIf="!loading && !error">{{ 'diary.empty' | translate }}</p>
-            </section>
-        </ng-template>
-    </div>
-
-    <ng-template #diaryWip>
+    } @else {
         <div class="diary-shell">
             <section class="wip-card">
                 <h2>{{ 'feature.wipTitle' | translate }}</h2>
@@ -159,5 +226,5 @@
                 <p class="wip-hint">{{ 'feature.wipDevHint' | translate }}</p>
             </section>
         </div>
-    </ng-template>
+    }
 </div>

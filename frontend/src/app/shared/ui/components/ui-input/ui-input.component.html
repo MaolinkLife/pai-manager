@@ -14,24 +14,26 @@
         (blur)="markTouched()"
     />
 
-    <div class="ui-number-stepper" *ngIf="type === 'number' && !isReadonly && !disabled">
-        <button
-            type="button"
-            class="ui-number-stepper__btn"
-            [disabled]="disabled || isReadonly"
-            (click)="increment($event)"
-            aria-label="Increase value"
-        >
-            <span class="ui-number-stepper__chevron ui-number-stepper__chevron--up"></span>
-        </button>
-        <button
-            type="button"
-            class="ui-number-stepper__btn"
-            [disabled]="disabled || isReadonly"
-            (click)="decrement($event)"
-            aria-label="Decrease value"
-        >
-            <span class="ui-number-stepper__chevron ui-number-stepper__chevron--down"></span>
-        </button>
-    </div>
+    @if (type === 'number' && !isReadonly && !disabled) {
+        <div class="ui-number-stepper">
+            <button
+                type="button"
+                class="ui-number-stepper__btn"
+                [disabled]="disabled || isReadonly"
+                (click)="increment($event)"
+                aria-label="Increase value"
+            >
+                <span class="ui-number-stepper__chevron ui-number-stepper__chevron--up"></span>
+            </button>
+            <button
+                type="button"
+                class="ui-number-stepper__btn"
+                [disabled]="disabled || isReadonly"
+                (click)="decrement($event)"
+                aria-label="Decrease value"
+            >
+                <span class="ui-number-stepper__chevron ui-number-stepper__chevron--down"></span>
+            </button>
+        </div>
+    }
 </div>

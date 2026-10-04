@@ -3,7 +3,9 @@
         <ng-content select="[uiDropdownTrigger]"></ng-content>
     </div>
 
-    <div class="ui-dropdown__menu" *ngIf="open" (click)="onMenuClick($event)">
-        <ng-content select="[uiDropdownMenu]"></ng-content>
-    </div>
+    @if (open) {
+        <div class="ui-dropdown__menu" (click)="onMenuClick($event)">
+            <ng-content select="[uiDropdownMenu]"></ng-content>
+        </div>
+    }
 </div>

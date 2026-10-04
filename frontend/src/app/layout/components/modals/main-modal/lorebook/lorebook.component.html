@@ -1,96 +1,93 @@
-<ng-container *ngIf="isLoading$ | async; else content">
-    <div class="entries-container">
-        <div class="entry-block skeleton-entry" *ngFor="let i of [1, 2, 3]">
-            <div class="entry-header">
-                <app-skeleton height="1.5rem" width="100%"></app-skeleton>
-                <app-skeleton height="1.5rem" width="100%"></app-skeleton>
-
-                <div class="entry-toolbar">
-                    <app-skeleton height="1.5rem" width="100%"></app-skeleton>
-                    <app-skeleton height="1.5rem" width="60px"></app-skeleton>
-                    <app-skeleton height="1.5rem" width="24px"></app-skeleton>
-                </div>
-            </div>
-            <app-skeleton height="6rem" width="100%"></app-skeleton>
-        </div>
-    </div>
-    <div class="modal-footer">
-        <app-skeleton height="2.5rem" width="150px"></app-skeleton>
-    </div>
-</ng-container>
-
-<ng-template #content>
-    <ng-container *ngIf="entries$ | async as entries">
+    @if (isLoading$ | async) {
         <div class="entries-container">
-            <div
-                *ngFor="let entry of entries; let i = index"
-                class="entry-block"
-            >
-                <div class="entry-header">
-                    <app-ui-input
-                        [(ngModel)]="entry.title"
-                        class="entry-title"
-                        [placeholder]="'lorebook.titlePlaceholder' | translate"
-                        (blur)="updateEntry(entry)"
-                    ></app-ui-input>
-                    <app-ui-input
-                        [(ngModel)]="entry.category"
-                        class="entry-category"
-                        [placeholder]="
-                            'lorebook.categoryPlaceholder' | translate
-                        "
-                        (blur)="updateEntry(entry)"
-                    ></app-ui-input>
+            @for (i of [1, 2, 3]; track i) {
+                <div class="entry-block skeleton-entry">
+                    <div class="entry-header">
+                        <app-skeleton height="1.5rem" width="100%"></app-skeleton>
+                        <app-skeleton height="1.5rem" width="100%"></app-skeleton>
 
-                    <div class="entry-toolbar">
-                        <app-ui-input
-                            [(ngModel)]="entry.keywords"
-                            class="entry-keywords"
-                            [placeholder]="
-                                'lorebook.keywordsPlaceholder' | translate
-                            "
-                            (blur)="updateEntry(entry)"
-                        ></app-ui-input>
-
-                        <label class="active-toggle">
-                            <input
-                                type="checkbox"
-                                [(ngModel)]="entry.active"
-                                (change)="updateEntry(entry)"
-                            />
-                            {{ "lorebook.active" | translate }}
-                        </label>
-
-                        <div
-                            class="icon delete-icon"
-                            (click)="clickDelete(entry)"
-                        >
-                            <app-custom-svg
-                                name="trash"
-                                [size]="20"
-                            ></app-custom-svg>
+                        <div class="entry-toolbar">
+                            <app-skeleton height="1.5rem" width="100%"></app-skeleton>
+                            <app-skeleton height="1.5rem" width="60px"></app-skeleton>
+                            <app-skeleton height="1.5rem" width="24px"></app-skeleton>
                         </div>
                     </div>
+                    <app-skeleton height="6rem" width="100%"></app-skeleton>
                 </div>
-                <textarea
-                    [(ngModel)]="entry.content"
-                    class="entry-text"
-                    [placeholder]="'lorebook.contentPlaceholder' | translate"
-                    (blur)="updateEntry(entry)"
-                >
-                </textarea>
-            </div>
+            }
         </div>
-
         <div class="modal-footer">
-            <div>
-                <button class="btn-transparent" (click)="addNewEntry()">
-                    <app-custom-svg name="plus" [size]="20"></app-custom-svg>
-                    <span>{{ "lorebook.addEntry" | translate }}</span>
-                </button>
-            </div>
+            <app-skeleton height="2.5rem" width="150px"></app-skeleton>
         </div>
-    </ng-container>
-</ng-template>
+    } @else {
+        @if (entries$ | async; as entries) {
+            <div class="entries-container">
+                @for (entry of entries; track entry; let i = $index) {
+                    <div class="entry-block">
+                        <div class="entry-header">
+                            <app-ui-input
+                                [(ngModel)]="entry.title"
+                                class="entry-title"
+                                [placeholder]="'lorebook.titlePlaceholder' | translate"
+                                (blur)="updateEntry(entry)"
+                            ></app-ui-input>
+                            <app-ui-input
+                                [(ngModel)]="entry.category"
+                                class="entry-category"
+                                [placeholder]="
+                                    'lorebook.categoryPlaceholder' | translate
+                                "
+                                (blur)="updateEntry(entry)"
+                            ></app-ui-input>
 
+                            <div class="entry-toolbar">
+                                <app-ui-input
+                                    [(ngModel)]="entry.keywords"
+                                    class="entry-keywords"
+                                    [placeholder]="
+                                        'lorebook.keywordsPlaceholder' | translate
+                                    "
+                                    (blur)="updateEntry(entry)"
+                                ></app-ui-input>
 
+                                <label class="active-toggle">
+                                    <input
+                                        type="checkbox"
+                                        [(ngModel)]="entry.active"
+                                        (change)="updateEntry(entry)"
+                                    />
+                                    {{ "lorebook.active" | translate }}
+                                </label>
+
+                                <div
+                                    class="icon delete-icon"
+                                    (click)="clickDelete(entry)"
+                                >
+                                    <app-custom-svg
+                                        name="trash"
+                                        [size]="20"
+                                    ></app-custom-svg>
+                                </div>
+                            </div>
+                        </div>
+                        <textarea
+                            [(ngModel)]="entry.content"
+                            class="entry-text"
+                            [placeholder]="'lorebook.contentPlaceholder' | translate"
+                            (blur)="updateEntry(entry)"
+                        >
+                        </textarea>
+                    </div>
+                }
+            </div>
+
+            <div class="modal-footer">
+                <div>
+                    <button class="btn-transparent" (click)="addNewEntry()">
+                        <app-custom-svg name="plus" [size]="20"></app-custom-svg>
+                        <span>{{ "lorebook.addEntry" | translate }}</span>
+                    </button>
+                </div>
+            </div>
+        }
+    }

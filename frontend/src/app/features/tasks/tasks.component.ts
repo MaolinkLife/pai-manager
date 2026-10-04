@@ -175,10 +175,6 @@ export class TasksComponent implements OnInit {
         return item.id;
     }
 
-    trackByWeek(index: number): number {
-        return index;
-    }
-
     trackByDay(_index: number, day: CalendarDay): string {
         return day.key;
     }

@@ -1,546 +1,549 @@
-<ng-container *ngIf="isLoading$ | async; else content">
-    <div class="settings-wrapper">
-        <div class="settings-form">
-            <h2><app-skeleton height="2rem" width="160px"></app-skeleton></h2>
+    @if (isLoading$ | async) {
+        <div class="settings-wrapper">
+            <div class="settings-form">
+                <h2><app-skeleton height="2rem" width="160px"></app-skeleton></h2>
 
-            <div class="section">
-                <h3>
-                    <app-skeleton height="1.5rem" width="140px"></app-skeleton>
-                </h3>
+                <div class="section">
+                    <h3>
+                        <app-skeleton height="1.5rem" width="140px"></app-skeleton>
+                    </h3>
 
-                <div class="form-group checkbox-group">
-                    <app-skeleton height="1.5rem" width="100%"></app-skeleton>
+                    <div class="form-group checkbox-group">
+                        <app-skeleton height="1.5rem" width="100%"></app-skeleton>
+                    </div>
+
+                    <div class="form-group">
+                        <label>
+                            <app-skeleton height="1rem" width="150px"></app-skeleton>
+                        </label>
+                        <app-skeleton height="2.5rem" width="100%"></app-skeleton>
+                    </div>
+
+                    <div class="form-group checkbox-group">
+                        <app-skeleton height="1.5rem" width="100%"></app-skeleton>
+                        <app-skeleton height="1.5rem" width="100%"></app-skeleton>
+                        <app-skeleton height="1.5rem" width="100%"></app-skeleton>
+                    </div>
                 </div>
 
-                <div class="form-group">
-                    <label>
-                        <app-skeleton height="1rem" width="150px"></app-skeleton>
-                    </label>
-                    <app-skeleton height="2.5rem" width="100%"></app-skeleton>
+                <div class="section">
+                    <h3>
+                        <app-skeleton height="1.5rem" width="160px"></app-skeleton>
+                    </h3>
+
+                    <div class="form-group">
+                        <label>
+                            <app-skeleton height="1rem" width="120px"></app-skeleton>
+                        </label>
+                        <app-skeleton height="2.5rem" width="100%"></app-skeleton>
+                    </div>
+
+                    <div class="form-group">
+                        <label>
+                            <app-skeleton height="1rem" width="120px"></app-skeleton>
+                        </label>
+                        <app-skeleton height="2.5rem" width="100%"></app-skeleton>
+                    </div>
                 </div>
 
-                <div class="form-group checkbox-group">
-                    <app-skeleton height="1.5rem" width="100%"></app-skeleton>
-                    <app-skeleton height="1.5rem" width="100%"></app-skeleton>
-                    <app-skeleton height="1.5rem" width="100%"></app-skeleton>
-                </div>
-            </div>
+                <div class="section">
+                    <h3>
+                        <app-skeleton height="1.5rem" width="160px"></app-skeleton>
+                    </h3>
+                    <div class="form-group">
+                        <label>
+                            <app-skeleton height="1rem" width="120px"></app-skeleton>
+                        </label>
+                        <app-skeleton height="2.5rem" width="100%"></app-skeleton>
+                    </div>
 
-            <div class="section">
-                <h3>
-                    <app-skeleton height="1.5rem" width="160px"></app-skeleton>
-                </h3>
-
-                <div class="form-group">
-                    <label>
-                        <app-skeleton height="1rem" width="120px"></app-skeleton>
-                    </label>
-                    <app-skeleton height="2.5rem" width="100%"></app-skeleton>
-                </div>
-
-                <div class="form-group">
-                    <label>
-                        <app-skeleton height="1rem" width="120px"></app-skeleton>
-                    </label>
-                    <app-skeleton height="2.5rem" width="100%"></app-skeleton>
-                </div>
-            </div>
-
-            <div class="section">
-                <h3>
-                    <app-skeleton height="1.5rem" width="160px"></app-skeleton>
-                </h3>
-                <div class="form-group">
-                    <label>
-                        <app-skeleton height="1rem" width="120px"></app-skeleton>
-                    </label>
-                    <app-skeleton height="2.5rem" width="100%"></app-skeleton>
+                    <div class="form-group">
+                        <label>
+                            <app-skeleton height="1rem" width="120px"></app-skeleton>
+                        </label>
+                        <app-skeleton height="2.5rem" width="100%"></app-skeleton>
+                    </div>
                 </div>
 
-                <div class="form-group">
-                    <label>
-                        <app-skeleton height="1rem" width="120px"></app-skeleton>
-                    </label>
-                    <app-skeleton height="2.5rem" width="100%"></app-skeleton>
+                <div class="button-row">
+                    <app-skeleton height="2.5rem" width="180px"></app-skeleton>
                 </div>
-            </div>
-
-            <div class="button-row">
-                <app-skeleton height="2.5rem" width="180px"></app-skeleton>
             </div>
         </div>
-    </div>
-</ng-container>
+    } @else {
+        <div class="settings-wrapper">
+            <form [formGroup]="moralForm" (ngSubmit)="saveChanges()" class="settings-form">
+                <h2>❤️ {{ "moralSettings.title" | translate }}</h2>
 
-<ng-template #content>
-    <div class="settings-wrapper">
-        <form [formGroup]="moralForm" (ngSubmit)="saveChanges()" class="settings-form">
-            <h2>❤️ {{ "moralSettings.title" | translate }}</h2>
+                <div class="section">
+                    <h3>{{ "settings.general" | translate }}</h3>
 
-            <div class="section">
-                <h3>{{ "settings.general" | translate }}</h3>
-
-                <div class="form-group checkbox-group">
-                    <label class="checkbox">
-                        <input type="checkbox" formControlName="enabled" />
-                        {{ "moralSettings.enablePipeline" | translate }}
-                    </label>
-                </div>
-
-                <div class="form-group checkbox-group">
-                    <label class="checkbox">
-                        <input type="checkbox" formControlName="releaseAfterUse" />
-                        {{ "settings.releaseAfterUse" | translate }}
-                    </label>
-                </div>
-
-                <div class="form-group">
-                    <label for="moralActiveProvider">{{ "settings.activeProvider" | translate }}</label>
-                    <app-ui-select
-                        id="moralActiveProvider"
-                        formControlName="activeProvider"
-                        [options]="activeProviderOptions"
-                    ></app-ui-select>
-                </div>
-
-                <div class="form-group checkbox-group">
-                    <label class="checkbox">
-                        <input type="checkbox" formControlName="fallbackHeuristic" />
-                        {{ "moralSettings.addHeuristicFallback" | translate }}
-                    </label>
-                    <label class="checkbox">
-                        <input type="checkbox" formControlName="fallbackOllama" />
-                        {{ "moralSettings.addOllamaFallback" | translate }}
-                    </label>
-                    <label class="checkbox">
-                        <input type="checkbox" formControlName="fallbackOpenrouter" />
-                        {{ "moralSettings.addOpenrouterFallback" | translate }}
-                    </label>
-                    <label class="checkbox">
-                        <input type="checkbox" formControlName="fallbackLlamaCpp" />
-                        {{ "moralSettings.addLlamaCppFallback" | translate }}
-                    </label>
-                </div>
-
-                <p class="hint">
-                    {{ "moralSettings.fallbackHint" | translate }}
-                </p>
-
-                <div class="form-group">
-                    <label for="moralSystemPrompt">{{ "settings.systemPrompt" | translate }}</label>
-                    <app-ui-textarea
-                        id="moralSystemPrompt"
-                        formControlName="systemPrompt"
-                        height="300px"
-                        [autoResize]="false"
-                        [rows]="12"
-                    ></app-ui-textarea>
-                    <div class="prompt-actions">
-                        <p class="hint">{{ "moralSettings.systemPromptHint" | translate }}</p>
-                        <button type="button" class="reset-button" (click)="resetPrompt('systemPrompt', 'moral.system_prompt')">
-                            {{ "moralSettings.resetPrompt" | translate }}
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <div class="section" [formGroup]="providersForm" *ngIf="isOllamaActive">
-                <h3>{{ "moralSettings.ollamaProvider" | translate }}</h3>
-                <div formGroupName="ollama">
-                    <div class="form-group">
-                        <label for="moralOllamaModel">{{ "settings.textModel" | translate }}</label>
-                        <app-ui-select
-                            id="moralOllamaModel"
-                            [options]="ollamaModelOptions"
-                            formControlName="model"
-                        ></app-ui-select>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="moralOllamaTemperature">{{ "settings.temperature" | translate }}</label>
-                        <app-ui-input
-                            id="moralOllamaTemperature"
-                            type="number"
-                            step="0.1"
-                            min="0"
-                            max="2"
-                            formControlName="temperature"
-                        ></app-ui-input>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="moralOllamaMaxTokens">{{ "settings.maxTokens" | translate }}</label>
-                        <app-ui-input
-                            id="moralOllamaMaxTokens"
-                            type="number"
-                            min="1"
-                            max="2048"
-                            formControlName="maxTokens"
-                        ></app-ui-input>
+                    <div class="form-group checkbox-group">
+                        <label class="checkbox">
+                            <input type="checkbox" formControlName="enabled" />
+                            {{ "moralSettings.enablePipeline" | translate }}
+                        </label>
                     </div>
 
                     <div class="form-group checkbox-group">
                         <label class="checkbox">
-                            <input type="checkbox" formControlName="thinking" />
-                            {{ "moralSettings.allowOllamaThinking" | translate }}
+                            <input type="checkbox" formControlName="releaseAfterUse" />
+                            {{ "settings.releaseAfterUse" | translate }}
                         </label>
                     </div>
-                </div>
-            </div>
-
-            <div class="section" [formGroup]="providersForm" *ngIf="isOpenrouterActive">
-                <h3>{{ "moralSettings.openrouterProvider" | translate }}</h3>
-                <div formGroupName="openrouter">
-                    <div class="form-group">
-                        <label for="moralOpenrouterKey">API Key</label>
-                        <app-ui-input id="moralOpenrouterKey" type="password" formControlName="apiKey" ></app-ui-input>
-                    </div>
 
                     <div class="form-group">
-                        <label for="moralOpenrouterModel">{{ "settings.textModel" | translate }}</label>
-                        <app-ui-input id="moralOpenrouterModel" type="text" formControlName="model" ></app-ui-input>
+                        <label for="moralActiveProvider">{{ "settings.activeProvider" | translate }}</label>
+                        <app-ui-select
+                            id="moralActiveProvider"
+                            formControlName="activeProvider"
+                            [options]="activeProviderOptions"
+                        ></app-ui-select>
                     </div>
+
+                    <div class="form-group checkbox-group">
+                        <label class="checkbox">
+                            <input type="checkbox" formControlName="fallbackHeuristic" />
+                            {{ "moralSettings.addHeuristicFallback" | translate }}
+                        </label>
+                        <label class="checkbox">
+                            <input type="checkbox" formControlName="fallbackOllama" />
+                            {{ "moralSettings.addOllamaFallback" | translate }}
+                        </label>
+                        <label class="checkbox">
+                            <input type="checkbox" formControlName="fallbackOpenrouter" />
+                            {{ "moralSettings.addOpenrouterFallback" | translate }}
+                        </label>
+                        <label class="checkbox">
+                            <input type="checkbox" formControlName="fallbackLlamaCpp" />
+                            {{ "moralSettings.addLlamaCppFallback" | translate }}
+                        </label>
+                    </div>
+
+                    <p class="hint">
+                        {{ "moralSettings.fallbackHint" | translate }}
+                    </p>
 
                     <div class="form-group">
-                        <label for="moralOpenrouterTemp">{{ "settings.temperature" | translate }}</label>
-                        <app-ui-input
-                            id="moralOpenrouterTemp"
-                            type="number"
-                            step="0.1"
-                            min="0"
-                            max="2"
-                            formControlName="temperature"
-                        ></app-ui-input>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="moralOpenrouterTokens">{{ "settings.maxTokens" | translate }}</label>
-                        <app-ui-input
-                            id="moralOpenrouterTokens"
-                            type="number"
-                            min="1"
-                            max="2048"
-                            formControlName="maxTokens"
-                        ></app-ui-input>
-                    </div>
-                </div>
-            </div>
-
-            <div class="section" [formGroup]="providersForm" *ngIf="isLlamaCppActive">
-                <h3>{{ "moralSettings.llamaCppProvider" | translate }}</h3>
-                <div formGroupName="llamaCpp">
-                    <div class="form-group">
-                        <app-ui-checkbox formControlName="enabled">
-                            {{ "moralSettings.llamaCppEnabled" | translate }}
-                        </app-ui-checkbox>
-                        <p class="hint">{{ "moralSettings.llamaCppEnabledHint" | translate }}</p>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="moralLlamaCppBaseUrl">{{ "moralSettings.llamaCppBaseUrl" | translate }}</label>
-                        <app-ui-input id="moralLlamaCppBaseUrl" type="text" formControlName="baseUrl"></app-ui-input>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="moralLlamaCppModel">{{ "settings.textModel" | translate }}</label>
-                        <app-ui-input id="moralLlamaCppModel" type="text" formControlName="model"></app-ui-input>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="moralLlamaCppTemp">{{ "settings.temperature" | translate }}</label>
-                        <app-ui-input
-                            id="moralLlamaCppTemp"
-                            type="number"
-                            step="0.1"
-                            min="0"
-                            max="2"
-                            formControlName="temperature"
-                        ></app-ui-input>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="moralLlamaCppMaxTokens">{{ "settings.maxTokens" | translate }}</label>
-                        <app-ui-input
-                            id="moralLlamaCppMaxTokens"
-                            type="number"
-                            min="1"
-                            max="4096"
-                            formControlName="maxTokens"
-                        ></app-ui-input>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="moralLlamaCppTimeout">{{ "moralSettings.llamaCppTimeout" | translate }}</label>
-                        <app-ui-input
-                            id="moralLlamaCppTimeout"
-                            type="number"
-                            min="1"
-                            max="600"
-                            formControlName="requestTimeout"
-                        ></app-ui-input>
-                    </div>
-                </div>
-            </div>
-
-            <div class="section" formGroupName="decay">
-                <h3>🍃 {{ "moralSettings.decayTitle" | translate }}</h3>
-                <p class="hint">{{ "moralSettings.decayHint" | translate }}</p>
-
-                <div class="form-group">
-                    <app-ui-checkbox formControlName="enabled">
-                        {{ "moralSettings.decayEnable" | translate }}
-                    </app-ui-checkbox>
-                </div>
-
-                <div class="form-group">
-                    <label for="moralDecayRate">{{ "moralSettings.decayGlobalRate" | translate }}</label>
-                    <app-ui-input
-                        id="moralDecayRate"
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        max="1"
-                        formControlName="globalRate"
-                    ></app-ui-input>
-                </div>
-            </div>
-
-            <div class="section" formGroupName="forgiveness">
-                <h3>🕊️ {{ "moralSettings.forgivenessTitle" | translate }}</h3>
-                <p class="hint">{{ "moralSettings.forgivenessHint" | translate }}</p>
-
-                <div class="form-group">
-                    <app-ui-checkbox formControlName="enabled">
-                        {{ "moralSettings.forgivenessEnable" | translate }}
-                    </app-ui-checkbox>
-                </div>
-
-                <div class="form-group">
-                    <label for="moralForgivenessTones">{{ "moralSettings.forgivenessCompensatingTones" | translate }}</label>
-                    <app-ui-input
-                        id="moralForgivenessTones"
-                        type="text"
-                        formControlName="compensatingTonesCsv"
-                        placeholder="warmth, apology, tenderness"
-                    ></app-ui-input>
-                    <p class="hint">{{ "moralSettings.csvHint" | translate }}</p>
-                </div>
-
-                <div class="form-group">
-                    <label for="moralForgivenessEmotions">{{ "moralSettings.forgivenessSoftenable" | translate }}</label>
-                    <app-ui-input
-                        id="moralForgivenessEmotions"
-                        type="text"
-                        formControlName="softenableEmotionsCsv"
-                        placeholder="resentment, anger, frustration"
-                    ></app-ui-input>
-                    <p class="hint">{{ "moralSettings.csvHint" | translate }}</p>
-                </div>
-
-                <div class="form-group">
-                    <label for="moralForgivenessDelta">{{ "moralSettings.forgivenessDelta" | translate }}</label>
-                    <app-ui-input
-                        id="moralForgivenessDelta"
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        max="1"
-                        formControlName="deltaPerEvent"
-                    ></app-ui-input>
-                </div>
-
-                <div class="form-group">
-                    <label for="moralForgivenessLookback">{{ "moralSettings.forgivenessLookback" | translate }}</label>
-                    <app-ui-input
-                        id="moralForgivenessLookback"
-                        type="number"
-                        min="1"
-                        max="365"
-                        formControlName="lookbackDays"
-                    ></app-ui-input>
-                </div>
-            </div>
-
-            <div class="section" formGroupName="scars">
-                <h3>🪨 {{ "moralSettings.scarsTitle" | translate }}</h3>
-                <p class="hint">{{ "moralSettings.scarsHint" | translate }}</p>
-
-                <div class="form-group">
-                    <app-ui-checkbox formControlName="enabled">
-                        {{ "moralSettings.scarsEnable" | translate }}
-                    </app-ui-checkbox>
-                </div>
-
-                <div class="scars-triggers" formArrayName="triggers">
-                    <div
-                        class="trigger-card"
-                        *ngFor="let triggerGroup of scarsTriggersArray.controls; let i = index"
-                        [formGroupName]="i"
-                    >
-                        <div class="trigger-header">
-                            <span class="trigger-index">#{{ i + 1 }}</span>
-                            <button
-                                type="button"
-                                class="trigger-remove"
-                                (click)="removeScarTrigger(i)"
-                            >
-                                ✕
+                        <label for="moralSystemPrompt">{{ "settings.systemPrompt" | translate }}</label>
+                        <app-ui-textarea
+                            id="moralSystemPrompt"
+                            formControlName="systemPrompt"
+                            height="300px"
+                            [autoResize]="false"
+                            [rows]="12"
+                        ></app-ui-textarea>
+                        <div class="prompt-actions">
+                            <p class="hint">{{ "moralSettings.systemPromptHint" | translate }}</p>
+                            <button type="button" class="reset-button" (click)="resetPrompt('systemPrompt', 'moral.system_prompt')">
+                                {{ "moralSettings.resetPrompt" | translate }}
                             </button>
                         </div>
-
-                        <div class="form-group">
-                            <label>{{ "moralSettings.scarsName" | translate }}</label>
-                            <app-ui-input type="text" formControlName="name"></app-ui-input>
-                        </div>
-
-                        <div class="form-group">
-                            <label>{{ "moralSettings.scarsIntents" | translate }}</label>
-                            <app-ui-input
-                                type="text"
-                                formControlName="intentsCsv"
-                                placeholder="attempt_rename_character, lie_detected"
-                            ></app-ui-input>
-                            <p class="hint">{{ "moralSettings.csvHint" | translate }}</p>
-                        </div>
-
-                        <div class="form-group">
-                            <label>{{ "moralSettings.scarsTones" | translate }}</label>
-                            <app-ui-input
-                                type="text"
-                                formControlName="tonesCsv"
-                                placeholder="hostile, dismissive"
-                            ></app-ui-input>
-                            <p class="hint">{{ "moralSettings.csvHint" | translate }}</p>
-                        </div>
-
-                        <div class="form-group">
-                            <label>{{ "moralSettings.scarsKeywords" | translate }}</label>
-                            <app-ui-input
-                                type="text"
-                                formControlName="keywordsCsv"
-                                placeholder="rename, replace, delete"
-                            ></app-ui-input>
-                            <p class="hint">{{ "moralSettings.csvHint" | translate }}</p>
-                        </div>
-
-                        <div class="form-group">
-                            <label>{{ "moralSettings.scarsPersistenceFloor" | translate }}</label>
-                            <app-ui-input
-                                type="number"
-                                step="0.05"
-                                min="0"
-                                max="1"
-                                formControlName="persistenceFloor"
-                            ></app-ui-input>
-                        </div>
-
-                        <div class="form-group">
-                            <label>{{ "moralSettings.scarsIntensityBoost" | translate }}</label>
-                            <app-ui-input
-                                type="number"
-                                step="0.05"
-                                min="0"
-                                max="1"
-                                formControlName="intensityBoost"
-                            ></app-ui-input>
-                        </div>
                     </div>
                 </div>
 
-                <div class="form-group">
-                    <button type="button" class="add-trigger-btn" (click)="addScarTrigger()">
-                        ➕ {{ "moralSettings.scarsAddTrigger" | translate }}
-                    </button>
+                @if (isOllamaActive) {
+                    <div class="section" [formGroup]="providersForm">
+                        <h3>{{ "moralSettings.ollamaProvider" | translate }}</h3>
+                        <div formGroupName="ollama">
+                            <div class="form-group">
+                                <label for="moralOllamaModel">{{ "settings.textModel" | translate }}</label>
+                                <app-ui-select
+                                    id="moralOllamaModel"
+                                    [options]="ollamaModelOptions"
+                                    formControlName="model"
+                                ></app-ui-select>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="moralOllamaTemperature">{{ "settings.temperature" | translate }}</label>
+                                <app-ui-input
+                                    id="moralOllamaTemperature"
+                                    type="number"
+                                    step="0.1"
+                                    min="0"
+                                    max="2"
+                                    formControlName="temperature"
+                                ></app-ui-input>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="moralOllamaMaxTokens">{{ "settings.maxTokens" | translate }}</label>
+                                <app-ui-input
+                                    id="moralOllamaMaxTokens"
+                                    type="number"
+                                    min="1"
+                                    max="2048"
+                                    formControlName="maxTokens"
+                                ></app-ui-input>
+                            </div>
+
+                            <div class="form-group checkbox-group">
+                                <label class="checkbox">
+                                    <input type="checkbox" formControlName="thinking" />
+                                    {{ "moralSettings.allowOllamaThinking" | translate }}
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                }
+
+                @if (isOpenrouterActive) {
+                    <div class="section" [formGroup]="providersForm">
+                        <h3>{{ "moralSettings.openrouterProvider" | translate }}</h3>
+                        <div formGroupName="openrouter">
+                            <div class="form-group">
+                                <label for="moralOpenrouterKey">API Key</label>
+                                <app-ui-input id="moralOpenrouterKey" type="password" formControlName="apiKey" ></app-ui-input>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="moralOpenrouterModel">{{ "settings.textModel" | translate }}</label>
+                                <app-ui-input id="moralOpenrouterModel" type="text" formControlName="model" ></app-ui-input>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="moralOpenrouterTemp">{{ "settings.temperature" | translate }}</label>
+                                <app-ui-input
+                                    id="moralOpenrouterTemp"
+                                    type="number"
+                                    step="0.1"
+                                    min="0"
+                                    max="2"
+                                    formControlName="temperature"
+                                ></app-ui-input>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="moralOpenrouterTokens">{{ "settings.maxTokens" | translate }}</label>
+                                <app-ui-input
+                                    id="moralOpenrouterTokens"
+                                    type="number"
+                                    min="1"
+                                    max="2048"
+                                    formControlName="maxTokens"
+                                ></app-ui-input>
+                            </div>
+                        </div>
+                    </div>
+                }
+
+                @if (isLlamaCppActive) {
+                    <div class="section" [formGroup]="providersForm">
+                        <h3>{{ "moralSettings.llamaCppProvider" | translate }}</h3>
+                        <div formGroupName="llamaCpp">
+                            <div class="form-group">
+                                <app-ui-checkbox formControlName="enabled">
+                                    {{ "moralSettings.llamaCppEnabled" | translate }}
+                                </app-ui-checkbox>
+                                <p class="hint">{{ "moralSettings.llamaCppEnabledHint" | translate }}</p>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="moralLlamaCppBaseUrl">{{ "moralSettings.llamaCppBaseUrl" | translate }}</label>
+                                <app-ui-input id="moralLlamaCppBaseUrl" type="text" formControlName="baseUrl"></app-ui-input>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="moralLlamaCppModel">{{ "settings.textModel" | translate }}</label>
+                                <app-ui-input id="moralLlamaCppModel" type="text" formControlName="model"></app-ui-input>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="moralLlamaCppTemp">{{ "settings.temperature" | translate }}</label>
+                                <app-ui-input
+                                    id="moralLlamaCppTemp"
+                                    type="number"
+                                    step="0.1"
+                                    min="0"
+                                    max="2"
+                                    formControlName="temperature"
+                                ></app-ui-input>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="moralLlamaCppMaxTokens">{{ "settings.maxTokens" | translate }}</label>
+                                <app-ui-input
+                                    id="moralLlamaCppMaxTokens"
+                                    type="number"
+                                    min="1"
+                                    max="4096"
+                                    formControlName="maxTokens"
+                                ></app-ui-input>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="moralLlamaCppTimeout">{{ "moralSettings.llamaCppTimeout" | translate }}</label>
+                                <app-ui-input
+                                    id="moralLlamaCppTimeout"
+                                    type="number"
+                                    min="1"
+                                    max="600"
+                                    formControlName="requestTimeout"
+                                ></app-ui-input>
+                            </div>
+                        </div>
+                    </div>
+                }
+
+                <div class="section" formGroupName="decay">
+                    <h3>🍃 {{ "moralSettings.decayTitle" | translate }}</h3>
+                    <p class="hint">{{ "moralSettings.decayHint" | translate }}</p>
+
+                    <div class="form-group">
+                        <app-ui-checkbox formControlName="enabled">
+                            {{ "moralSettings.decayEnable" | translate }}
+                        </app-ui-checkbox>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="moralDecayRate">{{ "moralSettings.decayGlobalRate" | translate }}</label>
+                        <app-ui-input
+                            id="moralDecayRate"
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            max="1"
+                            formControlName="globalRate"
+                        ></app-ui-input>
+                    </div>
                 </div>
-            </div>
 
-            <div class="section" formGroupName="innerVoice">
-                <h3>💭 {{ "moralSettings.innerVoiceTitle" | translate }}</h3>
-                <p class="hint">{{ "moralSettings.innerVoiceHint" | translate }}</p>
+                <div class="section" formGroupName="forgiveness">
+                    <h3>🕊️ {{ "moralSettings.forgivenessTitle" | translate }}</h3>
+                    <p class="hint">{{ "moralSettings.forgivenessHint" | translate }}</p>
 
-                <div class="form-group">
-                    <app-ui-checkbox formControlName="enabled">
-                        {{ "moralSettings.innerVoiceEnable" | translate }}
-                    </app-ui-checkbox>
+                    <div class="form-group">
+                        <app-ui-checkbox formControlName="enabled">
+                            {{ "moralSettings.forgivenessEnable" | translate }}
+                        </app-ui-checkbox>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="moralForgivenessTones">{{ "moralSettings.forgivenessCompensatingTones" | translate }}</label>
+                        <app-ui-input
+                            id="moralForgivenessTones"
+                            type="text"
+                            formControlName="compensatingTonesCsv"
+                            placeholder="warmth, apology, tenderness"
+                        ></app-ui-input>
+                        <p class="hint">{{ "moralSettings.csvHint" | translate }}</p>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="moralForgivenessEmotions">{{ "moralSettings.forgivenessSoftenable" | translate }}</label>
+                        <app-ui-input
+                            id="moralForgivenessEmotions"
+                            type="text"
+                            formControlName="softenableEmotionsCsv"
+                            placeholder="resentment, anger, frustration"
+                        ></app-ui-input>
+                        <p class="hint">{{ "moralSettings.csvHint" | translate }}</p>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="moralForgivenessDelta">{{ "moralSettings.forgivenessDelta" | translate }}</label>
+                        <app-ui-input
+                            id="moralForgivenessDelta"
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            max="1"
+                            formControlName="deltaPerEvent"
+                        ></app-ui-input>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="moralForgivenessLookback">{{ "moralSettings.forgivenessLookback" | translate }}</label>
+                        <app-ui-input
+                            id="moralForgivenessLookback"
+                            type="number"
+                            min="1"
+                            max="365"
+                            formControlName="lookbackDays"
+                        ></app-ui-input>
+                    </div>
                 </div>
 
-                <div class="form-group">
-                    <label for="moralInnerVoiceMaxTokens">{{ "settings.maxTokens" | translate }}</label>
-                    <app-ui-input
-                        id="moralInnerVoiceMaxTokens"
-                        type="number"
-                        min="1"
-                        max="1024"
-                        formControlName="maxTokens"
-                    ></app-ui-input>
-                </div>
+                <div class="section" formGroupName="scars">
+                    <h3>🪨 {{ "moralSettings.scarsTitle" | translate }}</h3>
+                    <p class="hint">{{ "moralSettings.scarsHint" | translate }}</p>
 
-                <div class="form-group">
-                    <label for="moralInnerVoiceTemp">{{ "settings.temperature" | translate }}</label>
-                    <app-ui-input
-                        id="moralInnerVoiceTemp"
-                        type="number"
-                        step="0.1"
-                        min="0"
-                        max="2"
-                        formControlName="temperature"
-                    ></app-ui-input>
-                </div>
+                    <div class="form-group">
+                        <app-ui-checkbox formControlName="enabled">
+                            {{ "moralSettings.scarsEnable" | translate }}
+                        </app-ui-checkbox>
+                    </div>
 
-                <div class="form-group">
-                    <label for="moralInnerVoiceUndercurrent">{{ "moralSettings.innerVoiceUndercurrent" | translate }}</label>
-                    <app-ui-input
-                        id="moralInnerVoiceUndercurrent"
-                        type="number"
-                        step="0.05"
-                        min="0"
-                        max="1"
-                        formControlName="undercurrentThreshold"
-                    ></app-ui-input>
-                    <p class="hint">{{ "moralSettings.innerVoiceUndercurrentHint" | translate }}</p>
-                </div>
+                    <div class="scars-triggers" formArrayName="triggers">
+                        @for (triggerGroup of scarsTriggersArray.controls; track triggerGroup; let i = $index) {
+                            <div
+                                class="trigger-card"
+                                [formGroupName]="i"
+                            >
+                                <div class="trigger-header">
+                                    <span class="trigger-index">#{{ i + 1 }}</span>
+                                    <button
+                                        type="button"
+                                        class="trigger-remove"
+                                        (click)="removeScarTrigger(i)"
+                                    >
+                                        ✕
+                                    </button>
+                                </div>
 
-                <div class="form-group">
-                    <label for="moralInnerVoiceDesire">{{ "moralSettings.innerVoiceDesire" | translate }}</label>
-                    <app-ui-input
-                        id="moralInnerVoiceDesire"
-                        type="number"
-                        step="0.05"
-                        min="0"
-                        max="1"
-                        formControlName="desireThreshold"
-                    ></app-ui-input>
-                    <p class="hint">{{ "moralSettings.innerVoiceDesireHint" | translate }}</p>
-                </div>
+                                <div class="form-group">
+                                    <label>{{ "moralSettings.scarsName" | translate }}</label>
+                                    <app-ui-input type="text" formControlName="name"></app-ui-input>
+                                </div>
 
-                <div class="form-group">
-                    <label for="moralInnerVoiceLang">{{ "moralSettings.innerVoiceLanguage" | translate }}</label>
-                    <app-ui-input
-                        id="moralInnerVoiceLang"
-                        type="text"
-                        formControlName="language"
-                        placeholder="ru-RU"
-                    ></app-ui-input>
-                    <p class="hint">{{ "moralSettings.innerVoiceLanguageHint" | translate }}</p>
-                </div>
+                                <div class="form-group">
+                                    <label>{{ "moralSettings.scarsIntents" | translate }}</label>
+                                    <app-ui-input
+                                        type="text"
+                                        formControlName="intentsCsv"
+                                        placeholder="attempt_rename_character, lie_detected"
+                                    ></app-ui-input>
+                                    <p class="hint">{{ "moralSettings.csvHint" | translate }}</p>
+                                </div>
 
-                <div class="form-group">
-                    <label for="moralInnerVoicePrompt">{{ "moralSettings.innerVoicePrompt" | translate }}</label>
-                    <app-ui-textarea id="moralInnerVoicePrompt" [rows]="8" [autoResize]="true" formControlName="systemPrompt"></app-ui-textarea>
-                    <div class="prompt-actions">
-                        <p class="hint">{{ "moralSettings.innerVoicePromptHint" | translate }}</p>
-                        <button type="button" class="reset-button" (click)="resetPrompt('innerVoice.systemPrompt', 'moral.inner_voice.system_prompt')">
-                            {{ "moralSettings.resetPrompt" | translate }}
+                                <div class="form-group">
+                                    <label>{{ "moralSettings.scarsTones" | translate }}</label>
+                                    <app-ui-input
+                                        type="text"
+                                        formControlName="tonesCsv"
+                                        placeholder="hostile, dismissive"
+                                    ></app-ui-input>
+                                    <p class="hint">{{ "moralSettings.csvHint" | translate }}</p>
+                                </div>
+
+                                <div class="form-group">
+                                    <label>{{ "moralSettings.scarsKeywords" | translate }}</label>
+                                    <app-ui-input
+                                        type="text"
+                                        formControlName="keywordsCsv"
+                                        placeholder="rename, replace, delete"
+                                    ></app-ui-input>
+                                    <p class="hint">{{ "moralSettings.csvHint" | translate }}</p>
+                                </div>
+
+                                <div class="form-group">
+                                    <label>{{ "moralSettings.scarsPersistenceFloor" | translate }}</label>
+                                    <app-ui-input
+                                        type="number"
+                                        step="0.05"
+                                        min="0"
+                                        max="1"
+                                        formControlName="persistenceFloor"
+                                    ></app-ui-input>
+                                </div>
+
+                                <div class="form-group">
+                                    <label>{{ "moralSettings.scarsIntensityBoost" | translate }}</label>
+                                    <app-ui-input
+                                        type="number"
+                                        step="0.05"
+                                        min="0"
+                                        max="1"
+                                        formControlName="intensityBoost"
+                                    ></app-ui-input>
+                                </div>
+                            </div>
+                        }
+                    </div>
+
+                    <div class="form-group">
+                        <button type="button" class="add-trigger-btn" (click)="addScarTrigger()">
+                            ➕ {{ "moralSettings.scarsAddTrigger" | translate }}
                         </button>
                     </div>
                 </div>
-            </div>
 
-            <div class="button-row">
-                <button type="submit" [disabled]="!hasChanges()">💾 {{ "moralSettings.save" | translate }}</button>
-            </div>
-        </form>
-    </div>
-</ng-template>
+                <div class="section" formGroupName="innerVoice">
+                    <h3>💭 {{ "moralSettings.innerVoiceTitle" | translate }}</h3>
+                    <p class="hint">{{ "moralSettings.innerVoiceHint" | translate }}</p>
 
+                    <div class="form-group">
+                        <app-ui-checkbox formControlName="enabled">
+                            {{ "moralSettings.innerVoiceEnable" | translate }}
+                        </app-ui-checkbox>
+                    </div>
 
+                    <div class="form-group">
+                        <label for="moralInnerVoiceMaxTokens">{{ "settings.maxTokens" | translate }}</label>
+                        <app-ui-input
+                            id="moralInnerVoiceMaxTokens"
+                            type="number"
+                            min="1"
+                            max="1024"
+                            formControlName="maxTokens"
+                        ></app-ui-input>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="moralInnerVoiceTemp">{{ "settings.temperature" | translate }}</label>
+                        <app-ui-input
+                            id="moralInnerVoiceTemp"
+                            type="number"
+                            step="0.1"
+                            min="0"
+                            max="2"
+                            formControlName="temperature"
+                        ></app-ui-input>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="moralInnerVoiceUndercurrent">{{ "moralSettings.innerVoiceUndercurrent" | translate }}</label>
+                        <app-ui-input
+                            id="moralInnerVoiceUndercurrent"
+                            type="number"
+                            step="0.05"
+                            min="0"
+                            max="1"
+                            formControlName="undercurrentThreshold"
+                        ></app-ui-input>
+                        <p class="hint">{{ "moralSettings.innerVoiceUndercurrentHint" | translate }}</p>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="moralInnerVoiceDesire">{{ "moralSettings.innerVoiceDesire" | translate }}</label>
+                        <app-ui-input
+                            id="moralInnerVoiceDesire"
+                            type="number"
+                            step="0.05"
+                            min="0"
+                            max="1"
+                            formControlName="desireThreshold"
+                        ></app-ui-input>
+                        <p class="hint">{{ "moralSettings.innerVoiceDesireHint" | translate }}</p>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="moralInnerVoiceLang">{{ "moralSettings.innerVoiceLanguage" | translate }}</label>
+                        <app-ui-input
+                            id="moralInnerVoiceLang"
+                            type="text"
+                            formControlName="language"
+                            placeholder="ru-RU"
+                        ></app-ui-input>
+                        <p class="hint">{{ "moralSettings.innerVoiceLanguageHint" | translate }}</p>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="moralInnerVoicePrompt">{{ "moralSettings.innerVoicePrompt" | translate }}</label>
+                        <app-ui-textarea id="moralInnerVoicePrompt" [rows]="8" [autoResize]="true" formControlName="systemPrompt"></app-ui-textarea>
+                        <div class="prompt-actions">
+                            <p class="hint">{{ "moralSettings.innerVoicePromptHint" | translate }}</p>
+                            <button type="button" class="reset-button" (click)="resetPrompt('innerVoice.systemPrompt', 'moral.inner_voice.system_prompt')">
+                                {{ "moralSettings.resetPrompt" | translate }}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="button-row">
+                    <button type="submit" [disabled]="!hasChanges()">💾 {{ "moralSettings.save" | translate }}</button>
+                </div>
+            </form>
+        </div>
+    }

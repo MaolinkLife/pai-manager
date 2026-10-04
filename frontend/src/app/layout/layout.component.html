@@ -7,59 +7,80 @@
                 <app-custom-svg name="chat-bubble" [size]="20"></app-custom-svg>
             </button>
 
-            <button *ngIf="!anonymousMode" class="icon-button" [routerLink]="['memory']" routerLinkActive="active" [attr.data-tooltip]="t('navigation.memory')" [attr.aria-label]="t('navigation.memory')">
-                <app-custom-svg name="file" [size]="20"></app-custom-svg>
-            </button>
+            @if (!anonymousMode) {
+                <button class="icon-button" [routerLink]="['memory']" routerLinkActive="active" [attr.data-tooltip]="t('navigation.memory')" [attr.aria-label]="t('navigation.memory')">
+                    <app-custom-svg name="file" [size]="20"></app-custom-svg>
+                </button>
+            }
 
-            <button *ngIf="!anonymousMode" class="icon-button" [routerLink]="['library']" routerLinkActive="active" [attr.data-tooltip]="t('navigation.library')" [attr.aria-label]="t('navigation.library')">
-                <app-custom-svg name="books" [size]="20"></app-custom-svg>
-            </button>
+            @if (!anonymousMode) {
+                <button class="icon-button" [routerLink]="['library']" routerLinkActive="active" [attr.data-tooltip]="t('navigation.library')" [attr.aria-label]="t('navigation.library')">
+                    <app-custom-svg name="books" [size]="20"></app-custom-svg>
+                </button>
+            }
 
-            <button *ngIf="!anonymousMode" class="icon-button" [routerLink]="['sandbox']" routerLinkActive="active" [attr.data-tooltip]="t('navigation.sandbox')" [attr.aria-label]="t('navigation.sandbox')">
-                <app-custom-svg name="settings" [size]="20"></app-custom-svg>
-            </button>
+            @if (!anonymousMode) {
+                <button class="icon-button" [routerLink]="['sandbox']" routerLinkActive="active" [attr.data-tooltip]="t('navigation.sandbox')" [attr.aria-label]="t('navigation.sandbox')">
+                    <app-custom-svg name="settings" [size]="20"></app-custom-svg>
+                </button>
+            }
 
-            <button *ngIf="!anonymousMode" class="icon-button" [routerLink]="['matrix']" routerLinkActive="active" [attr.data-tooltip]="t('navigation.matrix')" [attr.aria-label]="t('navigation.matrix')">
-                <app-custom-svg name="history" [size]="20"></app-custom-svg>
-            </button>
+            @if (!anonymousMode) {
+                <button class="icon-button" [routerLink]="['matrix']" routerLinkActive="active" [attr.data-tooltip]="t('navigation.matrix')" [attr.aria-label]="t('navigation.matrix')">
+                    <app-custom-svg name="history" [size]="20"></app-custom-svg>
+                </button>
+            }
 
-            <button *ngIf="!anonymousMode" class="icon-button" [routerLink]="['synthesis']" routerLinkActive="active" [attr.data-tooltip]="t('navigation.synthesis')" [attr.aria-label]="t('navigation.synthesis')">
-                <app-custom-svg name="synthesis" [size]="20"></app-custom-svg>
-            </button>
+            @if (!anonymousMode) {
+                <button class="icon-button" [routerLink]="['synthesis']" routerLinkActive="active" [attr.data-tooltip]="t('navigation.synthesis')" [attr.aria-label]="t('navigation.synthesis')">
+                    <app-custom-svg name="synthesis" [size]="20"></app-custom-svg>
+                </button>
+            }
 
-            <button *ngIf="!anonymousMode && uiFlags.diary" class="icon-button" [routerLink]="['diary']" routerLinkActive="active" [attr.data-tooltip]="t('navigation.diary')" [attr.aria-label]="t('navigation.diary')">
-                <app-custom-svg name="diary" [size]="20"></app-custom-svg>
-            </button>
+            @if (!anonymousMode && uiFlags.diary) {
+                <button class="icon-button" [routerLink]="['diary']" routerLinkActive="active" [attr.data-tooltip]="t('navigation.diary')" [attr.aria-label]="t('navigation.diary')">
+                    <app-custom-svg name="diary" [size]="20"></app-custom-svg>
+                </button>
+            }
 
-            <button *ngIf="!anonymousMode && uiFlags.audit" class="icon-button" [routerLink]="['audit']" routerLinkActive="active" [attr.data-tooltip]="t('navigation.audit')" [attr.aria-label]="t('navigation.audit')">
-                <app-custom-svg name="audit" [size]="20"></app-custom-svg>
-            </button>
+            @if (!anonymousMode && uiFlags.audit) {
+                <button class="icon-button" [routerLink]="['audit']" routerLinkActive="active" [attr.data-tooltip]="t('navigation.audit')" [attr.aria-label]="t('navigation.audit')">
+                    <app-custom-svg name="audit" [size]="20"></app-custom-svg>
+                </button>
+            }
 
-            <button *ngIf="!anonymousMode && uiFlags.tasks" class="icon-button" [routerLink]="['tasks']" routerLinkActive="active" [attr.data-tooltip]="t('navigation.tasks')" [attr.aria-label]="t('navigation.tasks')">
-                <app-custom-svg name="alarm" [size]="20"></app-custom-svg>
-            </button>
+            @if (!anonymousMode && uiFlags.tasks) {
+                <button class="icon-button" [routerLink]="['tasks']" routerLinkActive="active" [attr.data-tooltip]="t('navigation.tasks')" [attr.aria-label]="t('navigation.tasks')">
+                    <app-custom-svg name="alarm" [size]="20"></app-custom-svg>
+                </button>
+            }
 
             <!-- Debug/Bug Icon -->
-            <button *ngIf="!anonymousMode" class="icon-button" [routerLink]="['debug']" routerLinkActive="active" [attr.data-tooltip]="t('navigation.debug')" [attr.aria-label]="t('navigation.debug')">
-                <app-custom-svg name="bug" [size]="20"></app-custom-svg>
-            </button>
+            @if (!anonymousMode) {
+                <button class="icon-button" [routerLink]="['debug']" routerLinkActive="active" [attr.data-tooltip]="t('navigation.debug')" [attr.aria-label]="t('navigation.debug')">
+                    <app-custom-svg name="bug" [size]="20"></app-custom-svg>
+                </button>
+            }
 
-            <button *ngIf="!anonymousMode && canManageSettings()" class="icon-button" [routerLink]="['settings']" routerLinkActive="active" [attr.data-tooltip]="t('navigation.settings')" [attr.aria-label]="t('navigation.settings')">
-                <app-custom-svg name="tools" [size]="20"></app-custom-svg>
-            </button>
+            @if (!anonymousMode && canManageSettings()) {
+                <button class="icon-button" [routerLink]="['settings']" routerLinkActive="active" [attr.data-tooltip]="t('navigation.settings')" [attr.aria-label]="t('navigation.settings')">
+                    <app-custom-svg name="tools" [size]="20"></app-custom-svg>
+                </button>
+            }
         </div>
 
         <div class="bottom-button">
-            <button
-                *ngIf="!anonymousMode"
-                class="icon-button secondary"
-                [class.active]="entityPanelOpen"
-                (click)="toggleEntityPanel()"
-                [attr.data-tooltip]="t('navigation.state')"
-                [attr.aria-label]="t('navigation.state')"
-            >
-                <app-custom-svg name="neuralink" [size]="20"></app-custom-svg>
-            </button>
+            @if (!anonymousMode) {
+                <button
+                    class="icon-button secondary"
+                    [class.active]="entityPanelOpen"
+                    (click)="toggleEntityPanel()"
+                    [attr.data-tooltip]="t('navigation.state')"
+                    [attr.aria-label]="t('navigation.state')"
+                >
+                    <app-custom-svg name="neuralink" [size]="20"></app-custom-svg>
+                </button>
+            }
 
             <div class="profile-wrap">
                 <button
@@ -71,22 +92,23 @@
                     <span class="profile-initials">{{ getProfileInitials() }}</span>
                 </button>
 
-                <div class="profile-menu" *ngIf="profileMenuOpen">
-                    <ng-container *ngIf="!anonymousMode; else anonymousProfile">
-                        <div class="profile-line profile-name">{{ currentUser?.name || currentUser?.login || currentUser?.email }}</div>
-                        <div class="profile-line profile-meta">{{ currentUser?.role }} · {{ currentUser?.email }}</div>
-                        <app-ui-button variant="secondary" size="sm" [fullWidth]="true" (pressed)="logout()">
-                            {{ "auth.logout" | translate }}
-                        </app-ui-button>
-                    </ng-container>
-                    <ng-template #anonymousProfile>
-                        <div class="profile-line profile-name">{{ "auth.anonymousMode" | translate }}</div>
-                        <div class="profile-line profile-meta">{{ "auth.anonymousModeHint" | translate }}</div>
-                        <app-ui-button variant="secondary" size="sm" [fullWidth]="true" (pressed)="goToAuth()">
-                            {{ "auth.signIn" | translate }}
-                        </app-ui-button>
-                    </ng-template>
-                </div>
+                @if (profileMenuOpen) {
+                    <div class="profile-menu">
+                        @if (!anonymousMode) {
+                            <div class="profile-line profile-name">{{ currentUser?.name || currentUser?.login || currentUser?.email }}</div>
+                            <div class="profile-line profile-meta">{{ currentUser?.role }} · {{ currentUser?.email }}</div>
+                            <app-ui-button variant="secondary" size="sm" [fullWidth]="true" (pressed)="logout()">
+                                {{ "auth.logout" | translate }}
+                            </app-ui-button>
+                        } @else {
+                            <div class="profile-line profile-name">{{ "auth.anonymousMode" | translate }}</div>
+                            <div class="profile-line profile-meta">{{ "auth.anonymousModeHint" | translate }}</div>
+                            <app-ui-button variant="secondary" size="sm" [fullWidth]="true" (pressed)="goToAuth()">
+                                {{ "auth.signIn" | translate }}
+                            </app-ui-button>
+                        }
+                    </div>
+                }
             </div>
         </div>
     </aside>
@@ -96,16 +118,17 @@
         <header class="header">
             <div class="title">{{ isChatRoute ? 'Chat' : 'PAI' }}</div>
             <div class="header-actions">
-                <button
-                    *ngIf="isChatRoute && canManageSettings()"
-                    type="button"
-                    class="header-icon-btn"
-                    [class.active]="generationPanelOpen"
-                    (click)="toggleGenerationPanel()"
-                    title="Generation settings"
-                >
-                    <app-custom-svg name="settings" [size]="20"></app-custom-svg>
-                </button>
+                @if (isChatRoute && canManageSettings()) {
+                    <button
+                        type="button"
+                        class="header-icon-btn"
+                        [class.active]="generationPanelOpen"
+                        (click)="toggleGenerationPanel()"
+                        title="Generation settings"
+                    >
+                        <app-custom-svg name="settings" [size]="20"></app-custom-svg>
+                    </button>
+                }
             </div>
         </header>
 
@@ -147,21 +170,22 @@
                 <div class="setting-block">
                     <div class="setting-label-row">
                         <label for="quick-model">Model</label>
-                        <span
-                            *ngIf="generationProvider === 'ollama'"
-                            class="model-runtime-status"
-                            [class.loading]="ollamaRuntimeState === 'loading'"
-                            [class.loaded]="ollamaRuntimeState === 'loaded'"
-                            [class.idle]="ollamaRuntimeState === 'idle'"
-                            [class.unknown]="ollamaRuntimeState === 'unknown'"
-                            [title]="ollamaRuntimeLabel"
-                            [attr.aria-label]="ollamaRuntimeLabel"
-                        >
-                            <span class="model-runtime-lamp"></span>
-                            <span class="model-runtime-text">{{ ollamaRuntimeBadgeText }}</span>
-                        </span>
+                        @if (generationProvider === 'ollama') {
+                            <span
+                                class="model-runtime-status"
+                                [class.loading]="ollamaRuntimeState === 'loading'"
+                                [class.loaded]="ollamaRuntimeState === 'loaded'"
+                                [class.idle]="ollamaRuntimeState === 'idle'"
+                                [class.unknown]="ollamaRuntimeState === 'unknown'"
+                                [title]="ollamaRuntimeLabel"
+                                [attr.aria-label]="ollamaRuntimeLabel"
+                            >
+                                <span class="model-runtime-lamp"></span>
+                                <span class="model-runtime-text">{{ ollamaRuntimeBadgeText }}</span>
+                            </span>
+                        }
                     </div>
-                    <ng-container *ngIf="generationProvider === 'ollama'; else textModelInput">
+                    @if (generationProvider === 'ollama') {
                         <div class="model-control-row">
                             <app-ui-select
                                 id="quick-model"
@@ -182,15 +206,14 @@
                                 <app-custom-svg name="unload" [size]="17"></app-custom-svg>
                             </button>
                         </div>
-                    </ng-container>
-                    <ng-template #textModelInput>
+                    } @else {
                         <app-ui-input
                             id="quick-model"
                             type="text"
                             [disabled]="generationPanelLoading || generationPanelSaving"
                             [(ngModel)]="generationModel"
                         ></app-ui-input>
-                    </ng-template>
+                    }
                 </div>
 
                 <div class="setting-block">
@@ -267,11 +290,12 @@
             </div>
         </aside>
 
-        <div
-            class="chat-settings-overlay"
-            *ngIf="generationPanelOpen"
-            (click)="closeGenerationPanel()"
-        ></div>
+        @if (generationPanelOpen) {
+            <div
+                class="chat-settings-overlay"
+                (click)="closeGenerationPanel()"
+            ></div>
+        }
 
         <main
             class="main-area"

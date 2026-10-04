@@ -15,207 +15,209 @@
         </div>
     </div>
 
-    <div class="modal" *ngIf="showDlModal" (click)="closeDlModal()">
-        <div class="modal-content" (click)="$event.stopPropagation()">
-            <div class="modal-header">
-                <h3>{{ "coreSettings.dlModalTitle" | translate }}</h3>
-                <button class="close-btn" (click)="closeDlModal()">
-                    &times;
-                </button>
-            </div>
+    @if (showDlModal) {
+        <div class="modal" (click)="closeDlModal()">
+            <div class="modal-content" (click)="$event.stopPropagation()">
+                <div class="modal-header">
+                    <h3>{{ "coreSettings.dlModalTitle" | translate }}</h3>
+                    <button class="close-btn" (click)="closeDlModal()">
+                        &times;
+                    </button>
+                </div>
 
-            <div class="modal-body">
-                <form [formGroup]="dlForm" class="settings-form">
-                    <div class="section">
-                        <h4>{{ "coreSettings.routingMode" | translate }}</h4>
-                        <div class="form-grid">
-                            <div class="form-group">
-                                <label>{{ "coreSettings.mode" | translate }}</label>
-                                <app-ui-select
-                                    formControlName="mode"
-                                    [options]="modeOptions"
-                                ></app-ui-select>
-                            </div>
-
-                            <div class="form-group">
-                                <label>{{ "coreSettings.maxSteps" | translate }}</label>
-                                <app-ui-input
-                                    type="number"
-                                    formControlName="maxSteps"
-                                ></app-ui-input>
-                            </div>
-                        </div>
-
-                        <div class="toggle-list">
-                            <app-ui-checkbox formControlName="releaseAfterUse">
-                                {{ "settings.releaseAfterUse" | translate }}
-                            </app-ui-checkbox>
-                        </div>
-
-                        <p class="section-hint">
-                            {{ "coreSettings.routingModeHint" | translate }}
-                        </p>
-                    </div>
-
-                    <div class="section" *ngIf="dlForm.get('mode')?.value === 'llm'">
-                        <h4>{{ "coreSettings.llmProvider" | translate }}</h4>
-                        <div class="form-grid">
-                            <div class="form-group">
-                                <label>{{ "coreSettings.provider" | translate }}</label>
-                                <app-ui-select
-                                    formControlName="activeProvider"
-                                    [options]="providerOptions"
-                                ></app-ui-select>
-                            </div>
-
-                            <div class="form-group" formGroupName="providers">
-                                <ng-container formGroupName="ollama">
-                                    <label>{{ "coreSettings.model" | translate }}</label>
+                <div class="modal-body">
+                    <form [formGroup]="dlForm" class="settings-form">
+                        <div class="section">
+                            <h4>{{ "coreSettings.routingMode" | translate }}</h4>
+                            <div class="form-grid">
+                                <div class="form-group">
+                                    <label>{{ "coreSettings.mode" | translate }}</label>
                                     <app-ui-select
-                                        formControlName="model"
-                                        [options]="ollamaModelOptions"
+                                        formControlName="mode"
+                                        [options]="modeOptions"
                                     ></app-ui-select>
-                                </ng-container>
-                            </div>
-                        </div>
-
-                        <div class="form-grid" formGroupName="providers">
-                            <ng-container formGroupName="ollama">
-                                <div class="form-group">
-                                    <label>{{ "coreSettings.temperature" | translate }}</label>
-                                    <app-ui-input
-                                        type="number"
-                                        formControlName="temperature"
-                                    ></app-ui-input>
                                 </div>
 
                                 <div class="form-group">
-                                    <label>{{ "coreSettings.maxTokens" | translate }}</label>
+                                    <label>{{ "coreSettings.maxSteps" | translate }}</label>
                                     <app-ui-input
                                         type="number"
-                                        formControlName="maxTokens"
+                                        formControlName="maxSteps"
                                     ></app-ui-input>
                                 </div>
-                            </ng-container>
-                        </div>
-
-                        <div class="router-capabilities">
-                            <label>{{ "coreSettings.routerCapabilities" | translate }}</label>
-                            <div class="router-capabilities__row">
-                                <app-model-capability-chips
-                                    *ngIf="routerModelEntry; else routerModelNotIndexed"
-                                    [entry]="routerModelEntry"
-                                ></app-model-capability-chips>
-                                <ng-template #routerModelNotIndexed>
-                                    <span class="router-capabilities__none">
-                                        {{ "coreSettings.routerCapabilitiesNotIndexed" | translate }}
-                                    </span>
-                                </ng-template>
-                                <a class="router-capabilities__edit" routerLink="/settings/models">
-                                    {{ "coreSettings.routerCapabilitiesEdit" | translate }}
-                                </a>
                             </div>
-                            <p class="section-hint">{{ "coreSettings.routerCapabilitiesHint" | translate }}</p>
-                        </div>
 
-                        <div class="form-group prompt-group">
-                            <label for="dlOrchestratorPrompt">{{ "coreSettings.orchestratorPrompt" | translate }}</label>
-                            <app-ui-textarea id="dlOrchestratorPrompt" [rows]="10" [autoResize]="true" formControlName="orchestratorPrompt"></app-ui-textarea>
-                            <div class="prompt-actions">
-                                <p class="section-hint">{{ "coreSettings.orchestratorPromptHint" | translate }}</p>
-                                <button type="button" class="reset-button" (click)="resetPrompt('orchestratorPrompt', 'decision_layer.orchestrator_prompt')">
-                                    {{ "coreSettings.resetPrompt" | translate }}
-                                </button>
+                            <div class="toggle-list">
+                                <app-ui-checkbox formControlName="releaseAfterUse">
+                                    {{ "settings.releaseAfterUse" | translate }}
+                                </app-ui-checkbox>
                             </div>
-                        </div>
-                    </div>
 
-                    <div class="button-row">
-                        <app-ui-button
-                            variant="secondary"
-                            (pressed)="closeDlModal()"
-                        >
-                            {{ "general.cancel" | translate }}
-                        </app-ui-button>
-                        <app-ui-button
-                            [disabled]="!hasChanges() || dlForm.invalid"
-                            (pressed)="saveChanges()"
-                        >
-                            {{ "coreSettings.saveDlSettings" | translate }}
-                        </app-ui-button>
-                    </div>
-                </form>
+                            <p class="section-hint">
+                                {{ "coreSettings.routingModeHint" | translate }}
+                            </p>
+                        </div>
+
+                        @if (dlForm.get('mode')?.value === 'llm') {
+                            <div class="section">
+                                <h4>{{ "coreSettings.llmProvider" | translate }}</h4>
+                                <div class="form-grid">
+                                    <div class="form-group">
+                                        <label>{{ "coreSettings.provider" | translate }}</label>
+                                        <app-ui-select
+                                            formControlName="activeProvider"
+                                            [options]="providerOptions"
+                                        ></app-ui-select>
+                                    </div>
+
+                                    <div class="form-group" formGroupName="providers">
+                                        <ng-container formGroupName="ollama">
+                                            <label>{{ "coreSettings.model" | translate }}</label>
+                                            <app-ui-select
+                                                formControlName="model"
+                                                [options]="ollamaModelOptions"
+                                            ></app-ui-select>
+                                        </ng-container>
+                                    </div>
+                                </div>
+
+                                <div class="form-grid" formGroupName="providers">
+                                    <ng-container formGroupName="ollama">
+                                        <div class="form-group">
+                                            <label>{{ "coreSettings.temperature" | translate }}</label>
+                                            <app-ui-input
+                                                type="number"
+                                                formControlName="temperature"
+                                            ></app-ui-input>
+                                        </div>
+
+                                        <div class="form-group">
+                                            <label>{{ "coreSettings.maxTokens" | translate }}</label>
+                                            <app-ui-input
+                                                type="number"
+                                                formControlName="maxTokens"
+                                            ></app-ui-input>
+                                        </div>
+                                    </ng-container>
+                                </div>
+
+                                <div class="router-capabilities">
+                                    <label>{{ "coreSettings.routerCapabilities" | translate }}</label>
+                                    <div class="router-capabilities__row">
+                                        @if (routerModelEntry) {
+                                            <app-model-capability-chips [entry]="routerModelEntry"></app-model-capability-chips>
+                                        } @else {
+                                            <span class="router-capabilities__none">
+                                                {{ "coreSettings.routerCapabilitiesNotIndexed" | translate }}
+                                            </span>
+                                        }
+                                        <a class="router-capabilities__edit" routerLink="/settings/models">
+                                            {{ "coreSettings.routerCapabilitiesEdit" | translate }}
+                                        </a>
+                                    </div>
+                                    <p class="section-hint">{{ "coreSettings.routerCapabilitiesHint" | translate }}</p>
+                                </div>
+
+                                <div class="form-group prompt-group">
+                                    <label for="dlOrchestratorPrompt">{{ "coreSettings.orchestratorPrompt" | translate }}</label>
+                                    <app-ui-textarea id="dlOrchestratorPrompt" [rows]="10" [autoResize]="true" formControlName="orchestratorPrompt"></app-ui-textarea>
+                                    <div class="prompt-actions">
+                                        <p class="section-hint">{{ "coreSettings.orchestratorPromptHint" | translate }}</p>
+                                        <button type="button" class="reset-button" (click)="resetPrompt('orchestratorPrompt', 'decision_layer.orchestrator_prompt')">
+                                            {{ "coreSettings.resetPrompt" | translate }}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+
+                        <div class="button-row">
+                            <app-ui-button
+                                variant="secondary"
+                                (pressed)="closeDlModal()"
+                            >
+                                {{ "general.cancel" | translate }}
+                            </app-ui-button>
+                            <app-ui-button
+                                [disabled]="!hasChanges() || dlForm.invalid"
+                                (pressed)="saveChanges()"
+                            >
+                                {{ "coreSettings.saveDlSettings" | translate }}
+                            </app-ui-button>
+                        </div>
+                    </form>
+                </div>
             </div>
         </div>
-    </div>
+    }
 
-    <div class="modal" *ngIf="showInstructorModal" (click)="closeInstructorModal()">
-        <div class="modal-content instructor-modal" (click)="$event.stopPropagation()">
-            <div class="modal-header">
-                <h3>{{ "coreSettings.instructorModalTitle" | translate }}</h3>
-                <button class="close-btn" (click)="closeInstructorModal()">
-                    &times;
-                </button>
-            </div>
+    @if (showInstructorModal) {
+        <div class="modal" (click)="closeInstructorModal()">
+            <div class="modal-content instructor-modal" (click)="$event.stopPropagation()">
+                <div class="modal-header">
+                    <h3>{{ "coreSettings.instructorModalTitle" | translate }}</h3>
+                    <button class="close-btn" (click)="closeInstructorModal()">
+                        &times;
+                    </button>
+                </div>
 
-            <div class="modal-body">
-                <form [formGroup]="dlForm" class="settings-form">
-                    <div class="section" formGroupName="instructor">
-                        <h4>{{ "coreSettings.instructorBuildSchema" | translate }}</h4>
-                        <p class="section-hint">
-                            {{ "coreSettings.instructorBuildSchemaHint" | translate }}
-                        </p>
+                <div class="modal-body">
+                    <form [formGroup]="dlForm" class="settings-form">
+                        <div class="section" formGroupName="instructor">
+                            <h4>{{ "coreSettings.instructorBuildSchema" | translate }}</h4>
+                            <p class="section-hint">
+                                {{ "coreSettings.instructorBuildSchemaHint" | translate }}
+                            </p>
 
-                        <div class="form-group">
-                            <app-ui-textarea
-                                formControlName="buildSchema"
-                                [rows]="14"
-                            ></app-ui-textarea>
-                            <div class="prompt-actions">
-                                <span></span>
-                                <button type="button" class="reset-button" (click)="resetPrompt('instructor.buildSchema', 'decision_layer.instructor.build_schema')">
-                                    {{ "coreSettings.resetPrompt" | translate }}
-                                </button>
+                            <div class="form-group">
+                                <app-ui-textarea
+                                    formControlName="buildSchema"
+                                    [rows]="14"
+                                ></app-ui-textarea>
+                                <div class="prompt-actions">
+                                    <span></span>
+                                    <button type="button" class="reset-button" (click)="resetPrompt('instructor.buildSchema', 'decision_layer.instructor.build_schema')">
+                                        {{ "coreSettings.resetPrompt" | translate }}
+                                    </button>
+                                </div>
                             </div>
                         </div>
-                    </div>
 
-                    <div class="section" formGroupName="instructor">
-                        <h4>{{ "coreSettings.instructorSystemData" | translate }}</h4>
-                        <div class="toggle-list">
-                            <app-ui-checkbox formControlName="includeDatetime">
-                                {{ "coreSettings.includeDatetime" | translate }}
-                            </app-ui-checkbox>
-                            <app-ui-checkbox formControlName="includeGeolocation">
-                                {{ "coreSettings.includeGeolocation" | translate }}
-                            </app-ui-checkbox>
-                            <app-ui-checkbox formControlName="excludeDisabledModules">
-                                {{ "coreSettings.excludeDisabledModules" | translate }}
-                            </app-ui-checkbox>
+                        <div class="section" formGroupName="instructor">
+                            <h4>{{ "coreSettings.instructorSystemData" | translate }}</h4>
+                            <div class="toggle-list">
+                                <app-ui-checkbox formControlName="includeDatetime">
+                                    {{ "coreSettings.includeDatetime" | translate }}
+                                </app-ui-checkbox>
+                                <app-ui-checkbox formControlName="includeGeolocation">
+                                    {{ "coreSettings.includeGeolocation" | translate }}
+                                </app-ui-checkbox>
+                                <app-ui-checkbox formControlName="excludeDisabledModules">
+                                    {{ "coreSettings.excludeDisabledModules" | translate }}
+                                </app-ui-checkbox>
+                            </div>
+                            <p class="section-hint">
+                                {{ "coreSettings.excludeDisabledModulesHint" | translate }}
+                            </p>
                         </div>
-                        <p class="section-hint">
-                            {{ "coreSettings.excludeDisabledModulesHint" | translate }}
-                        </p>
-                    </div>
 
-                    <div class="button-row">
-                        <app-ui-button
-                            variant="secondary"
-                            (pressed)="closeInstructorModal()"
-                        >
-                            {{ "general.cancel" | translate }}
-                        </app-ui-button>
-                        <app-ui-button
-                            [disabled]="!hasChanges() || dlForm.invalid"
-                            (pressed)="saveChanges()"
-                        >
-                            {{ "coreSettings.saveInstructorSettings" | translate }}
-                        </app-ui-button>
-                    </div>
-                </form>
+                        <div class="button-row">
+                            <app-ui-button
+                                variant="secondary"
+                                (pressed)="closeInstructorModal()"
+                            >
+                                {{ "general.cancel" | translate }}
+                            </app-ui-button>
+                            <app-ui-button
+                                [disabled]="!hasChanges() || dlForm.invalid"
+                                (pressed)="saveChanges()"
+                            >
+                                {{ "coreSettings.saveInstructorSettings" | translate }}
+                            </app-ui-button>
+                        </div>
+                    </form>
+                </div>
             </div>
         </div>
-    </div>
+    }
 </div>
-
-
