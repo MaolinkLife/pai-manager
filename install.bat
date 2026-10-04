@@ -1,28 +1,36 @@
 @echo off
 echo ----------------------------------
-echo Installing Z-Waif dependencies
+echo Installing PAI dependencies
 echo ----------------------------------
+
+echo.
+echo check Node.js...
+where node >nul 2>&1
+if errorlevel 1 (
+    echo [ERROR] Node.js was not found. The frontend needs Node.js 20.19+, 22.12+ or 24+.
+    pause
+    exit /b 1
+)
+:: Angular 21 runs on Node.js ^20.19, ^22.12 or 24 and later
+node -e "const [a, b] = process.versions.node.split('.').map(Number); process.exit((a === 20 && b >= 19) || (a === 22 && b >= 12) || a >= 24 ? 0 : 1)"
+if errorlevel 1 (
+    for /f %%v in ('node -v') do echo [ERROR] Node.js %%v is not supported. The frontend needs Node.js 20.19+, 22.12+ or 24+.
+    pause
+    exit /b 1
+)
 
 echo.
 echo install frontend...
 cd frontend
 
-:: Проверяем, есть ли node_modules
-if not exist node_modules (
-    echo node_modules не найден, выполняю npm install...
-    call npm install
-) else (
-    echo node_modules найден
-)
-
-:: Проверяем наличие @angular-devkit/build-angular
-echo Проверяю наличие @angular-devkit/build-angular...
-call npm ls @angular-devkit/build-angular >nul 2>&1
-if %errorlevel% neq 0 (
-    echo Устанавливаю @angular-devkit/build-angular...
-    call npm install --save-dev @angular-devkit/build-angular
-) else (
-    echo @angular-devkit/build-angular уже установлен
+:: Always sync node_modules with package-lock.json: after an update the
+:: existing node_modules still holds the packages of the previous version
+call npm install
+if errorlevel 1 (
+    echo [ERROR] npm install failed, see the messages above.
+    cd ..
+    pause
+    exit /b 1
 )
 
 cd ..

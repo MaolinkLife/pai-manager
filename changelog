@@ -35,7 +35,14 @@ version: 0.9.4
 - Memory, diary and characters
   - A day summary belongs to its character and is read only for it; building summaries on start is a setting in the RAG tab. The diary screen shows every entry, page by page.
   - Deleting a character archives its data first; the dialog shows what goes into the archive and asks for the name. The create character button is released after an error.
+- Frontend toolchain
+  - Angular 18, which no longer gets security fixes, is now Angular 21 (through 19 and 20 with the official migrations), TypeScript 5.9. The frontend now needs Node.js 20.19+, 22.12+ or 24+.
+  - Templates use the built-in control flow (`@if`, `@for`, `@switch`) instead of the deprecated `*ngIf`, `*ngFor` and `ngSwitch`. Angular 21's stricter template and host listener checks found three handlers declared with the wrong types and two needless optional chains; all fixed.
+  - The build runs on the application builder of `@angular/build`: esbuild for the build, Vite for the dev server, which still proxies `/api` and the chat WebSocket. Builds are about three times faster, and webpack-dev-server with its open advisories is gone.
+  - Unit tests run on Vitest in Node instead of Karma and Jasmine, without a browser.
+  - Known vulnerabilities in the frontend packages go from 86 to 0: updates within the allowed ranges, the Angular upgrade, the new builder, an npm override for `piscina` (5.3.2 until `@angular/build` ships it) and the move off Karma.
 - Internals
+  - `install.bat` checks the Node.js version first and stops with the supported versions named, and always runs `npm install`, so an update brings the frontend packages up to date; before, an existing `node_modules` was left as it was. It no longer installs `@angular-devkit/build-angular` on its own.
   - `launch.bat` and `install.bat` use only the Python of `backend\venv`; `run.py` refuses to start PAI on any other interpreter and says why.
   - diffusers is pinned to a tested commit, with `safetensors==0.8.0rc0` that it requires; an unpinned install drifted between environments and broke checkpoints.
   - Contour tests run a whole turn on a throwaway storage tree (`PAI_STORAGE_DIR`), covering memory and every emotion of the pool; four memory tests fail on purpose and mark behaviour not built yet. The suite no longer depends on the working directory or on chance; test-only dependencies live in `requirements-dev.txt`.
