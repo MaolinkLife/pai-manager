@@ -1,5 +1,5 @@
 <div class="settings-wrapper">
-    <ng-container *ngIf="isLoading$ | async; else formContent">
+    @if (isLoading$ | async) {
         <div class="settings-form">
             <h2><app-skeleton height="2rem" width="180px"></app-skeleton></h2>
 
@@ -49,9 +49,7 @@
                 <app-skeleton height="2.5rem" width="140px"></app-skeleton>
             </div>
         </div>
-    </ng-container>
-
-    <ng-template #formContent>
+    } @else {
         <form
             [formGroup]="visionForm"
             (ngSubmit)="saveChanges()"
@@ -107,63 +105,70 @@
                 </div>
             </div>
 
-            <div class="section provider-settings" formGroupName="visionModules" *ngIf="activeProvider && currentProviderGroup">
-                <h3>
-                    {{ "settings.providerSettings" | translate }}:
-                    {{ getProviderLabel(activeProvider) }}
-                </h3>
-                <div [formGroupName]="activeProvider">
-                    <ng-container *ngFor="let field of getProviderFields(activeProvider)">
-                        <div class="form-group" *ngIf="field.type === 'boolean'">
-                            <label class="checkbox">
-                                <input type="checkbox" [formControlName]="field.key" />
-                                {{ field.label }}
-                            </label>
-                        </div>
-                        <div class="form-group" *ngIf="field.type !== 'boolean'">
-                            <label
-                                [attr.for]="activeProvider + '-' + field.key"
-                            >
-                                {{ field.label }}
-                            </label>
-                            <ng-container *ngIf="activeProvider === 'ollama_vision' && field.key === 'model'; else standardProviderField">
-                                <div class="monitor-selection">
-                                    <app-ui-select
-                                        class="provider-input"
-                                        [id]="activeProvider + '-' + field.key"
-                                        [formControlName]="field.key"
-                                        [options]="ollamaModelOptions"
-                                    ></app-ui-select>
-                                    <button
-                                        type="button"
-                                        class="select-monitor-btn"
-                                        (click)="refreshOllamaModels()"
-                                        [disabled]="isLoadingOllamaModels"
-                                    >
-                                        {{ isLoadingOllamaModels ? ('settings.loading' | translate) : ('settings.refreshModels' | translate) }}
-                                    </button>
+            @if (activeProvider && currentProviderGroup) {
+                <div class="section provider-settings" formGroupName="visionModules">
+                    <h3>
+                        {{ "settings.providerSettings" | translate }}:
+                        {{ getProviderLabel(activeProvider) }}
+                    </h3>
+                    <div [formGroupName]="activeProvider">
+                        @for (field of getProviderFields(activeProvider); track field) {
+                            @if (field.type === 'boolean') {
+                                <div class="form-group">
+                                    <label class="checkbox">
+                                        <input type="checkbox" [formControlName]="field.key" />
+                                        {{ field.label }}
+                                    </label>
                                 </div>
-                            </ng-container>
-                            <ng-template #standardProviderField>
-                            <app-ui-input
-                                *ngIf="field.type === 'number'"
-                                type="number"
-                                class="provider-input"
-                                [id]="activeProvider + '-' + field.key"
-                                [formControlName]="field.key"
-                            ></app-ui-input>
-                            <app-ui-input
-                                *ngIf="field.type === 'text'"
-                                type="text"
-                                class="provider-input"
-                                [id]="activeProvider + '-' + field.key"
-                                [formControlName]="field.key"
-                            ></app-ui-input>
-                            </ng-template>
-                        </div>
-                    </ng-container>
+                            }
+                            @if (field.type !== 'boolean') {
+                                <div class="form-group">
+                                    <label
+                                        [attr.for]="activeProvider + '-' + field.key"
+                                    >
+                                        {{ field.label }}
+                                    </label>
+                                    @if (activeProvider === 'ollama_vision' && field.key === 'model') {
+                                        <div class="monitor-selection">
+                                            <app-ui-select
+                                                class="provider-input"
+                                                [id]="activeProvider + '-' + field.key"
+                                                [formControlName]="field.key"
+                                                [options]="ollamaModelOptions"
+                                            ></app-ui-select>
+                                            <button
+                                                type="button"
+                                                class="select-monitor-btn"
+                                                (click)="refreshOllamaModels()"
+                                                [disabled]="isLoadingOllamaModels"
+                                            >
+                                                {{ isLoadingOllamaModels ? ('settings.loading' | translate) : ('settings.refreshModels' | translate) }}
+                                            </button>
+                                        </div>
+                                    } @else {
+                                        @if (field.type === 'number') {
+                                            <app-ui-input
+                                                type="number"
+                                                class="provider-input"
+                                                [id]="activeProvider + '-' + field.key"
+                                                [formControlName]="field.key"
+                                            ></app-ui-input>
+                                        }
+                                        @if (field.type === 'text') {
+                                            <app-ui-input
+                                                type="text"
+                                                class="provider-input"
+                                                [id]="activeProvider + '-' + field.key"
+                                                [formControlName]="field.key"
+                                            ></app-ui-input>
+                                        }
+                                    }
+                                </div>
+                            }
+                        }
+                    </div>
                 </div>
-            </div>
+            }
 
             <div class="section">
                 <h3>Capture</h3>
@@ -221,29 +226,33 @@
                     ></app-ui-select>
                 </div>
 
-                <div class="form-group" *ngIf="visionForm.get('captureMode')?.value === 'window'">
-                    <label for="windowTitle">{{
-                        "settings.windowTitle" | translate
-                    }}</label>
-                    <app-ui-input
-                        id="windowTitle"
-                        type="text"
-                        formControlName="windowTitle"
-                        [placeholder]="'settings.windowTitlePlaceholder' | translate"
-                    ></app-ui-input>
-                </div>
+                @if (visionForm.get('captureMode')?.value === 'window') {
+                    <div class="form-group">
+                        <label for="windowTitle">{{
+                            "settings.windowTitle" | translate
+                        }}</label>
+                        <app-ui-input
+                            id="windowTitle"
+                            type="text"
+                            formControlName="windowTitle"
+                            [placeholder]="'settings.windowTitlePlaceholder' | translate"
+                        ></app-ui-input>
+                    </div>
+                }
 
-                <div class="form-group" *ngIf="visionForm.get('captureMode')?.value === 'window'">
-                    <label for="windowProcess">{{
-                        "settings.windowProcess" | translate
-                    }}</label>
-                    <app-ui-input
-                        id="windowProcess"
-                        type="text"
-                        formControlName="windowProcess"
-                        [placeholder]="'settings.windowProcessPlaceholder' | translate"
-                    ></app-ui-input>
-                </div>
+                @if (visionForm.get('captureMode')?.value === 'window') {
+                    <div class="form-group">
+                        <label for="windowProcess">{{
+                            "settings.windowProcess" | translate
+                        }}</label>
+                        <app-ui-input
+                            id="windowProcess"
+                            type="text"
+                            formControlName="windowProcess"
+                            [placeholder]="'settings.windowProcessPlaceholder' | translate"
+                        ></app-ui-input>
+                    </div>
+                }
 
                 <div class="form-group">
                     <label for="fps">{{ "settings.captureFps" | translate }}</label>
@@ -358,7 +367,5 @@
                 </button>
             </div>
         </form>
-    </ng-template>
+    }
 </div>
-
-

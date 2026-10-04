@@ -1,214 +1,218 @@
-<ng-container *ngIf="isLoading$ | async; else content">
-    <div class="settings-wrapper">
-        <div class="settings-form">
-            <h2><app-skeleton height="2rem" width="150px"></app-skeleton></h2>
+    @if (isLoading$ | async) {
+        <div class="settings-wrapper">
+            <div class="settings-form">
+                <h2><app-skeleton height="2rem" width="150px"></app-skeleton></h2>
 
-            <div class="section">
-                <h3>
-                    <app-skeleton height="1.5rem" width="120px"></app-skeleton>
-                </h3>
+                <div class="section">
+                    <h3>
+                        <app-skeleton height="1.5rem" width="120px"></app-skeleton>
+                    </h3>
 
-                <div class="form-group">
-                    <label><app-skeleton height="1rem" width="120px"></app-skeleton></label>
-                    <app-skeleton height="2.5rem" width="100%"></app-skeleton>
+                    <div class="form-group">
+                        <label><app-skeleton height="1rem" width="120px"></app-skeleton></label>
+                        <app-skeleton height="2.5rem" width="100%"></app-skeleton>
+                    </div>
+
+                    <div class="form-group checkbox-group">
+                        <app-skeleton height="1.5rem" width="100%"></app-skeleton>
+                        <app-skeleton height="1.5rem" width="100%"></app-skeleton>
+                    </div>
                 </div>
 
-                <div class="form-group checkbox-group">
-                    <app-skeleton height="1.5rem" width="100%"></app-skeleton>
-                    <app-skeleton height="1.5rem" width="100%"></app-skeleton>
+                <div class="section">
+                    <h3>
+                        <app-skeleton height="1.5rem" width="120px"></app-skeleton>
+                    </h3>
+
+                    <div class="form-group">
+                        <label><app-skeleton height="1rem" width="120px"></app-skeleton></label>
+                        <app-skeleton height="2.5rem" width="100%"></app-skeleton>
+                    </div>
+
+                    <div class="form-group">
+                        <label><app-skeleton height="1rem" width="120px"></app-skeleton></label>
+                        <app-skeleton height="2.5rem" width="100%"></app-skeleton>
+                    </div>
+
+                    <div class="form-group">
+                        <label><app-skeleton height="1rem" width="120px"></app-skeleton></label>
+                        <app-skeleton height="2.5rem" width="100%"></app-skeleton>
+                    </div>
+
+                    <div class="form-group">
+                        <label><app-skeleton height="1rem" width="120px"></app-skeleton></label>
+                        <app-skeleton height="2.5rem" width="100%"></app-skeleton>
+                    </div>
                 </div>
-            </div>
 
-            <div class="section">
-                <h3>
-                    <app-skeleton height="1.5rem" width="120px"></app-skeleton>
-                </h3>
-
-                <div class="form-group">
-                    <label><app-skeleton height="1rem" width="120px"></app-skeleton></label>
-                    <app-skeleton height="2.5rem" width="100%"></app-skeleton>
+                <div class="button-row">
+                    <app-skeleton height="2.5rem" width="150px"></app-skeleton>
                 </div>
-
-                <div class="form-group">
-                    <label><app-skeleton height="1rem" width="120px"></app-skeleton></label>
-                    <app-skeleton height="2.5rem" width="100%"></app-skeleton>
-                </div>
-
-                <div class="form-group">
-                    <label><app-skeleton height="1rem" width="120px"></app-skeleton></label>
-                    <app-skeleton height="2.5rem" width="100%"></app-skeleton>
-                </div>
-
-                <div class="form-group">
-                    <label><app-skeleton height="1rem" width="120px"></app-skeleton></label>
-                    <app-skeleton height="2.5rem" width="100%"></app-skeleton>
-                </div>
-            </div>
-
-            <div class="button-row">
-                <app-skeleton height="2.5rem" width="150px"></app-skeleton>
             </div>
         </div>
-    </div>
-</ng-container>
+    } @else {
+        <div class="settings-wrapper">
+            <form [formGroup]="analyzerForm" (ngSubmit)="saveChanges()" class="settings-form">
+                <h2>🧠 Analyzer Settings</h2>
 
-<ng-template #content>
-    <div class="settings-wrapper">
-        <form [formGroup]="analyzerForm" (ngSubmit)="saveChanges()" class="settings-form">
-            <h2>🧠 Analyzer Settings</h2>
+                <!-- Основные настройки -->
+                <div class="section">
+                    <h3>General</h3>
 
-            <!-- Основные настройки -->
-            <div class="section">
-                <h3>General</h3>
-
-                <div class="form-group checkbox-group">
-                    <app-ui-checkbox formControlName="enabled">
-                        Enable Analyzer
-                    </app-ui-checkbox>
-                </div>
-
-                <div class="form-group checkbox-group">
-                    <app-ui-checkbox formControlName="releaseAfterUse">
-                        {{ "settings.releaseAfterUse" | translate }}
-                    </app-ui-checkbox>
-                </div>
-
-                <div class="form-group">
-                    <label for="activeProvider">Active Provider</label>
-                    <app-ui-select id="activeProvider" formControlName="activeProvider" [options]="activeProviderOptions"></app-ui-select>
-                </div>
-
-                <div class="form-group checkbox-group">
-                    <label class="checkbox">
-                        <input type="checkbox" formControlName="fallbackOpenrouter" />
-                        Use OpenRouter as fallback
-                    </label>
-                </div>
-
-                <div class="form-group checkbox-group">
-                    <label class="checkbox">
-                        <input type="checkbox" formControlName="fallbackOllama" />
-                        Use Ollama as fallback
-                    </label>
-                </div>
-
-                <div class="form-group checkbox-group">
-                    <label class="checkbox">
-                        <input type="checkbox" formControlName="fallbackLlamaCpp" />
-                        Use llama.cpp as fallback
-                    </label>
-                </div>
-
-                <div class="form-group">
-                    <label for="analyzerSystemPrompt">System Prompt</label>
-                    <app-ui-textarea
-                        id="analyzerSystemPrompt"
-                        formControlName="systemPrompt"
-                        [rows]="12"
-                        height="300px"
-                        [autoResize]="false"
-                    ></app-ui-textarea>
-                    <div class="prompt-actions">
-                        <p class="hint">{{ "settings.analyzerPromptHint" | translate }}</p>
-                        <button type="button" class="reset-button" (click)="resetPrompt('systemPrompt', 'analyzer.system_prompt')">
-                            {{ "settings.resetPrompt" | translate }}
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <!-- OpenRouter Provider -->
-            <div class="section" *ngIf="activeProvider === 'openrouter'" [formGroup]="providersForm">
-                <h3>OpenRouter Provider</h3>
-
-                <div formGroupName="openrouter">
-                    <div class="form-group">
-                        <label for="apiKey">API Key</label>
-                        <app-ui-input id="apiKey" type="password" formControlName="apiKey"></app-ui-input>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="model">Model</label>
-                        <app-ui-input id="model" type="text" formControlName="model"></app-ui-input>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="temperature">Temperature</label>
-                        <app-ui-input id="temperature" type="number" step="0.1" min="0" max="2" formControlName="temperature"></app-ui-input>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="maxTokens">Max Tokens</label>
-                        <app-ui-input id="maxTokens" type="number" min="1" max="4096" formControlName="maxTokens"></app-ui-input>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Ollama Provider -->
-            <div class="section" *ngIf="activeProvider === 'ollama'" [formGroup]="providersForm">
-                <h3>Ollama Provider</h3>
-
-                <div formGroupName="ollama">
-                    <div class="form-group">
-                        <label for="ollamaModel">Model</label>
-                        <app-ui-select id="ollamaModel" [options]="ollamaModelOptions" formControlName="model"></app-ui-select>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="ollamaTemperature">Temperature</label>
-                        <app-ui-input id="ollamaTemperature" type="number" step="0.1" min="0" max="2" formControlName="temperature"></app-ui-input>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="ollamaMaxTokens">Max Tokens</label>
-                        <app-ui-input id="ollamaMaxTokens" type="number" min="1" max="4096" formControlName="maxTokens"></app-ui-input>
-                    </div>
-                </div>
-            </div>
-
-            <!-- llama.cpp Provider -->
-            <div class="section" *ngIf="isLlamaCppActive" [formGroup]="providersForm">
-                <h3>llama.cpp Provider</h3>
-
-                <div formGroupName="llamaCpp">
-                    <div class="form-group">
+                    <div class="form-group checkbox-group">
                         <app-ui-checkbox formControlName="enabled">
-                            Enable llama.cpp
+                            Enable Analyzer
+                        </app-ui-checkbox>
+                    </div>
+
+                    <div class="form-group checkbox-group">
+                        <app-ui-checkbox formControlName="releaseAfterUse">
+                            {{ "settings.releaseAfterUse" | translate }}
                         </app-ui-checkbox>
                     </div>
 
                     <div class="form-group">
-                        <label for="analyzerLlamaCppBaseUrl">Base URL</label>
-                        <app-ui-input id="analyzerLlamaCppBaseUrl" type="text" formControlName="baseUrl"></app-ui-input>
+                        <label for="activeProvider">Active Provider</label>
+                        <app-ui-select id="activeProvider" formControlName="activeProvider" [options]="activeProviderOptions"></app-ui-select>
+                    </div>
+
+                    <div class="form-group checkbox-group">
+                        <label class="checkbox">
+                            <input type="checkbox" formControlName="fallbackOpenrouter" />
+                            Use OpenRouter as fallback
+                        </label>
+                    </div>
+
+                    <div class="form-group checkbox-group">
+                        <label class="checkbox">
+                            <input type="checkbox" formControlName="fallbackOllama" />
+                            Use Ollama as fallback
+                        </label>
+                    </div>
+
+                    <div class="form-group checkbox-group">
+                        <label class="checkbox">
+                            <input type="checkbox" formControlName="fallbackLlamaCpp" />
+                            Use llama.cpp as fallback
+                        </label>
                     </div>
 
                     <div class="form-group">
-                        <label for="analyzerLlamaCppModel">Model</label>
-                        <app-ui-input id="analyzerLlamaCppModel" type="text" formControlName="model"></app-ui-input>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="analyzerLlamaCppTemp">Temperature</label>
-                        <app-ui-input id="analyzerLlamaCppTemp" type="number" step="0.1" min="0" max="2" formControlName="temperature"></app-ui-input>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="analyzerLlamaCppMaxTokens">Max Tokens</label>
-                        <app-ui-input id="analyzerLlamaCppMaxTokens" type="number" min="1" max="4096" formControlName="maxTokens"></app-ui-input>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="analyzerLlamaCppTimeout">Request timeout (sec)</label>
-                        <app-ui-input id="analyzerLlamaCppTimeout" type="number" min="1" max="600" formControlName="requestTimeout"></app-ui-input>
+                        <label for="analyzerSystemPrompt">System Prompt</label>
+                        <app-ui-textarea
+                            id="analyzerSystemPrompt"
+                            formControlName="systemPrompt"
+                            [rows]="12"
+                            height="300px"
+                            [autoResize]="false"
+                        ></app-ui-textarea>
+                        <div class="prompt-actions">
+                            <p class="hint">{{ "settings.analyzerPromptHint" | translate }}</p>
+                            <button type="button" class="reset-button" (click)="resetPrompt('systemPrompt', 'analyzer.system_prompt')">
+                                {{ "settings.resetPrompt" | translate }}
+                            </button>
+                        </div>
                     </div>
                 </div>
-            </div>
 
-            <div class="button-row">
-                <button type="submit" [disabled]="!hasChanges()">
-                    💾 Save Analyzer Settings
-                </button>
-            </div>
-        </form>
-    </div>
-</ng-template>
+                <!-- OpenRouter Provider -->
+                @if (activeProvider === 'openrouter') {
+                    <div class="section" [formGroup]="providersForm">
+                        <h3>OpenRouter Provider</h3>
+
+                        <div formGroupName="openrouter">
+                            <div class="form-group">
+                                <label for="apiKey">API Key</label>
+                                <app-ui-input id="apiKey" type="password" formControlName="apiKey"></app-ui-input>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="model">Model</label>
+                                <app-ui-input id="model" type="text" formControlName="model"></app-ui-input>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="temperature">Temperature</label>
+                                <app-ui-input id="temperature" type="number" step="0.1" min="0" max="2" formControlName="temperature"></app-ui-input>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="maxTokens">Max Tokens</label>
+                                <app-ui-input id="maxTokens" type="number" min="1" max="4096" formControlName="maxTokens"></app-ui-input>
+                            </div>
+                        </div>
+                    </div>
+                }
+
+                <!-- Ollama Provider -->
+                @if (activeProvider === 'ollama') {
+                    <div class="section" [formGroup]="providersForm">
+                        <h3>Ollama Provider</h3>
+
+                        <div formGroupName="ollama">
+                            <div class="form-group">
+                                <label for="ollamaModel">Model</label>
+                                <app-ui-select id="ollamaModel" [options]="ollamaModelOptions" formControlName="model"></app-ui-select>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="ollamaTemperature">Temperature</label>
+                                <app-ui-input id="ollamaTemperature" type="number" step="0.1" min="0" max="2" formControlName="temperature"></app-ui-input>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="ollamaMaxTokens">Max Tokens</label>
+                                <app-ui-input id="ollamaMaxTokens" type="number" min="1" max="4096" formControlName="maxTokens"></app-ui-input>
+                            </div>
+                        </div>
+                    </div>
+                }
+
+                <!-- llama.cpp Provider -->
+                @if (isLlamaCppActive) {
+                    <div class="section" [formGroup]="providersForm">
+                        <h3>llama.cpp Provider</h3>
+
+                        <div formGroupName="llamaCpp">
+                            <div class="form-group">
+                                <app-ui-checkbox formControlName="enabled">
+                                    Enable llama.cpp
+                                </app-ui-checkbox>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="analyzerLlamaCppBaseUrl">Base URL</label>
+                                <app-ui-input id="analyzerLlamaCppBaseUrl" type="text" formControlName="baseUrl"></app-ui-input>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="analyzerLlamaCppModel">Model</label>
+                                <app-ui-input id="analyzerLlamaCppModel" type="text" formControlName="model"></app-ui-input>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="analyzerLlamaCppTemp">Temperature</label>
+                                <app-ui-input id="analyzerLlamaCppTemp" type="number" step="0.1" min="0" max="2" formControlName="temperature"></app-ui-input>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="analyzerLlamaCppMaxTokens">Max Tokens</label>
+                                <app-ui-input id="analyzerLlamaCppMaxTokens" type="number" min="1" max="4096" formControlName="maxTokens"></app-ui-input>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="analyzerLlamaCppTimeout">Request timeout (sec)</label>
+                                <app-ui-input id="analyzerLlamaCppTimeout" type="number" min="1" max="600" formControlName="requestTimeout"></app-ui-input>
+                            </div>
+                        </div>
+                    </div>
+                }
+
+                <div class="button-row">
+                    <button type="submit" [disabled]="!hasChanges()">
+                        💾 Save Analyzer Settings
+                    </button>
+                </div>
+            </form>
+        </div>
+    }

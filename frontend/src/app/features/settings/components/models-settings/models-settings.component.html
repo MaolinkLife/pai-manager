@@ -23,33 +23,45 @@
         </div>
         <div class="pull-hint">{{ "settingsPage.models.pullHint" | translate }}</div>
 
-        <div class="pull-list" *ngIf="pulls.length">
-            <div class="pull-item" *ngFor="let pull of pulls; trackBy: trackByPull">
-                <div class="pull-item-head">
-                    <span class="pull-item-name">{{ pull.model }}</span>
-                    <span class="pull-item-status" [class.error]="pull.error">
-                        {{ pull.error ? pull.error : pull.status }}
-                    </span>
-                </div>
-                <div class="pull-progress" *ngIf="!pull.done">
-                    <div class="pull-progress-bar">
-                        <div class="pull-progress-fill" [style.width.%]="pullPercent(pull)"></div>
+        @if (pulls.length) {
+            <div class="pull-list">
+                @for (pull of pulls; track trackByPull($index, pull)) {
+                    <div class="pull-item">
+                        <div class="pull-item-head">
+                            <span class="pull-item-name">{{ pull.model }}</span>
+                            <span class="pull-item-status" [class.error]="pull.error">
+                                {{ pull.error ? pull.error : pull.status }}
+                            </span>
+                        </div>
+                        @if (!pull.done) {
+                            <div class="pull-progress">
+                                <div class="pull-progress-bar">
+                                    <div class="pull-progress-fill" [style.width.%]="pullPercent(pull)"></div>
+                                </div>
+                                <span class="pull-progress-meta">
+                                    {{ formatSize(pull.completed) }} / {{ formatSize(pull.total) }}
+                                    @if (pull.total) {
+                                        · {{ pullPercent(pull) }}%
+                                    }
+                                </span>
+                            </div>
+                        }
+                        <div class="pull-item-actions">
+                            @if (!pull.done) {
+                                <button type="button" class="link-btn" (click)="cancelPull(pull.model)">
+                                    {{ "settingsPage.models.cancel" | translate }}
+                                </button>
+                            }
+                            @if (pull.done) {
+                                <button type="button" class="link-btn" (click)="dismissPull(pull.model)">
+                                    {{ "settingsPage.models.dismiss" | translate }}
+                                </button>
+                            }
+                        </div>
                     </div>
-                    <span class="pull-progress-meta">
-                        {{ formatSize(pull.completed) }} / {{ formatSize(pull.total) }}
-                        <ng-container *ngIf="pull.total"> · {{ pullPercent(pull) }}%</ng-container>
-                    </span>
-                </div>
-                <div class="pull-item-actions">
-                    <button type="button" class="link-btn" *ngIf="!pull.done" (click)="cancelPull(pull.model)">
-                        {{ "settingsPage.models.cancel" | translate }}
-                    </button>
-                    <button type="button" class="link-btn" *ngIf="pull.done" (click)="dismissPull(pull.model)">
-                        {{ "settingsPage.models.dismiss" | translate }}
-                    </button>
-                </div>
+                }
             </div>
-        </div>
+        }
     </section>
 
     <section class="pull-card hf-card">
@@ -71,83 +83,109 @@
         </div>
         <div class="pull-hint">{{ "settingsPage.models.hfHint" | translate }}</div>
 
-        <div class="hf-results" *ngIf="hfResults.length">
-            <ng-container *ngFor="let result of hfResults; trackBy: trackByHfResult">
-                <button
-                    type="button"
-                    class="hf-result"
-                    [class.expanded]="hfSelectedRepo === result.repo_id"
-                    (click)="selectHfRepo(result.repo_id)"
-                >
-                    <span class="hf-result-name">
-                        {{ result.repo_id }}
-                        <span class="hf-gated" *ngIf="result.gated">{{ "settingsPage.models.hfGated" | translate }}</span>
-                    </span>
-                    <span class="hf-result-meta">
-                        ↓ {{ formatDownloads(result.downloads) }} · ♥ {{ formatDownloads(result.likes) }}
-                    </span>
-                </button>
-
-                <div class="hf-files" *ngIf="hfSelectedRepo === result.repo_id">
-                    <div class="hf-files-loading" *ngIf="hfFilesLoading">{{ "settingsPage.models.loading" | translate }}</div>
-                    <div class="hf-files-error" *ngIf="hfFilesError">{{ hfFilesError }}</div>
-                    <div class="hf-files-empty" *ngIf="!hfFilesLoading && !hfFilesError && !hfFiles.length">
-                        {{ "settingsPage.models.hfNoFiles" | translate }}
-                    </div>
-                    <div class="hf-file" *ngFor="let file of hfFiles; trackBy: trackByHfFile">
-                        <div class="hf-file-main">
-                            <span class="hf-file-name" [title]="file.path">{{ hfFileName(file.path) }}</span>
-                            <span class="hf-file-size">{{ formatSize(file.size) }}</span>
-                        </div>
-                        <div class="hf-file-actions">
-                            <app-ui-select
-                                [options]="hfCategoryOptions"
-                                [ngModel]="hfFileCategories[file.path]"
-                                (ngModelChange)="hfFileCategories[file.path] = $event"
-                            ></app-ui-select>
-                            <app-ui-button
-                                size="sm"
-                                [disabled]="isHfFileDownloading(file)"
-                                (pressed)="hfDownloadFile(file)"
-                            >
-                                {{ "settingsPage.models.hfDownload" | translate }}
-                            </app-ui-button>
-                        </div>
-                    </div>
-                </div>
-            </ng-container>
-        </div>
-
-        <div class="pull-list" *ngIf="hfDownloads.length">
-            <div class="pull-item" *ngFor="let item of hfDownloads; trackBy: trackByHfDownload">
-                <div class="pull-item-head">
-                    <span class="pull-item-name" [title]="item.repo_id + '/' + item.path">
-                        {{ hfFileName(item.path) }}
-                        <span class="hf-download-category">→ {{ item.category }}</span>
-                    </span>
-                    <span class="pull-item-status" [class.error]="item.error">
-                        {{ item.error ? item.error : item.status }}
-                    </span>
-                </div>
-                <div class="pull-progress" *ngIf="!item.done">
-                    <div class="pull-progress-bar">
-                        <div class="pull-progress-fill" [style.width.%]="hfPercent(item)"></div>
-                    </div>
-                    <span class="pull-progress-meta">
-                        {{ formatSize(item.completed) }} / {{ formatSize(item.total) }}
-                        <ng-container *ngIf="item.total"> · {{ hfPercent(item) }}%</ng-container>
-                    </span>
-                </div>
-                <div class="pull-item-actions">
-                    <button type="button" class="link-btn" *ngIf="!item.done" (click)="cancelHfDownload(item.id)">
-                        {{ "settingsPage.models.cancel" | translate }}
+        @if (hfResults.length) {
+            <div class="hf-results">
+                @for (result of hfResults; track trackByHfResult($index, result)) {
+                    <button
+                        type="button"
+                        class="hf-result"
+                        [class.expanded]="hfSelectedRepo === result.repo_id"
+                        (click)="selectHfRepo(result.repo_id)"
+                    >
+                        <span class="hf-result-name">
+                            {{ result.repo_id }}
+                            @if (result.gated) {
+                                <span class="hf-gated">{{ "settingsPage.models.hfGated" | translate }}</span>
+                            }
+                        </span>
+                        <span class="hf-result-meta">
+                            ↓ {{ formatDownloads(result.downloads) }} · ♥ {{ formatDownloads(result.likes) }}
+                        </span>
                     </button>
-                    <button type="button" class="link-btn" *ngIf="item.done" (click)="dismissHfDownload(item.id)">
-                        {{ "settingsPage.models.dismiss" | translate }}
-                    </button>
-                </div>
+
+                    @if (hfSelectedRepo === result.repo_id) {
+                        <div class="hf-files">
+                            @if (hfFilesLoading) {
+                                <div class="hf-files-loading">{{ "settingsPage.models.loading" | translate }}</div>
+                            }
+                            @if (hfFilesError) {
+                                <div class="hf-files-error">{{ hfFilesError }}</div>
+                            }
+                            @if (!hfFilesLoading && !hfFilesError && !hfFiles.length) {
+                                <div class="hf-files-empty">
+                                    {{ "settingsPage.models.hfNoFiles" | translate }}
+                                </div>
+                            }
+                            @for (file of hfFiles; track trackByHfFile($index, file)) {
+                                <div class="hf-file">
+                                    <div class="hf-file-main">
+                                        <span class="hf-file-name" [title]="file.path">{{ hfFileName(file.path) }}</span>
+                                        <span class="hf-file-size">{{ formatSize(file.size) }}</span>
+                                    </div>
+                                    <div class="hf-file-actions">
+                                        <app-ui-select
+                                            [options]="hfCategoryOptions"
+                                            [ngModel]="hfFileCategories[file.path]"
+                                            (ngModelChange)="hfFileCategories[file.path] = $event"
+                                        ></app-ui-select>
+                                        <app-ui-button
+                                            size="sm"
+                                            [disabled]="isHfFileDownloading(file)"
+                                            (pressed)="hfDownloadFile(file)"
+                                        >
+                                            {{ "settingsPage.models.hfDownload" | translate }}
+                                        </app-ui-button>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                }
             </div>
-        </div>
+        }
+
+        @if (hfDownloads.length) {
+            <div class="pull-list">
+                @for (item of hfDownloads; track trackByHfDownload($index, item)) {
+                    <div class="pull-item">
+                        <div class="pull-item-head">
+                            <span class="pull-item-name" [title]="item.repo_id + '/' + item.path">
+                                {{ hfFileName(item.path) }}
+                                <span class="hf-download-category">→ {{ item.category }}</span>
+                            </span>
+                            <span class="pull-item-status" [class.error]="item.error">
+                                {{ item.error ? item.error : item.status }}
+                            </span>
+                        </div>
+                        @if (!item.done) {
+                            <div class="pull-progress">
+                                <div class="pull-progress-bar">
+                                    <div class="pull-progress-fill" [style.width.%]="hfPercent(item)"></div>
+                                </div>
+                                <span class="pull-progress-meta">
+                                    {{ formatSize(item.completed) }} / {{ formatSize(item.total) }}
+                                    @if (item.total) {
+                                        · {{ hfPercent(item) }}%
+                                    }
+                                </span>
+                            </div>
+                        }
+                        <div class="pull-item-actions">
+                            @if (!item.done) {
+                                <button type="button" class="link-btn" (click)="cancelHfDownload(item.id)">
+                                    {{ "settingsPage.models.cancel" | translate }}
+                                </button>
+                            }
+                            @if (item.done) {
+                                <button type="button" class="link-btn" (click)="dismissHfDownload(item.id)">
+                                    {{ "settingsPage.models.dismiss" | translate }}
+                                </button>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+        }
     </section>
 
     <section class="list-card">
@@ -158,66 +196,79 @@
             </button>
         </div>
 
-        <div class="models-loading" *ngIf="loading">{{ "settingsPage.models.loading" | translate }}</div>
+        @if (loading) {
+            <div class="models-loading">{{ "settingsPage.models.loading" | translate }}</div>
+        }
 
-        <div class="models-empty" *ngIf="!loading && !models.length">
-            {{ "settingsPage.models.empty" | translate }}
-        </div>
+        @if (!loading && !models.length) {
+            <div class="models-empty">
+                {{ "settingsPage.models.empty" | translate }}
+            </div>
+        }
 
-        <div class="model-row" *ngFor="let model of models; trackBy: trackByModel">
-            <div class="model-main">
-                <span class="model-name">{{ model.name }}</span>
-                <span class="model-meta">
-                    {{ formatSize(model.size) }}
-                    <ng-container *ngIf="model.loaded">
-                        · <span class="model-loaded">{{ "settingsPage.models.loaded" | translate }}</span>
-                        <ng-container *ngIf="model.size_vram"> ({{ formatSize(model.size_vram) }} VRAM)</ng-container>
-                    </ng-container>
-                </span>
-                <div class="model-capabilities" *ngIf="indexByName[model.name] as entry">
-                    <app-model-capability-chips [entry]="entry"></app-model-capability-chips>
-                    <span class="capability-differs" *ngIf="entry.differs" [attr.title]="differenceHint(entry)">⚠</span>
+        @for (model of models; track trackByModel($index, model)) {
+            <div class="model-row">
+                <div class="model-main">
+                    <span class="model-name">{{ model.name }}</span>
+                    <span class="model-meta">
+                        {{ formatSize(model.size) }}
+                        @if (model.loaded) {
+                            · <span class="model-loaded">{{ "settingsPage.models.loaded" | translate }}</span>
+                            @if (model.size_vram) {
+                                ({{ formatSize(model.size_vram) }} VRAM)
+                            }
+                        }
+                    </span>
+                    @if (indexByName[model.name]; as entry) {
+                        <div class="model-capabilities">
+                            <app-model-capability-chips [entry]="entry"></app-model-capability-chips>
+                            @if (entry.differs) {
+                                <span class="capability-differs" [attr.title]="differenceHint(entry)">⚠</span>
+                            }
+                            <button
+                                type="button"
+                                class="capability-edit"
+                                [attr.title]="t('settingsPage.models.capabilitiesEdit')"
+                                [attr.aria-label]="t('settingsPage.models.capabilitiesEdit')"
+                                (click)="openCapabilities(model.name)"
+                            >
+                                <app-custom-svg name="edit" [size]="14"></app-custom-svg>
+                            </button>
+                        </div>
+                    }
+                </div>
+                <div class="model-actions">
+                    @if (model.loaded) {
+                        <button
+                            type="button"
+                            class="action-btn"
+                            [disabled]="isBusy(model.name)"
+                            (click)="unload(model.name)"
+                            [attr.title]="t('settingsPage.models.unload')"
+                        >
+                            {{ "settingsPage.models.unload" | translate }}
+                        </button>
+                    }
                     <button
                         type="button"
-                        class="capability-edit"
-                        [attr.title]="t('settingsPage.models.capabilitiesEdit')"
-                        [attr.aria-label]="t('settingsPage.models.capabilitiesEdit')"
-                        (click)="openCapabilities(model.name)"
+                        class="action-btn"
+                        [disabled]="isBusy(model.name)"
+                        (click)="startPull(model.name)"
+                        [attr.title]="t('settingsPage.models.updateHint')"
                     >
-                        <app-custom-svg name="edit" [size]="14"></app-custom-svg>
+                        {{ "settingsPage.models.update" | translate }}
+                    </button>
+                    <button
+                        type="button"
+                        class="action-btn danger"
+                        [disabled]="isBusy(model.name)"
+                        (click)="requestDelete(model.name)"
+                    >
+                        {{ "settingsPage.models.delete" | translate }}
                     </button>
                 </div>
             </div>
-            <div class="model-actions">
-                <button
-                    type="button"
-                    class="action-btn"
-                    *ngIf="model.loaded"
-                    [disabled]="isBusy(model.name)"
-                    (click)="unload(model.name)"
-                    [attr.title]="t('settingsPage.models.unload')"
-                >
-                    {{ "settingsPage.models.unload" | translate }}
-                </button>
-                <button
-                    type="button"
-                    class="action-btn"
-                    [disabled]="isBusy(model.name)"
-                    (click)="startPull(model.name)"
-                    [attr.title]="t('settingsPage.models.updateHint')"
-                >
-                    {{ "settingsPage.models.update" | translate }}
-                </button>
-                <button
-                    type="button"
-                    class="action-btn danger"
-                    [disabled]="isBusy(model.name)"
-                    (click)="requestDelete(model.name)"
-                >
-                    {{ "settingsPage.models.delete" | translate }}
-                </button>
-            </div>
-        </div>
+        }
     </section>
 
     <section class="list-card">
@@ -227,78 +278,94 @@
                 {{ "settingsPage.models.refresh" | translate }}
             </button>
         </div>
-        <div class="models-loading" *ngIf="storageLoading">{{ "settingsPage.models.loading" | translate }}</div>
-        <div class="models-empty" *ngIf="!storageLoading && !storageGroups.length">
-            {{ "settingsPage.models.storageEmpty" | translate }}
-        </div>
+        @if (storageLoading) {
+            <div class="models-loading">{{ "settingsPage.models.loading" | translate }}</div>
+        }
+        @if (!storageLoading && !storageGroups.length) {
+            <div class="models-empty">
+                {{ "settingsPage.models.storageEmpty" | translate }}
+            </div>
+        }
 
-        <div class="storage-group" *ngFor="let group of storageGroups; trackBy: trackByStorageGroup">
-            <div class="storage-group-label">
-                {{ storageGroupLabel(group.key) }}
-                <span class="storage-group-count">{{ group.items.length }}</span>
-            </div>
-            <div class="model-row" *ngFor="let item of group.items; trackBy: trackByStorageItem">
-                <div class="model-main">
-                    <span class="model-name" [title]="item.absolute_path || item.path">{{ item.path }}</span>
-                    <span class="model-meta">{{ formatSize(item.size_bytes) }}</span>
+        @for (group of storageGroups; track trackByStorageGroup($index, group)) {
+            <div class="storage-group">
+                <div class="storage-group-label">
+                    {{ storageGroupLabel(group.key) }}
+                    <span class="storage-group-count">{{ group.items.length }}</span>
                 </div>
-                <div class="model-actions" *ngIf="item.absolute_path && item.type !== 'diffusers_pipeline'">
-                    <button type="button" class="action-btn danger" (click)="requestStorageDelete(item)">
-                        {{ "settingsPage.models.delete" | translate }}
-                    </button>
-                </div>
+                @for (item of group.items; track trackByStorageItem($index, item)) {
+                    <div class="model-row">
+                        <div class="model-main">
+                            <span class="model-name" [title]="item.absolute_path || item.path">{{ item.path }}</span>
+                            <span class="model-meta">{{ formatSize(item.size_bytes) }}</span>
+                        </div>
+                        @if (item.absolute_path && item.type !== 'diffusers_pipeline') {
+                            <div class="model-actions">
+                                <button type="button" class="action-btn danger" (click)="requestStorageDelete(item)">
+                                    {{ "settingsPage.models.delete" | translate }}
+                                </button>
+                            </div>
+                        }
+                    </div>
+                }
             </div>
-        </div>
+        }
     </section>
 
-    <div class="confirm-overlay" *ngIf="hfTokenPromptOpen" (click)="cancelHfToken()">
-        <section class="confirm-dialog" (click)="$event.stopPropagation()">
-            <h3>{{ "settingsPage.models.hfTokenTitle" | translate }}</h3>
-            <p>{{ "settingsPage.models.hfTokenText" | translate }}</p>
-            <app-ui-input
-                type="password"
-                [placeholder]="'settingsPage.models.hfTokenPlaceholder' | translate"
-                [(ngModel)]="hfTokenInput"
-                (keydown.enter)="submitHfToken()"
-            ></app-ui-input>
-            <footer>
-                <app-ui-button variant="secondary" size="sm" (pressed)="cancelHfToken()">
-                    {{ "settingsPage.models.cancel" | translate }}
-                </app-ui-button>
-                <app-ui-button size="sm" [disabled]="!hfTokenInput.trim()" (pressed)="submitHfToken()">
-                    {{ "settingsPage.models.hfTokenContinue" | translate }}
-                </app-ui-button>
-            </footer>
-        </section>
-    </div>
+    @if (hfTokenPromptOpen) {
+        <div class="confirm-overlay" (click)="cancelHfToken()">
+            <section class="confirm-dialog" (click)="$event.stopPropagation()">
+                <h3>{{ "settingsPage.models.hfTokenTitle" | translate }}</h3>
+                <p>{{ "settingsPage.models.hfTokenText" | translate }}</p>
+                <app-ui-input
+                    type="password"
+                    [placeholder]="'settingsPage.models.hfTokenPlaceholder' | translate"
+                    [(ngModel)]="hfTokenInput"
+                    (keydown.enter)="submitHfToken()"
+                ></app-ui-input>
+                <footer>
+                    <app-ui-button variant="secondary" size="sm" (pressed)="cancelHfToken()">
+                        {{ "settingsPage.models.cancel" | translate }}
+                    </app-ui-button>
+                    <app-ui-button size="sm" [disabled]="!hfTokenInput.trim()" (pressed)="submitHfToken()">
+                        {{ "settingsPage.models.hfTokenContinue" | translate }}
+                    </app-ui-button>
+                </footer>
+            </section>
+        </div>
+    }
 
-    <div class="confirm-overlay" *ngIf="confirmStorageDelete" (click)="cancelStorageDelete()">
-        <section class="confirm-dialog" (click)="$event.stopPropagation()">
-            <h3>{{ "settingsPage.models.storageDeleteConfirmTitle" | translate }}</h3>
-            <p>{{ "settingsPage.models.deleteConfirmText" | translate }} <strong>{{ confirmStorageDelete.path }}</strong></p>
-            <footer>
-                <app-ui-button variant="secondary" size="sm" (pressed)="cancelStorageDelete()">
-                    {{ "settingsPage.models.cancel" | translate }}
-                </app-ui-button>
-                <app-ui-button size="sm" (pressed)="confirmStorageDeleteAction()">
-                    {{ "settingsPage.models.delete" | translate }}
-                </app-ui-button>
-            </footer>
-        </section>
-    </div>
+    @if (confirmStorageDelete) {
+        <div class="confirm-overlay" (click)="cancelStorageDelete()">
+            <section class="confirm-dialog" (click)="$event.stopPropagation()">
+                <h3>{{ "settingsPage.models.storageDeleteConfirmTitle" | translate }}</h3>
+                <p>{{ "settingsPage.models.deleteConfirmText" | translate }} <strong>{{ confirmStorageDelete.path }}</strong></p>
+                <footer>
+                    <app-ui-button variant="secondary" size="sm" (pressed)="cancelStorageDelete()">
+                        {{ "settingsPage.models.cancel" | translate }}
+                    </app-ui-button>
+                    <app-ui-button size="sm" (pressed)="confirmStorageDeleteAction()">
+                        {{ "settingsPage.models.delete" | translate }}
+                    </app-ui-button>
+                </footer>
+            </section>
+        </div>
+    }
 
-    <div class="confirm-overlay" *ngIf="confirmDeleteModel" (click)="cancelDelete()">
-        <section class="confirm-dialog" (click)="$event.stopPropagation()">
-            <h3>{{ "settingsPage.models.deleteConfirmTitle" | translate }}</h3>
-            <p>{{ "settingsPage.models.deleteConfirmText" | translate }} <strong>{{ confirmDeleteModel }}</strong></p>
-            <footer>
-                <app-ui-button variant="secondary" size="sm" (pressed)="cancelDelete()">
-                    {{ "settingsPage.models.cancel" | translate }}
-                </app-ui-button>
-                <app-ui-button size="sm" (pressed)="confirmDelete()">
-                    {{ "settingsPage.models.delete" | translate }}
-                </app-ui-button>
-            </footer>
-        </section>
-    </div>
+    @if (confirmDeleteModel) {
+        <div class="confirm-overlay" (click)="cancelDelete()">
+            <section class="confirm-dialog" (click)="$event.stopPropagation()">
+                <h3>{{ "settingsPage.models.deleteConfirmTitle" | translate }}</h3>
+                <p>{{ "settingsPage.models.deleteConfirmText" | translate }} <strong>{{ confirmDeleteModel }}</strong></p>
+                <footer>
+                    <app-ui-button variant="secondary" size="sm" (pressed)="cancelDelete()">
+                        {{ "settingsPage.models.cancel" | translate }}
+                    </app-ui-button>
+                    <app-ui-button size="sm" (pressed)="confirmDelete()">
+                        {{ "settingsPage.models.delete" | translate }}
+                    </app-ui-button>
+                </footer>
+            </section>
+        </div>
+    }
 </div>

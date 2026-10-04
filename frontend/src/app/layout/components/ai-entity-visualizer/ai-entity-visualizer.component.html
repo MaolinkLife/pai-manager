@@ -35,14 +35,15 @@
         </svg>
 
         <div class="particles-layer">
-            <span
-                *ngFor="let p of particles"
-                class="particle"
-                [style.background]="entityColor()"
-                [style.left.%]="p.x"
-                [style.top.%]="p.y"
-                [style.animation-delay.s]="p.delay"
-            ></span>
+            @for (p of particles; track p) {
+                <span
+                    class="particle"
+                    [style.background]="entityColor()"
+                    [style.left.%]="p.x"
+                    [style.top.%]="p.y"
+                    [style.animation-delay.s]="p.delay"
+                ></span>
+            }
         </div>
     </div>
 
@@ -58,7 +59,7 @@
     </div>
 
     <div class="call-controls">
-        <ng-container *ngIf="!callActive(); else activeCall">
+        @if (!callActive()) {
             <button
                 type="button"
                 class="call-btn call-btn--start"
@@ -69,8 +70,7 @@
                 <app-custom-svg name="microphone" [size]="18"></app-custom-svg>
                 <span>{{ "entityVisualizer.callStart" | translate }}</span>
             </button>
-        </ng-container>
-        <ng-template #activeCall>
+        } @else {
             <span class="call-stage" [attr.data-stage]="callStage()">
                 <span class="call-stage__dot"></span>
                 {{ callStageLabel() }}
@@ -85,7 +85,7 @@
                 <app-custom-svg name="stop" [size]="16"></app-custom-svg>
                 <span>{{ "entityVisualizer.callEnd" | translate }}</span>
             </button>
-        </ng-template>
+        }
     </div>
 
     <div class="scan-line"></div>

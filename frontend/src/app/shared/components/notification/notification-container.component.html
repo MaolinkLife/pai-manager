@@ -1,28 +1,27 @@
 <div class="notification notification--{{ data.type }}" [@slideIn] [@fadeOut]>
     <div class="notification-icon">
-        <ng-container *ngIf="data.type === 'success'">
+        @if (data.type === 'success') {
             <app-custom-svg name="check-circle" [size]="24"></app-custom-svg>
-        </ng-container>
-        <ng-container *ngIf="data.type === 'error'">
+        }
+        @if (data.type === 'error') {
             <app-custom-svg name="x-circle" [size]="24"></app-custom-svg>
-        </ng-container>
-        <ng-container *ngIf="data.type === 'warning'">
+        }
+        @if (data.type === 'warning') {
             <app-custom-svg name="alert-triangle" [size]="24"></app-custom-svg>
-        </ng-container>
-        <ng-container *ngIf="data.type === 'info'">
+        }
+        @if (data.type === 'info') {
             <app-custom-svg name="info" [size]="24"></app-custom-svg>
-        </ng-container>
+        }
     </div>
 
     <div class="notification-content">
         <div class="notification-title">{{ data.title || "Уведомление" }}</div>
         <div class="notification-message">
-            <ng-container *ngIf="data.template; else textContent">
+            @if (data.template) {
                 <ng-template [ngTemplateOutlet]="data.template"></ng-template>
-            </ng-container>
-            <ng-template #textContent>
+            } @else {
                 {{ data.message }}
-            </ng-template>
+            }
         </div>
     </div>
 

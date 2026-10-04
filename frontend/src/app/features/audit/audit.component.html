@@ -1,47 +1,51 @@
 <div class="audit-page custom-scrollbar">
-    <div class="audit-shell" *ngIf="featureEnabled; else auditWip">
-        <header class="audit-header">
-            <div>
-                <h2>{{ 'audit.title' | translate }}</h2>
-                <p>{{ 'audit.subtitle' | translate }}</p>
-            </div>
-            <app-ui-button [loading]="isAuditing" [disabled]="isAuditing" (pressed)="runAudit()">
-                {{ isAuditing ? ('audit.analyzing' | translate) : ('audit.run' | translate) }}
-            </app-ui-button>
-        </header>
-
-        <section class="audit-list" *ngIf="records.length; else emptyState">
-            <article class="audit-card" *ngFor="let record of records; let i = index" [class.latest]="i === 0">
-                <div class="audit-top">
-                    <div>
-                        <div class="label">{{ 'audit.report' | translate }}</div>
-                        <div class="date">{{ record.timestamp | date:'dd.MM.yyyy, HH:mm:ss' }}</div>
-                    </div>
-                    <div class="score">
-                        <span>{{ 'audit.score' | translate }}</span>
-                        <strong>{{ record.score }}</strong>
-                    </div>
+    @if (featureEnabled) {
+        <div class="audit-shell">
+            <header class="audit-header">
+                <div>
+                    <h2>{{ 'audit.title' | translate }}</h2>
+                    <p>{{ 'audit.subtitle' | translate }}</p>
                 </div>
+                <app-ui-button [loading]="isAuditing" [disabled]="isAuditing" (pressed)="runAudit()">
+                    {{ isAuditing ? ('audit.analyzing' | translate) : ('audit.run' | translate) }}
+                </app-ui-button>
+            </header>
 
-                <p class="summary">{{ record.summary }}</p>
+            @if (records.length) {
+                <section class="audit-list">
+                    @for (record of records; track record; let i = $index) {
+                        <article class="audit-card" [class.latest]="i === 0">
+                            <div class="audit-top">
+                                <div>
+                                    <div class="label">{{ 'audit.report' | translate }}</div>
+                                    <div class="date">{{ record.timestamp | date:'dd.MM.yyyy, HH:mm:ss' }}</div>
+                                </div>
+                                <div class="score">
+                                    <span>{{ 'audit.score' | translate }}</span>
+                                    <strong>{{ record.score }}</strong>
+                                </div>
+                            </div>
 
-                <div class="insights">
-                    <div class="insight" *ngFor="let insight of record.insights" [class.warn]="insight.level === 'warn'" [class.ok]="insight.level === 'ok'">
-                        {{ insight.text }}
-                    </div>
-                </div>
-            </article>
-        </section>
+                            <p class="summary">{{ record.summary }}</p>
 
-        <ng-template #emptyState>
-            <section class="empty-state">
-                <app-skeleton height="140px" width="100%"></app-skeleton>
-                <p>{{ 'audit.empty' | translate }}</p>
-            </section>
-        </ng-template>
-    </div>
-
-    <ng-template #auditWip>
+                            <div class="insights">
+                                @for (insight of record.insights; track insight) {
+                                    <div class="insight" [class.warn]="insight.level === 'warn'" [class.ok]="insight.level === 'ok'">
+                                        {{ insight.text }}
+                                    </div>
+                                }
+                            </div>
+                        </article>
+                    }
+                </section>
+            } @else {
+                <section class="empty-state">
+                    <app-skeleton height="140px" width="100%"></app-skeleton>
+                    <p>{{ 'audit.empty' | translate }}</p>
+                </section>
+            }
+        </div>
+    } @else {
         <div class="audit-shell">
             <section class="wip-card">
                 <h2>{{ 'feature.wipTitle' | translate }}</h2>
@@ -49,5 +53,5 @@
                 <p class="wip-hint">{{ 'feature.wipDevHint' | translate }}</p>
             </section>
         </div>
-    </ng-template>
+    }
 </div>

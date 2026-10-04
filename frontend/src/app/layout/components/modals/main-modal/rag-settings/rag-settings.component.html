@@ -284,124 +284,124 @@
                     ></app-ui-select>
                 </div>
                 <div formArrayName="vectorProfiles">
-                <div
-                    class="vector-profile"
-                    *ngIf="vectorProfilesControls.length === 0"
-                >
-                    <p class="muted">No vector profiles configured.</p>
-                </div>
-                <div
-                    class="vector-profile"
-                    *ngFor="let profileCtrl of vectorProfilesControls; let i = index"
-                    [formGroupName]="i"
-                >
-                    <input type="hidden" formControlName="key" />
-                    <h5>{{ profileCtrl.value.key }}</h5>
-                    <div class="form-group">
-                        <label class="checkbox">
-                            <input type="checkbox" formControlName="enabled" />
-                            Enabled
-                        </label>
+                @if (vectorProfilesControls.length === 0) {
+                    <div class="vector-profile">
+                        <p class="muted">No vector profiles configured.</p>
                     </div>
-                    <div class="form-group">
-                        <label for="vectorLabel-{{ i }}">Label</label>
-                        <app-ui-input
-                            id="vectorLabel-{{ i }}"
-                            type="text"
-                            formControlName="label"
-                            placeholder="Display name"
-                        ></app-ui-input>
-                    </div>
-                    <div class="form-group">
-                        <label for="vectorProvider-{{ i }}">Provider</label>
-                        <app-ui-input
-                            id="vectorProvider-{{ i }}"
-                            type="text"
-                            formControlName="provider"
-                            placeholder="ollama/st"
-                        ></app-ui-input>
-                    </div>
-                    <div class="form-group">
-                        <label for="vectorModel-{{ i }}">Model</label>
-                        <app-ui-input
-                            id="vectorModel-{{ i }}"
-                            type="text"
-                            formControlName="model"
-                            placeholder="nomic-embed-text"
-                        ></app-ui-input>
-                    </div>
-                    <div class="form-group">
-                        <label for="vectorTopK-{{ i }}">Top K</label>
-                        <app-ui-input
-                            id="vectorTopK-{{ i }}"
-                            type="number"
-                            formControlName="topK"
-                            min="1"
-                            max="32"
-                        ></app-ui-input>
-                    </div>
-                    <div class="form-group">
-                        <label for="vectorThreshold-{{ i }}">Threshold</label>
-                        <app-ui-input
-                            id="vectorThreshold-{{ i }}"
-                            type="number"
-                            formControlName="threshold"
-                            min="0"
-                            max="1"
-                            step="0.01"
-                        ></app-ui-input>
-                    </div>
-                    <div class="form-group">
-                        <label for="vectorEndpoint-{{ i }}">Endpoint / URL</label>
-                        <app-ui-input
-                            id="vectorEndpoint-{{ i }}"
-                            type="text"
-                            formControlName="endpoint"
-                            placeholder="http://localhost:11434/api/embeddings"
-                        ></app-ui-input>
-                    </div>
-                    <div class="form-row">
+                }
+                @for (profileCtrl of vectorProfilesControls; track profileCtrl; let i = $index) {
+                    <div
+                        class="vector-profile"
+                        [formGroupName]="i"
+                    >
+                        <input type="hidden" formControlName="key" />
+                        <h5>{{ profileCtrl.value.key }}</h5>
                         <div class="form-group">
-                            <label for="vectorTimeout-{{ i }}">Timeout (s)</label>
+                            <label class="checkbox">
+                                <input type="checkbox" formControlName="enabled" />
+                                Enabled
+                            </label>
+                        </div>
+                        <div class="form-group">
+                            <label for="vectorLabel-{{ i }}">Label</label>
                             <app-ui-input
-                                id="vectorTimeout-{{ i }}"
-                                type="number"
-                                formControlName="timeout"
-                                min="0"
-                                step="1"
+                                id="vectorLabel-{{ i }}"
+                                type="text"
+                                formControlName="label"
+                                placeholder="Display name"
                             ></app-ui-input>
                         </div>
                         <div class="form-group">
-                            <label for="vectorMaxRetries-{{ i }}">Max retries</label>
+                            <label for="vectorProvider-{{ i }}">Provider</label>
                             <app-ui-input
-                                id="vectorMaxRetries-{{ i }}"
-                                type="number"
-                                formControlName="maxRetries"
-                                min="0"
-                                step="1"
+                                id="vectorProvider-{{ i }}"
+                                type="text"
+                                formControlName="provider"
+                                placeholder="ollama/st"
                             ></app-ui-input>
                         </div>
                         <div class="form-group">
-                            <label for="vectorRetryBackoff-{{ i }}">Retry backoff</label>
+                            <label for="vectorModel-{{ i }}">Model</label>
                             <app-ui-input
-                                id="vectorRetryBackoff-{{ i }}"
+                                id="vectorModel-{{ i }}"
+                                type="text"
+                                formControlName="model"
+                                placeholder="nomic-embed-text"
+                            ></app-ui-input>
+                        </div>
+                        <div class="form-group">
+                            <label for="vectorTopK-{{ i }}">Top K</label>
+                            <app-ui-input
+                                id="vectorTopK-{{ i }}"
                                 type="number"
-                                formControlName="retryBackoff"
+                                formControlName="topK"
+                                min="1"
+                                max="32"
+                            ></app-ui-input>
+                        </div>
+                        <div class="form-group">
+                            <label for="vectorThreshold-{{ i }}">Threshold</label>
+                            <app-ui-input
+                                id="vectorThreshold-{{ i }}"
+                                type="number"
+                                formControlName="threshold"
                                 min="0"
+                                max="1"
                                 step="0.01"
                             ></app-ui-input>
                         </div>
+                        <div class="form-group">
+                            <label for="vectorEndpoint-{{ i }}">Endpoint / URL</label>
+                            <app-ui-input
+                                id="vectorEndpoint-{{ i }}"
+                                type="text"
+                                formControlName="endpoint"
+                                placeholder="http://localhost:11434/api/embeddings"
+                            ></app-ui-input>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="vectorTimeout-{{ i }}">Timeout (s)</label>
+                                <app-ui-input
+                                    id="vectorTimeout-{{ i }}"
+                                    type="number"
+                                    formControlName="timeout"
+                                    min="0"
+                                    step="1"
+                                ></app-ui-input>
+                            </div>
+                            <div class="form-group">
+                                <label for="vectorMaxRetries-{{ i }}">Max retries</label>
+                                <app-ui-input
+                                    id="vectorMaxRetries-{{ i }}"
+                                    type="number"
+                                    formControlName="maxRetries"
+                                    min="0"
+                                    step="1"
+                                ></app-ui-input>
+                            </div>
+                            <div class="form-group">
+                                <label for="vectorRetryBackoff-{{ i }}">Retry backoff</label>
+                                <app-ui-input
+                                    id="vectorRetryBackoff-{{ i }}"
+                                    type="number"
+                                    formControlName="retryBackoff"
+                                    min="0"
+                                    step="0.01"
+                                ></app-ui-input>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="vectorDevice-{{ i }}">Device override</label>
+                            <app-ui-input
+                                id="vectorDevice-{{ i }}"
+                                type="text"
+                                formControlName="device"
+                                placeholder="cpu / cuda"
+                            ></app-ui-input>
+                        </div>
                     </div>
-                    <div class="form-group">
-                        <label for="vectorDevice-{{ i }}">Device override</label>
-                        <app-ui-input
-                            id="vectorDevice-{{ i }}"
-                            type="text"
-                            formControlName="device"
-                            placeholder="cpu / cuda"
-                        ></app-ui-input>
-                    </div>
-                </div>
+                }
                 </div>
             </div>
 
@@ -938,5 +938,3 @@
         </div>
     </form>
 </div>
-
-

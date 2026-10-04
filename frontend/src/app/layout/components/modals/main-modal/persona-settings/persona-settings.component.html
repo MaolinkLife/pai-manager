@@ -1,5 +1,5 @@
 <div class="settings-wrapper">
-    <ng-container *ngIf="isLoading$ | async; else formContent">
+    @if (isLoading$ | async) {
         <div class="settings-form">
             <h2><app-skeleton height="2rem" width="180px"></app-skeleton></h2>
             <div class="section">
@@ -12,9 +12,7 @@
                 <app-skeleton height="12rem" width="100%"></app-skeleton>
             </div>
         </div>
-    </ng-container>
-
-    <ng-template #formContent>
+    } @else {
         <form [formGroup]="personaForm" (ngSubmit)="saveChanges()" class="settings-form">
             <h2>{{ 'personaSettings.title' | translate }}</h2>
 
@@ -212,114 +210,126 @@
                 <p class="hint">{{ 'personaSettings.telegramBindingsHint' | translate }}</p>
 
                 <div class="chat-bindings" formArrayName="chat_bindings">
-                    <div
-                        class="chat-binding-row"
-                        *ngFor="let binding of chatBindingControls.controls; let i = index"
-                        [formGroupName]="i"
-                    >
-                        <div class="chat-meta">
-                            <strong>{{ binding.get('title')?.value }}</strong>
-                            <span>
-                                {{ binding.get('chat_kind')?.value }} · {{ binding.get('chat_id')?.value }}
-                            </span>
+                    @for (binding of chatBindingControls.controls; track binding; let i = $index) {
+                        <div
+                            class="chat-binding-row"
+                            [formGroupName]="i"
+                        >
+                            <div class="chat-meta">
+                                <strong>{{ binding.get('title')?.value }}</strong>
+                                <span>
+                                    {{ binding.get('chat_kind')?.value }} · {{ binding.get('chat_id')?.value }}
+                                </span>
+                            </div>
+                            <app-ui-select
+                                formControlName="character_id"
+                                [options]="characterBindingOptions"
+                            ></app-ui-select>
                         </div>
-                        <app-ui-select
-                            formControlName="character_id"
-                            [options]="characterBindingOptions"
-                        ></app-ui-select>
-                    </div>
+                    }
                 </div>
 
-                <p class="hint" *ngIf="isChatsLoading">{{ 'general.loading' | translate }}</p>
-                <p class="hint" *ngIf="!isChatsLoading && chatBindingControls.length === 0">
-                    {{ 'personaSettings.telegramBindingsEmpty' | translate }}
-                </p>
+                @if (isChatsLoading) {
+                    <p class="hint">{{ 'general.loading' | translate }}</p>
+                }
+                @if (!isChatsLoading && chatBindingControls.length === 0) {
+                    <p class="hint">
+                        {{ 'personaSettings.telegramBindingsEmpty' | translate }}
+                    </p>
+                }
             </div>
 
             <div class="button-row">
                 <button type="submit" [disabled]="!hasChanges()">{{ 'personaSettings.save' | translate }}</button>
             </div>
         </form>
-    </ng-template>
-
-    <div class="character-create-backdrop" *ngIf="showCreateCharacterModal" (click)="closeCreateCharacterModal()">
-        <div class="character-create-modal" (click)="$event.stopPropagation()">
-            <h3>{{ 'personaSettings.createTitle' | translate }}</h3>
-            <div class="form-group">
-                <label for="new-persona-name">{{ 'personaSettings.name' | translate }}</label>
-                <app-ui-input
-                    id="new-persona-name"
-                    type="text"
-                    [(ngModel)]="newCharacterName"
-                    [ngModelOptions]="{ standalone: true }"
-                    [placeholder]="'personaSettings.namePlaceholder' | translate"
-                ></app-ui-input>
-            </div>
-            <div class="button-row">
-                <button type="button" (click)="closeCreateCharacterModal()">
-                    {{ 'general.cancel' | translate }}
-                </button>
-                <button
-                    type="button"
-                    [disabled]="isCharacterCreateBusy || !newCharacterName.trim()"
-                    (click)="createCharacter()"
-                >
-                    {{ isCharacterCreateBusy ? ('general.loading' | translate) : ('personaSettings.create' | translate) }}
-                </button>
-            </div>
-        </div>
-    </div>
-
-    <div class="character-create-backdrop" *ngIf="showDeleteCharacterModal" (click)="closeDeleteCharacterModal()">
-        <div class="character-create-modal character-delete-modal" (click)="$event.stopPropagation()">
-            <h3>{{ 'personaSettings.deleteTitle' | translate }}</h3>
-            <p class="hint" *ngIf="deletePreviewLoading">{{ 'general.loading' | translate }}</p>
-
-            <ng-container *ngIf="deletePreview as preview">
-                <p class="delete-blocked" *ngIf="preview.blocked">{{ deleteBlockedMessage }}</p>
-
-                <ng-container *ngIf="!preview.blocked">
-                    <ng-container *ngIf="preview.has_data; else noHistory">
-                        <p class="delete-archive-note">{{ 'personaSettings.deleteArchiveNote' | translate }}</p>
-                        <ul class="delete-summary">
-                            <li *ngFor="let row of deleteSummaryRows; trackBy: trackDeleteSummaryRow">
-                                <span>{{ row.labelKey | translate }}</span>
-                                <strong>{{ row.count }}</strong>
-                            </li>
-                        </ul>
-                    </ng-container>
-                    <ng-template #noHistory>
-                        <p class="hint">{{ 'personaSettings.deleteNoHistory' | translate }}</p>
-                    </ng-template>
-
-                    <div class="form-group">
-                        <label for="delete-persona-name">
-                            {{ 'personaSettings.deleteTypeName' | translate }} <strong>{{ preview.character.name }}</strong>
-                        </label>
-                        <app-ui-input
-                            id="delete-persona-name"
-                            type="text"
-                            [(ngModel)]="deleteConfirmName"
-                            [ngModelOptions]="{ standalone: true }"
-                            [placeholder]="preview.character.name"
-                        ></app-ui-input>
-                    </div>
-                </ng-container>
-            </ng-container>
-
-            <div class="button-row">
-                <button type="button" (click)="closeDeleteCharacterModal()">
-                    {{ 'general.cancel' | translate }}
-                </button>
-                <button
-                    type="button"
-                    class="danger-confirm"
-                    [disabled]="!canConfirmDelete()"
-                    (click)="confirmDeleteCharacter()"
-                >
-                    {{ isCharacterDeleteBusy ? ('general.loading' | translate) : ('personaSettings.deleteConfirm' | translate) }}
-                </button>
+    }
+    @if (showCreateCharacterModal) {
+        <div class="character-create-backdrop" (click)="closeCreateCharacterModal()">
+            <div class="character-create-modal" (click)="$event.stopPropagation()">
+                <h3>{{ 'personaSettings.createTitle' | translate }}</h3>
+                <div class="form-group">
+                    <label for="new-persona-name">{{ 'personaSettings.name' | translate }}</label>
+                    <app-ui-input
+                        id="new-persona-name"
+                        type="text"
+                        [(ngModel)]="newCharacterName"
+                        [ngModelOptions]="{ standalone: true }"
+                        [placeholder]="'personaSettings.namePlaceholder' | translate"
+                    ></app-ui-input>
+                </div>
+                <div class="button-row">
+                    <button type="button" (click)="closeCreateCharacterModal()">
+                        {{ 'general.cancel' | translate }}
+                    </button>
+                    <button
+                        type="button"
+                        [disabled]="isCharacterCreateBusy || !newCharacterName.trim()"
+                        (click)="createCharacter()"
+                    >
+                        {{ isCharacterCreateBusy ? ('general.loading' | translate) : ('personaSettings.create' | translate) }}
+                    </button>
+                </div>
             </div>
         </div>
-    </div>
+    }
+
+    @if (showDeleteCharacterModal) {
+        <div class="character-create-backdrop" (click)="closeDeleteCharacterModal()">
+            <div class="character-create-modal character-delete-modal" (click)="$event.stopPropagation()">
+                <h3>{{ 'personaSettings.deleteTitle' | translate }}</h3>
+                @if (deletePreviewLoading) {
+                    <p class="hint">{{ 'general.loading' | translate }}</p>
+                }
+
+                @if (deletePreview; as preview) {
+                    @if (preview.blocked) {
+                        <p class="delete-blocked">{{ deleteBlockedMessage }}</p>
+                    }
+                    @if (!preview.blocked) {
+                        @if (preview.has_data) {
+                            <p class="delete-archive-note">{{ 'personaSettings.deleteArchiveNote' | translate }}</p>
+                            <ul class="delete-summary">
+                                @for (row of deleteSummaryRows; track trackDeleteSummaryRow($index, row)) {
+                                    <li>
+                                        <span>{{ row.labelKey | translate }}</span>
+                                        <strong>{{ row.count }}</strong>
+                                    </li>
+                                }
+                            </ul>
+                        } @else {
+                            <p class="hint">{{ 'personaSettings.deleteNoHistory' | translate }}</p>
+                        }
+
+                        <div class="form-group">
+                            <label for="delete-persona-name">
+                                {{ 'personaSettings.deleteTypeName' | translate }} <strong>{{ preview.character.name }}</strong>
+                            </label>
+                            <app-ui-input
+                                id="delete-persona-name"
+                                type="text"
+                                [(ngModel)]="deleteConfirmName"
+                                [ngModelOptions]="{ standalone: true }"
+                                [placeholder]="preview.character.name"
+                            ></app-ui-input>
+                        </div>
+                    }
+                }
+
+                <div class="button-row">
+                    <button type="button" (click)="closeDeleteCharacterModal()">
+                        {{ 'general.cancel' | translate }}
+                    </button>
+                    <button
+                        type="button"
+                        class="danger-confirm"
+                        [disabled]="!canConfirmDelete()"
+                        (click)="confirmDeleteCharacter()"
+                    >
+                        {{ isCharacterDeleteBusy ? ('general.loading' | translate) : ('personaSettings.deleteConfirm' | translate) }}
+                    </button>
+                </div>
+            </div>
+        </div>
+    }
 </div>

@@ -26,32 +26,37 @@
         </button>
     </div>
 
-    <div class="datetime-popup" *ngIf="open">
-        <div class="datetime-nav">
-            <div class="datetime-nav-month">
-                <button type="button" class="datetime-nav-btn" (click)="previousMonth($event)" aria-label="Previous month">‹</button>
-                <span class="datetime-month-label">{{ monthLabel }}</span>
-                <button type="button" class="datetime-nav-btn" (click)="nextMonth($event)" aria-label="Next month">›</button>
+    @if (open) {
+        <div class="datetime-popup">
+            <div class="datetime-nav">
+                <div class="datetime-nav-month">
+                    <button type="button" class="datetime-nav-btn" (click)="previousMonth($event)" aria-label="Previous month">‹</button>
+                    <span class="datetime-month-label">{{ monthLabel }}</span>
+                    <button type="button" class="datetime-nav-btn" (click)="nextMonth($event)" aria-label="Next month">›</button>
+                </div>
+                <button type="button" class="datetime-today-btn" (click)="goToCurrentMonth($event)">•</button>
             </div>
-            <button type="button" class="datetime-today-btn" (click)="goToCurrentMonth($event)">•</button>
-        </div>
 
-        <div class="datetime-grid">
-            <div class="datetime-weekday" *ngFor="let label of weekdayLabels">{{ label }}</div>
-            <ng-container *ngFor="let week of weeks; trackBy: trackByWeek">
-                <button
-                    type="button"
-                    class="datetime-day"
-                    *ngFor="let cell of week; trackBy: trackByCell"
-                    [class.out-month]="!cell.inMonth"
-                    [class.today]="cell.isToday"
-                    [class.selected]="cell.isSelected"
-                    [disabled]="cell.isDisabled"
-                    (click)="pickDay(cell, $event)"
-                >
-                    {{ cell.dayNumber }}
-                </button>
-            </ng-container>
+            <div class="datetime-grid">
+                @for (label of weekdayLabels; track label) {
+                    <div class="datetime-weekday">{{ label }}</div>
+                }
+                @for (week of weeks; track $index) {
+                    @for (cell of week; track trackByCell($index, cell)) {
+                        <button
+                            type="button"
+                            class="datetime-day"
+                            [class.out-month]="!cell.inMonth"
+                            [class.today]="cell.isToday"
+                            [class.selected]="cell.isSelected"
+                            [disabled]="cell.isDisabled"
+                            (click)="pickDay(cell, $event)"
+                        >
+                            {{ cell.dayNumber }}
+                        </button>
+                    }
+                }
+            </div>
         </div>
-    </div>
+    }
 </div>

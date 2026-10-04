@@ -14,16 +14,15 @@
     </div>
 
     <div uiDropdownMenu class="ui-multiselect-menu">
-        <label
-            class="ui-multiselect-option"
-            *ngFor="let option of normalizedOptions; trackBy: trackByValue"
-        >
-            <input
-                type="checkbox"
-                [checked]="isSelected(option.value)"
-                (change)="toggleOption(option.value)"
-            />
-            <span>{{ option.label }}</span>
-        </label>
+        @for (option of normalizedOptions; track trackByValue($index, option)) {
+            <label class="ui-multiselect-option">
+                <input
+                    type="checkbox"
+                    [checked]="isSelected(option.value)"
+                    (change)="toggleOption(option.value)"
+                />
+                <span>{{ option.label }}</span>
+            </label>
+        }
     </div>
 </app-ui-dropdown>

@@ -8,7 +8,7 @@
             <button type="button" class="refresh-btn" (click)="loadState()">{{ "settings.refresh" | translate }}</button>
         </header>
 
-        <ng-container *ngIf="isLoading; else stateContent">
+        @if (isLoading) {
             <div class="state-grid">
                 <app-skeleton height="68px" width="100%"></app-skeleton>
                 <app-skeleton height="68px" width="100%"></app-skeleton>
@@ -19,50 +19,54 @@
                 <app-skeleton height="280px" width="100%"></app-skeleton>
                 <app-skeleton height="280px" width="100%"></app-skeleton>
             </div>
-        </ng-container>
-
-        <ng-template #stateContent>
+        } @else {
             <div class="status-line">
                 <span class="emotion">
                     {{ "matrix.current" | translate }}: {{ ('matrix.emotions.' + (state?.current_emotion || 'neutral')) | translate }}
                 </span>
                 <span>{{ "matrix.intensity" | translate }}: {{ ((state?.emotion_intensity || 0) * 100) | number:'1.0-0' }}%</span>
-                <span *ngIf="state?.updated_at">{{ "matrix.updated" | translate }}: {{ formatUpdatedAt(state?.updated_at) }}</span>
+                @if (state?.updated_at) {
+                    <span>{{ "matrix.updated" | translate }}: {{ formatUpdatedAt(state?.updated_at) }}</span>
+                }
             </div>
 
             <div class="state-grid">
-                <div class="metric-card" *ngFor="let metric of stateMetrics">
-                    <div class="metric-row">
-                        <span class="metric-label">{{ ('matrix.metrics.' + metric.key) | translate }}</span>
-                        <span class="metric-value">{{ (getMetricValue(metric.key) * 100) | number:'1.0-0' }}%</span>
+                @for (metric of stateMetrics; track metric) {
+                    <div class="metric-card">
+                        <div class="metric-row">
+                            <span class="metric-label">{{ ('matrix.metrics.' + metric.key) | translate }}</span>
+                            <span class="metric-value">{{ (getMetricValue(metric.key) * 100) | number:'1.0-0' }}%</span>
+                        </div>
+                        <div class="metric-line">
+                            <span
+                                class="metric-fill"
+                                [ngClass]="metric.color"
+                                [style.width.%]="getMetricValue(metric.key) * 100"
+                            ></span>
+                        </div>
                     </div>
-                    <div class="metric-line">
-                        <span
-                            class="metric-fill"
-                            [ngClass]="metric.color"
-                            [style.width.%]="getMetricValue(metric.key) * 100"
-                        ></span>
-                    </div>
-                </div>
+                }
             </div>
 
             <div class="state-details">
                 <div class="emotion-panel">
                     <h4>{{ "matrix.spectral" | translate }}</h4>
                     <div class="emotion-list">
-                        <div class="emotion-item" *ngFor="let emotion of emotionBars">
-                            <div class="emotion-row">
-                                <span>{{ ('matrix.emotions.' + emotion.key) | translate }}</span>
-                                <span>{{ (getEmotionValue(emotion.key) * 100) | number:'1.0-0' }}%</span>
+                        @for (emotion of emotionBars; track emotion) {
+                            <div class="emotion-item">
+                                <div class="emotion-row">
+                                    <span>{{ ('matrix.emotions.' + emotion.key) | translate }}</span>
+                                    <span>{{ (getEmotionValue(emotion.key) * 100) | number:'1.0-0' }}%</span>
+                                </div>
+                                <div class="emotion-line">
+                                    <span
+                                        class="emotion-fill"
+                                        [ngClass]="emotion.color"
+                                        [style.width.%]="getEmotionValue(emotion.key) * 100"
+                                    ></span>
+                                </div>
                             </div>
-                            <div class="emotion-line">
-                                <span
-                                    class="emotion-fill"
-                                    [ngClass]="emotion.color"
-                                    [style.width.%]="getEmotionValue(emotion.key) * 100"
-                                ></span>
-                            </div>
-                        </div>
+                        }
                     </div>
                 </div>
 
@@ -79,22 +83,30 @@
             <div class="matrix-data-grid">
                 <section class="data-card">
                     <h4>{{ "matrix.affectiveState" | translate }}</h4>
-                    <div class="data-row data-row--stacked" *ngIf="innerVoice">
-                        <span>{{ "matrix.innerVoice" | translate }}</span>
-                        <strong>{{ innerVoice }}</strong>
-                    </div>
-                    <div class="data-row" *ngIf="!innerVoice && affectiveTrigger">
-                        <span>{{ "matrix.trigger" | translate }}</span>
-                        <strong>{{ affectiveTrigger }}</strong>
-                    </div>
-                    <div class="data-row" *ngFor="let item of influenceEntries; trackBy: trackByInfluence">
-                        <span>{{ ('matrix.influence.' + item.key) | translate }}</span>
-                        <strong>{{ item.value }}</strong>
-                    </div>
-                    <div class="data-row" *ngIf="associatedEvents.length">
-                        <span>{{ "matrix.associatedEvents" | translate }}</span>
-                        <strong>{{ associatedEvents.length }}</strong>
-                    </div>
+                    @if (innerVoice) {
+                        <div class="data-row data-row--stacked">
+                            <span>{{ "matrix.innerVoice" | translate }}</span>
+                            <strong>{{ innerVoice }}</strong>
+                        </div>
+                    }
+                    @if (!innerVoice && affectiveTrigger) {
+                        <div class="data-row">
+                            <span>{{ "matrix.trigger" | translate }}</span>
+                            <strong>{{ affectiveTrigger }}</strong>
+                        </div>
+                    }
+                    @for (item of influenceEntries; track trackByInfluence($index, item)) {
+                        <div class="data-row">
+                            <span>{{ ('matrix.influence.' + item.key) | translate }}</span>
+                            <strong>{{ item.value }}</strong>
+                        </div>
+                    }
+                    @if (associatedEvents.length) {
+                        <div class="data-row">
+                            <span>{{ "matrix.associatedEvents" | translate }}</span>
+                            <strong>{{ associatedEvents.length }}</strong>
+                        </div>
+                    }
                 </section>
 
                 <section class="data-card">
@@ -103,40 +115,54 @@
                         <span>{{ "matrix.tracesLoaded" | translate }}</span>
                         <strong>{{ traceCount }}</strong>
                     </div>
-                    <div class="data-row" *ngIf="latestTrace">
-                        <span>{{ "matrix.primaryEmotion" | translate }}</span>
-                        <strong>{{ ('matrix.emotions.' + (latestTrace.primary_emotion || 'neutral')) | translate }}</strong>
-                    </div>
-                    <div class="data-row" *ngIf="latestTrace?.intensity !== undefined">
-                        <span>{{ "matrix.intensity" | translate }}</span>
-                        <strong>{{ (latestTrace.intensity * 100) | number:'1.0-0' }}%</strong>
-                    </div>
-                    <div class="data-row" *ngIf="latestTrace?.created_at">
-                        <span>{{ "matrix.updated" | translate }}</span>
-                        <strong>{{ formatUpdatedAt(latestTrace.created_at) }}</strong>
-                    </div>
-                    <div class="data-row data-row--stacked" *ngIf="latestTraceVoice">
-                        <span>{{ "matrix.innerVoice" | translate }}</span>
-                        <strong>{{ latestTraceVoice }}</strong>
-                    </div>
-                    <div class="data-row data-row--stacked" *ngIf="!latestTraceVoice && latestTraceCause">
-                        <span>{{ "matrix.trigger" | translate }}</span>
-                        <strong>{{ latestTraceCause }}</strong>
-                    </div>
-                    <div class="data-row" *ngIf="latestTraceOutcomes.length">
-                        <span>{{ "matrix.outcomes" | translate }}</span>
-                        <strong>{{ latestTraceOutcomes.length }}</strong>
-                    </div>
+                    @if (latestTrace) {
+                        <div class="data-row">
+                            <span>{{ "matrix.primaryEmotion" | translate }}</span>
+                            <strong>{{ ('matrix.emotions.' + (latestTrace.primary_emotion || 'neutral')) | translate }}</strong>
+                        </div>
+                    }
+                    @if (latestTrace?.intensity !== undefined) {
+                        <div class="data-row">
+                            <span>{{ "matrix.intensity" | translate }}</span>
+                            <strong>{{ (latestTrace.intensity * 100) | number:'1.0-0' }}%</strong>
+                        </div>
+                    }
+                    @if (latestTrace?.created_at) {
+                        <div class="data-row">
+                            <span>{{ "matrix.updated" | translate }}</span>
+                            <strong>{{ formatUpdatedAt(latestTrace.created_at) }}</strong>
+                        </div>
+                    }
+                    @if (latestTraceVoice) {
+                        <div class="data-row data-row--stacked">
+                            <span>{{ "matrix.innerVoice" | translate }}</span>
+                            <strong>{{ latestTraceVoice }}</strong>
+                        </div>
+                    }
+                    @if (!latestTraceVoice && latestTraceCause) {
+                        <div class="data-row data-row--stacked">
+                            <span>{{ "matrix.trigger" | translate }}</span>
+                            <strong>{{ latestTraceCause }}</strong>
+                        </div>
+                    }
+                    @if (latestTraceOutcomes.length) {
+                        <div class="data-row">
+                            <span>{{ "matrix.outcomes" | translate }}</span>
+                            <strong>{{ latestTraceOutcomes.length }}</strong>
+                        </div>
+                    }
                 </section>
 
                 <section class="data-card">
                     <h4>{{ "matrix.latestSnapshot" | translate }}</h4>
-                    <div class="data-row" *ngFor="let metric of stateMetrics">
-                        <span>{{ ('matrix.metrics.' + metric.key) | translate }}</span>
-                        <strong>{{ (getMetricValue(metric.key) * 100) | number:'1.0-0' }}%</strong>
-                    </div>
+                    @for (metric of stateMetrics; track metric) {
+                        <div class="data-row">
+                            <span>{{ ('matrix.metrics.' + metric.key) | translate }}</span>
+                            <strong>{{ (getMetricValue(metric.key) * 100) | number:'1.0-0' }}%</strong>
+                        </div>
+                    }
                 </section>
             </div>
-        </ng-template>
+        }
     </div>
 </div>

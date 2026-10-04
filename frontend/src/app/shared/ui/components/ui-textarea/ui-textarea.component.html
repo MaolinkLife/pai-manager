@@ -14,7 +14,9 @@
         (blur)="markTouched()"
     ></textarea>
 
-    <div class="ui-textarea__counter" *ngIf="showCounter && maxLength !== null">
-        {{ currentLength }}/{{ maxLength }}
-    </div>
+    @if (showCounter && maxLength !== null) {
+        <div class="ui-textarea__counter">
+            {{ currentLength }}/{{ maxLength }}
+        </div>
+    }
 </div>

@@ -2,43 +2,49 @@
     <div class="message-bubble">
         <div class="timestamp">{{ formattedTimestamp }}</div>
 
-        <div class="source-badge" *ngIf="messageSource as source">
-            <span class="source-dot" [ngClass]="source.name"></span>
-            <span>{{ source.label }}</span>
-            <span class="source-extra" *ngIf="source.chatTitle">· {{ source.chatTitle }}</span>
-        </div>
+        @if (messageSource; as source) {
+            <div class="source-badge">
+                <span class="source-dot" [ngClass]="source.name"></span>
+                <span>{{ source.label }}</span>
+                @if (source.chatTitle) {
+                    <span class="source-extra">· {{ source.chatTitle }}</span>
+                }
+            </div>
+        }
 
-        <div class="sender" *ngIf="msg.role === 'assistant'">{{ charName }}:</div>
+        @if (msg.role === 'assistant') {
+            <div class="sender">{{ charName }}:</div>
+        }
 
         <div class="content">
-            <app-chat-runtime-block
-                *ngIf="msg.role === 'assistant' && hasRuntime"
-                [runtime]="msg.runtime"
-                [summary]="runtimeSummary"
-                [activeLabel]="runtimeActiveLabel"
-                [stages]="runtimeStages"
-                (toggleDetails)="toggleRuntimeDetails.emit(msg)"
-                (skipThinking)="skipThinking.emit()"
-            ></app-chat-runtime-block>
+            @if (msg.role === 'assistant' && hasRuntime) {
+                <app-chat-runtime-block
+                    [runtime]="msg.runtime"
+                    [summary]="runtimeSummary"
+                    [activeLabel]="runtimeActiveLabel"
+                    [stages]="runtimeStages"
+                    (toggleDetails)="toggleRuntimeDetails.emit(msg)"
+                    (skipThinking)="skipThinking.emit()"
+                ></app-chat-runtime-block>
+            }
 
-            <ng-container *ngIf="!isEditing; else editMode">
+            @if (!isEditing) {
                 <app-message-renderer
                     [content]="renderContent"
                     [isStreaming]="isStreaming"
                     [thinkingDurationMs]="thinkingDurationMs"
                     [collapseThinking]="collapseThinking"
                 ></app-message-renderer>
-                <button
-                    *ngIf="msg.role === 'user' && userContentExpandable"
-                    type="button"
-                    class="message-expand-toggle"
-                    (click)="toggleUserContent.emit(msg.id)"
-                >
-                    {{ userContentExpanded ? 'Скрыть' : 'Раскрыть' }}
-                </button>
-            </ng-container>
-
-            <ng-template #editMode>
+                @if (msg.role === 'user' && userContentExpandable) {
+                    <button
+                        type="button"
+                        class="message-expand-toggle"
+                        (click)="toggleUserContent.emit(msg.id)"
+                    >
+                        {{ userContentExpanded ? 'Скрыть' : 'Раскрыть' }}
+                    </button>
+                }
+            } @else {
                 <div class="message-edit">
                     <textarea
                         class="message-edit__textarea custom-scrollbar"
@@ -65,171 +71,202 @@
                         </button>
                     </div>
                 </div>
-            </ng-template>
+            }
         </div>
 
-        <div class="message-media" *ngIf="msg.media?.length">
-            <div
-                class="message-media__item"
-                *ngFor="let media of msg.media; trackBy: trackByMedia"
-                [ngSwitch]="media.category"
-            >
-                <div
-                    class="message-media__image"
-                    *ngSwitchCase="'image'"
-                    [style.backgroundImage]="mediaSource(media) ? 'url(' + mediaSource(media) + ')' : null"
-                    (click)="previewMedia.emit(media)"
-                    [attr.title]="media.description || media.name"
-                ></div>
-                <div class="message-media__audio" *ngSwitchCase="'audio'">
-                    <audio controls [src]="mediaSource(media)"></audio>
-                    <span class="media-name">{{ media.name }}</span>
+        @if (msg.media?.length) {
+            <div class="message-media">
+                @for (media of msg.media; track trackByMedia($index, media)) {
+                    <div class="message-media__item">
+                        @switch (media.category) {
+                            @case ('image') {
+                                <div
+                                    class="message-media__image"
+                                    [style.backgroundImage]="mediaSource(media) ? 'url(' + mediaSource(media) + ')' : null"
+                                    (click)="previewMedia.emit(media)"
+                                    [attr.title]="media.description || media.name"
+                                ></div>
+                            }
+                            @case ('audio') {
+                                <div class="message-media__audio">
+                                    <audio controls [src]="mediaSource(media)"></audio>
+                                    <span class="media-name">{{ media.name }}</span>
+                                </div>
+                            }
+                            @case ('video') {
+                                <div class="message-media__video">
+                                    <video controls [src]="mediaSource(media)"></video>
+                                    <span class="media-name">{{ media.name }}</span>
+                                </div>
+                            }
+                            @default {
+                                <div
+                                    class="message-media__file"
+                                    (click)="downloadMedia.emit(media)"
+                                    [attr.title]="media.description || media.name"
+                                >
+                                    <app-custom-svg name="file" [size]="20"></app-custom-svg>
+                                    <span class="media-name">{{ media.name }}</span>
+                                </div>
+                            }
+                        }
+                    </div>
+                }
+            </div>
+        }
+
+        @if (complianceBadges.length) {
+            <div class="compliance-bar">
+                @for (badge of complianceBadges; track trackByBadge($index, badge)) {
+                    <span
+                        class="compliance-badge"
+                        [ngClass]="'compliance-badge--' + badge.state"
+                        [attr.data-tooltip]="badge.tooltip"
+                    >
+                        <span class="compliance-badge__icon">{{ badge.icon }}</span>
+                        @if (badge.label) {
+                            <span class="compliance-badge__label">{{ badge.label }}</span>
+                        }
+                    </span>
+                }
+            </div>
+        }
+
+        @if (knowledgeSources.length) {
+            <div class="knowledge-sources">
+                <span class="knowledge-sources__label">Источники:</span>
+                @for (source of knowledgeSources; track trackBySource($index, source)) {
+                    <span
+                        class="knowledge-source"
+                        [attr.data-tooltip]="sourceTooltip(source)"
+                    >
+                        📄 {{ source.fileName }}
+                    </span>
+                }
+            </div>
+        }
+    </div>
+
+    @if (actionsVisible) {
+        <div class="actions">
+            @if (hasVariants) {
+                <div class="variant-switcher">
+                    <button
+                        class="variant-btn"
+                        type="button"
+                        [disabled]="!previousVariantId || loading"
+                        (click)="previousVariantId && activateVariant.emit(previousVariantId)"
+                        title="Предыдущий вариант"
+                    >
+                        ‹
+                    </button>
+                    <span>{{ variantLabel }}</span>
+                    <button
+                        class="variant-btn"
+                        type="button"
+                        [disabled]="!nextVariantId || loading"
+                        (click)="nextVariantId && activateVariant.emit(nextVariantId)"
+                        title="Следующий вариант"
+                    >
+                        ›
+                    </button>
                 </div>
-                <div class="message-media__video" *ngSwitchCase="'video'">
-                    <video controls [src]="mediaSource(media)"></video>
-                    <span class="media-name">{{ media.name }}</span>
-                </div>
-                <div
-                    class="message-media__file"
-                    *ngSwitchDefault
-                    (click)="downloadMedia.emit(media)"
-                    [attr.title]="media.description || media.name"
+            }
+            <button class="btn-icon" (click)="copy.emit(msg)" [attr.data-tooltip]="'Скопировать'" aria-label="Скопировать">
+                <app-custom-svg name="copy" [size]="18"></app-custom-svg>
+            </button>
+            @if (msg.role === 'user' && isLatestUserMessage) {
+                <button
+                    class="btn-icon"
+                    (click)="edit.emit(msg)"
+                    [disabled]="loading && !!activeGenerationRunId"
+                    [attr.data-tooltip]="'Редактировать'"
+                    aria-label="Редактировать"
                 >
-                    <app-custom-svg name="file" [size]="20"></app-custom-svg>
-                    <span class="media-name">{{ media.name }}</span>
-                </div>
-            </div>
-        </div>
-
-        <div class="compliance-bar" *ngIf="complianceBadges.length">
-            <span
-                class="compliance-badge"
-                *ngFor="let badge of complianceBadges; trackBy: trackByBadge"
-                [ngClass]="'compliance-badge--' + badge.state"
-                [attr.data-tooltip]="badge.tooltip"
-            >
-                <span class="compliance-badge__icon">{{ badge.icon }}</span>
-                <span class="compliance-badge__label" *ngIf="badge.label">{{ badge.label }}</span>
-            </span>
-        </div>
-
-        <div class="knowledge-sources" *ngIf="knowledgeSources.length">
-            <span class="knowledge-sources__label">Источники:</span>
-            <span
-                class="knowledge-source"
-                *ngFor="let source of knowledgeSources; trackBy: trackBySource"
-                [attr.data-tooltip]="sourceTooltip(source)"
-            >
-                📄 {{ source.fileName }}
-            </span>
-        </div>
-    </div>
-
-    <div class="actions" *ngIf="actionsVisible">
-        <div class="variant-switcher" *ngIf="hasVariants">
-            <button
-                class="variant-btn"
-                type="button"
-                [disabled]="!previousVariantId || loading"
-                (click)="previousVariantId && activateVariant.emit(previousVariantId)"
-                title="Предыдущий вариант"
-            >
-                ‹
+                    <app-custom-svg name="edit" [size]="18"></app-custom-svg>
+                </button>
+            }
+            <button class="btn-icon" (click)="delete.emit(msg)" [attr.data-tooltip]="'Удалить'" aria-label="Удалить">
+                <app-custom-svg name="trash" [size]="18"></app-custom-svg>
             </button>
-            <span>{{ variantLabel }}</span>
-            <button
-                class="variant-btn"
-                type="button"
-                [disabled]="!nextVariantId || loading"
-                (click)="nextVariantId && activateVariant.emit(nextVariantId)"
-                title="Следующий вариант"
-            >
-                ›
-            </button>
-        </div>
-        <button class="btn-icon" (click)="copy.emit(msg)" [attr.data-tooltip]="'Скопировать'" aria-label="Скопировать">
-            <app-custom-svg name="copy" [size]="18"></app-custom-svg>
-        </button>
-        <button
-            class="btn-icon"
-            (click)="edit.emit(msg)"
-            *ngIf="msg.role === 'user' && isLatestUserMessage"
-            [disabled]="loading && !!activeGenerationRunId"
-            [attr.data-tooltip]="'Редактировать'"
-            aria-label="Редактировать"
-        >
-            <app-custom-svg name="edit" [size]="18"></app-custom-svg>
-        </button>
-        <button class="btn-icon" (click)="delete.emit(msg)" [attr.data-tooltip]="'Удалить'" aria-label="Удалить">
-            <app-custom-svg name="trash" [size]="18"></app-custom-svg>
-        </button>
-        <button
-            class="btn-icon"
-            (click)="toggleVoice.emit(msg.id)"
-            *ngIf="ownerTools && msg.role === 'assistant' && msg.id"
-            [attr.data-tooltip]="currentPlayingMessage === msg.id ? 'Остановить озвучку' : 'Озвучить ответ'"
-            [attr.aria-label]="currentPlayingMessage === msg.id ? 'Остановить озвучку' : 'Озвучить ответ'"
-        >
-            <app-custom-svg [name]="currentPlayingMessage === msg.id ? 'volume-x' : 'volume-2'" [size]="20"></app-custom-svg>
-        </button>
-        <button
-            class="btn-icon"
-            (click)="illustrate.emit(msg.id)"
-            *ngIf="ownerTools && msg.role === 'assistant' && msg.id && !msg.isPending"
-            [disabled]="isIllustrating"
-            [class.active]="isIllustrating"
-            [attr.data-tooltip]="isIllustrating ? 'Создаю изображение...' : 'Создать изображение по запросу'"
-            aria-label="Создать изображение по запросу"
-        >
-            <app-custom-svg name="image" [size]="18"></app-custom-svg>
-        </button>
-        <button
-            class="btn-icon"
-            (click)="continueResponse.emit(msg.id)"
-            *ngIf="msg.role === 'assistant' && canContinue"
-            [disabled]="loading && !!activeGenerationRunId"
-            [attr.data-tooltip]="'Продолжить ответ'"
-            aria-label="Продолжить ответ"
-        >
-            <app-custom-svg name="play-circle" [size]="18"></app-custom-svg>
-        </button>
-        <button
-            class="btn-icon"
-            (click)="reroll.emit(msg.id)"
-            *ngIf="msg.role === 'assistant' && isLatestAssistantMessage"
-            [disabled]="!canReroll"
-            [attr.data-tooltip]="loading && activeGenerationRunId ? 'Дождитесь завершения текущей генерации' : 'Перегенерировать ответ'"
-            [attr.aria-label]="loading && activeGenerationRunId ? 'Дождитесь завершения текущей генерации' : 'Перегенерировать ответ'"
-        >
-            <app-custom-svg name="reroll" [size]="18"></app-custom-svg>
-        </button>
-        <button
-            class="btn-icon"
-            *ngIf="msg.role === 'assistant' && hasUsageMeta"
-            (click)="toggleUsageDetails.emit({ message: msg, event: $event })"
-            [class.active]="usageOpen"
-            [attr.data-tooltip]="'Детали генерации'"
-            aria-label="Детали генерации"
-        >
-            <app-custom-svg name="info" [size]="16"></app-custom-svg>
-        </button>
-        <div
-            class="usage-popover"
-            *ngIf="msg.role === 'assistant' && hasUsageMeta && usageOpen"
-            (click)="$event.stopPropagation()"
-        >
-            <div class="usage-popover__header">
-                <div>
-                    <div class="usage-popover__title">Детали генерации</div>
-                    <div class="usage-popover__subtitle">{{ msg.runtime?.model || msg.provider || 'provider' }}</div>
+            @if (ownerTools && msg.role === 'assistant' && msg.id) {
+                <button
+                    class="btn-icon"
+                    (click)="toggleVoice.emit(msg.id)"
+                    [attr.data-tooltip]="currentPlayingMessage === msg.id ? 'Остановить озвучку' : 'Озвучить ответ'"
+                    [attr.aria-label]="currentPlayingMessage === msg.id ? 'Остановить озвучку' : 'Озвучить ответ'"
+                >
+                    <app-custom-svg [name]="currentPlayingMessage === msg.id ? 'volume-x' : 'volume-2'" [size]="20"></app-custom-svg>
+                </button>
+            }
+            @if (ownerTools && msg.role === 'assistant' && msg.id && !msg.isPending) {
+                <button
+                    class="btn-icon"
+                    (click)="illustrate.emit(msg.id)"
+                    [disabled]="isIllustrating"
+                    [class.active]="isIllustrating"
+                    [attr.data-tooltip]="isIllustrating ? 'Создаю изображение...' : 'Создать изображение по запросу'"
+                    aria-label="Создать изображение по запросу"
+                >
+                    <app-custom-svg name="image" [size]="18"></app-custom-svg>
+                </button>
+            }
+            @if (msg.role === 'assistant' && canContinue) {
+                <button
+                    class="btn-icon"
+                    (click)="continueResponse.emit(msg.id)"
+                    [disabled]="loading && !!activeGenerationRunId"
+                    [attr.data-tooltip]="'Продолжить ответ'"
+                    aria-label="Продолжить ответ"
+                >
+                    <app-custom-svg name="play-circle" [size]="18"></app-custom-svg>
+                </button>
+            }
+            @if (msg.role === 'assistant' && isLatestAssistantMessage) {
+                <button
+                    class="btn-icon"
+                    (click)="reroll.emit(msg.id)"
+                    [disabled]="!canReroll"
+                    [attr.data-tooltip]="loading && activeGenerationRunId ? 'Дождитесь завершения текущей генерации' : 'Перегенерировать ответ'"
+                    [attr.aria-label]="loading && activeGenerationRunId ? 'Дождитесь завершения текущей генерации' : 'Перегенерировать ответ'"
+                >
+                    <app-custom-svg name="reroll" [size]="18"></app-custom-svg>
+                </button>
+            }
+            @if (msg.role === 'assistant' && hasUsageMeta) {
+                <button
+                    class="btn-icon"
+                    (click)="toggleUsageDetails.emit({ message: msg, event: $event })"
+                    [class.active]="usageOpen"
+                    [attr.data-tooltip]="'Детали генерации'"
+                    aria-label="Детали генерации"
+                >
+                    <app-custom-svg name="info" [size]="16"></app-custom-svg>
+                </button>
+            }
+            @if (msg.role === 'assistant' && hasUsageMeta && usageOpen) {
+                <div
+                    class="usage-popover"
+                    (click)="$event.stopPropagation()"
+                >
+                    <div class="usage-popover__header">
+                        <div>
+                            <div class="usage-popover__title">Детали генерации</div>
+                            <div class="usage-popover__subtitle">{{ msg.runtime?.model || msg.provider || 'provider' }}</div>
+                        </div>
+                        <span class="usage-popover__status">{{ msg.runtime?.status || 'done' }}</span>
+                    </div>
+                    @for (line of usageLines; track line) {
+                        <div class="usage-popover__row">
+                            <span class="usage-popover__key">{{ line.key }}</span>
+                            <strong>{{ line.value }}</strong>
+                        </div>
+                    }
+                    @if (!usageLines.length) {
+                        <div class="usage-popover__empty">Нет метаданных.</div>
+                    }
                 </div>
-                <span class="usage-popover__status">{{ msg.runtime?.status || 'done' }}</span>
-            </div>
-            <div class="usage-popover__row" *ngFor="let line of usageLines">
-                <span class="usage-popover__key">{{ line.key }}</span>
-                <strong>{{ line.value }}</strong>
-            </div>
-            <div class="usage-popover__empty" *ngIf="!usageLines.length">Нет метаданных.</div>
+            }
         </div>
-    </div>
+    }
 </div>

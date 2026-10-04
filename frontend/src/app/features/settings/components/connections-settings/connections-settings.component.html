@@ -4,11 +4,11 @@
         <p class="connections-subtitle">{{ "settingsPage.connections.subtitle" | translate }}</p>
     </header>
 
-    <div class="connections-loading" *ngIf="isLoading$ | async; else formBlock">
-        {{ "settingsPage.connections.loading" | translate }}
-    </div>
-
-    <ng-template #formBlock>
+    @if (isLoading$ | async) {
+        <div class="connections-loading">
+            {{ "settingsPage.connections.loading" | translate }}
+        </div>
+    } @else {
         <form [formGroup]="form" class="connections-form">
             <section class="connection-card">
                 <div class="connection-card-head">
@@ -26,9 +26,11 @@
             <section class="connection-card" formGroupName="ollama">
                 <div class="connection-card-head">
                     <h3>Ollama</h3>
-                    <span class="provider-badge" *ngIf="form.value.activeProvider === 'ollama'">
-                        {{ "settingsPage.connections.activeBadge" | translate }}
-                    </span>
+                    @if (form.value.activeProvider === 'ollama') {
+                        <span class="provider-badge">
+                            {{ "settingsPage.connections.activeBadge" | translate }}
+                        </span>
+                    }
                 </div>
                 <div class="field">
                     <label>{{ "settingsPage.connections.baseUrl" | translate }}</label>
@@ -43,9 +45,11 @@
             <section class="connection-card" formGroupName="llamaCpp">
                 <div class="connection-card-head">
                     <h3>llama.cpp</h3>
-                    <span class="provider-badge" *ngIf="form.value.activeProvider === 'llama_cpp'">
-                        {{ "settingsPage.connections.activeBadge" | translate }}
-                    </span>
+                    @if (form.value.activeProvider === 'llama_cpp') {
+                        <span class="provider-badge">
+                            {{ "settingsPage.connections.activeBadge" | translate }}
+                        </span>
+                    }
                 </div>
                 <div class="field">
                     <app-ui-checkbox formControlName="enabled">
@@ -65,9 +69,11 @@
             <section class="connection-card" formGroupName="openrouter">
                 <div class="connection-card-head">
                     <h3>OpenRouter</h3>
-                    <span class="provider-badge" *ngIf="form.value.activeProvider === 'openrouter'">
-                        {{ "settingsPage.connections.activeBadge" | translate }}
-                    </span>
+                    @if (form.value.activeProvider === 'openrouter') {
+                        <span class="provider-badge">
+                            {{ "settingsPage.connections.activeBadge" | translate }}
+                        </span>
+                    }
                 </div>
                 <div class="field">
                     <label>{{ "settingsPage.connections.baseUrl" | translate }}</label>
@@ -86,9 +92,11 @@
             <section class="connection-card" formGroupName="transformers">
                 <div class="connection-card-head">
                     <h3>Transformers</h3>
-                    <span class="provider-badge" *ngIf="form.value.activeProvider === 'transformers'">
-                        {{ "settingsPage.connections.activeBadge" | translate }}
-                    </span>
+                    @if (form.value.activeProvider === 'transformers') {
+                        <span class="provider-badge">
+                            {{ "settingsPage.connections.activeBadge" | translate }}
+                        </span>
+                    }
                 </div>
                 <div class="field">
                     <label>{{ "settingsPage.connections.model" | translate }}</label>
@@ -111,5 +119,5 @@
                 </app-ui-button>
             </div>
         </form>
-    </ng-template>
+    }
 </div>

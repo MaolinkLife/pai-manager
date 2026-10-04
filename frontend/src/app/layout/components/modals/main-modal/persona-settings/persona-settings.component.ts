@@ -56,7 +56,7 @@ export class PersonaSettingsComponent implements OnInit {
     deletePreviewLoading = false;
     deletePreview: CharacterDeletionPreview | null = null;
     // Rows are a field, rebuilt when a preview arrives: a getter returning a new
-    // array under *ngFor + the impure translate pipe loops change detection.
+    // array under @for + the impure translate pipe loops change detection.
     deleteSummaryRows: DeleteSummaryRow[] = [];
     deleteBlockedMessage = '';
     deleteConfirmName = '';

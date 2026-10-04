@@ -2,37 +2,74 @@
     <aside class="settings-nav custom-scrollbar">
         <div class="settings-nav-title">{{ "settingsSidebar.title" | translate }}</div>
 
-        <div class="settings-nav-group" *ngFor="let group of groups">
-            <div class="settings-nav-group-label">{{ group.labelKey | translate }}</div>
-            <button
-                *ngFor="let tab of group.tabs"
-                type="button"
-                class="settings-nav-item"
-                [class.active]="activeTab === tab.key"
-                (click)="selectTab(tab.key)"
-            >
-                {{ tab.labelKey | translate }}
-            </button>
-        </div>
+        @for (group of groups; track group) {
+            <div class="settings-nav-group">
+                <div class="settings-nav-group-label">{{ group.labelKey | translate }}</div>
+                @for (tab of group.tabs; track tab) {
+                    <button
+                        type="button"
+                        class="settings-nav-item"
+                        [class.active]="activeTab === tab.key"
+                        (click)="selectTab(tab.key)"
+                    >
+                        {{ tab.labelKey | translate }}
+                    </button>
+                }
+            </div>
+        }
     </aside>
 
     <section class="settings-content custom-scrollbar">
-        <app-connections-settings *ngIf="activeTab === 'connections'"></app-connections-settings>
-        <app-models-settings *ngIf="activeTab === 'models'"></app-models-settings>
-        <app-generation-settings *ngIf="activeTab === 'generate'"></app-generation-settings>
-        <app-core-settings *ngIf="activeTab === 'core'"></app-core-settings>
-        <app-system-settings *ngIf="activeTab === 'system'"></app-system-settings>
-        <app-initiative-settings *ngIf="activeTab === 'initiative'"></app-initiative-settings>
-        <app-analyzer-settings *ngIf="activeTab === 'analyzer'"></app-analyzer-settings>
-        <app-compliance-settings *ngIf="activeTab === 'compliance'"></app-compliance-settings>
-        <app-rag-settings *ngIf="activeTab === 'rag'"></app-rag-settings>
-        <app-persona-settings *ngIf="activeTab === 'persona'"></app-persona-settings>
-        <app-moral-settings *ngIf="activeTab === 'moral'"></app-moral-settings>
-        <app-lorebook *ngIf="activeTab === 'lorebook'"></app-lorebook>
-        <app-vision-settings *ngIf="activeTab === 'vision'"></app-vision-settings>
-        <app-audio-settings *ngIf="activeTab === 'audio'"></app-audio-settings>
-        <app-voice-settings *ngIf="activeTab === 'voice'"></app-voice-settings>
-        <app-media-settings *ngIf="activeTab === 'media'"></app-media-settings>
-        <app-social-settings *ngIf="activeTab === 'social'"></app-social-settings>
+        @if (activeTab === 'connections') {
+            <app-connections-settings></app-connections-settings>
+        }
+        @if (activeTab === 'models') {
+            <app-models-settings></app-models-settings>
+        }
+        @if (activeTab === 'generate') {
+            <app-generation-settings></app-generation-settings>
+        }
+        @if (activeTab === 'core') {
+            <app-core-settings></app-core-settings>
+        }
+        @if (activeTab === 'system') {
+            <app-system-settings></app-system-settings>
+        }
+        @if (activeTab === 'initiative') {
+            <app-initiative-settings></app-initiative-settings>
+        }
+        @if (activeTab === 'analyzer') {
+            <app-analyzer-settings></app-analyzer-settings>
+        }
+        @if (activeTab === 'compliance') {
+            <app-compliance-settings></app-compliance-settings>
+        }
+        @if (activeTab === 'rag') {
+            <app-rag-settings></app-rag-settings>
+        }
+        @if (activeTab === 'persona') {
+            <app-persona-settings></app-persona-settings>
+        }
+        @if (activeTab === 'moral') {
+            <app-moral-settings></app-moral-settings>
+        }
+        @if (activeTab === 'lorebook') {
+            <app-lorebook></app-lorebook>
+        }
+        @if (activeTab === 'vision') {
+            <app-vision-settings></app-vision-settings>
+        }
+        @if (activeTab === 'audio') {
+            <app-audio-settings></app-audio-settings>
+        }
+        @if (activeTab === 'voice') {
+            <app-voice-settings></app-voice-settings>
+        }
+        @if (activeTab === 'media') {
+            <app-media-settings></app-media-settings>
+        }
+        @if (activeTab === 'social') {
+            <app-social-settings></app-social-settings>
+        }
     </section>
 </div>

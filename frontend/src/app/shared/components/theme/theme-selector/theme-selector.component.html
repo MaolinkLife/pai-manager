@@ -5,8 +5,10 @@
         [(ngModel)]="currentTheme"
         (change)="switchTheme(currentTheme)"
     >
-        <option *ngFor="let theme of themes" [value]="theme">
-            {{ theme | titlecase }}
-        </option>
+        @for (theme of themes; track theme) {
+            <option [value]="theme">
+                {{ theme | titlecase }}
+            </option>
+        }
     </select>
 </div>

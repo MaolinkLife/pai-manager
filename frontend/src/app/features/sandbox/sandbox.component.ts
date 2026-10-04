@@ -336,14 +336,6 @@ export class SandboxComponent implements OnInit {
         return new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     }
 
-    trackByMessage(index: number): string {
-        return String(index);
-    }
-
-    trackByTrace(index: number): string {
-        return String(index);
-    }
-
     getToolContext(): Array<{ name: string; content: string }> {
         const raw = this.lastResponse?.metadata?.['tool_context'];
         if (!Array.isArray(raw)) {
