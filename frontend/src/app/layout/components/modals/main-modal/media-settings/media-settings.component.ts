@@ -22,7 +22,8 @@ import { take, takeUntil } from 'rxjs/operators';
 @Component({
     selector: 'app-media-settings',
     templateUrl: './media-settings.component.html',
-    styleUrls: ['./media-settings.component.less']
+    styleUrls: ['./media-settings.component.less'],
+    standalone: false
 })
 export class MediaSettingsComponent implements OnInit, OnDestroy {
     mediaForm: UntypedFormGroup;

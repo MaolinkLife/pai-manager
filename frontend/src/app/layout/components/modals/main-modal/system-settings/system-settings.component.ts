@@ -29,7 +29,8 @@ export interface DeviceRow {
 @Component({
     selector: 'app-system-settings',
     templateUrl: './system-settings.component.html',
-    styleUrls: ['./system-settings.component.less']
+    styleUrls: ['./system-settings.component.less'],
+    standalone: false
 })
 export class SystemSettingsComponent implements OnInit {
     systemForm: UntypedFormGroup;

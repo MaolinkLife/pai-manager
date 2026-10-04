@@ -12,7 +12,8 @@ import { UiSelectOption } from '../../../../../shared/ui/components/ui-select/ui
 @Component({
     selector: 'app-core-settings',
     templateUrl: './core-settings.component.html',
-    styleUrls: ['./core-settings.component.less']
+    styleUrls: ['./core-settings.component.less'],
+    standalone: false
 })
 export class CoreSettingsComponent implements OnInit {
     showDlModal = false;

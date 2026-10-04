@@ -9,7 +9,8 @@ import { LocalizationService } from '../../../../../shared/pipes/translation/loc
 @Component({
     selector: 'app-lorebook',
     templateUrl: './lorebook.component.html',
-    styleUrls: ['./lorebook.component.less']
+    styleUrls: ['./lorebook.component.less'],
+    standalone: false
 })
 export class LorebookComponent implements OnInit {
 

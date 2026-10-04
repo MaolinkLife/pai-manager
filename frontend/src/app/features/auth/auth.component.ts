@@ -12,6 +12,7 @@ type AuthMode = 'login' | 'register';
     selector: 'app-auth',
     templateUrl: './auth.component.html',
     styleUrls: ['./auth.component.less'],
+    standalone: false
 })
 export class AuthComponent implements OnInit {
     mode: AuthMode = 'login';

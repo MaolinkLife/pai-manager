@@ -25,6 +25,7 @@ import { LocalizationService } from '../../../../../shared/pipes/translation/loc
     selector: 'app-compliance-settings',
     templateUrl: './compliance-settings.component.html',
     styleUrls: ['./compliance-settings.component.less'],
+    standalone: false
 })
 export class ComplianceSettingsComponent implements OnInit {
     complianceForm: UntypedFormGroup;

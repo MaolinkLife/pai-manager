@@ -11,6 +11,7 @@ import {
     selector: 'app-ui-dropdown',
     templateUrl: './ui-dropdown.component.html',
     styleUrls: ['./ui-dropdown.component.less'],
+    standalone: false
 })
 export class UiDropdownComponent {
     @Input() open = false;

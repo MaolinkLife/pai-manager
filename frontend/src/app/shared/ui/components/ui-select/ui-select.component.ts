@@ -18,6 +18,7 @@ export interface UiSelectOption<T = any> {
             multi: true,
         },
     ],
+    standalone: false
 })
 export class UiSelectComponent implements ControlValueAccessor {
     @Input() placeholder = 'Select...';

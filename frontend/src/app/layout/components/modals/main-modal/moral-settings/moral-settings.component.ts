@@ -17,7 +17,8 @@ import { LocalizationService } from '../../../../../shared/pipes/translation/loc
 @Component({
     selector: 'app-moral-settings',
     templateUrl: './moral-settings.component.html',
-    styleUrls: ['./moral-settings.component.less']
+    styleUrls: ['./moral-settings.component.less'],
+    standalone: false
 })
 export class MoralSettingsComponent implements OnInit {
     moralForm: UntypedFormGroup;

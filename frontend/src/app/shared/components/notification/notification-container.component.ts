@@ -28,7 +28,8 @@ export interface NotificationData {
                 animate('300ms ease-in', style({ transform: 'translateX(100%)', opacity: 0 }))
             ])
         ])
-    ]
+    ],
+    standalone: false
 })
 export class NotificationContainerComponent implements OnInit, OnDestroy {
     constructor(

@@ -8,7 +8,8 @@ import { MOCK_LOREBOOK } from '../../../../shared/mock/lorebook-mock';
     selector: 'app-memory-modal',
     templateUrl: './memory-modal.component.html',
     styleUrls: ['./memory-modal.component.less'],
-    changeDetection: ChangeDetectionStrategy.Default
+    changeDetection: ChangeDetectionStrategy.Default,
+    standalone: false
 })
 export class MemoryModalComponent implements OnInit {
     entries: LorebookEntry[] = [];

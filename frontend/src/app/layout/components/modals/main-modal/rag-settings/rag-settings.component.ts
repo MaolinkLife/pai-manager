@@ -12,7 +12,8 @@ import { pickChangedFields } from '../../../../../core/utils/changed-fields';
 @Component({
     selector: 'app-rag-settings',
     templateUrl: './rag-settings.component.html',
-    styleUrls: ['./rag-settings.component.less']
+    styleUrls: ['./rag-settings.component.less'],
+    standalone: false
 })
 export class RagSettingsComponent implements OnInit {
     ragForm: UntypedFormGroup;

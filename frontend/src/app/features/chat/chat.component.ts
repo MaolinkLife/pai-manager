@@ -86,7 +86,8 @@ interface CachedChatMessageView {
 @Component({
     selector: 'app-chat',
     templateUrl: './chat.component.html',
-    styleUrls: ['./chat.component.less']
+    styleUrls: ['./chat.component.less'],
+    standalone: false
 })
 export class ChatComponent implements OnInit, AfterViewInit, OnDestroy {
     private static readonly CHAT_ALL_SOURCES_KEY = 'chat.showAllSources';

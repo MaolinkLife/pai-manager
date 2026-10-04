@@ -17,6 +17,7 @@ interface AuditRecord {
     selector: 'app-audit',
     templateUrl: './audit.component.html',
     styleUrls: ['./audit.component.less'],
+    standalone: false
 })
 export class AuditComponent {
     readonly featureEnabled: boolean;

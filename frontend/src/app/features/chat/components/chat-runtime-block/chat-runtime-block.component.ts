@@ -6,6 +6,7 @@ import { RuntimeStageView, RuntimeState } from '../../store';
     templateUrl: './chat-runtime-block.component.html',
     styleUrls: ['./chat-runtime-block.component.less'],
     changeDetection: ChangeDetectionStrategy.OnPush,
+    standalone: false
 })
 export class ChatRuntimeBlockComponent {
     @Input() runtime?: RuntimeState;

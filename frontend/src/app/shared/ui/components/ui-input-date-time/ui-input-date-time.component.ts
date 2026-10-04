@@ -41,6 +41,7 @@ const DEFAULT_PICK_HOUR = 9;
             multi: true,
         },
     ],
+    standalone: false
 })
 export class UiInputDateTimeComponent implements ControlValueAccessor {
     @Input() placeholder = MASK_PLACEHOLDER;

@@ -23,6 +23,7 @@ interface HistoryPair {
     selector: 'app-memory',
     templateUrl: './memory.component.html',
     styleUrls: ['./memory.component.less'],
+    standalone: false
 })
 export class MemoryComponent implements OnInit {
     isLoading = false;

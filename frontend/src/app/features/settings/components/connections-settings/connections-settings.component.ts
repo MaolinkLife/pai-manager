@@ -22,6 +22,7 @@ import { LocalizationService } from '../../../../shared/pipes/translation/locali
     selector: 'app-connections-settings',
     templateUrl: './connections-settings.component.html',
     styleUrls: ['./connections-settings.component.less'],
+    standalone: false
 })
 export class ConnectionsSettingsComponent implements OnInit {
     form: UntypedFormGroup;

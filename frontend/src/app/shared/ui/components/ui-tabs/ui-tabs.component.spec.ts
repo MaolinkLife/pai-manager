@@ -12,6 +12,7 @@ import { UiTabsComponent } from './ui-tabs.component';
             <app-ui-tab key="bridge">Bridge</app-ui-tab>
         </app-ui-tabs>
     `,
+    standalone: false
 })
 class TabsHostComponent {
     active: string | null = 'general';

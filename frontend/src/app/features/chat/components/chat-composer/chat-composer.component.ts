@@ -24,6 +24,7 @@ export interface ComposerContextAttachment {
     selector: 'app-chat-composer',
     templateUrl: './chat-composer.component.html',
     styleUrls: ['./chat-composer.component.less'],
+    standalone: false
 })
 export class ChatComposerComponent implements AfterViewInit {
     @Input() chatInput!: UntypedFormControl;

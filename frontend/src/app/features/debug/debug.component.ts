@@ -9,6 +9,7 @@ const JSON_LIKE_RE = /^\s*[\[{]/;
     selector: 'app-debug',
     templateUrl: './debug.component.html',
     styleUrls: ['./debug.component.less'],
+    standalone: false
 })
 export class DebugComponent implements OnInit, AfterViewInit {
     private readonly PAGE_SIZE = 30;

@@ -10,7 +10,8 @@ import { UiSelectOption } from '../../../../../shared/ui/components/ui-select/ui
 @Component({
     selector: 'app-social-settings',
     templateUrl: './social-settings.component.html',
-    styleUrls: ['./social-settings.component.less']
+    styleUrls: ['./social-settings.component.less'],
+    standalone: false
 })
 export class SocialSettingsComponent implements OnInit {
     activeTab = 'general';
