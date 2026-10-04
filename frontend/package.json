@@ -23,17 +23,18 @@
     "zone.js": "~0.15.1"
   },
   "devDependencies": {
-    "@angular-devkit/build-angular": "^21.2.24",
+    "@angular/build": "^21.2.24",
     "@angular/cli": "^21.2.24",
     "@angular/compiler-cli": "^21.2.25",
     "@types/jasmine": "~3.8.0",
     "@types/node": "^12.11.1",
     "jasmine-core": "~3.8.0",
-    "karma": "~6.3.0",
+    "karma": "~6.4.4",
     "karma-chrome-launcher": "~3.1.0",
     "karma-coverage": "~2.0.3",
     "karma-jasmine": "~4.0.0",
     "karma-jasmine-html-reporter": "~1.7.0",
+    "less": "^4.2.0",
     "typescript": "~5.9.3"
   }
 }
