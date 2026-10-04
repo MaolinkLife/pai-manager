@@ -12,6 +12,7 @@ import { ControlValueAccessor, NG_VALUE_ACCESSOR } from '@angular/forms';
             multi: true,
         },
     ],
+    standalone: false
 })
 export class UiInputComponent implements ControlValueAccessor {
     @Input() type: 'text' | 'number' | 'password' | 'email' = 'text';

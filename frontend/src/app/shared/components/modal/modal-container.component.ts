@@ -15,7 +15,8 @@ import { ModalRef } from './modal-ref';
     selector: 'app-modal-container',
     templateUrl: './modal-container.component.html',
     styleUrls: ['./modal-container.component.less'],
-    changeDetection: ChangeDetectionStrategy.OnPush
+    changeDetection: ChangeDetectionStrategy.OnPush,
+    standalone: false
 })
 export class ModalContainerComponent implements AfterViewInit {
     @ViewChild('dynamicComponent', { read: ViewContainerRef }) vcr!: ViewContainerRef;

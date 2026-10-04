@@ -5,7 +5,8 @@ import { Message } from '../../../core/models/message.model';
 @Component({
     selector: 'app-icons-toolbar',
     templateUrl: './icons-toolbar.component.html',
-    styleUrls: ['./icons-toolbar.component.less']
+    styleUrls: ['./icons-toolbar.component.less'],
+    standalone: false
 })
 export class IconsToolbarComponent {
     @Input() msg!: Message;

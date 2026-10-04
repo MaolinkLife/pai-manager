@@ -86,13 +86,14 @@ interface CachedChatMessageView {
 @Component({
     selector: 'app-chat',
     templateUrl: './chat.component.html',
-    styleUrls: ['./chat.component.less']
+    styleUrls: ['./chat.component.less'],
+    standalone: false
 })
 export class ChatComponent implements OnInit, AfterViewInit, OnDestroy {
     private static readonly CHAT_ALL_SOURCES_KEY = 'chat.showAllSources';
     private readonly destroyRef = inject(DestroyRef);
 
-    @HostListener('document:click', ['$event'])
+    @HostListener('document:click')
     onClickOutside(): void {
         this.activeDropdown = null;
         this.showEmojiPicker = false;
@@ -140,8 +141,9 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy {
     }
 
     @HostListener('window:chat-history-source-filter-changed', ['$event'])
-    onSourceFilterChanged(event: CustomEvent<{ showAllSources?: boolean }>): void {
-        this.showAllChatSources = !!event.detail?.showAllSources;
+    onSourceFilterChanged(event: Event): void {
+        const detail = event instanceof CustomEvent ? (event.detail as { showAllSources?: boolean } | null) : null;
+        this.showAllChatSources = !!detail?.showAllSources;
         this.chatMessageViewCache.clear();
         this.rebuildChatMessageViews(this.chatHistory);
         this.loadHistory();

@@ -13,6 +13,7 @@ import { UiSelectOption } from '../ui-select/ui-select.component';
             multi: true,
         },
     ],
+    standalone: false
 })
 export class UiMultiselectComponent implements ControlValueAccessor {
     @Input() placeholder = 'Select...';

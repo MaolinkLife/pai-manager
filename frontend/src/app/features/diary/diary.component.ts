@@ -44,6 +44,7 @@ const KNOWN_HIDDEN_REASONS = new Set(['low_importance', 'superseded_by', 'user_a
     selector: 'app-diary',
     templateUrl: './diary.component.html',
     styleUrls: ['./diary.component.less'],
+    standalone: false
 })
 export class DiaryComponent implements OnInit {
     readonly featureEnabled: boolean;

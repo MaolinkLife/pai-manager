@@ -14,6 +14,7 @@ type SynthesisTab = 'image' | 'video' | 'audio';
     selector: 'app-synthesis',
     templateUrl: './synthesis.component.html',
     styleUrls: ['./synthesis.component.less'],
+    standalone: false
 })
 export class SynthesisComponent implements OnInit {
     @ViewChild('checkpointInput') checkpointInput?: ElementRef<HTMLInputElement>;

@@ -3,7 +3,8 @@ import { LocalizationService } from './localization.service';
 
 @Pipe({
     name: 'translate',
-    pure: false
+    pure: false,
+    standalone: false
 })
 export class TranslatePipe implements PipeTransform {
     private lastKey = '';

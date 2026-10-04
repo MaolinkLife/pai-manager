@@ -10,6 +10,7 @@ import { UiTabRef, UiTabsComponent } from './ui-tabs.component';
     selector: 'app-ui-tab',
     templateUrl: './ui-tab.component.html',
     styleUrls: ['./ui-tab.component.less'],
+    standalone: false
 })
 export class UiTabComponent implements UiTabRef, OnInit, OnDestroy {
     @Input() key = '';

@@ -10,7 +10,8 @@ interface EmojiPanelPosition {
 @Component({
     selector: 'app-emoji-picker',
     templateUrl: './emoji-picker.component.html',
-    styleUrls: ['./emoji-picker.component.less']
+    styleUrls: ['./emoji-picker.component.less'],
+    standalone: false
 })
 export class EmojiPickerComponent implements OnInit, OnChanges {
     @Input() position: EmojiPanelPosition | null = null;

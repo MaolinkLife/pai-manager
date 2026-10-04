@@ -6,6 +6,7 @@ import { MODEL_CAPABILITY_KEYS, ModelIndexEntry } from '../../../../../../core/s
     selector: 'app-model-capability-chips',
     templateUrl: './model-capability-chips.component.html',
     styleUrls: ['./model-capability-chips.component.less'],
+    standalone: false
 })
 export class ModelCapabilityChipsComponent {
     @Input() entry: ModelIndexEntry | null = null;

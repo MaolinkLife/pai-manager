@@ -22,6 +22,7 @@ export interface UiTabRef {
     selector: 'app-ui-tabs',
     templateUrl: './ui-tabs.component.html',
     styleUrls: ['./ui-tabs.component.less'],
+    standalone: false
 })
 export class UiTabsComponent {
     @Input() activeKey: string | null = null;

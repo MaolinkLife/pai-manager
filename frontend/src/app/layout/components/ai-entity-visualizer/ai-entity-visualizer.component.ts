@@ -23,6 +23,7 @@ type CallStage = 'listening' | 'waiting' | 'speaking';
     templateUrl: './ai-entity-visualizer.component.html',
     styleUrls: ['./ai-entity-visualizer.component.less'],
     changeDetection: ChangeDetectionStrategy.OnPush,
+    standalone: false
 })
 export class AiEntityVisualizerComponent implements OnInit, OnDestroy {
     private readonly destroyRef = inject(DestroyRef);

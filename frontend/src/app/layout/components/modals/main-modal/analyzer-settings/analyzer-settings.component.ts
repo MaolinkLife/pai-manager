@@ -12,7 +12,8 @@ import { UiSelectOption } from '../../../../../shared/ui/components/ui-select/ui
 @Component({
     selector: 'app-analyzer-settings',
     templateUrl: './analyzer-settings.component.html',
-    styleUrls: ['./analyzer-settings.component.less']
+    styleUrls: ['./analyzer-settings.component.less'],
+    standalone: false
 })
 export class AnalyzerSettingsComponent implements OnInit {
     analyzerForm: UntypedFormGroup;

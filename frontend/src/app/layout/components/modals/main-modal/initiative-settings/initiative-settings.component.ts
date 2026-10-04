@@ -18,6 +18,7 @@ import { LocalizationService } from '../../../../../shared/pipes/translation/loc
     selector: 'app-initiative-settings',
     templateUrl: './initiative-settings.component.html',
     styleUrls: ['./initiative-settings.component.less'],
+    standalone: false
 })
 export class InitiativeSettingsComponent implements OnInit {
     initiativeForm: UntypedFormGroup;

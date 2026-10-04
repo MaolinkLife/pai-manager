@@ -40,7 +40,8 @@ function buildDeleteSummaryRows(counts: Record<string, number>): DeleteSummaryRo
 @Component({
     selector: 'app-persona-settings',
     templateUrl: './persona-settings.component.html',
-    styleUrls: ['./persona-settings.component.less']
+    styleUrls: ['./persona-settings.component.less'],
+    standalone: false
 })
 export class PersonaSettingsComponent implements OnInit {
     personaForm: UntypedFormGroup;

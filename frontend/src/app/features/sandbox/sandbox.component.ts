@@ -47,6 +47,7 @@ interface SandboxTraceView {
     selector: 'app-sandbox',
     templateUrl: './sandbox.component.html',
     styleUrls: ['./sandbox.component.less'],
+    standalone: false
 })
 export class SandboxComponent implements OnInit {
     mode: SandboxMode = 'text';

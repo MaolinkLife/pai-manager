@@ -17,6 +17,7 @@ type LibraryPageTab = 'files' | 'collections';
     selector: 'app-library',
     templateUrl: './library.component.html',
     styleUrls: ['./library.component.less'],
+    standalone: false
 })
 export class LibraryComponent implements OnInit {
     @ViewChild('uploadInput') uploadInput?: ElementRef<HTMLInputElement>;

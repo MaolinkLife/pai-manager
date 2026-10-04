@@ -21,7 +21,8 @@ interface AudioDevicesData {
 @Component({
     selector: 'app-audio-settings',
     templateUrl: './audio-settings.component.html',
-    styleUrls: ['./audio-settings.component.less']
+    styleUrls: ['./audio-settings.component.less'],
+    standalone: false
 })
 export class AudioSettingsComponent implements OnInit {
     audioForm: UntypedFormGroup;

@@ -21,7 +21,8 @@ interface MonitorResponse {
 @Component({
     selector: 'app-monitor-selection-modal',
     templateUrl: './monitor-selection-modal.component.html',
-    styleUrls: ['./monitor-selection-modal.component.less']
+    styleUrls: ['./monitor-selection-modal.component.less'],
+    standalone: false
 })
 export class MonitorSelectionModalComponent implements OnInit {
     selectedMonitor: number = 0;

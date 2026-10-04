@@ -4,6 +4,7 @@ import { Component, EventEmitter, Input, Output } from '@angular/core';
     selector: 'app-ui-button',
     templateUrl: './ui-button.component.html',
     styleUrls: ['./ui-button.component.less'],
+    standalone: false
 })
 export class UiButtonComponent {
     @Input() type: 'button' | 'submit' | 'reset' = 'button';

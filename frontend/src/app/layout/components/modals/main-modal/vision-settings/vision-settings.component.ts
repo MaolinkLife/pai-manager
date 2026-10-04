@@ -30,7 +30,8 @@ const VISION_PROVIDER_DEFAULTS: Record<string, Record<string, any>> = {
 @Component({
     selector: 'app-vision-settings',
     templateUrl: './vision-settings.component.html',
-    styleUrls: ['./vision-settings.component.less']
+    styleUrls: ['./vision-settings.component.less'],
+    standalone: false
 })
 export class VisionSettingsComponent implements OnInit, OnDestroy {
     visionForm: UntypedFormGroup;

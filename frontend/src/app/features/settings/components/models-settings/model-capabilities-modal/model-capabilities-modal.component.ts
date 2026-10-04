@@ -15,6 +15,7 @@ import { LocalizationService } from '../../../../../shared/pipes/translation/loc
     selector: 'app-model-capabilities-modal',
     templateUrl: './model-capabilities-modal.component.html',
     styleUrls: ['./model-capabilities-modal.component.less'],
+    standalone: false
 })
 export class ModelCapabilitiesModalComponent implements OnInit {
     /** Set by the modal service from `data`. */

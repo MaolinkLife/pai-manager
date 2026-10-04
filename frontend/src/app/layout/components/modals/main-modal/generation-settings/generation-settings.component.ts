@@ -14,7 +14,8 @@ import { UiSelectOption } from '../../../../../shared/ui/components/ui-select/ui
 @Component({
     selector: 'app-generation-settings',
     templateUrl: './generation-settings.component.html',
-    styleUrls: ['./generation-settings.component.less']
+    styleUrls: ['./generation-settings.component.less'],
+    standalone: false
 })
 export class GenerationSettingsComponent implements OnInit, OnDestroy {
     private readonly builtInProviderDefaults: Record<string, any> = {

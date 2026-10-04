@@ -30,6 +30,7 @@ import { LocalizationService } from '../../../../shared/pipes/translation/locali
     selector: 'app-models-settings',
     templateUrl: './models-settings.component.html',
     styleUrls: ['./models-settings.component.less'],
+    standalone: false
 })
 export class ModelsSettingsComponent implements OnInit {
     private readonly destroyRef = inject(DestroyRef);

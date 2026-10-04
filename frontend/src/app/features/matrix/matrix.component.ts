@@ -11,6 +11,7 @@ import { LocalizationService } from '../../shared/pipes/translation/localization
     selector: 'app-matrix',
     templateUrl: './matrix.component.html',
     styleUrls: ['./matrix.component.less'],
+    standalone: false
 })
 export class MatrixComponent implements OnInit {
     private readonly destroyRef = inject(DestroyRef);

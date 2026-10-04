@@ -13,7 +13,8 @@ import { IconService } from '../../services/icon.service';
     selector: 'app-custom-svg',
     templateUrl: './custom-svg.component.html',
     styleUrls: ['./custom-svg.component.less'],
-    changeDetection: ChangeDetectionStrategy.OnPush
+    changeDetection: ChangeDetectionStrategy.OnPush,
+    standalone: false
 })
 export class CustomSvgComponent implements OnChanges {
     @Input() name = '';

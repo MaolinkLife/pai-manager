@@ -19,7 +19,8 @@ import { of, Subscription } from 'rxjs';
 @Component({
     selector: 'app-layout',
     templateUrl: './layout.component.html',
-    styleUrls: ['./layout.component.less']
+    styleUrls: ['./layout.component.less'],
+    standalone: false
 })
 export class LayoutComponent implements OnInit, OnDestroy {
     private static readonly CHAT_ALL_SOURCES_KEY = 'chat.showAllSources';

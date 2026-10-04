@@ -102,3 +102,57 @@ describe('ChatComponent: a busy chat and a dropped connection', () => {
         expect(sent).toEqual([]);
     });
 });
+
+describe('ChatComponent: the history source filter event', () => {
+    function create(): ChatComponent {
+        const websocketService: any = {
+            isConnected: () => true,
+            send: () => undefined,
+            reconnect: () => undefined,
+            reconnected$: new Subject<void>(),
+            bufferedMessages$: new Subject(),
+            getBufferedMessagesAfter: () => [],
+            getConsumerCursor: () => 0,
+        };
+        const authService: any = {
+            isOwner: () => true,
+            getCurrentUser: () => ({ uuid: 'owner-uuid', name: 'Owner' }),
+        };
+        const configService: any = { getConfig$: () => of(null) };
+        const voiceService: any = { voiceModeStatus$: () => of({ running: false }) };
+        const voicePlaybackState: any = { state$: of({ stage: 'idle', messageId: null }), refresh: () => undefined };
+        return TestBed.runInInjectionContext(() => new ChatComponent(
+            {} as any,
+            authService,
+            configService,
+            {} as any,
+            {} as any,
+            voiceService,
+            voicePlaybackState,
+            websocketService,
+            { open: () => undefined } as any,
+            new ChatRunStoreService(),
+            new ChatMessageStoreService(),
+            new ChatSessionStateService(),
+        ));
+    }
+
+    it('shows every source when the event asks for it', () => {
+        const component = create();
+
+        component.onSourceFilterChanged(new CustomEvent('chat-history-source-filter-changed', {
+            detail: { showAllSources: true },
+        }));
+
+        expect(component.showAllChatSources).toBeTrue();
+    });
+
+    it('turns every-source mode off when the event carries no detail', () => {
+        const component = create();
+        component.showAllChatSources = true;
+
+        component.onSourceFilterChanged(new Event('chat-history-source-filter-changed'));
+
+        expect(component.showAllChatSources).toBeFalse();
+    });
+});

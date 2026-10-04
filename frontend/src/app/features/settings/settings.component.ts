@@ -18,6 +18,7 @@ const DEFAULT_TAB = 'connections';
     selector: 'app-settings',
     templateUrl: './settings.component.html',
     styleUrls: ['./settings.component.less'],
+    standalone: false
 })
 export class SettingsComponent implements OnInit {
     readonly groups: SettingsGroup[] = [

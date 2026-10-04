@@ -120,7 +120,8 @@ const PY_KEYWORDS = [
 @Component({
     selector: 'app-message-renderer',
     templateUrl: './message-renderer.component.html',
-    styleUrls: ['./message-renderer.component.less']
+    styleUrls: ['./message-renderer.component.less'],
+    standalone: false
 })
 export class MessageRendererComponent implements OnChanges, OnDestroy {
     @Input() content: string = '';

@@ -21,6 +21,7 @@ export interface ComplianceBadgeView {
     templateUrl: './chat-message.component.html',
     styleUrls: ['./chat-message.component.less'],
     changeDetection: ChangeDetectionStrategy.OnPush,
+    standalone: false
 })
 export class ChatMessageComponent {
     @Input() msg!: Message;
