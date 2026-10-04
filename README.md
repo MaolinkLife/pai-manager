@@ -2,7 +2,7 @@
 
 ### RU Adaptation — independently evolved fork
 
-**System Version:** 0.9.2
+**System Version:** 0.9.4
 **Status:** Beta  
 **License:** Maolink Noncommercial License 1.0.0  
 **Original source project:** Z-Waif by SugarcaneDefender
@@ -32,7 +32,7 @@ The current focus is not only dialogue generation, but also:
 
 ## 2. Core Architecture
 
-As of **v0.9.2**, the system follows a module-oriented design with well-defined domain boundaries.
+As of **v0.9.4**, the system follows a module-oriented design with well-defined domain boundaries.
 
 ### Main architectural domains
 
@@ -43,6 +43,9 @@ As of **v0.9.2**, the system follows a module-oriented design with well-defined 
 - **validator / language_guard / confidence / factuality / self_watcher** — post-generation compliance pipeline (all opt-in, never-raise, output never modified)
 - **debug_vault** — curated anomaly store with review workflow
 - **reminders** — user-requested wake-ups and reminders (in-chat capture + scheduled delivery)
+- **initiative** — proactive messages composed in character, optionally with a selfie
+- **documents** — knowledge collections: library files indexed into the vector store and retrieved into the generation context
+- **hf_hub / model_index** — HuggingFace search and downloads; an index of what each model can do, from provider metadata
 - **vision** — capture/inference pipeline, configurable providers
 - **voice / tts / rvc** — voice control, synthesis, playback, model integration (Qwen3-TTS, sherpa-onnx STT)
 - **llama_cpp** — embedded llama-server provider parity (generation / analyzer / moral / vision)
@@ -65,7 +68,7 @@ As of **v0.9.2**, the system follows a module-oriented design with well-defined 
 
 ## 3. What is implemented
 
-### 3.0 v0.8.0–0.9.2 — Emotional Core, Compliance Pipeline & Scheduling
+### 3.0 v0.8.0–0.9.4 — Emotional Core, Compliance Pipeline, Scheduling & Hardening
 
 #### Emotional Core (0.8.0)
 - Emotional decay: traces soften nightly with per-trace `decay_rate`, never below `persistence_floor` — emotions release, memory remains
@@ -95,6 +98,23 @@ As of **v0.9.2**, the system follows a module-oriented design with well-defined 
 - **Auto-reroll**: failed Validator/LanguageGuard checks regenerate the reply with a corrective hint before sending (sync path, off by default)
 - **Reasoning-model overhaul**: conversational paths run uncapped (`num_predict: -1`, open-webui parity — fixes chronic empty answers when thinking ate the token budget); service/judge calls keep small explicit budgets with thinking disabled
 - Chat compliance badges with human tooltips, streaming compliance, voice input at full chat parity (runtime traces, details, badges), off-page reply notifications with a soft chime, user-timezone log timestamps
+
+#### Model Hub, Knowledge Collections & Self-Update (0.9.3)
+- **Settings as a page**: one `/settings/:tab` page grouped into System / Intelligence / Personality / Perception / Channels, with a Connections tab for provider endpoints and credentials
+- **Model hub**: background Ollama pulls with unload / update / delete, HuggingFace search and downloads into `storage/models` by category (gated repos with a session-only token), a local storage browser
+- **Image synthesis**: GGUF diffusion checkpoints (FLUX / SD3.x / Qwen-Image), an Illustrate button that re-runs the user's request through the media pipeline, internal engine settings at parity with ComfyUI
+- **Knowledge collections**: library documents indexed into named collections and retrieved into the generation context, with sources shown under the reply
+- **Voice call and initiative**: a call mode on top of the voice loop; proactive messages written by the generation model in character, optionally with a selfie; the visualizer follows real playback loudness
+- **Self-update**: the version is read from the changelog head and compared with GitHub; updates are git fast-forward only and never overwrite local changes
+- Chat render window for long histories, own date-time input and a calendar view for tasks
+
+#### Security, Reliability & Emotions (0.9.4)
+- **Sign-in**: the chat socket opens with a one-time pass instead of the access token in its address; access tokens live 15 minutes and are renewed quietly; lifetimes, signed-in devices and per-device sign-out in System → Security; a reused refresh token ends the whole sign-in
+- **Chat reliability**: a message sent during a reply waits its turn instead of being refused; a dropped socket no longer cancels the reply; a new message is kept from the moment it arrives, even if the turn dies on the way
+- **Emotions**: the moral matrix judges PAI's stored state and the analyzer's read of the user instead of a pre-blended guess, so the user's tone no longer becomes PAI's emotion; the pool grows to 21 emotions; the inner voice speaks in first person about the feeling, its reason, the undercurrent and what PAI wants, and the speaking model gets that voice instead of numbers
+- **Images and vision**: a generated image is checked against its request and regenerated within a limit; long and weighted prompts for CLIP checkpoints; vision reads model capabilities from provider metadata and says exactly why it cannot see
+- **Settings**: every tab saves only the fields it changed, so saves no longer overwrite each other; technical prompts are editable in the UI; one Telegram switch, the main chat always on
+- A stopped Ollama no longer freezes the UI; character deletion archives the data first
 
 ---
 
@@ -250,11 +270,15 @@ The system already supports:
 
 - local/cloud LLM orchestration (Ollama + embedded llama.cpp, reasoning-model aware)
 - hybrid memory retrieval + day-to-day diary continuity in generation context
-- emotional state with decay, forgiveness, scars and a per-turn inner voice
+- emotional state over 21 emotions with decay, forgiveness, scars and a first-person inner voice
 - post-generation compliance pipeline (validator, language guard, confidence, factuality, self-watcher) with chat badges and optional auto-reroll
 - user reminders and wake-ups captured from natural chat phrases and delivered in character
 - configurable TTS/STT pipelines (Qwen3-TTS, XTTS/RVC, sherpa-onnx, faster-whisper)
-- role-aware auth and access
+- role-aware auth and access: short-lived tokens, signed-in device list and per-device sign-out
+- model hub: Ollama model management, HuggingFace downloads and a model capability index
+- knowledge collections over library documents, with sources in the chat
+- voice calls on top of the voice loop
+- self-update by git fast-forward
 - active character runtime switching
 - diagnostics: DB-backed audit logs with retention, DebugVault anomaly review, runtime trace streaming
 - voice model integration
