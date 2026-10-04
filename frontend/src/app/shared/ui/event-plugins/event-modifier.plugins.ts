@@ -1,5 +1,4 @@
-import { DOCUMENT } from '@angular/common';
-import { Inject, Injectable, Provider } from '@angular/core';
+import { Inject, Injectable, Provider, DOCUMENT } from '@angular/core';
 import { EVENT_MANAGER_PLUGINS, EventManagerPlugin } from '@angular/platform-browser';
 
 /**
