@@ -199,7 +199,7 @@
                     <app-custom-svg name="close" [size]="20"></app-custom-svg>
                 </button>
                 <img
-                    *ngIf="selectedMedia?.category === 'image'"
+                    *ngIf="selectedMedia.category === 'image'"
                     [src]="selectedMedia ? getMediaSource(selectedMedia) : null"
                     [alt]="selectedMedia.name"
                 />

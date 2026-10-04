@@ -262,8 +262,9 @@ export class UiInputDateTimeComponent implements ControlValueAccessor {
     }
 
     @HostListener('document:click', ['$event.target'])
-    onDocumentClick(target: Node): void {
-        if (this.open && !this.elementRef.nativeElement.contains(target)) {
+    onDocumentClick(target: EventTarget | null): void {
+        const inside = target instanceof Node && this.elementRef.nativeElement.contains(target);
+        if (this.open && !inside) {
             this.open = false;
             this.onTouched();
         }

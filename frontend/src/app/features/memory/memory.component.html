@@ -220,7 +220,7 @@
 
                                 <p class="summary">{{ record.summary }}</p>
 
-                                <div class="themes" *ngIf="record.themes?.length">
+                                <div class="themes" *ngIf="record.themes.length">
                                     <span class="theme" *ngFor="let theme of record.themes">#{{ theme }}</span>
                                 </div>
 
