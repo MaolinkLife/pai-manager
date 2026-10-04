@@ -1,27 +1,17 @@
-# ZWaifProject
+# PAI frontend
 
-This project was generated with [Angular CLI](https://github.com/angular/angular-cli) version 12.2.18.
+The Angular 21 web interface of PAI. It is normally installed by `install.bat` and started together with the backend by `launch.bat`, both in the repository root.
+
+Requires Node.js 20.19+, 22.12+ or 24+.
 
 ## Development server
 
-Run `ng serve` for a dev server. Navigate to `http://localhost:3880/`. The app will automatically reload if you change any of the source files.
-
-## Code scaffolding
-
-Run `ng generate component component-name` to generate a new component. You can also use `ng generate directive|pipe|service|class|guard|interface|enum|module`.
+`npm start` runs `ng serve` on port 3880 with `proxy.conf.json`, which forwards `/api` to the backend, the chat WebSocket included. When PAI is started with `launch.bat`, the ports come from `config/port-config.json` and the proxy target is synced from it.
 
 ## Build
 
-Run `ng build` to build the project. The build artifacts will be stored in the `dist/` directory.
+`ng build` writes the production build to `dist/pai-manager/browser`.
 
-## Running unit tests
+## Unit tests
 
-Run `ng test` to execute the unit tests via [Karma](https://karma-runner.github.io).
-
-## Running end-to-end tests
-
-Run `ng e2e` to execute the end-to-end tests via a platform of your choice. To use this command, you need to first add a package that implements end-to-end testing capabilities.
-
-## Further help
-
-To get more help on the Angular CLI use `ng help` or go check out the [Angular CLI Overview and Command Reference](https://angular.io/cli) page.
+`ng test` runs the specs with Vitest in Node (jsdom), without a browser; `ng test --watch=false` runs them once.
