@@ -114,6 +114,7 @@ As of **v0.9.4**, the system follows a module-oriented design with well-defined 
 - **Emotions**: the moral matrix judges PAI's stored state and the analyzer's read of the user instead of a pre-blended guess, so the user's tone no longer becomes PAI's emotion; the pool grows to 21 emotions; the inner voice speaks in first person about the feeling, its reason, the undercurrent and what PAI wants, and the speaking model gets that voice instead of numbers
 - **Images and vision**: a generated image is checked against its request and regenerated within a limit; long and weighted prompts for CLIP checkpoints; vision reads model capabilities from provider metadata and says exactly why it cannot see
 - **Settings**: every tab saves only the fields it changed, so saves no longer overwrite each other; technical prompts are editable in the UI; one Telegram switch, the main chat always on
+- **Frontend toolchain**: Angular 21 with the built-in control flow, esbuild and a Vite dev server, unit tests on Vitest; no known vulnerabilities in the frontend packages; Node.js 20.19+, 22.12+ or 24+ required
 - A stopped Ollama no longer freezes the UI; character deletion archives the data first
 
 ---
