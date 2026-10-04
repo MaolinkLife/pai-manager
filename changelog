@@ -1,3 +1,46 @@
+version: 0.9.4
+- Sign-in and security
+  - The chat WebSocket opens with a one-time pass requested over HTTP, where the token travels in the Authorization header. A pass is random, works once, lives 30 seconds and names one user; a missing, used or expired pass closes the socket with code 4401. An anonymous guest connects without a pass.
+  - An access token lives 15 minutes and is renewed quietly while the page is open; a sign-in not renewed for 30 days ends. Both lifetimes are settings in System → Security for the owner account (1–1440 minutes, 1–365 days), read from the owner config only. Lowering a lifetime ends older tokens at once. The environment variables for the lifetimes are gone.
+  - Renewal holds up with several tabs: two tabs renewing at once no longer sign each other out, a 401 outside the credential endpoints renews and retries instead of signing out, and the chat socket reconnects only when the signed-in user changes.
+  - Signed-in devices: System → Security lists every live sign-in (browser and system from the user agent, address, last activity, this device marked) with a sign-out button per device and one for all other devices. The password can be changed from a signed-in session and signs the other devices out. A signed-out device loses its open chat at once.
+  - A retired refresh token presented again more than 30 seconds after its renewal can only be a copy: the whole sign-in ends and a warning is logged. A repeat within 30 seconds (two tabs) is only refused.
+  - A guest may only chat; everything else reached from outside belongs to the owner account. A revoked session no longer accepts its access token. The tunnel started by PAI opens it from a phone.
+- Chat
+  - A message sent while a reply is being written is no longer refused with "generation is already running": every message gets its own run and waits its turn. Stop and skip thinking act on the reply being written, not on messages still waiting.
+  - A dropped socket no longer cancels the reply: it finishes, is saved and goes to the newest live socket of the same user. After reconnecting the chat reloads what the server saved instead of staying frozen until a page reload.
+  - A new message is written to a turn queue the moment it arrives, so a turn that dies on the way (dropped socket, restart, a hung module) no longer loses it. Messages left behind by a restart are stored at the next start as interrupted and are not answered automatically; failed and interrupted turns are logged and go to the debug vault.
+  - An answer replaced by a reroll is no longer kept as memory, and a sent message gets its real id, so a reroll or an edit no longer stores it twice.
+  - A stopped Ollama no longer freezes the whole UI: Ollama calls run in a worker thread, go to 127.0.0.1 instead of localhost, and an unreachable Ollama is remembered for 30 seconds. The rings of the entity visualizer no longer swallow clicks on the call button.
+- Emotions and the moral matrix
+  - The matrix now gets the input its prompt describes: PAI's state as the last turn stored it, the state one message earlier, the reason of the last strong change, the message, the analyzer's read of the user (named as the user's) and memory to compare against. The user's tone no longer becomes PAI's emotion, recent traces are no longer counted twice, and without a verdict from the matrix the state does not change. The built-in matrix prompt matches this input; a stored prompt is kept as it is, and Reset takes the built-in one.
+  - The emotion pool grows from 16 to 21: passion, curiosity, surprise, gratitude and guilt. Flirty and seductive words lead to passion instead of tenderness, surprise is no longer read as confusion.
+  - The inner voice speaks in up to three short first-person sentences: the feeling, its reason and how it wants to answer. It hears the undercurrent (the strongest other emotion, threshold 0.5) and the two strongest wishes of the matrix in words (threshold 0.6); both thresholds are settings of the inner voice section.
+  - The emotion tool block given to the speaking model is that inner voice instead of numbers and a third-person analysis; the matrix's own recommendations come with it. The wanted response is no longer a hard directive, so neither the model nor the validator reads it as a must.
+  - The matrix page shows the inner voice. The desire vector of a matrix answer is kept with the snapshot instead of being dropped.
+  - The matrix and analyzer settings show the built-in prompt when none is stored, instead of a one-sentence copy that a save would have written.
+- Images and vision
+  - A checkpoint's family is read from its weights, not its file name. The core engine encodes long and weighted prompts for CLIP checkpoints: 77-token windows, `(word:1.3)` weights, both SDXL encoders.
+  - A generated image is checked against its request: the vision module describes it once, a judge scores relevance (on by default) and quality (off), and a failed check regenerates within one shared limit of generations. The check has its own section in Media; its prompts are editable.
+  - Chat and proactive pictures are put together before generation: who is in the picture and who writes its prompt. The prompt builder prompts are editable in the UI.
+  - Vision reads what a model declares from the provider's metadata, turns thinking off for its requests and says exactly why it cannot see. Images are described by the vision module only, and there is no default vision model.
+  - Models: an index of what each model can do, taken from the provider's metadata, with marks editable in the Models tab; the router model and the model pickers use it. Background screen capture has its own switch.
+- Settings
+  - Every settings tab sends only the fields it changed, so a save can no longer overwrite settings changed in another tab, and a tab whose settings failed to load does not save. Fixed on the way: switching scars wiped the scar triggers, the RAG tab resent untouched stopwords, the vision and RAG tabs could switch back a module changed elsewhere, and the System tab showed default log retention instead of the stored one.
+  - Config saves always use PATCH; a whole-config write has its own method.
+  - Technical prompts are editable in the settings: validator, confidence, reflection, memory judge, day summary, diary and orchestrator.
+  - A global initiative switch on its own settings screen.
+  - Telegram: `telegram.enabled` is the only switch for the bridge (the retired module flag folds into it, off stays off), and saving it off stops a running bridge at once. The main chat can no longer be disabled and is the fallback for every other channel. The social page is split into tabs, built on a new shared `ui-tabs` component.
+  - Instructor: the date and time switch decides whether the clock is in the prompt; memory and lorebook blocks say whether they found something, are off or failed.
+- Memory, diary and characters
+  - A day summary belongs to its character and is read only for it; building summaries on start is a setting in the RAG tab. The diary screen shows every entry, page by page.
+  - Deleting a character archives its data first; the dialog shows what goes into the archive and asks for the name. The create character button is released after an error.
+- Internals
+  - `launch.bat` and `install.bat` use only the Python of `backend\venv`; `run.py` refuses to start PAI on any other interpreter and says why.
+  - diffusers is pinned to a tested commit, with `safetensors==0.8.0rc0` that it requires; an unpinned install drifted between environments and broke checkpoints.
+  - Contour tests run a whole turn on a throwaway storage tree (`PAI_STORAGE_DIR`), covering memory and every emotion of the pool; four memory tests fail on purpose and mark behaviour not built yet. The suite no longer depends on the working directory or on chance; test-only dependencies live in `requirements-dev.txt`.
+  - Groundwork for importing interaction history from external services: three tables and archive parsers, with no UI yet.
+
 version: 0.9.3
 - Settings as a page, not a modal
   - The 14 settings group components moved into an exported `SettingsComponentsModule`; a lazy `/settings/:tab` page groups them into System / Intelligence / Personality / Perception / Channels and is deep-linkable. `MainModalComponent` and the header dots button are gone — the page is the single entry point.
